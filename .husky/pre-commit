@@ -1,0 +1,31 @@
+echo "Running pre-commit checks..."
+
+# 1. 运行单元测试
+echo "▶ Running unit tests..."
+if ! pnpm test:unit; then
+    echo "❌ Unit tests failed. Commit aborted."
+    exit 1
+fi
+
+# 2. 运行 build
+echo "▶ Running build..."
+if ! pnpm run build; then
+    echo "❌ Build failed. Commit aborted."
+    exit 1
+fi
+
+# 3. 检查代码格式（不自动修复）
+echo "▶ Checking code format..."
+if ! pnpm run format:check; then
+    echo "❌ Code format check failed. Please run 'pnpm format' to fix formatting issues."
+    exit 1
+fi
+
+# 4. 检查 ESLint（不自动修复）
+echo "▶ Running lint check..."
+if ! pnpm run lint; then
+    echo "❌ Lint check failed. Please fix the linting issues above."
+    exit 1
+fi
+
+echo "✅ All checks passed. Proceeding with commit..."

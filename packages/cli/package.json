@@ -1,0 +1,48 @@
+{
+  "name": "@agentskillmania/colts-workspace-cli",
+  "version": "0.1.0",
+  "description": "CLI tool for Skill development — create, edit, test, sync, and chat with skills.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "colts-workspace": "dist/index.js"
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:intg": "vitest run test/integration",
+    "test:coverage": "vitest run test/unit --coverage",
+    "test:watch": "vitest watch test/unit",
+    "prepublishOnly": "pnpm test:unit && pnpm build"
+  },
+  "author": {
+    "name": "yusangeng",
+    "email": "yusangeng@outlook.com"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agentskillmania/colts-workspace.git",
+    "directory": "packages/cli"
+  },
+  "dependencies": {
+    "@agentskillmania/colts-workspace-core": "workspace:*",
+    "commander": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
