@@ -1,7 +1,7 @@
 {
-  "name": "@agentskillmania/colts-workspace-devtool",
+  "name": "@agentskillmania/wrangler-devtool",
   "version": "0.1.0",
-  "description": "Devtool library for colts workspace — development tooling and utilities.",
+  "description": "Devtool library for Wrangler — development tooling and utilities.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,11 +26,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/agentskillmania/colts-workspace.git",
+    "url": "https://github.com/agentskillmania/wrangler.git",
     "directory": "packages/devtool"
   },
   "dependencies": {
-    "@agentskillmania/colts-workspace-core": "workspace:*"
+    "@agentskillmania/wrangler-core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

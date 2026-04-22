@@ -1,3 +1,3 @@
-// @agentskillmania/colts-workspace-devtool
-// Devtool library
+// @agentskillmania/wrangler-devtool
+// Wrangler 开发工具库
 export {};

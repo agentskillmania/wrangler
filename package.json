@@ -1,8 +1,8 @@
 {
-  "name": "@agentskillmania/colts-workspace",
+  "name": "@agentskillmania/wrangler",
   "version": "0.1.0",
   "private": true,
-  "description": "A pnpm monorepo workspace providing CLI tools and core libraries for Skill development in the @agentskillmania ecosystem.",
+  "description": "Wrangler — orchestrates agents, skills, and tools into a working crew on top of the colts framework.",
   "author": {
     "name": "yusangeng",
     "email": "yusangeng@outlook.com"
@@ -10,7 +10,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/agentskillmania/colts-workspace.git"
+    "url": "https://github.com/agentskillmania/wrangler.git"
   },
   "type": "module",
   "scripts": {

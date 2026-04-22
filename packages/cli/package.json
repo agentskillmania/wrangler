@@ -1,12 +1,12 @@
 {
-  "name": "@agentskillmania/colts-workspace-cli",
+  "name": "@agentskillmania/wrangler-cli",
   "version": "0.1.0",
-  "description": "CLI tool for Skill development — create, edit, test, sync, and chat with skills.",
+  "description": "CLI tool for Wrangler — manage agent crews from the terminal.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "colts-workspace": "dist/index.js"
+    "wrangler": "dist/index.js"
   },
   "files": ["dist", "README.md"],
   "scripts": {
@@ -29,11 +29,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/agentskillmania/colts-workspace.git",
+    "url": "https://github.com/agentskillmania/wrangler.git",
     "directory": "packages/cli"
   },
   "dependencies": {
-    "@agentskillmania/colts-workspace-core": "workspace:*",
+    "@agentskillmania/wrangler-core": "workspace:*",
     "commander": "^13.0.0"
   },
   "devDependencies": {

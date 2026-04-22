@@ -1,7 +1,7 @@
 {
-  "name": "@agentskillmania/colts-workspace-core",
+  "name": "@agentskillmania/wrangler-core",
   "version": "0.1.0",
-  "description": "Core library for Skill development — directory management, testing, sync, and colts agent integration.",
+  "description": "Core library for Wrangler — agent crew orchestration, skill management, and workspace composition.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/agentskillmania/colts-workspace.git",
+    "url": "https://github.com/agentskillmania/wrangler.git",
     "directory": "packages/core"
   },
   "dependencies": {

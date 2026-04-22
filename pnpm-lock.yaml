@@ -56,7 +56,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@agentskillmania/colts-workspace-core':
+      '@agentskillmania/wrangler-core':
         specifier: workspace:*
         version: link:../core
       commander:
@@ -100,7 +100,7 @@ importers:
 
   packages/devtool:
     dependencies:
-      '@agentskillmania/colts-workspace-core':
+      '@agentskillmania/wrangler-core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
