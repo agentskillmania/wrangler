@@ -73,6 +73,32 @@ describe('createSessionMiddleware', () => {
       expect(parsed.type).toBe('user');
       expect(parsed.content).toBe('Hello');
     });
+
+    it('should stringify non-string user message content', async () => {
+      const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      // Manually push a message with non-string content (array format)
+      const nonStringState = {
+        ...state,
+        context: {
+          ...state.context,
+          messages: [
+            ...state.context.messages,
+            {
+              role: 'user' as const,
+              content: [{ type: 'text', text: 'Hello from array' }],
+            },
+          ],
+        },
+      };
+
+      await middleware.beforeRun!({ state: nonStringState });
+
+      const dir = store.getSessionDir(state.id);
+      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
+      const parsed = JSON.parse(transcript.trim());
+      expect(parsed.type).toBe('user');
+      expect(parsed.content).toBe(JSON.stringify([{ type: 'text', text: 'Hello from array' }]));
+    });
   });
 
   describe('afterStep', () => {
@@ -122,6 +148,53 @@ describe('createSessionMiddleware', () => {
       const parsed = JSON.parse(transcript.trim());
       expect(parsed.type).toBe('assistant');
       expect(parsed.content).toBe('Here is the answer.');
+    });
+
+    it('should stringify non-string toolResult in continue result', async () => {
+      const state = createAgentState({
+        name: 'test',
+        instructions: 'test',
+        tools: [],
+      });
+      await store.createWithId(state.id, model);
+
+      const stepResult: StepResult = {
+        type: 'continue',
+        toolResult: { files: ['a.ts', 'b.ts'] },
+        actions: [{ id: 'tc1', tool: 'file_list', arguments: { dir: 'src' } }],
+        tokens: { input: 100, output: 50 },
+      };
+
+      await middleware.afterStep!({ state, result: stepResult, stepNumber: 0 });
+
+      const dir = store.getSessionDir(state.id);
+      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
+      const parsed = JSON.parse(transcript.trim());
+      expect(parsed.type).toBe('tool');
+      expect(parsed.result).toBe(JSON.stringify({ files: ['a.ts', 'b.ts'] }));
+    });
+
+    it('should handle null toolResult in continue result', async () => {
+      const state = createAgentState({
+        name: 'test',
+        instructions: 'test',
+        tools: [],
+      });
+      await store.createWithId(state.id, model);
+
+      const stepResult: StepResult = {
+        type: 'continue',
+        toolResult: null as any,
+        actions: [{ id: 'tc1', tool: 'noop', arguments: {} }],
+        tokens: { input: 0, output: 0 },
+      };
+
+      await middleware.afterStep!({ state, result: stepResult, stepNumber: 0 });
+
+      const dir = store.getSessionDir(state.id);
+      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
+      const parsed = JSON.parse(transcript.trim());
+      expect(parsed.result).toBe('""');
     });
 
     it('should write error transcript entry for error result', async () => {

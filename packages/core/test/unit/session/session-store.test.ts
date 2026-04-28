@@ -156,6 +156,16 @@ describe('SessionStore', () => {
       expect(meta!.updatedAt).toBe('2026-04-28T15:00:00.000Z');
       expect(meta!.id).toBe(sessionId);
     });
+
+    it('should do nothing when meta does not exist', async () => {
+      // Create session dir without meta.yaml
+      const sessionId = '1745800000-nometa';
+      const dir = store.getSessionDir(sessionId);
+      await mkdir(dir, { recursive: true });
+
+      // Should not throw
+      await store.updateMeta(sessionId, { messageCount: 5 });
+    });
   });
 
   describe('listSessions', () => {
@@ -178,6 +188,30 @@ describe('SessionStore', () => {
       const otherStore = new SessionStore(testBaseDir, '/other/workspace');
       const sessions = await otherStore.listSessions();
       expect(sessions).toHaveLength(0);
+    });
+
+    it('should skip non-directory entries in workspace dir', async () => {
+      await store.createWithId('1745800001-test1', 'GLM-4.7');
+      // Create a file in the workspace dir (not a directory)
+      const { writeFile } = await import('node:fs/promises');
+      const wsDir = store.getSessionDir('').replace(/\/$/, '');
+      const parentDir = wsDir.substring(0, wsDir.lastIndexOf('/'));
+      await writeFile(join(parentDir, 'rogue-file.txt'), 'not a session', 'utf-8');
+
+      const sessions = await store.listSessions();
+      expect(sessions).toHaveLength(1);
+    });
+
+    it('should skip sessions with missing or corrupt meta', async () => {
+      await store.createWithId('1745800001-test1', 'GLM-4.7');
+      // Create a directory without meta.yaml
+      const { mkdir: mkdirFn, writeFile: writeFileFn } = await import('node:fs/promises');
+      const wsDir = store.getSessionDir('').replace(/\/$/, '');
+      const parentDir = wsDir.substring(0, wsDir.lastIndexOf('/'));
+      await mkdirFn(join(parentDir, 'empty-session-dir'), { recursive: true });
+
+      const sessions = await store.listSessions();
+      expect(sessions).toHaveLength(1);
     });
   });
 
