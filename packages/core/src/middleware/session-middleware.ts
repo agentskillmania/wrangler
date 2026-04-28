@@ -7,15 +7,13 @@ import type { TranscriptEntry } from '../types.js';
 /**
  * 创建 session 管理 middleware
  *
- * 基于 colts middleware hooks 的生命周期：
  * - beforeRun: 检查 session 目录 → 不存在则创建，写 User transcript entry
  * - afterStep: 根据 StepResult 类型写 Tool/Assistant/Error transcript entry
  * - afterRun: saveState（Snapshot 格式）+ updateMeta
  *
- * @param store - SessionStore 实例
- * @param model - 模型名称（写入 meta.yaml）
+ * model 从 ctx.runnerOptions.model 获取，无需外部注入。
  */
-export function createSessionMiddleware(store: SessionStore, model: string): AgentMiddleware {
+export function createSessionMiddleware(store: SessionStore): AgentMiddleware {
   return {
     name: 'session',
 
@@ -23,6 +21,7 @@ export function createSessionMiddleware(store: SessionStore, model: string): Age
       const sessionId = ctx.state.id;
 
       if (!(await store.existsAsync(sessionId))) {
+        const model = ctx.runnerOptions.model;
         await store.createWithId(sessionId, model);
       }
 
