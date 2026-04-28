@@ -1,0 +1,194 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdir, rm, readFile, readdir, stat } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { SessionStore } from '../../../src/session/session-store.js';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+import type { TranscriptEntry } from '../../../src/types.js';
+
+describe('SessionStore', () => {
+  let store: SessionStore;
+  let testBaseDir: string;
+  const workspacePath = '/test/workspace';
+
+  beforeEach(async () => {
+    testBaseDir = join(tmpdir(), `wrangler-test-store-${Date.now()}`);
+    await mkdir(testBaseDir, { recursive: true });
+    store = new SessionStore(testBaseDir, workspacePath);
+  });
+
+  afterEach(async () => {
+    await rm(testBaseDir, { recursive: true, force: true });
+  });
+
+  describe('exists / existsAsync', () => {
+    it('should return false for non-existent session', () => {
+      expect(store.exists('nonexistent-id')).toBe(false);
+    });
+
+    it('should return true after createWithId', async () => {
+      const sessionId = await store.createWithId('1745800000-test', 'GLM-4.7');
+      expect(store.exists(sessionId)).toBe(true);
+    });
+  });
+
+  describe('createWithId', () => {
+    it('should create session directory with meta.yaml', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+      const dirPath = store.getSessionDir(sessionId);
+      const dirStat = await stat(dirPath);
+      expect(dirStat.isDirectory()).toBe(true);
+
+      const files = await readdir(dirPath);
+      expect(files).toContain('meta.yaml');
+    });
+
+    it('should write correct metadata', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+      const meta = await store.getMeta(sessionId);
+      expect(meta).not.toBeNull();
+      expect(meta!.id).toBe(sessionId);
+      expect(meta!.workspacePath).toBe(workspacePath);
+      expect(meta!.model).toBe('GLM-4.7');
+      expect(meta!.messageCount).toBe(0);
+    });
+  });
+
+  describe('saveState / loadState', () => {
+    it('should save and restore AgentState via snapshot', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+
+      const state = createAgentState({
+        name: 'test-agent',
+        instructions: 'You are a test agent.',
+        tools: [],
+      });
+      const stateWithMsg = addUserMessage(state, 'Hello');
+
+      await store.saveState(sessionId, stateWithMsg);
+      const loaded = await store.loadState(sessionId);
+
+      expect(loaded).not.toBeNull();
+      expect(loaded!.id).toBe(stateWithMsg.id);
+      expect(loaded!.context.messages).toHaveLength(1);
+      expect(loaded!.context.messages[0].content).toBe('Hello');
+    });
+
+    it('should return null for non-existent session', async () => {
+      const loaded = await store.loadState('nonexistent-id');
+      expect(loaded).toBeNull();
+    });
+
+    it('should use Snapshot format with checksum', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+      const state = createAgentState({
+        name: 'test-agent',
+        instructions: 'You are a test agent.',
+        tools: [],
+      });
+      await store.saveState(sessionId, state);
+
+      const dirPath = store.getSessionDir(sessionId);
+      const raw = await readFile(join(dirPath, 'state.json'), 'utf-8');
+      const payload = JSON.parse(raw);
+      expect(payload.version).toBe('1.0.0');
+      expect(payload.checksum).toBeDefined();
+      expect(payload.state).toBeDefined();
+    });
+  });
+
+  describe('appendTranscript', () => {
+    it('should append transcript entry to file', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+
+      const entry: TranscriptEntry = {
+        type: 'user',
+        content: 'Hello',
+        timestamp: Date.now(),
+      };
+      await store.appendTranscript(sessionId, entry);
+
+      const dirPath = store.getSessionDir(sessionId);
+      const content = await readFile(join(dirPath, 'transcript.jsonl'), 'utf-8');
+      const parsed = JSON.parse(content.trim());
+      expect(parsed.type).toBe('user');
+      expect(parsed.content).toBe('Hello');
+    });
+
+    it('should append multiple entries in order', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+
+      await store.appendTranscript(sessionId, {
+        type: 'user',
+        content: 'Hello',
+        timestamp: Date.now(),
+      });
+      await store.appendTranscript(sessionId, {
+        type: 'assistant',
+        content: 'Hi there!',
+        timestamp: Date.now(),
+      });
+
+      const dirPath = store.getSessionDir(sessionId);
+      const content = await readFile(join(dirPath, 'transcript.jsonl'), 'utf-8');
+      const lines = content.trim().split('\n');
+      expect(lines).toHaveLength(2);
+      expect(JSON.parse(lines[0]).type).toBe('user');
+      expect(JSON.parse(lines[1]).type).toBe('assistant');
+    });
+  });
+
+  describe('updateMeta', () => {
+    it('should update metadata fields', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.updateMeta(sessionId, { messageCount: 5, updatedAt: '2026-04-28T15:00:00.000Z' });
+
+      const meta = await store.getMeta(sessionId);
+      expect(meta).not.toBeNull();
+      expect(meta!.messageCount).toBe(5);
+      expect(meta!.updatedAt).toBe('2026-04-28T15:00:00.000Z');
+      expect(meta!.id).toBe(sessionId);
+    });
+  });
+
+  describe('listSessions', () => {
+    it('should return empty array when no sessions exist', async () => {
+      const sessions = await store.listSessions();
+      expect(sessions).toEqual([]);
+    });
+
+    it('should list sessions for the workspace', async () => {
+      await store.createWithId('1745800001-test1', 'GLM-4.7');
+      await store.createWithId('1745800002-test2', 'GLM-4.7');
+
+      const sessions = await store.listSessions();
+      expect(sessions).toHaveLength(2);
+    });
+
+    it('should not list sessions from different workspace', async () => {
+      await store.createWithId('1745800001-test1', 'GLM-4.7');
+
+      const otherStore = new SessionStore(testBaseDir, '/other/workspace');
+      const sessions = await otherStore.listSessions();
+      expect(sessions).toHaveLength(0);
+    });
+  });
+
+  describe('deleteSession', () => {
+    it('should remove session directory', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+      expect(store.exists(sessionId)).toBe(true);
+
+      await store.deleteSession(sessionId);
+      expect(store.exists(sessionId)).toBe(false);
+    });
+  });
+});
