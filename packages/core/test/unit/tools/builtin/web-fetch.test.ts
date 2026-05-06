@@ -92,6 +92,28 @@ describe('web_fetch', () => {
     expect(result.output).toContain('Unsupported content type');
   });
 
+  it('returns error on network failure', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValue(new Error('ECONNREFUSED')) as unknown as typeof globalThis.fetch;
+    const tool = createWebFetchTool(deps());
+    const result = await tool.execute({ url: 'https://unreachable.example.com' });
+    expect(result.output).toContain('Failed to fetch');
+    expect(result.output).toContain('ECONNREFUSED');
+  });
+
+  it('handles response with no content-type header', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => 'some text',
+    }) as unknown as typeof globalThis.fetch;
+    const tool = createWebFetchTool(deps());
+    const result = await tool.execute({ url: 'https://example.com/binary' });
+    expect(result.output).toContain('Unsupported content type');
+  });
+
   it('has correct tool metadata', () => {
     const tool = createWebFetchTool(deps());
     expect(tool.name).toBe('web_fetch');

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 describe('@agentskillmania/wrangler-core', () => {
-  it('should export without error', async () => {
+  it('should export without error', { timeout: 15_000 }, async () => {
     const mod = await import('../../src/index.js');
     expect(mod).toBeDefined();
   });

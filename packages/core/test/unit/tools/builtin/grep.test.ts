@@ -71,4 +71,26 @@ describe('grep', () => {
     expect(tool.name).toBe('grep');
     expect(tool.parameters).toBeDefined();
   });
+
+  it('searches within subpath', async () => {
+    await mkdir(join(workspace, 'src'), { recursive: true });
+    await writeFile(join(workspace, 'src', 'a.ts'), 'function helper() {}');
+    await writeFile(join(workspace, 'root.ts'), 'function main() {}');
+    const tool = createGrepTool(deps());
+    const result = await tool.execute({ pattern: 'function', path: 'src' });
+    expect(result.output).toContain('helper');
+    expect(result.output).not.toContain('main');
+  });
+
+  it('truncates at 100 matches across multiple files', async () => {
+    // 50 matches per file, 3 files = 150 total, should stop at 100
+    for (let f = 0; f < 3; f++) {
+      const lines = Array.from({ length: 50 }, (_, i) => `match_${f}_${i}`).join('\n');
+      await writeFile(join(workspace, `file${f}.ts`), lines);
+    }
+    const tool = createGrepTool(deps());
+    const result = await tool.execute({ pattern: 'match_\\d+_\\d+' });
+    expect(result.metadata?.truncated).toBe(true);
+    expect(result.metadata?.matches.length).toBe(100);
+  });
 });

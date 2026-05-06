@@ -63,6 +63,27 @@ describe('glob', () => {
     );
   });
 
+  it('sorts results by mtime descending', async () => {
+    await writeFile(join(workspace, 'old.ts'), '');
+    // small delay to ensure different mtime
+    await new Promise((r) => setTimeout(r, 10));
+    await writeFile(join(workspace, 'new.ts'), '');
+    const tool = createGlobTool(deps());
+    const result = await tool.execute({ pattern: '**/*.ts' });
+    const files: string[] = result.metadata?.files;
+    expect(files[0]).toBe('new.ts');
+  });
+
+  it('uses workspace root when path not specified', async () => {
+    await mkdir(join(workspace, 'sub'), { recursive: true });
+    await writeFile(join(workspace, 'root.ts'), '');
+    await writeFile(join(workspace, 'sub', 'nested.ts'), '');
+    const tool = createGlobTool(deps());
+    const result = await tool.execute({ pattern: '**/*.ts' });
+    expect(result.output).toContain('root.ts');
+    expect(result.output).toContain('nested.ts');
+  });
+
   it('has correct tool metadata', () => {
     const tool = createGlobTool(deps());
     expect(tool.name).toBe('glob');
