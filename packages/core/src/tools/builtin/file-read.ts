@@ -41,13 +41,17 @@ export function createFileReadTool(
       let totalLines = 0;
 
       const rl = createInterface({ input: createReadStream(absolutePath, { encoding: 'utf8' }) });
-      for await (const line of rl) {
-        totalLines++;
-        if (totalLines < offset) continue;
-        if (lines.length >= limit) continue;
-        const display =
-          line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + '...' : line;
-        lines.push(`${totalLines}:${display}`);
+      try {
+        for await (const line of rl) {
+          totalLines++;
+          if (totalLines < offset) continue;
+          if (lines.length >= limit) continue;
+          const display =
+            line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + '...' : line;
+          lines.push(`${totalLines}:${display}`);
+        }
+      } finally {
+        rl.close();
       }
 
       let output = lines.join('\n');
@@ -56,6 +60,8 @@ export function createFileReadTool(
         if (totalLines > offset + limit - 1) {
           output += `\nUse offset=${offset + limit} to continue reading`;
         }
+      } else if (offset > 1 && totalLines > 0) {
+        output = `Error: offset ${offset} exceeds file length (${totalLines} lines)`;
       } else {
         output = `Total lines: ${totalLines}`;
       }

@@ -88,6 +88,13 @@ describe('file_read', () => {
     expect(result.metadata?.totalLines).toBe(0);
   });
 
+  it('returns error when offset exceeds file length', async () => {
+    await writeFile(join(workspace, 'short.txt'), 'line1\nline2\n');
+    const tool = createFileReadTool(deps());
+    const result = await tool.execute({ filePath: 'short.txt', offset: 100 });
+    expect(result.output).toContain('offset 100 exceeds file length');
+  });
+
   it('has correct tool metadata', () => {
     const tool = createFileReadTool(deps());
     expect(tool.name).toBe('file_read');

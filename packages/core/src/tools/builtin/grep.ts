@@ -40,15 +40,20 @@ export function createGrepTool(deps: WorkspaceToolDeps): WranglerToolDef<typeof 
         if (matches.length >= MAX_RESULTS) break;
         const absPath = resolve(cwd, file);
         const rl = createInterface({ input: createReadStream(absPath, { encoding: 'utf8' }) });
-        let lineNum = 0;
-        for await (const line of rl) {
-          lineNum++;
-          if (regex.test(line)) {
-            const text =
-              line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + '...' : line;
-            matches.push({ path: file, line: lineNum, text });
-            if (matches.length >= MAX_RESULTS) break;
+        try {
+          let lineNum = 0;
+          for await (const line of rl) {
+            lineNum++;
+            regex.lastIndex = 0;
+            if (regex.test(line)) {
+              const text =
+                line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + '...' : line;
+              matches.push({ path: file, line: lineNum, text });
+              if (matches.length >= MAX_RESULTS) break;
+            }
           }
+        } finally {
+          rl.close();
         }
       }
 
