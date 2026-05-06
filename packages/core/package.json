@@ -34,12 +34,17 @@
   },
   "dependencies": {
     "@agentskillmania/colts": "^0.2.2",
+    "diff": "^9.0.0",
+    "fast-glob": "^3.3.3",
     "immer": "^11.1.4",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "turndown": "^7.2.4",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
+    "@types/turndown": "^5.0.6",
     "@vitest/coverage-v8": "^2.0.0",
     "typescript": "^5.0.0",
     "vitest": "^2.0.0"
