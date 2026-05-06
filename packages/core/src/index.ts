@@ -12,3 +12,14 @@ export { formatTranscriptEntry } from './session/transcript.js';
 
 // Middleware (advanced usage)
 export { createSessionMiddleware } from './middleware/session-middleware.js';
+
+// Tools (Layer 2)
+export { createBuiltinTools } from './tools/builtin/index.js';
+export type { BuiltinToolsOptions } from './tools/builtin/index.js';
+export type { SearchProvider, SearchResult } from './tools/builtin/index.js';
+export { resolvePath, truncateOutput, isBinaryFile } from './tools/builtin/index.js';
+export type { WorkspaceToolDeps } from './tools/builtin/index.js';
+export { wrapToColtsTool } from './tools/wrap-tool.js';
+export type { WranglerToolResult, WranglerToolDef } from './tools/types.js';
+export { loadMCPTools } from './tools/mcp/index.js';
+export type { MCPLoaderOptions } from './tools/mcp/index.js';
