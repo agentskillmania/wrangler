@@ -23,3 +23,14 @@ export { wrapToColtsTool } from './tools/wrap-tool.js';
 export type { WranglerToolResult, WranglerToolDef } from './tools/types.js';
 export { loadMCPTools } from './tools/mcp/index.js';
 export type { MCPLoaderOptions } from './tools/mcp/index.js';
+
+// Todolist (Layer 3)
+export { createTodolistSupport } from './todolist/index.js';
+export type { TodoStatus, TodoItem, TodoList } from './todolist/index.js';
+export {
+  createEmptyTodoList,
+  addTodo,
+  updateTodo,
+  deleteTodo,
+  formatTodoForContext,
+} from './todolist/index.js';
