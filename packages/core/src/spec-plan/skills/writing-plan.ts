@@ -1,6 +1,6 @@
 export const WRITING_PLAN_CONTENT = `---
 name: writing-plan
-description: spec 已批准，需要把需求拆解成带验收条件的具体执行步骤。
+description: spec 批准后触发。将需求拆解为分阶段、带验收条件的执行计划。
 ---
 
 # Plan：设计怎么执行

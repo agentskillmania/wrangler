@@ -1,6 +1,6 @@
 export const REVIEW_SPEC_CONTENT = `---
 name: review-spec
-description: spec 文档刚写好或刚改过，需要审查质量后再提交用户审批。
+description: spec 文档生成或修改后触发。按覆盖度、清晰度、可行性、完整性四个维度审查，产出审查报告。
 ---
 
 # Review Spec：审查需求文档

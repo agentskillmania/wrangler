@@ -1,6 +1,6 @@
 export const REVIEW_PLAN_CONTENT = `---
 name: review-plan
-description: plan 文档刚写好或刚改过，需要审查质量后再提交用户审批。
+description: plan 文档生成或修改后触发。按覆盖度、一致性、顺序、粒度等六个维度审查，产出审查报告。
 ---
 
 # Review Plan：审查执行计划
