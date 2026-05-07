@@ -12,12 +12,25 @@
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { createSessionSupport } from '../../src/session/support.js';
-import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
+import {
+  AgentRunner,
+  createAgentState,
+  addUserMessage,
+  type ToolDefinition,
+} from '@agentskillmania/colts';
 import { mkdir, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { testConfig, itif } from './config.js';
-import { createRealLLMClient } from './helpers.js';
+
+function makeRunner(tools: ToolDefinition[], middleware: any[]) {
+  return new AgentRunner({
+    model: testConfig.testModel,
+    llm: { apiKey: testConfig.apiKey, provider: testConfig.provider, baseUrl: testConfig.baseUrl },
+    tools,
+    middleware,
+  });
+}
 
 describe('US1: 创建 Runner 并执行单轮对话', () => {
   let testBaseDir: string;
@@ -42,18 +55,12 @@ describe('US1: 创建 Runner 并执行单轮对话', () => {
   itif(testConfig.enabled)(
     'should execute single-turn conversation and persist full session',
     async () => {
-      const client = createRealLLMClient();
       const session = createSessionSupport({
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });
 
-      const runner = new AgentRunner({
-        model: testConfig.testModel,
-        llmClient: client,
-        tools: session.tools,
-        middleware: [session.middleware],
-      });
+      const runner = makeRunner(session.tools, [session.middleware]);
 
       let state = createAgentState({
         name: 'test-agent',
@@ -98,19 +105,12 @@ describe('US1: 创建 Runner 并执行单轮对话', () => {
   itif(testConfig.enabled)(
     'should handle calculator tool call and persist transcript',
     async () => {
-      const client = createRealLLMClient();
       const session = createSessionSupport({
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });
 
-      const runner = new AgentRunner({
-        model: testConfig.testModel,
-        llmClient: client,
-        tools: session.tools,
-        middleware: [session.middleware],
-        maxSteps: 5,
-      });
+      const runner = makeRunner(session.tools, [session.middleware]);
 
       let state = createAgentState({
         name: 'math-agent',
@@ -150,7 +150,7 @@ describe('US2: 恢复 Session 继续对话', () => {
       const agentConfig = {
         name: 'test-agent',
         instructions: 'You are a helpful assistant. Answer concisely.',
-        tools: [] as import('@agentskillmania/colts').ToolDefinition[],
+        tools: [] as ToolDefinition[],
       };
 
       const session = createSessionSupport({
@@ -159,13 +159,7 @@ describe('US2: 恢复 Session 继续对话', () => {
       });
 
       // Round 1
-      const client1 = createRealLLMClient();
-      const runner1 = new AgentRunner({
-        model: testConfig.testModel,
-        llmClient: client1,
-        tools: session.tools,
-        middleware: [session.middleware],
-      });
+      const runner1 = makeRunner(session.tools, [session.middleware]);
 
       let state = createAgentState(agentConfig);
       state = addUserMessage(state, 'My name is Alice. Remember it.');
@@ -176,13 +170,7 @@ describe('US2: 恢复 Session 继续对话', () => {
       const loaded = await session.store.loadState(sessionId);
       expect(loaded).not.toBeNull();
 
-      const client2 = createRealLLMClient();
-      const runner2 = new AgentRunner({
-        model: testConfig.testModel,
-        llmClient: client2,
-        tools: session.tools,
-        middleware: [session.middleware],
-      });
+      const runner2 = makeRunner(session.tools, [session.middleware]);
 
       const resumedState = addUserMessage(loaded!, 'What is my name?');
       const { state: finalState } = await runner2.run(resumedState);
