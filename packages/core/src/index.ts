@@ -34,3 +34,17 @@ export {
   deleteTodo,
   formatTodoForContext,
 } from './todolist/index.js';
+
+// Spec/Plan (Layer 4)
+export { SpecStore, PlanStore } from './spec-plan/index.js';
+export type {
+  SpecStatus,
+  PlanStatus,
+  SpecMeta,
+  PlanMeta,
+  SpecDocument,
+  PlanDocument,
+} from './spec-plan/index.js';
+export { WRITING_SPEC_CONTENT, REVIEW_SPEC_CONTENT } from './spec-plan/index.js';
+export { WRITING_PLAN_CONTENT, REVIEW_PLAN_CONTENT } from './spec-plan/index.js';
+export { EXECUTE_PLAN_CONTENT } from './spec-plan/index.js';
