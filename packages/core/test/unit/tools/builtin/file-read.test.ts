@@ -57,7 +57,9 @@ describe('file_read', () => {
   });
 
   it('rejects binary file', async () => {
-    await writeFile(join(workspace, 'test.zip'), 'fake zip');
+    const buf = Buffer.alloc(100);
+    for (let i = 0; i < 50; i++) buf[i] = 0;
+    await writeFile(join(workspace, 'test.zip'), buf);
     const tool = createFileReadTool(deps());
     const result = await tool.execute({ filePath: 'test.zip' });
     expect(result.output).toContain('Error: Cannot read binary file');

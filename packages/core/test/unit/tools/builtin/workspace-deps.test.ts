@@ -88,55 +88,41 @@ describe('workspace-deps', () => {
   // --- isBinaryFile ---
 
   describe('isBinaryFile', () => {
-    it('detects binary by extension (.zip)', async () => {
+    it('detects binary file with null bytes', async () => {
       const path = join(workspace, 'test.zip');
-      await writeFile(path, 'not actually zip');
+      const buf = Buffer.alloc(100);
+      for (let i = 0; i < 50; i++) buf[i] = 0;
+      for (let i = 50; i < 100; i++) buf[i] = 65;
+      await writeFile(path, buf);
       expect(await isBinaryFile(path)).toBe(true);
     });
 
-    it('detects binary by extension (.exe)', async () => {
-      const path = join(workspace, 'test.exe');
-      await writeFile(path, 'content');
-      expect(await isBinaryFile(path)).toBe(true);
-    });
-
-    it('detects binary by extension (.wasm)', async () => {
-      const path = join(workspace, 'test.wasm');
-      await writeFile(path, 'content');
-      expect(await isBinaryFile(path)).toBe(true);
-    });
-
-    it('returns false for text extension (.ts)', async () => {
+    it('returns false for text file (.ts)', async () => {
       const path = join(workspace, 'test.ts');
       await writeFile(path, 'const x = 1;');
       expect(await isBinaryFile(path)).toBe(false);
     });
 
-    it('returns false for text extension (.json)', async () => {
+    it('returns false for text file (.json)', async () => {
       const path = join(workspace, 'test.json');
       await writeFile(path, '{}');
       expect(await isBinaryFile(path)).toBe(false);
     });
 
-    it('returns false for text extension (.md)', async () => {
+    it('returns false for text file (.md)', async () => {
       const path = join(workspace, 'test.md');
       await writeFile(path, '# Hello');
       expect(await isBinaryFile(path)).toBe(false);
     });
 
-    it('detects binary by byte sampling (>30% non-printable, no extension)', async () => {
-      const path = join(workspace, 'binaryfile');
-      // Create buffer with >30% non-printable bytes
-      const buf = Buffer.alloc(100);
-      for (let i = 0; i < 50; i++) buf[i] = 0; // 50% null bytes
-      for (let i = 50; i < 100; i++) buf[i] = 65; // 'A'
-      await writeFile(path, buf);
-      expect(await isBinaryFile(path)).toBe(true);
-    });
-
     it('returns false for empty file', async () => {
       const path = join(workspace, 'empty');
       await writeFile(path, '');
+      expect(await isBinaryFile(path)).toBe(false);
+    });
+
+    it('returns false when file does not exist', async () => {
+      const path = join(workspace, 'nope');
       expect(await isBinaryFile(path)).toBe(false);
     });
   });

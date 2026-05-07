@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import TurndownService from 'turndown';
+import { JSDOM } from 'jsdom';
+import { Readability } from '@mozilla/readability';
 import type { WranglerToolDef } from '../types.js';
 import type { WorkspaceToolDeps } from './workspace-deps.js';
 import { truncateOutput } from './workspace-deps.js';
@@ -8,6 +10,16 @@ const WebFetchSchema = z.object({
   url: z.string().describe('URL to fetch'),
   format: z.enum(['markdown', 'text']).optional().describe('Output format (default: markdown)'),
 });
+
+function htmlToMarkdown(html: string, url: string): string {
+  const dom = new JSDOM(html, { url });
+  const article = new Readability(dom.window.document).parse();
+
+  if (article?.content) {
+    return new TurndownService().turndown(article.content);
+  }
+  return new TurndownService().turndown(html);
+}
 
 export function createWebFetchTool(
   deps: WorkspaceToolDeps
@@ -38,7 +50,7 @@ export function createWebFetchTool(
 
       if (contentType.includes('text/html')) {
         const html = await response.text();
-        output = new TurndownService().turndown(html);
+        output = htmlToMarkdown(html, args.url);
       } else if (contentType.includes('application/json')) {
         const json = await response.json();
         output = JSON.stringify(json, null, 2);

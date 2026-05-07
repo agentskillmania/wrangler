@@ -1,8 +1,5 @@
-import { resolve } from 'node:path';
-import { createReadStream } from 'node:fs';
-import { createInterface } from 'node:readline';
 import { z } from 'zod';
-import fg from 'fast-glob';
+import { ripgrep } from 'ripgrep';
 import type { WranglerToolDef } from '../types.js';
 import type { WorkspaceToolDeps } from './workspace-deps.js';
 import { resolvePath } from './workspace-deps.js';
@@ -25,35 +22,46 @@ export function createGrepTool(deps: WorkspaceToolDeps): WranglerToolDef<typeof 
     description: 'Search file contents by regex pattern.',
     parameters: GrepSchema,
     async execute(args) {
-      let regex: RegExp;
       try {
-        regex = new RegExp(args.pattern);
+        new RegExp(args.pattern);
       } catch (e) {
         return { output: `Error: Invalid regex pattern: ${(e as Error).message}` };
       }
 
       const cwd = args.path ? resolvePath(deps, args.path) : deps.workspacePath;
-      const files = await fg(args.include ?? '**/*', { cwd, onlyFiles: true, dot: false });
-      const matches: Array<{ path: string; line: number; text: string }> = [];
+      const rgArgs = ['--json', '--max-count', String(MAX_RESULTS), '--regexp', args.pattern];
+      if (args.include) {
+        rgArgs.push('--glob', args.include);
+      }
+      rgArgs.push(cwd);
 
-      for (const file of files) {
-        if (matches.length >= MAX_RESULTS) break;
-        const absPath = resolve(cwd, file);
-        const rl = createInterface({ input: createReadStream(absPath, { encoding: 'utf8' }) });
+      let stdout: string;
+      try {
+        const result = await ripgrep(rgArgs, { buffer: true });
+        stdout = result.stdout ?? '';
+      } catch (e) {
+        return { output: `Error: Search failed: ${(e as Error).message}` };
+      }
+
+      const matches: Array<{ path: string; line: number; text: string }> = [];
+      for (const line of stdout.split('\n')) {
+        if (!line.trim()) continue;
         try {
-          let lineNum = 0;
-          for await (const line of rl) {
-            lineNum++;
-            regex.lastIndex = 0;
-            if (regex.test(line)) {
-              const text =
-                line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + '...' : line;
-              matches.push({ path: file, line: lineNum, text });
-              if (matches.length >= MAX_RESULTS) break;
-            }
+          const obj = JSON.parse(line);
+          if (obj.type === 'match') {
+            const text = obj.data.lines.text;
+            matches.push({
+              path: obj.data.path.text,
+              line: obj.data.line_number,
+              text:
+                text.length > MAX_LINE_LENGTH
+                  ? text.slice(0, MAX_LINE_LENGTH) + '...'
+                  : text.trimEnd(),
+            });
+            if (matches.length >= MAX_RESULTS) break;
           }
-        } finally {
-          rl.close();
+        } catch {
+          // skip unparseable lines
         }
       }
 
