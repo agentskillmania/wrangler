@@ -1,6 +1,6 @@
 export const REVIEW_SPEC_CONTENT = `---
 name: review-spec
-description: 审查 spec 文档的质量。逐项检查覆盖度、清晰度、可行性、完整性，产出审查报告。不通过时附带修改建议。
+description: spec 文档刚写好或刚改过，需要审查质量后再提交用户审批。
 ---
 
 # Review Spec：审查需求文档

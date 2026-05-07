@@ -1,6 +1,6 @@
 export const EXECUTE_PLAN_CONTENT = `---
 name: execute-plan
-description: plan 批准后使用。读取 plan 文档，创建 todolist，逐步执行每个任务并验证验收条件，完成后更新 plan 状态。
+description: plan 已批准，可以开始创建任务列表并逐步执行了。
 ---
 
 # Execute：按计划行动

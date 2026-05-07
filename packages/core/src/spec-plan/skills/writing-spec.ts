@@ -1,6 +1,6 @@
 export const WRITING_SPEC_CONTENT = `---
 name: writing-spec
-description: 用户提出新功能、新任务或重大变更时使用。通过结构化访谈挖掘真实需求，生成版本化的 spec 文档，保存后交由 review skill 审查。
+description: 用户描述了需求（新功能、新任务、重大变更、调研、配置等），需要先弄清楚要做什么再动手。
 ---
 
 # Spec：搞清楚要做什么

@@ -1,6 +1,6 @@
 export const WRITING_PLAN_CONTENT = `---
 name: writing-plan
-description: spec 批准后使用。将 spec 转化为分阶段的执行计划，包含带验收条件的小步骤，保存后交由 review skill 审查，通过后创建 todolist。
+description: spec 已批准，需要把需求拆解成带验收条件的具体执行步骤。
 ---
 
 # Plan：设计怎么执行
