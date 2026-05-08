@@ -5,51 +5,38 @@
  * Requires wasmtime and busybox.wasm to be available.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import { Sandbox } from '@agentskillmania/sandbox';
 import { createShellTool } from '../../src/tools/builtin/shell.js';
-import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdir, rm } from 'node:fs/promises';
 
-// Probe: try creating a sandbox and running a command to detect availability
+// Probe synchronously at module load time so itif gets the right value
 let sandboxAvailable = false;
+let sandbox: Sandbox;
+let sandboxDir: string;
 
-async function probeSandbox(): Promise<boolean> {
-  try {
-    const dir = join(tmpdir(), `wrangler-shell-probe-${Date.now()}`);
-    await mkdir(dir, { recursive: true });
-    const sb = new Sandbox({ sandboxDir: dir, timeout: 10000 });
-    const result = await sb.run('echo ok');
-    await rm(dir, { recursive: true, force: true }).catch(() => {});
-    return result.exitCode === 0;
-  } catch {
-    return false;
-  }
+// Top-level await: vitest supports ESM top-level await
+try {
+  sandboxDir = join(tmpdir(), `wrangler-shell-intg-${Date.now()}`);
+  await mkdir(sandboxDir, { recursive: true });
+  sandbox = new Sandbox({ sandboxDir, timeout: 15000 });
+  const result = await sandbox.run('echo probe');
+  sandboxAvailable = result.exitCode === 0;
+} catch {
+  sandboxAvailable = false;
 }
 
 const itif = (condition: boolean) => (condition ? it : it.skip);
 
+afterAll(async () => {
+  if (sandboxDir) {
+    await rm(sandboxDir, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
 describe('US2: Shell tool (real sandbox)', () => {
-  let sandbox: Sandbox;
-  let sandboxDir: string;
-
-  beforeAll(async () => {
-    sandboxAvailable = await probeSandbox();
-    if (!sandboxAvailable) return;
-
-    sandboxDir = join(tmpdir(), `wrangler-shell-intg-${Date.now()}`);
-    await mkdir(sandboxDir, { recursive: true });
-    sandbox = new Sandbox({ sandboxDir: sandboxDir, timeout: 15000 });
-  });
-
-  afterAll(async () => {
-    if (sandboxDir) {
-      await rm(sandboxDir, { recursive: true, force: true }).catch(() => {});
-    }
-  });
-
   itif(sandboxAvailable)('executes echo command', async () => {
     const tool = createShellTool(sandbox);
     const result = await tool.execute({ command: 'echo hello' });
