@@ -1,5 +1,5 @@
 /**
- * Layer 4 集成测试 — 覆盖 US1-US8
+ * Spec/Plan 集成测试 — 覆盖 US1-US8
  *
  * US1: 创建和存储 Spec 文档
  * US2: 创建和存储 Plan 文档
@@ -25,7 +25,7 @@ import {
 } from '../../src/spec-plan/index.js';
 import type { SpecDocument, PlanDocument } from '../../src/spec-plan/types.js';
 
-describe('Layer 4: Spec/Plan Integration', () => {
+describe('Spec/Plan Integration', () => {
   let testDir: string;
   let specStore: SpecStore;
   let planStore: PlanStore;

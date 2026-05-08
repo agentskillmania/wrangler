@@ -9,9 +9,14 @@ export { createSessionSupport } from './session/support.js';
 export { SessionStore } from './session/session-store.js';
 export { writeMeta, readMeta } from './session/meta.js';
 export { formatTranscriptEntry } from './session/transcript.js';
+export type { ConversationMessage } from './session/types.js';
 
 // Middleware (advanced usage)
 export { createSessionMiddleware } from './middleware/session-middleware.js';
+
+// Agent (Layer 5)
+export { parseAgentMd, ConfigurableAgent } from './agent/index.js';
+export type { AgentMeta, AgentDefinition, ConfigurableAgentOptions } from './agent/index.js';
 
 // Tools (Layer 2)
 export { createBuiltinTools } from './tools/builtin/index.js';
@@ -48,3 +53,27 @@ export type {
 export { WRITING_SPEC_CONTENT, REVIEW_SPEC_CONTENT } from './spec-plan/index.js';
 export { WRITING_PLAN_CONTENT, REVIEW_PLAN_CONTENT } from './spec-plan/index.js';
 export { EXECUTE_PLAN_CONTENT } from './spec-plan/index.js';
+
+// Crew (Layer 6)
+export { CrewLoader, CrewRunner, CrewStore, LocalCrewExecutor } from './crew/index.js';
+export {
+  createDelegateTaskTool,
+  createSendMessageTool,
+  createReadTodolistTool,
+  createUpdateTodolistTool,
+} from './crew/index.js';
+export type {
+  CrewConfig,
+  CrewMeta,
+  CrewState,
+  CrewEvent,
+  CrewAction,
+  CrewResult,
+  TaskState,
+  TaskMeta,
+  TaskContext,
+  CrewTodoItem,
+  AgentStatus,
+  TaskStatus,
+  CrewRunnerOptions,
+} from './crew/index.js';

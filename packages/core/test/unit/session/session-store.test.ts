@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { SessionStore } from '../../../src/session/session-store.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import type { TranscriptEntry } from '../../../src/types.js';
+import type { ConversationMessage } from '../../../src/session/types.js';
 
 describe('SessionStore', () => {
   let store: SessionStore;
@@ -223,6 +224,117 @@ describe('SessionStore', () => {
 
       await store.deleteSession(sessionId);
       expect(store.exists(sessionId)).toBe(false);
+    });
+  });
+
+  describe('appendMessage / readConversation', () => {
+    it('should append a ConversationMessage to user-chat.jsonl', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+
+      const msg: ConversationMessage = {
+        role: 'user',
+        content: 'Hello agent',
+        timestamp: Date.now(),
+      };
+      await store.appendMessage(sessionId, msg);
+
+      const dirPath = store.getSessionDir(sessionId);
+      const content = await readFile(join(dirPath, 'user-chat.jsonl'), 'utf-8');
+      const parsed = JSON.parse(content.trim());
+      expect(parsed.role).toBe('user');
+      expect(parsed.content).toBe('Hello agent');
+      expect(parsed.timestamp).toBe(msg.timestamp);
+    });
+
+    it('should read all ConversationMessages in order', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+
+      await store.appendMessage(sessionId, {
+        role: 'user',
+        content: 'Hello',
+        timestamp: 1000,
+      });
+      await store.appendMessage(sessionId, {
+        role: 'assistant',
+        content: 'Hi!',
+        timestamp: 2000,
+      });
+      await store.appendMessage(sessionId, {
+        role: 'tool',
+        content: 'result output',
+        timestamp: 3000,
+        toolName: 'read',
+      });
+
+      const messages = await store.readConversation(sessionId);
+      expect(messages).toHaveLength(3);
+      expect(messages[0].role).toBe('user');
+      expect(messages[0].content).toBe('Hello');
+      expect(messages[1].role).toBe('assistant');
+      expect(messages[2].role).toBe('tool');
+      expect(messages[2].toolName).toBe('read');
+    });
+
+    it('should write one JSON per line (JSONL format)', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+
+      await store.appendMessage(sessionId, { role: 'user', content: 'a', timestamp: 1 });
+      await store.appendMessage(sessionId, { role: 'user', content: 'b', timestamp: 2 });
+
+      const dirPath = store.getSessionDir(sessionId);
+      const raw = await readFile(join(dirPath, 'user-chat.jsonl'), 'utf-8');
+      const lines = raw.trim().split('\n');
+      expect(lines).toHaveLength(2);
+      // Each line is valid JSON
+      for (const line of lines) {
+        expect(() => JSON.parse(line)).not.toThrow();
+      }
+    });
+
+    it('should return empty array for non-existent session', async () => {
+      const messages = await store.readConversation('nonexistent-id');
+      expect(messages).toEqual([]);
+    });
+
+    it('should handle messages with optional fields', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+
+      const errorMsg: ConversationMessage = {
+        role: 'error',
+        content: 'something went wrong',
+        timestamp: Date.now(),
+        errorMessage: 'ENOENT: file not found',
+      };
+      await store.appendMessage(sessionId, errorMsg);
+
+      const messages = await store.readConversation(sessionId);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].errorMessage).toBe('ENOENT: file not found');
+    });
+
+    it('should handle messages with exitCode and toolArguments', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+
+      const toolMsg: ConversationMessage = {
+        role: 'tool',
+        content: 'command output',
+        timestamp: Date.now(),
+        toolName: 'shell',
+        toolArguments: '{"command":"ls -la"}',
+        exitCode: 0,
+      };
+      await store.appendMessage(sessionId, toolMsg);
+
+      const messages = await store.readConversation(sessionId);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].toolName).toBe('shell');
+      expect(messages[0].toolArguments).toBe('{"command":"ls -la"}');
+      expect(messages[0].exitCode).toBe(0);
     });
   });
 });

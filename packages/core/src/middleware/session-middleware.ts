@@ -2,87 +2,71 @@
 
 import type { AgentMiddleware } from '@agentskillmania/colts';
 import type { SessionStore } from '../session/session-store.js';
-import type { TranscriptEntry } from '../types.js';
+import type { ConversationMessage } from '../session/types.js';
 
 /**
- * 创建 session 管理 middleware
+ * Create session management middleware.
  *
- * - beforeRun: 检查 session 目录 → 不存在则创建，写 User transcript entry
- * - afterStep: 根据 StepResult 类型写 Tool/Assistant/Error transcript entry
- * - afterRun: saveState（Snapshot 格式）+ updateMeta
- *
- * model 从 ctx.runnerOptions.model 获取，无需外部注入。
+ * - beforeRun: create session dir if missing
+ * - afterStep: write ConversationMessage (tool/assistant/error) to user-chat.jsonl
+ * - afterRun: save state + update meta
  */
 export function createSessionMiddleware(store: SessionStore): AgentMiddleware {
   return {
     name: 'session',
 
-    async beforeRun(ctx) {
+    beforeRun: async (ctx) => {
       const sessionId = ctx.state.id;
+      const model = ctx.runnerOptions.model;
 
       if (!(await store.existsAsync(sessionId))) {
-        const model = ctx.runnerOptions.model;
         await store.createWithId(sessionId, model);
-      }
-
-      const messages = ctx.state.context.messages;
-      const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
-      if (lastUserMsg) {
-        const entry: TranscriptEntry = {
-          type: 'user',
-          content:
-            typeof lastUserMsg.content === 'string'
-              ? lastUserMsg.content
-              : JSON.stringify(lastUserMsg.content),
-          timestamp: Date.now(),
-        };
-        await store.appendTranscript(sessionId, entry);
       }
     },
 
-    async afterStep(ctx) {
+    afterStep: async (ctx) => {
       const sessionId = ctx.state.id;
       const { result } = ctx;
 
       if (result.type === 'continue') {
         for (const action of result.actions) {
-          const entry: TranscriptEntry = {
-            type: 'tool',
-            toolName: action.tool,
-            arguments: JSON.stringify(action.arguments),
-            result:
+          const msg: ConversationMessage = {
+            role: 'tool',
+            content:
               typeof result.toolResult === 'string'
                 ? result.toolResult
                 : JSON.stringify(result.toolResult ?? ''),
             timestamp: Date.now(),
+            toolName: action.tool,
+            toolArguments: JSON.stringify(action.arguments),
           };
-          await store.appendTranscript(sessionId, entry);
+          await store.appendMessage(sessionId, msg);
         }
       } else if (result.type === 'done') {
-        const entry: TranscriptEntry = {
-          type: 'assistant',
+        const msg: ConversationMessage = {
+          role: 'assistant',
           content: result.answer,
           timestamp: Date.now(),
         };
-        await store.appendTranscript(sessionId, entry);
+        await store.appendMessage(sessionId, msg);
       } else if (result.type === 'error') {
-        const entry: TranscriptEntry = {
-          type: 'error',
-          message: result.error.message,
+        const msg: ConversationMessage = {
+          role: 'error',
+          content: result.error.message,
           timestamp: Date.now(),
+          errorMessage: result.error.message,
         };
-        await store.appendTranscript(sessionId, entry);
+        await store.appendMessage(sessionId, msg);
       }
     },
 
-    async afterRun(ctx) {
+    afterRun: async (ctx) => {
       const sessionId = ctx.state.id;
 
       await store.saveState(sessionId, ctx.state);
 
       await store.updateMeta(sessionId, {
         updatedAt: new Date().toISOString(),
-        messageCount: ctx.state.context.messages.length,
       });
     },
   };

@@ -10,6 +10,7 @@ import { writeMeta, readMeta } from './meta.js';
 import { formatTranscriptEntry } from './transcript.js';
 import type { SessionMeta, TranscriptEntry } from '../types.js';
 import type { TodoList } from '../todolist/types.js';
+import type { ConversationMessage } from './types.js';
 
 /**
  * 计算 workspace 路径的 MD5 哈希，用于 session 目录分组
@@ -166,6 +167,30 @@ export class SessionStore {
       return JSON.parse(raw) as TodoList;
     } catch {
       return null;
+    }
+  }
+
+  // ─── Conversation model (Layer 5+, replaces transcript) ───
+
+  /** Append a ConversationMessage to user-chat.jsonl */
+  async appendMessage(sessionId: string, message: ConversationMessage): Promise<void> {
+    const dir = this.getSessionDir(sessionId);
+    const line = JSON.stringify(message) + '\n';
+    await writeFile(join(dir, 'user-chat.jsonl'), line, { flag: 'a', encoding: 'utf-8' });
+  }
+
+  /** Read all ConversationMessages from user-chat.jsonl */
+  async readConversation(sessionId: string): Promise<ConversationMessage[]> {
+    try {
+      const dir = this.getSessionDir(sessionId);
+      const content = await readFile(join(dir, 'user-chat.jsonl'), 'utf-8');
+      return content
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as ConversationMessage);
+    } catch {
+      return [];
     }
   }
 }

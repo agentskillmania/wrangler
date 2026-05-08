@@ -18,7 +18,7 @@ import {
   addUserMessage,
   type ToolDefinition,
 } from '@agentskillmania/colts';
-import { mkdir, rm, readFile } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { testConfig, itif } from './config.js';
@@ -86,17 +86,12 @@ describe('US1: 创建 Runner 并执行单轮对话', () => {
       expect(meta).not.toBeNull();
       expect(meta!.model).toBe(testConfig.testModel);
       expect(meta!.workspacePath).toBe('/test/workspace');
-      expect(meta!.messageCount).toBeGreaterThan(0);
+      expect(meta!.updatedAt).toBeDefined();
 
-      // Verify transcript.jsonl
-      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
-      const lines = transcript.trim().split('\n');
-      expect(lines.length).toBeGreaterThanOrEqual(2);
-      const userEntry = JSON.parse(lines[0]);
-      expect(userEntry.type).toBe('user');
-      expect(userEntry.content).toBe('What is 2 + 2?');
-
-      const assistantMsgs = finalState.context.messages.filter((m) => m.role === 'assistant');
+      // Verify user-chat.jsonl via conversation API
+      const messages = await session.store.readConversation(sessionId);
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+      const assistantMsgs = messages.filter((m) => m.role === 'assistant');
       expect(assistantMsgs.length).toBeGreaterThan(0);
     },
     60000
@@ -175,15 +170,15 @@ describe('US2: 恢复 Session 继续对话', () => {
       const resumedState = addUserMessage(loaded!, 'What is my name?');
       const { state: finalState } = await runner2.run(resumedState);
 
-      // Verify transcript has entries from both rounds
-      const dir = session.store.getSessionDir(sessionId);
-      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
-      const entries = transcript
-        .trim()
-        .split('\n')
-        .map((l) => JSON.parse(l));
+      // Verify conversation has entries from both rounds
+      const messages = await session.store.readConversation(sessionId);
+      const assistantEntries = messages.filter((m) => m.role === 'assistant');
+      expect(assistantEntries.length).toBeGreaterThanOrEqual(2);
 
-      const userContents = entries.filter((e) => e.type === 'user').map((e) => e.content);
+      // Verify state contains both user messages
+      const userContents = finalState.context.messages
+        .filter((m) => m.role === 'user')
+        .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)));
       expect(userContents).toContain('My name is Alice. Remember it.');
       expect(userContents).toContain('What is my name?');
 

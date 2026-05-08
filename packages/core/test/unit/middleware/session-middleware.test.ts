@@ -49,38 +49,6 @@ describe('createSessionMiddleware', () => {
       expect(meta1!.createdAt).toBe(meta2!.createdAt);
     });
 
-    it('should write user transcript entry', async () => {
-      const state = addUserMessage(
-        createAgentState({ name: 'test', instructions: 'test', tools: [] }),
-        'Hello'
-      );
-      await middleware.beforeRun!({ state, runnerOptions: mockRunnerOptions });
-      const dir = store.getSessionDir(state.id);
-      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
-      const parsed = JSON.parse(transcript.trim());
-      expect(parsed.type).toBe('user');
-      expect(parsed.content).toBe('Hello');
-    });
-
-    it('should stringify non-string user message content', async () => {
-      const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      const nonStringState = {
-        ...state,
-        context: {
-          ...state.context,
-          messages: [
-            ...state.context.messages,
-            { role: 'user' as const, content: [{ type: 'text', text: 'Hello from array' }] },
-          ],
-        },
-      };
-      await middleware.beforeRun!({ state: nonStringState, runnerOptions: mockRunnerOptions });
-      const dir = store.getSessionDir(state.id);
-      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
-      const parsed = JSON.parse(transcript.trim());
-      expect(parsed.content).toBe(JSON.stringify([{ type: 'text', text: 'Hello from array' }]));
-    });
-
     it('should use model from runnerOptions for meta', async () => {
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
       await middleware.beforeRun!({ state, runnerOptions: mockRunnerOptions });
@@ -90,7 +58,7 @@ describe('createSessionMiddleware', () => {
   });
 
   describe('afterStep', () => {
-    it('should write tool transcript entry for continue result', async () => {
+    it('should write tool ConversationMessage for continue result', async () => {
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
       await store.createWithId(state.id, 'GLM-4.7');
       const stepResult: StepResult = {
@@ -105,14 +73,15 @@ describe('createSessionMiddleware', () => {
         stepNumber: 0,
         runnerOptions: mockRunnerOptions,
       });
-      const dir = store.getSessionDir(state.id);
-      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
-      const parsed = JSON.parse(transcript.trim());
-      expect(parsed.type).toBe('tool');
-      expect(parsed.toolName).toBe('file_read');
+      const messages = await store.readConversation(state.id);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].role).toBe('tool');
+      expect(messages[0].toolName).toBe('file_read');
+      expect(messages[0].content).toBe('file content here');
+      expect(messages[0].toolArguments).toBe(JSON.stringify({ path: 'src/app.ts' }));
     });
 
-    it('should write assistant transcript entry for done result', async () => {
+    it('should write assistant ConversationMessage for done result', async () => {
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
       await store.createWithId(state.id, 'GLM-4.7');
       const stepResult: StepResult = {
@@ -126,14 +95,13 @@ describe('createSessionMiddleware', () => {
         stepNumber: 0,
         runnerOptions: mockRunnerOptions,
       });
-      const dir = store.getSessionDir(state.id);
-      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
-      const parsed = JSON.parse(transcript.trim());
-      expect(parsed.type).toBe('assistant');
-      expect(parsed.content).toBe('Here is the answer.');
+      const messages = await store.readConversation(state.id);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].role).toBe('assistant');
+      expect(messages[0].content).toBe('Here is the answer.');
     });
 
-    it('should write error transcript entry for error result', async () => {
+    it('should write error ConversationMessage for error result', async () => {
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
       await store.createWithId(state.id, 'GLM-4.7');
       const stepResult: StepResult = {
@@ -147,11 +115,11 @@ describe('createSessionMiddleware', () => {
         stepNumber: 0,
         runnerOptions: mockRunnerOptions,
       });
-      const dir = store.getSessionDir(state.id);
-      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
-      const parsed = JSON.parse(transcript.trim());
-      expect(parsed.type).toBe('error');
-      expect(parsed.message).toBe('LLM call failed');
+      const messages = await store.readConversation(state.id);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].role).toBe('error');
+      expect(messages[0].errorMessage).toBe('LLM call failed');
+      expect(messages[0].content).toBe('LLM call failed');
     });
 
     it('should stringify non-string toolResult in continue result', async () => {
@@ -169,10 +137,8 @@ describe('createSessionMiddleware', () => {
         stepNumber: 0,
         runnerOptions: mockRunnerOptions,
       });
-      const dir = store.getSessionDir(state.id);
-      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
-      const parsed = JSON.parse(transcript.trim());
-      expect(parsed.result).toBe(JSON.stringify({ files: ['a.ts', 'b.ts'] }));
+      const messages = await store.readConversation(state.id);
+      expect(messages[0].content).toBe(JSON.stringify({ files: ['a.ts', 'b.ts'] }));
     });
 
     it('should handle null toolResult in continue result', async () => {
@@ -190,10 +156,32 @@ describe('createSessionMiddleware', () => {
         stepNumber: 0,
         runnerOptions: mockRunnerOptions,
       });
-      const dir = store.getSessionDir(state.id);
-      const transcript = await readFile(join(dir, 'transcript.jsonl'), 'utf-8');
-      const parsed = JSON.parse(transcript.trim());
-      expect(parsed.result).toBe('""');
+      const messages = await store.readConversation(state.id);
+      expect(messages[0].content).toBe('""');
+    });
+
+    it('should write multiple messages for multiple actions', async () => {
+      const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      await store.createWithId(state.id, 'GLM-4.7');
+      const stepResult: StepResult = {
+        type: 'continue',
+        toolResult: 'ok',
+        actions: [
+          { id: 'tc1', tool: 'file_read', arguments: { path: 'a.ts' } },
+          { id: 'tc2', tool: 'file_read', arguments: { path: 'b.ts' } },
+        ],
+        tokens: { input: 100, output: 50 },
+      };
+      await middleware.afterStep!({
+        state,
+        result: stepResult,
+        stepNumber: 0,
+        runnerOptions: mockRunnerOptions,
+      });
+      const messages = await store.readConversation(state.id);
+      expect(messages).toHaveLength(2);
+      expect(messages[0].toolName).toBe('file_read');
+      expect(messages[1].toolName).toBe('file_read');
     });
   });
 
@@ -206,14 +194,14 @@ describe('createSessionMiddleware', () => {
       await store.createWithId(state.id, 'GLM-4.7');
       await middleware.afterRun!({
         state,
-        result: { type: 'success', reason: 'done', state } as any,
+        result: { type: 'completed', reason: 'done', state } as any,
         runnerOptions: mockRunnerOptions,
       });
       const loaded = await store.loadState(state.id);
       expect(loaded).not.toBeNull();
       expect(loaded!.id).toBe(state.id);
       const meta = await store.getMeta(state.id);
-      expect(meta!.messageCount).toBe(state.context.messages.length);
+      expect(meta!.updatedAt).toBeDefined();
     });
   });
 });
