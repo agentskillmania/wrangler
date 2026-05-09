@@ -1,0 +1,70 @@
+import type { AgentRole, AgentInstanceInfo, AgentInstanceStatus, CrewMessage } from './types.js';
+
+export interface AgentInstanceOptions {
+  id: string;
+  role: AgentRole;
+  definitionName: string;
+  partnerId?: string;
+  taskId?: string;
+}
+
+export class AgentInstance {
+  readonly id: string;
+  readonly role: AgentRole;
+  readonly definitionName: string;
+  readonly partnerId?: string;
+  readonly taskId?: string;
+
+  private _status: AgentInstanceStatus = 'idle';
+  private _queue: CrewMessage[] = [];
+
+  constructor(options: AgentInstanceOptions) {
+    this.id = options.id;
+    this.role = options.role;
+    this.definitionName = options.definitionName;
+    this.partnerId = options.partnerId;
+    this.taskId = options.taskId;
+  }
+
+  get status(): AgentInstanceStatus {
+    return this._status;
+  }
+
+  get queueSize(): number {
+    return this._queue.length;
+  }
+
+  get hasMessages(): boolean {
+    return this._queue.length > 0;
+  }
+
+  enqueue(message: CrewMessage): void {
+    this._queue.push(message);
+  }
+
+  dequeue(): CrewMessage[] {
+    const msgs = [...this._queue];
+    this._queue = [];
+    return msgs;
+  }
+
+  setRunning(): void {
+    this._status = 'running';
+  }
+
+  setIdle(): void {
+    this._status = 'idle';
+  }
+
+  toInfo(): AgentInstanceInfo {
+    return {
+      id: this.id,
+      role: this.role,
+      definitionName: this.definitionName,
+      status: this._status,
+      partnerId: this.partnerId,
+      taskId: this.taskId,
+      queueSize: this._queue.length,
+    };
+  }
+}
