@@ -1,28 +1,40 @@
-// packages/core/src/crew/index.ts
+// @agentskillmania/wrangler — Layer 8 crew module
 
-export { CrewLoader } from './crew-loader.js';
-export { CrewRunner } from './crew-runner.js';
-export { CrewStore } from './crew-store.js';
-export { LocalCrewExecutor } from './crew-executor.js';
+// Tools
 export {
-  createDelegateTaskTool,
+  createCreateTaskTool,
   createSendMessageTool,
-  createReadTodolistTool,
-  createUpdateTodolistTool,
+  createRelayToPrimaryTool,
+  createSendToWorkerTool,
+  createSendToLiaisonTool,
+  createAskUserTool,
+  createReadCrewTodolistTool,
+  createUpdateCrewTodolistTool,
 } from './crew-tools.js';
+
+// Types
 export type {
-  CrewConfig,
-  CrewMeta,
-  CrewState,
-  CrewEvent,
-  CrewAction,
-  CrewResult,
-  TaskState,
-  TaskMeta,
-  TaskContext,
-  CrewTodoItem,
-  AgentStatus,
+  AgentRole,
+  AgentInstanceStatus,
+  AgentInstanceInfo,
   TaskStatus,
-  ConversationMessage,
-  CrewRunnerOptions,
+  TaskInfo,
+  CrewTodoStatus,
+  CrewTodoItem,
+  CrewStatus,
+  CrewState,
+  CrewInput,
+  CrewOutputEvent,
+  CrewEventHandler,
+  CrewUserResponseEvent,
+  CrewTaskStartedEvent,
+  CrewTaskCompletedEvent,
+  CrewTaskFailedEvent,
+  CrewTodolistUpdatedEvent,
+  CrewAgentCreatedEvent,
+  CrewAgentDestroyedEvent,
+  CrewErrorEvent,
+  CrewMessage,
+  CrewConfig,
+  CrewOptions,
 } from './types.js';

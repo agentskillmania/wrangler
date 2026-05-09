@@ -53,26 +53,27 @@ export { WRITING_SPEC_CONTENT, REVIEW_SPEC_CONTENT } from './spec-plan/index.js'
 export { WRITING_PLAN_CONTENT, REVIEW_PLAN_CONTENT } from './spec-plan/index.js';
 export { EXECUTE_PLAN_CONTENT } from './spec-plan/index.js';
 
-// Crew (Layer 6)
-export { CrewLoader, CrewRunner, CrewStore, LocalCrewExecutor } from './crew/index.js';
+// Crew (Layer 8)
 export {
-  createDelegateTaskTool,
+  createCreateTaskTool,
   createSendMessageTool,
-  createReadTodolistTool,
-  createUpdateTodolistTool,
+  createRelayToPrimaryTool,
+  createSendToWorkerTool,
+  createSendToLiaisonTool,
+  createAskUserTool,
+  createReadCrewTodolistTool,
+  createUpdateCrewTodolistTool,
 } from './crew/index.js';
 export type {
   CrewConfig,
-  CrewMeta,
   CrewState,
-  CrewEvent,
-  CrewAction,
-  CrewResult,
-  TaskState,
-  TaskMeta,
-  TaskContext,
+  CrewInput,
+  CrewOutputEvent,
+  CrewEventHandler,
   CrewTodoItem,
-  AgentStatus,
+  AgentRole,
+  AgentInstanceInfo,
   TaskStatus,
-  CrewRunnerOptions,
+  TaskInfo,
+  CrewOptions,
 } from './crew/index.js';
