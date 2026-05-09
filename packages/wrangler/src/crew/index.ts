@@ -1,5 +1,8 @@
 // @agentskillmania/wrangler — Layer 8 crew module
 
+// Crew main class
+export { Crew } from './crew.js';
+
 // Tools
 export {
   createCreateTaskTool,
@@ -11,6 +14,13 @@ export {
   createReadCrewTodolistTool,
   createUpdateCrewTodolistTool,
 } from './crew-tools.js';
+
+// Internal components
+export { AgentInstance } from './agent-instance.js';
+export { MessageRouter } from './message-router.js';
+export { Scheduler } from './scheduler.js';
+export { CrewTodoList } from './crew-todolist.js';
+export { buildLiaisonPrompt } from './liaison-prompt.js';
 
 // Types
 export type {
