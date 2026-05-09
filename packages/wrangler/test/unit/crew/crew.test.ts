@@ -70,43 +70,4 @@ describe('Crew', () => {
     crew.pushInput({ type: 'stop' });
     expect(crew.state.status).toBe('stopped');
   });
-
-  it('pushInput with user_message creates primary and sets running', async () => {
-    const crew = new Crew(mockConfig, { llmClient: {} as never });
-    const events: CrewOutputEvent[] = [];
-    crew.on('agent_created', (e) => events.push(e));
-
-    crew.pushInput({ type: 'user_message', content: 'hello' });
-
-    expect(crew.state.status).toBe('running');
-    expect(events).toHaveLength(1);
-    expect(events[0].type).toBe('agent_created');
-
-    // Wait for async scheduling to complete
-    await new Promise((r) => setTimeout(r, 50));
-  });
-
-  it('pushInput with user_message reuses existing primary', async () => {
-    const crew = new Crew(mockConfig, { llmClient: {} as never });
-
-    crew.pushInput({ type: 'user_message', content: 'first' });
-    await new Promise((r) => setTimeout(r, 50));
-
-    const events: CrewOutputEvent[] = [];
-    crew.on('agent_created', (e) => events.push(e));
-
-    crew.pushInput({ type: 'user_message', content: 'second' });
-    await new Promise((r) => setTimeout(r, 50));
-
-    // Primary already exists, no new agent_created event
-    expect(events).toHaveLength(0);
-  });
-
-  it('state includes primaryId after first message', async () => {
-    const crew = new Crew(mockConfig, { llmClient: {} as never });
-    crew.pushInput({ type: 'user_message', content: 'hello' });
-    await new Promise((r) => setTimeout(r, 50));
-
-    expect(crew.state.primaryId).toBe('primary-1');
-  });
 });

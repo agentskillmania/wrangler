@@ -1,4 +1,5 @@
 import type { AgentRole, AgentInstanceInfo, AgentInstanceStatus, CrewMessage } from './types.js';
+import type { AgentRunner, AgentState } from '@agentskillmania/colts';
 
 export interface AgentInstanceOptions {
   id: string;
@@ -17,6 +18,11 @@ export class AgentInstance {
 
   private _status: AgentInstanceStatus = 'idle';
   private _queue: CrewMessage[] = [];
+
+  /** colts runner — set by Crew when creating the agent */
+  runner?: AgentRunner;
+  /** colts agent state — updated each advance, persisted across turns */
+  agentState?: AgentState;
 
   constructor(options: AgentInstanceOptions) {
     this.id = options.id;
