@@ -169,4 +169,72 @@ describe('Crew', () => {
       });
     });
   });
+
+  describe('per-agent model', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type InternalCrew = { ensureRunner: (a: any) => void; agents: Map<string, any> };
+
+    function getRunnerModel(crew: InternalCrew, agentDefName: string): string {
+      const agent = [...crew.agents.values()].find(
+        (a: { definitionName: string }) => a.definitionName === agentDefName
+      );
+      if (!agent) throw new Error(`Agent ${agentDefName} not found`);
+      crew.ensureRunner(agent);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (agent.runner as any).options.model as string;
+    }
+
+    it('uses agentDef meta.model when available', () => {
+      const configWithModel: CrewConfig = {
+        ...mockConfig,
+        agentDefs: {
+          primary: { meta: { name: 'primary' }, instructions: 'You are primary' },
+          searcher: {
+            meta: { name: 'searcher', description: 'Search', model: 'claude-3' },
+            instructions: 'You search',
+          },
+        },
+      };
+      const crew = new Crew(configWithModel, {
+        llmClient: {} as never,
+        defaultModel: 'gpt-4o',
+      }) as unknown as InternalCrew;
+
+      // Create a worker via createTask
+      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        'searcher',
+        'test',
+        'primary-1'
+      );
+
+      expect(getRunnerModel(crew, 'searcher')).toBe('claude-3');
+    });
+
+    it('falls back to defaultModel when agentDef has no model', () => {
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        defaultModel: 'gpt-4o',
+      }) as unknown as InternalCrew;
+
+      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        'searcher',
+        'test',
+        'primary-1'
+      );
+
+      expect(getRunnerModel(crew, 'searcher')).toBe('gpt-4o');
+    });
+
+    it('falls back to gpt-4 when neither provides model', () => {
+      const crew = new Crew(mockConfig, { llmClient: {} as never }) as unknown as InternalCrew;
+
+      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        'searcher',
+        'test',
+        'primary-1'
+      );
+
+      expect(getRunnerModel(crew, 'searcher')).toBe('gpt-4');
+    });
+  });
 });

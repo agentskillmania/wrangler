@@ -229,8 +229,8 @@ export class Crew {
   private ensureRunner(agent: AgentInstance): void {
     if (agent.runner) return;
 
-    const model = this.options.defaultModel ?? 'gpt-4';
     const agentDef = this.config.agentDefs[agent.definitionName];
+    const model = agentDef?.meta?.model ?? this.options.defaultModel ?? 'gpt-4';
 
     // Custom instructions take priority for ad-hoc workers, then catalog definition
     const instructions =
