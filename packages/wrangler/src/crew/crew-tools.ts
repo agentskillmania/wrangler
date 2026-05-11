@@ -68,63 +68,6 @@ export function createRelayToPrimaryTool(deps: {
   };
 }
 
-const SendToWorkerSchema = z.object({
-  content: z.string().describe('Content to send to the worker'),
-});
-
-export function createSendToWorkerTool(deps: {
-  onSend: (content: string) => Promise<void>;
-}): Tool<ZodTypeAny> {
-  return {
-    name: 'send_to_worker',
-    description: 'Send a message to your assigned worker.',
-    parameters: SendToWorkerSchema,
-    async execute(args: z.infer<typeof SendToWorkerSchema>) {
-      await deps.onSend(args.content);
-      return 'Sent to worker.';
-    },
-  };
-}
-
-// ─── Worker tools ───
-
-const SendToLiaisonSchema = z.object({
-  content: z.string().describe('Content to send to your liaison'),
-});
-
-export function createSendToLiaisonTool(deps: {
-  onSend: (content: string) => Promise<void>;
-}): Tool<ZodTypeAny> {
-  return {
-    name: 'send_to_liaison',
-    description: 'Send a message to your liaison. Use to report results or ask questions.',
-    parameters: SendToLiaisonSchema,
-    async execute(args: z.infer<typeof SendToLiaisonSchema>) {
-      await deps.onSend(args.content);
-      return 'Sent to liaison.';
-    },
-  };
-}
-
-const AskUserSchema = z.object({
-  question: z.string().describe('Question to ask the user'),
-});
-
-export function createAskUserTool(deps: {
-  onAskUser: (question: string) => Promise<void>;
-}): Tool<ZodTypeAny> {
-  return {
-    name: 'ask_user',
-    description:
-      'Ask the user a question. The question will be relayed through your liaison to the primary agent.',
-    parameters: AskUserSchema,
-    async execute(args: z.infer<typeof AskUserSchema>) {
-      await deps.onAskUser(args.question);
-      return 'Question sent to user.';
-    },
-  };
-}
-
 // ─── Shared tools ───
 
 const ReadTodolistSchema = z.object({}).passthrough();

@@ -55,20 +55,11 @@ export { EXECUTE_PLAN_CONTENT } from './spec-plan/index.js';
 
 // Crew (Layer 8)
 export { Crew } from './crew/index.js';
-export {
-  AgentInstance,
-  MessageRouter,
-  Scheduler,
-  CrewTodoList,
-  buildLiaisonPrompt,
-} from './crew/index.js';
+export { AgentInstance, MessageRouter, CrewTodoList, buildLiaisonPrompt } from './crew/index.js';
 export {
   createCreateTaskTool,
   createSendMessageTool,
   createRelayToPrimaryTool,
-  createSendToWorkerTool,
-  createSendToLiaisonTool,
-  createAskUserTool,
   createReadCrewTodolistTool,
   createUpdateCrewTodolistTool,
 } from './crew/index.js';

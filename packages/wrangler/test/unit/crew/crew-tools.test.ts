@@ -3,9 +3,6 @@ import {
   createCreateTaskTool,
   createSendMessageTool,
   createRelayToPrimaryTool,
-  createSendToWorkerTool,
-  createSendToLiaisonTool,
-  createAskUserTool,
   createReadCrewTodolistTool,
   createUpdateCrewTodolistTool,
 } from '../../../src/crew/crew-tools.js';
@@ -43,33 +40,6 @@ describe('crew tools', () => {
       const tool = createRelayToPrimaryTool({ onRelay });
       await tool.execute({ content: 'important update' });
       expect(onRelay).toHaveBeenCalledWith('important update');
-    });
-  });
-
-  describe('createSendToWorkerTool', () => {
-    it('sends to worker', async () => {
-      const onSend = vi.fn().mockResolvedValue(undefined);
-      const tool = createSendToWorkerTool({ onSend });
-      await tool.execute({ content: 'do this' });
-      expect(onSend).toHaveBeenCalledWith('do this');
-    });
-  });
-
-  describe('createSendToLiaisonTool', () => {
-    it('sends to liaison', async () => {
-      const onSend = vi.fn().mockResolvedValue(undefined);
-      const tool = createSendToLiaisonTool({ onSend });
-      await tool.execute({ content: 'result' });
-      expect(onSend).toHaveBeenCalledWith('result');
-    });
-  });
-
-  describe('createAskUserTool', () => {
-    it('routes question through callback', async () => {
-      const onAskUser = vi.fn().mockResolvedValue(undefined);
-      const tool = createAskUserTool({ onAskUser });
-      await tool.execute({ question: 'A or B?' });
-      expect(onAskUser).toHaveBeenCalledWith('A or B?');
     });
   });
 

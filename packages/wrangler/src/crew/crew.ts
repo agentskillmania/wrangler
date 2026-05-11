@@ -17,9 +17,6 @@ import {
   createCreateTaskTool,
   createSendMessageTool,
   createRelayToPrimaryTool,
-  createSendToWorkerTool,
-  createSendToLiaisonTool,
-  createAskUserTool,
   createReadCrewTodolistTool,
   createUpdateCrewTodolistTool,
 } from './crew-tools.js';
@@ -270,42 +267,11 @@ export class Crew {
               }
             },
           }),
-          createSendToWorkerTool({
-            onSend: async (content) => {
-              const workerId = agent.partnerId;
-              if (workerId) {
-                this.router.enqueue(workerId, { from: agent.id, content, timestamp: Date.now() });
-              }
-            },
-          }),
           ...todolistTools,
         ];
 
       case 'worker':
-        return [
-          createSendToLiaisonTool({
-            onSend: async (content) => {
-              const liaisonId = agent.partnerId;
-              if (liaisonId) {
-                this.router.enqueue(liaisonId, { from: agent.id, content, timestamp: Date.now() });
-              }
-            },
-          }),
-          createAskUserTool({
-            onAskUser: async (question) => {
-              // Route through liaison
-              const liaisonId = agent.partnerId;
-              if (liaisonId) {
-                this.router.enqueue(liaisonId, {
-                  from: agent.id,
-                  content: `[ask_user] ${question}`,
-                  timestamp: Date.now(),
-                });
-              }
-            },
-          }),
-          ...todolistTools,
-        ];
+        return [...todolistTools];
     }
   }
 
