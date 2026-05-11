@@ -17,6 +17,7 @@ export { AgentInstance } from './agent-instance.js';
 export { MessageRouter } from './message-router.js';
 export { CrewTodoList } from './crew-todolist.js';
 export { buildLiaisonPrompt } from './liaison-prompt.js';
+export { CrewLoader } from './crew-loader.js';
 
 // Types
 export type {
