@@ -135,7 +135,11 @@ export class Crew {
   private async scheduleLoop(): Promise<void> {
     let maxIterations = 100;
     while (maxIterations-- > 0) {
-      let didWork = false;
+      // Collect all idle agents with pending messages
+      const ready: Array<{
+        agent: AgentInstance;
+        messages: import('./types.js').CrewMessage[];
+      }> = [];
 
       for (const agent of this.agents.values()) {
         if (agent.status !== 'idle') continue;
@@ -150,23 +154,28 @@ export class Crew {
 
         const messages = agent.dequeue();
         agent.setRunning();
-
-        try {
-          await this.advanceAgent(agent, messages);
-        } catch (e) {
-          this.emit({
-            type: 'error',
-            error: e instanceof Error ? e : new Error(String(e)),
-          });
-        } finally {
-          agent.setIdle();
-        }
-
-        didWork = true;
-        break; // restart loop to pick up new messages from tool calls
+        ready.push({ agent, messages });
       }
 
-      if (!didWork) break;
+      if (ready.length === 0) break;
+
+      // Advance all ready agents in parallel
+      await Promise.allSettled(
+        ready.map(async ({ agent, messages }) => {
+          try {
+            await this.advanceAgent(agent, messages);
+          } catch (e) {
+            this.emit({
+              type: 'error',
+              error: e instanceof Error ? e : new Error(String(e)),
+            });
+          } finally {
+            agent.setIdle();
+          }
+        })
+      );
+      // Loop restarts — auto-routed messages from this batch
+      // are now in the router, ready for the next iteration
     }
   }
 
