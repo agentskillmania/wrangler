@@ -167,6 +167,9 @@ export class Crew {
   ): Promise<void> {
     this.ensureRunner(agent);
 
+    // Reset relay flag at start of each advance
+    agent.relayFlag = false;
+
     // Inject crew messages into agent state as user messages
     let state = agent.agentState!;
     for (const msg of messages) {
@@ -178,11 +181,45 @@ export class Crew {
     const runResult = await agent.runner!.run(state);
     agent.agentState = runResult.state;
 
-    // Emit user_response only for primary when no pending tasks remain
-    if (runResult.result.type === 'success' && agent.role === 'primary') {
-      const hasPending = [...this.tasks.values()].some((t) => t.status === 'running');
-      if (!hasPending) {
-        this.emit({ type: 'user_response', content: runResult.result.answer });
+    if (runResult.result.type === 'success') {
+      const answer = runResult.result.answer;
+
+      // Worker → auto-route to Liaison
+      if (agent.role === 'worker' && agent.partnerId) {
+        this.router.enqueue(agent.partnerId, {
+          from: agent.id,
+          content: answer,
+          timestamp: Date.now(),
+        });
+        this.emit({
+          type: 'message_routed',
+          from: agent.id,
+          to: agent.partnerId,
+          contentPreview: answer.slice(0, 100),
+        });
+      }
+
+      // Liaison → auto-route to Worker (unless relay_to_primary was called)
+      if (agent.role === 'liaison' && !agent.relayFlag && agent.partnerId) {
+        this.router.enqueue(agent.partnerId, {
+          from: agent.id,
+          content: answer,
+          timestamp: Date.now(),
+        });
+        this.emit({
+          type: 'message_routed',
+          from: agent.id,
+          to: agent.partnerId,
+          contentPreview: answer.slice(0, 100),
+        });
+      }
+
+      // Emit user_response only for primary when no pending tasks remain
+      if (agent.role === 'primary') {
+        const hasPending = [...this.tasks.values()].some((t) => t.status === 'running');
+        if (!hasPending) {
+          this.emit({ type: 'user_response', content: answer });
+        }
       }
     }
   }
@@ -194,10 +231,15 @@ export class Crew {
 
     const model = this.options.defaultModel ?? 'gpt-4';
     const agentDef = this.config.agentDefs[agent.definitionName];
-    const instructions = agentDef?.instructions ?? `You are a ${agent.definitionName} agent.`;
+
+    // Custom instructions take priority for ad-hoc workers, then catalog definition
+    const instructions =
+      agent.customInstructions ??
+      agentDef?.instructions ??
+      `You are a ${agent.definitionName} agent.`;
 
     const tools = this.createToolsForRole(agent);
-    const systemPrompt =
+    let systemPrompt =
       agent.role === 'liaison'
         ? buildLiaisonPrompt({
             workerType: agent.partnerId
@@ -206,6 +248,11 @@ export class Crew {
             memory: this.config.memory,
           })
         : instructions;
+
+    // Inject agent catalog into Primary context
+    if (agent.role === 'primary') {
+      systemPrompt += '\n\n' + this.buildAgentCatalog();
+    }
 
     const runner = new AgentRunner({
       model,
@@ -239,7 +286,8 @@ export class Crew {
       case 'primary':
         return [
           createCreateTaskTool({
-            onCreateTask: async (workerType, task) => this.createTask(workerType, task, agent.id),
+            onCreateTask: async (workerType, task, instructions) =>
+              this.createTask(workerType, task, agent.id, instructions),
           }),
           createSendMessageTool({
             onSend: async (to, content) => {
@@ -258,6 +306,7 @@ export class Crew {
                 content,
                 timestamp: Date.now(),
               });
+              agent.relayFlag = true;
               // Mark task as completed when liaison relays result back
               if (agent.taskId) {
                 const task = this.tasks.get(agent.taskId);
@@ -277,7 +326,20 @@ export class Crew {
 
   // ─── Task creation ───
 
-  private createTask(workerType: string, description: string, primaryId: string): string {
+  private createTask(
+    workerType: string,
+    description: string,
+    primaryId: string,
+    instructions?: string
+  ): string {
+    // Resolve worker definition from catalog or ad-hoc instructions
+    const workerDef = this.config.agentDefs[workerType];
+    if (!workerDef && !instructions) {
+      throw new Error(
+        `Unknown worker type: ${workerType}. Available: ${Object.keys(this.config.agentDefs).join(', ')}. Or provide instructions.`
+      );
+    }
+
     const taskId = `task-${++this.taskIdCounter}`;
     const liaisonId = `liaison-${++this.agentIdCounter}`;
     const workerId = `worker-${this.agentIdCounter}`;
@@ -292,8 +354,15 @@ export class Crew {
       definitionName: 'liaison',
     });
 
-    // Create worker
-    const worker = this.createAgentInstance('worker', workerType, workerId, liaisonId, taskId);
+    // Create worker (with optional custom instructions for ad-hoc creation)
+    const worker = this.createAgentInstance(
+      'worker',
+      workerType,
+      workerId,
+      liaisonId,
+      taskId,
+      instructions
+    );
     this.agents.set(worker.id, worker);
     this.emit({
       type: 'agent_created',
@@ -332,7 +401,8 @@ export class Crew {
     definitionName: string,
     id?: string,
     partnerId?: string,
-    taskId?: string
+    taskId?: string,
+    customInstructions?: string
   ): AgentInstance {
     const instance = new AgentInstance({
       id: id ?? `${role}-${++this.agentIdCounter}`,
@@ -340,6 +410,7 @@ export class Crew {
       definitionName,
       partnerId,
       taskId,
+      customInstructions,
     });
     return instance;
   }
@@ -358,5 +429,19 @@ export class Crew {
       if (agent.hasMessages) return true;
     }
     return this.router.agentsWithMessages().length > 0;
+  }
+
+  private buildAgentCatalog(): string {
+    const entries = Object.entries(this.config.agentDefs).filter(
+      ([name]) => name !== this.config.meta.primaryAgent
+    );
+    if (entries.length === 0) return 'No predefined worker agents available.';
+
+    const lines = ['Available worker agents (prefer these over ad-hoc creation):'];
+    for (const [name, def] of entries) {
+      const desc = def.meta.description ?? 'No description';
+      lines.push(`- ${name}: ${desc}`);
+    }
+    return lines.join('\n');
   }
 }

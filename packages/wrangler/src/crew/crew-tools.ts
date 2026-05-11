@@ -8,18 +8,23 @@ import type { CrewTodoItem, CrewTodoStatus } from './types.js';
 const CreateTaskSchema = z.object({
   workerType: z.string().describe('Agent definition name to create as worker'),
   task: z.string().describe('Task description for the worker'),
+  instructions: z
+    .string()
+    .optional()
+    .describe('Custom instructions for ad-hoc worker creation when type is not in catalog'),
 });
 
 export function createCreateTaskTool(deps: {
-  onCreateTask: (workerType: string, task: string) => Promise<string>;
+  onCreateTask: (workerType: string, task: string, instructions?: string) => Promise<string>;
 }): Tool<ZodTypeAny> {
   return {
     name: 'create_task',
-    description: 'Create a new worker agent with a liaison. Returns a taskId immediately.',
+    description:
+      'Create a new worker agent with a liaison. Prefer existing agent types from the catalog. Use instructions only when no suitable type exists.',
     parameters: CreateTaskSchema,
     async execute(args: z.infer<typeof CreateTaskSchema>) {
       try {
-        const taskId = await deps.onCreateTask(args.workerType, args.task);
+        const taskId = await deps.onCreateTask(args.workerType, args.task, args.instructions);
         return `Task created. ID: ${taskId}. Worker type: ${args.workerType}. Status: started.`;
       } catch (e) {
         return `Failed to create task: ${(e as Error).message}`;

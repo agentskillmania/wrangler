@@ -9,12 +9,28 @@ import {
 
 describe('crew tools', () => {
   describe('createCreateTaskTool', () => {
-    it('calls onCreateTask callback', async () => {
+    it('calls onCreateTask callback without instructions', async () => {
       const onCreateTask = vi.fn().mockResolvedValue('task-1');
       const tool = createCreateTaskTool({ onCreateTask });
       const result = await tool.execute({ workerType: 'searcher', task: 'search x' });
-      expect(onCreateTask).toHaveBeenCalledWith('searcher', 'search x');
+      expect(onCreateTask).toHaveBeenCalledWith('searcher', 'search x', undefined);
       expect(result).toContain('task-1');
+    });
+
+    it('calls onCreateTask callback with instructions', async () => {
+      const onCreateTask = vi.fn().mockResolvedValue('task-2');
+      const tool = createCreateTaskTool({ onCreateTask });
+      const result = await tool.execute({
+        workerType: 'custom',
+        task: 'do something',
+        instructions: 'You are a custom agent.',
+      });
+      expect(onCreateTask).toHaveBeenCalledWith(
+        'custom',
+        'do something',
+        'You are a custom agent.'
+      );
+      expect(result).toContain('task-2');
     });
 
     it('handles callback error', async () => {
