@@ -45,7 +45,7 @@ export class Crew {
   private primaryId = '';
   private taskIdCounter = 0;
   private agentIdCounter = 0;
-  private scheduling = false;
+  private abortController = new AbortController();
 
   constructor(config: CrewConfig, options: CrewOptions) {
     this.config = config;
@@ -70,6 +70,7 @@ export class Crew {
 
   pushInput(input: CrewInput): void {
     if (input.type === 'stop') {
+      this.abortController.abort();
       this._status = 'stopped';
       return;
     }
@@ -117,65 +118,49 @@ export class Crew {
     this.runScheduler();
   }
 
-  // ─── Scheduling loop ───
+  // ─── Scheduling — fire-and-forget ───
 
   private runScheduler(): void {
-    if (this.scheduling) return;
-    this.scheduling = true;
     this._status = 'running';
-
-    this.scheduleLoop().finally(() => {
-      this.scheduling = false;
-      if (!this.hasPendingWork()) {
-        this._status = 'idle';
-      }
-    });
+    this.scheduleRound();
   }
 
-  private async scheduleLoop(): Promise<void> {
-    let maxIterations = 100;
-    while (maxIterations-- > 0) {
-      // Collect all idle agents with pending messages
-      const ready: Array<{
-        agent: AgentInstance;
-        messages: import('./types.js').CrewMessage[];
-      }> = [];
+  /** Start advancing all idle agents with messages. Returns immediately. */
+  private scheduleRound(): void {
+    for (const agent of this.agents.values()) {
+      if (agent.status !== 'idle') continue;
 
-      for (const agent of this.agents.values()) {
-        if (agent.status !== 'idle') continue;
-
-        // Transfer messages from router to agent's queue
-        const routed = this.router.dequeue(agent.id);
-        for (const msg of routed) {
-          agent.enqueue(msg);
-        }
-
-        if (!agent.hasMessages) continue;
-
-        const messages = agent.dequeue();
-        agent.setRunning();
-        ready.push({ agent, messages });
+      // Transfer messages from router to agent's queue
+      const routed = this.router.dequeue(agent.id);
+      for (const msg of routed) {
+        agent.enqueue(msg);
       }
 
-      if (ready.length === 0) break;
+      if (!agent.hasMessages) continue;
 
-      // Advance all ready agents in parallel
-      await Promise.allSettled(
-        ready.map(async ({ agent, messages }) => {
-          try {
-            await this.advanceAgent(agent, messages);
-          } catch (e) {
-            this.emit({
-              type: 'error',
-              error: e instanceof Error ? e : new Error(String(e)),
-            });
-          } finally {
-            agent.setIdle();
-          }
+      const messages = agent.dequeue();
+      agent.setRunning();
+
+      // Fire-and-forget: advance independently, callback triggers next round
+      this.advanceAgent(agent, messages)
+        .catch((e) => {
+          this.emit({
+            type: 'error',
+            error: e instanceof Error ? e : new Error(String(e)),
+          });
         })
-      );
-      // Loop restarts — auto-routed messages from this batch
-      // are now in the router, ready for the next iteration
+        .finally(() => {
+          agent.setIdle();
+          // Check if crew was stopped
+          if (this._status === 'stopped') return;
+          // Agent completion may have produced auto-routed messages or tool calls
+          // that created new agents — kick a new scheduling round
+          this.scheduleRound();
+          // Update overall status
+          if (!this.hasPendingWork() && !this.hasRunningAgents()) {
+            this._status = 'idle';
+          }
+        });
     }
   }
 
@@ -199,7 +184,9 @@ export class Crew {
 
     // Run the agent (ReAct loop until completion)
     const startTime = Date.now();
-    const runResult = await agent.runner!.run(state);
+    const runResult = await agent.runner!.run(state, {
+      signal: this.abortController.signal,
+    });
     const duration = Date.now() - startTime;
     agent.agentState = runResult.state;
 
@@ -543,6 +530,13 @@ export class Crew {
       if (agent.hasMessages) return true;
     }
     return this.router.agentsWithMessages().length > 0;
+  }
+
+  private hasRunningAgents(): boolean {
+    for (const agent of this.agents.values()) {
+      if (agent.status === 'running') return true;
+    }
+    return false;
   }
 
   private buildAgentCatalog(): string {
