@@ -1,5 +1,8 @@
 import type { AgentDefinition } from '../agent/types.js';
 import type { ILLMProvider, AskHumanHandler } from '@agentskillmania/colts';
+import type { WorkspaceToolDeps } from '../tools/builtin/workspace-deps.js';
+import type { SearchProvider } from '../tools/builtin/web-search.js';
+import type { Sandbox } from '@agentskillmania/sandbox';
 
 // ─── Agent roles ───
 
@@ -182,4 +185,7 @@ export interface CrewOptions {
   readonly llmClient: ILLMProvider;
   readonly defaultModel?: string;
   readonly askHumanHandler?: AskHumanHandler;
+  readonly workspaceDeps?: WorkspaceToolDeps;
+  readonly searchProvider?: SearchProvider;
+  readonly sandbox?: Sandbox;
 }

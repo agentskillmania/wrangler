@@ -20,6 +20,17 @@ import {
   createReadCrewTodolistTool,
   createUpdateCrewTodolistTool,
 } from './crew-tools.js';
+import {
+  createWebSearchTool,
+  createWebFetchTool,
+  createShellTool,
+  createFileReadTool,
+  createFileWriteTool,
+  createFileEditTool,
+  createGlobTool,
+  createGrepTool,
+} from '../tools/builtin/index.js';
+import type { WorkspaceToolDeps } from '../tools/builtin/workspace-deps.js';
 
 export class Crew {
   private config: CrewConfig;
@@ -307,16 +318,16 @@ export class Crew {
   private createToolsForRole(
     agent: AgentInstance
   ): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
-    const todolistTools = [
-      createReadCrewTodolistTool({ getTodolist: () => [...this.todolist.items] }),
-      createUpdateCrewTodolistTool({
-        onUpdate: async (itemId, status) => {
-          this.todolist.update(itemId, status);
-          this.emit({ type: 'todolist_updated', todolist: this.todolist.snapshot() });
-        },
-      }),
+    return [
+      ...this.createCommTools(agent),
+      ...this.createExecTools(agent),
+      ...this.createTodolistTools(),
     ];
+  }
 
+  private createCommTools(
+    agent: AgentInstance
+  ): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
     switch (agent.role) {
       case 'primary':
         return [
@@ -329,7 +340,6 @@ export class Crew {
               this.router.enqueue(to, { from: agent.id, content, timestamp: Date.now() });
             },
           }),
-          ...todolistTools,
         ];
 
       case 'liaison':
@@ -342,7 +352,6 @@ export class Crew {
                 timestamp: Date.now(),
               });
               agent.relayFlag = true;
-              // Mark task as completed when liaison relays result back
               if (agent.taskId) {
                 const task = this.tasks.get(agent.taskId);
                 if (task) {
@@ -351,12 +360,73 @@ export class Crew {
               }
             },
           }),
-          ...todolistTools,
         ];
 
       case 'worker':
-        return [...todolistTools];
+        return [];
     }
+  }
+
+  private createExecTools(
+    agent: AgentInstance
+  ): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
+    const agentDef = this.config.agentDefs[agent.definitionName];
+    const skillNames = agentDef?.meta?.skills;
+    if (!skillNames?.length) return [];
+
+    return this.resolveSkillTools(skillNames);
+  }
+
+  private createTodolistTools(): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
+    return [
+      createReadCrewTodolistTool({ getTodolist: () => [...this.todolist.items] }),
+      createUpdateCrewTodolistTool({
+        onUpdate: async (itemId, status) => {
+          this.todolist.update(itemId, status);
+          this.emit({ type: 'todolist_updated', todolist: this.todolist.snapshot() });
+        },
+      }),
+    ];
+  }
+
+  private resolveSkillTools(
+    skillNames: string[]
+  ): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
+    const deps: WorkspaceToolDeps = this.options.workspaceDeps ?? {
+      workspacePath: process.cwd(),
+    };
+    const tools: import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] = [];
+
+    for (const name of skillNames) {
+      switch (name) {
+        case 'web-search':
+          tools.push(createWebSearchTool(this.options.searchProvider));
+          break;
+        case 'web-fetch':
+          tools.push(createWebFetchTool(deps));
+          break;
+        case 'shell':
+          if (this.options.sandbox) tools.push(createShellTool(this.options.sandbox));
+          break;
+        case 'file-read':
+          tools.push(createFileReadTool(deps));
+          break;
+        case 'file-write':
+          tools.push(createFileWriteTool(deps));
+          break;
+        case 'file-edit':
+          tools.push(createFileEditTool(deps));
+          break;
+        case 'glob':
+          tools.push(createGlobTool(deps));
+          break;
+        case 'grep':
+          tools.push(createGrepTool(deps));
+          break;
+      }
+    }
+
+    return tools;
   }
 
   // ─── Task creation ───

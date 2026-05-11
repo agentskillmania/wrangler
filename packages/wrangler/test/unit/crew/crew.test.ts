@@ -237,4 +237,82 @@ describe('Crew', () => {
       expect(getRunnerModel(crew, 'searcher')).toBe('gpt-4');
     });
   });
+
+  describe('exec tool loading', () => {
+    const configWithSkills: CrewConfig = {
+      ...mockConfig,
+      agentDefs: {
+        primary: { meta: { name: 'primary' }, instructions: 'You are primary' },
+        searcher: {
+          meta: { name: 'searcher', description: 'Search', skills: ['web-search', 'web-fetch'] },
+          instructions: 'You search',
+        },
+      },
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type InternalCrew = { createExecTools: (a: any) => any[]; agents: Map<string, any> };
+
+    function getExecToolNames(crew: InternalCrew, defName: string): string[] {
+      const agent = [...crew.agents.values()].find(
+        (a: { definitionName: string }) => a.definitionName === defName
+      );
+      if (!agent) throw new Error(`Agent ${defName} not found`);
+      return crew.createExecTools(agent).map((t: { name: string }) => t.name);
+    }
+
+    it('loads exec tools for agent with skills', () => {
+      const crew = new Crew(configWithSkills, {
+        llmClient: {} as never,
+      }) as unknown as InternalCrew;
+
+      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        'searcher',
+        'test',
+        'primary-1'
+      );
+
+      const toolNames = getExecToolNames(crew, 'searcher');
+      expect(toolNames).toContain('web_search');
+      expect(toolNames).toContain('web_fetch');
+    });
+
+    it('returns empty array for agent without skills', () => {
+      const crew = new Crew(mockConfig, { llmClient: {} as never }) as unknown as InternalCrew;
+
+      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        'searcher',
+        'test',
+        'primary-1'
+      );
+
+      const toolNames = getExecToolNames(crew, 'searcher');
+      expect(toolNames).toEqual([]);
+    });
+
+    it('returns empty array for empty skills array', () => {
+      const emptySkillsConfig: CrewConfig = {
+        ...mockConfig,
+        agentDefs: {
+          primary: { meta: { name: 'primary' }, instructions: 'You are primary' },
+          searcher: {
+            meta: { name: 'searcher', description: 'Search', skills: [] },
+            instructions: 'You search',
+          },
+        },
+      };
+      const crew = new Crew(emptySkillsConfig, {
+        llmClient: {} as never,
+      }) as unknown as InternalCrew;
+
+      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        'searcher',
+        'test',
+        'primary-1'
+      );
+
+      const toolNames = getExecToolNames(crew, 'searcher');
+      expect(toolNames).toEqual([]);
+    });
+  });
 });
