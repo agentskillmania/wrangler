@@ -178,8 +178,18 @@ export class Crew {
     }
 
     // Run the agent (ReAct loop until completion)
+    const startTime = Date.now();
     const runResult = await agent.runner!.run(state);
+    const duration = Date.now() - startTime;
     agent.agentState = runResult.state;
+
+    this.emit({
+      type: 'agent_advanced',
+      agentId: agent.id,
+      role: agent.role,
+      duration,
+      resultType: runResult.result.type,
+    });
 
     if (runResult.result.type === 'success') {
       const answer = runResult.result.answer;
@@ -259,6 +269,31 @@ export class Crew {
       llmClient: this.options.llmClient,
       tools,
       systemPrompt,
+    });
+
+    // Track callId → toolName for tool:end mapping
+    const pendingToolNames = new Map<string, string>();
+
+    runner.on('tool:start', (e: { action: { id: string; tool: string; arguments: unknown } }) => {
+      pendingToolNames.set(e.action.id, e.action.tool);
+      this.emit({
+        type: 'tool_invoked',
+        agentId: agent.id,
+        toolName: e.action.tool,
+        args: e.action.arguments,
+      });
+    });
+
+    runner.on('tool:end', (e: { result: unknown; callId?: string }) => {
+      const toolName = (e.callId && pendingToolNames.get(e.callId)) ?? 'unknown';
+      if (e.callId) pendingToolNames.delete(e.callId);
+      this.emit({
+        type: 'tool_completed',
+        agentId: agent.id,
+        toolName,
+        result: String(e.result),
+        duration: 0,
+      });
     });
 
     agent.runner = runner;
