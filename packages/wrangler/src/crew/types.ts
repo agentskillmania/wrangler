@@ -109,6 +109,36 @@ export interface CrewErrorEvent {
   readonly error: Error;
 }
 
+export interface CrewToolInvokedEvent {
+  readonly type: 'tool_invoked';
+  readonly agentId: string;
+  readonly toolName: string;
+  readonly args: unknown;
+}
+
+export interface CrewToolCompletedEvent {
+  readonly type: 'tool_completed';
+  readonly agentId: string;
+  readonly toolName: string;
+  readonly result: string;
+  readonly duration: number;
+}
+
+export interface CrewAgentAdvancedEvent {
+  readonly type: 'agent_advanced';
+  readonly agentId: string;
+  readonly role: AgentRole;
+  readonly duration: number;
+  readonly resultType: string;
+}
+
+export interface CrewMessageRoutedEvent {
+  readonly type: 'message_routed';
+  readonly from: string;
+  readonly to: string;
+  readonly contentPreview: string;
+}
+
 export type CrewOutputEvent =
   | CrewUserResponseEvent
   | CrewTaskStartedEvent
@@ -117,7 +147,11 @@ export type CrewOutputEvent =
   | CrewTodolistUpdatedEvent
   | CrewAgentCreatedEvent
   | CrewAgentDestroyedEvent
-  | CrewErrorEvent;
+  | CrewErrorEvent
+  | CrewToolInvokedEvent
+  | CrewToolCompletedEvent
+  | CrewAgentAdvancedEvent
+  | CrewMessageRoutedEvent;
 
 export type CrewEventHandler = (event: CrewOutputEvent) => void;
 

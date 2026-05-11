@@ -84,4 +84,8 @@ export type {
   TaskStatus,
   TaskInfo,
   CrewOptions,
+  CrewToolInvokedEvent,
+  CrewToolCompletedEvent,
+  CrewAgentAdvancedEvent,
+  CrewMessageRoutedEvent,
 } from './crew/index.js';
