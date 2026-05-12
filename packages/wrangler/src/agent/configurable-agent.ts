@@ -3,6 +3,7 @@
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { createSessionSupport } from '../session/support.js';
 import { createBuiltinTools } from '../tools/builtin/index.js';
+import { loadMCPTools } from '../tools/mcp/index.js';
 import type { AgentDefinition, ConfigurableAgentOptions } from './types.js';
 
 /**
@@ -31,10 +32,14 @@ export class ConfigurableAgent {
       workspacePath: this.workspacePath,
     });
 
+    const mcpTools = await loadMCPTools({
+      localConfigPath: this.options.localMcpConfigPath,
+    });
+
     const runner = new AgentRunner({
       model,
       llmClient: this.options.llmClient,
-      tools: [...session.tools, ...builtinTools],
+      tools: [...session.tools, ...builtinTools, ...mcpTools],
       middleware: [session.middleware],
       skillDirectories: this.options.skillDirectories,
       systemPrompt: this.agentDef.instructions,

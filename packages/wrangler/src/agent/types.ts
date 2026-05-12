@@ -23,4 +23,5 @@ export interface ConfigurableAgentOptions {
   askHumanHandler?: AskHumanHandler;
   sessionBaseDir?: string;
   skillDirectories?: string[];
+  localMcpConfigPath?: string;
 }
