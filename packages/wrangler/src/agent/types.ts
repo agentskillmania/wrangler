@@ -5,7 +5,6 @@ export interface AgentMeta {
   name: string;
   description?: string;
   model?: string;
-  skills?: string[];
   thinking?: {
     enabled?: boolean;
   };

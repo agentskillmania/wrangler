@@ -1,8 +1,9 @@
 import type { AgentDefinition } from '../agent/types.js';
-import type { ILLMProvider, AskHumanHandler } from '@agentskillmania/colts';
+import type { ILLMProvider, AskHumanHandler, Tool } from '@agentskillmania/colts';
 import type { WorkspaceToolDeps } from '../tools/builtin/workspace-deps.js';
 import type { SearchProvider } from '../tools/builtin/web-search.js';
 import type { Sandbox } from '@agentskillmania/sandbox';
+import type { ZodTypeAny } from 'zod';
 
 // ─── Agent roles ───
 
@@ -179,6 +180,27 @@ export interface CrewConfig {
   readonly skillDirs: readonly string[];
 }
 
+// ─── Runner factory (testability) ───
+
+export interface CrewRunner {
+  run(
+    state: unknown,
+    options?: { signal?: AbortSignal }
+  ): Promise<{
+    state: unknown;
+    result: { type: string; answer?: string; error?: Error };
+  }>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string, handler: (...args: any[]) => void): void;
+}
+
+export type RunnerFactory = (options: {
+  model: string;
+  llmClient: ILLMProvider;
+  tools: Tool<ZodTypeAny>[];
+  systemPrompt: string;
+}) => CrewRunner;
+
 // ─── Crew constructor options ───
 
 export interface CrewOptions {
@@ -188,4 +210,5 @@ export interface CrewOptions {
   readonly workspaceDeps?: WorkspaceToolDeps;
   readonly searchProvider?: SearchProvider;
   readonly sandbox?: Sandbox;
+  readonly runnerFactory?: RunnerFactory;
 }

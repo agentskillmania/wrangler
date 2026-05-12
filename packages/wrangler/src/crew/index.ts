@@ -48,4 +48,6 @@ export type {
   CrewMessage,
   CrewConfig,
   CrewOptions,
+  CrewRunner,
+  RunnerFactory,
 } from './types.js';

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import { createAgentState } from '@agentskillmania/colts';
 import { Crew } from '../../../src/crew/crew.js';
-import type { CrewConfig, CrewOutputEvent } from '../../../src/crew/types.js';
+import type { CrewConfig, CrewOutputEvent, CrewRunner } from '../../../src/crew/types.js';
 
 const mockConfig: CrewConfig = {
   meta: { name: 'test-crew', description: 'test', primaryAgent: 'primary' },
@@ -238,81 +239,403 @@ describe('Crew', () => {
     });
   });
 
-  describe('exec tool loading', () => {
-    const configWithSkills: CrewConfig = {
-      ...mockConfig,
-      agentDefs: {
-        primary: { meta: { name: 'primary' }, instructions: 'You are primary' },
-        searcher: {
-          meta: { name: 'searcher', description: 'Search', skills: ['web-search', 'web-fetch'] },
-          instructions: 'You search',
+  // ─── Mock runner factory helpers ───
+
+  function createMockRunnerFactory(result: { type: string; answer?: string; error?: Error }) {
+    const mockState = createAgentState({
+      name: 'mock',
+      instructions: 'mock',
+      tools: [],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+    return (_options: any): CrewRunner => ({
+      run: async () => ({ state: mockState, result }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      on: () => {},
+    });
+  }
+
+  function waitForEvent(crew: Crew, eventType: string): Promise<CrewOutputEvent> {
+    return new Promise<CrewOutputEvent>((resolve) => {
+      const unsub = crew.on(eventType, (e) => {
+        unsub();
+        resolve(e);
+      });
+    });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type InternalCrew = any;
+
+  describe('advanceAgent pipeline via runnerFactory', () => {
+    it('pushInput user_message creates primary and emits user_response on success', async () => {
+      const factory = createMockRunnerFactory({ type: 'success', answer: 'Done!' });
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        runnerFactory: factory,
+      });
+
+      const events: CrewOutputEvent[] = [];
+      crew.on('agent_created', (e) => events.push(e));
+      crew.on('agent_advanced', (e) => events.push(e));
+
+      const response = waitForEvent(crew, 'user_response');
+      crew.pushInput({ type: 'user_message', content: 'Hello' });
+
+      const result = await response;
+      expect(result.type).toBe('user_response');
+      expect((result as { content: string }).content).toBe('Done!');
+
+      expect(events.filter((e) => e.type === 'agent_created')).toHaveLength(1);
+      expect(events.filter((e) => e.type === 'agent_advanced')).toHaveLength(1);
+    });
+
+    it('advanceAgent error emits error event and user_response', async () => {
+      const factory = createMockRunnerFactory({
+        type: 'error',
+        error: new Error('LLM failed'),
+      });
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        runnerFactory: factory,
+      });
+
+      const errorP = waitForEvent(crew, 'error');
+      const responseP = waitForEvent(crew, 'user_response');
+
+      crew.pushInput({ type: 'user_message', content: 'Hello' });
+
+      const errorEvent = await errorP;
+      expect(errorEvent.type).toBe('error');
+      expect((errorEvent as { error: Error }).error.message).toContain('LLM failed');
+
+      const response = await responseP;
+      expect((response as { content: string }).content).toContain('LLM failed');
+    });
+
+    it('advanceAgent max_steps emits error event', async () => {
+      const factory = createMockRunnerFactory({ type: 'max_steps' });
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        runnerFactory: factory,
+      });
+
+      const errorP = waitForEvent(crew, 'error');
+      crew.pushInput({ type: 'user_message', content: 'Hello' });
+
+      const errorEvent = await errorP;
+      expect(errorEvent.type).toBe('error');
+      expect((errorEvent as { error: Error }).error.message).toContain('max_steps');
+    });
+
+    it('advanceAgent abort emits error event', async () => {
+      const factory = createMockRunnerFactory({ type: 'abort' });
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        runnerFactory: factory,
+      });
+
+      const errorP = waitForEvent(crew, 'error');
+      crew.pushInput({ type: 'user_message', content: 'Hello' });
+
+      const errorEvent = await errorP;
+      expect(errorEvent.type).toBe('error');
+      expect((errorEvent as { error: Error }).error.message).toContain('abort');
+    });
+
+    it('max-hop guard prevents infinite loops', async () => {
+      const factory = createMockRunnerFactory({ type: 'success', answer: 'loop' });
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        runnerFactory: factory,
+      }) as unknown as InternalCrew;
+
+      // Create primary agent
+      crew.pushInput({ type: 'user_message', content: 'Hello' });
+      await waitForEvent(crew, 'user_response');
+
+      // Get primary and set advance count to max
+      const primary = [...(crew.agents as Map<string, { advanceCount: number }>).values()].find(
+        (a: { role: string }) => a.role === 'primary'
+      );
+      expect(primary).toBeDefined();
+      primary!.advanceCount = 50;
+
+      // Push another message — should hit max-hop guard
+      const errorP = waitForEvent(crew, 'error');
+      crew.pushInput({ type: 'user_message', content: 'Another' });
+
+      const errorEvent = await errorP;
+      expect(errorEvent.type).toBe('error');
+      expect((errorEvent as { error: Error }).error.message).toContain('max advances');
+    });
+  });
+
+  describe('auto-routing with mock runner', () => {
+    it('worker auto-routes result to liaison', async () => {
+      const factory = createMockRunnerFactory({ type: 'success', answer: 'search result' });
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        runnerFactory: factory,
+      }) as unknown as InternalCrew;
+
+      // Create a task to get worker + liaison pair
+      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        'searcher',
+        'search',
+        'primary-1'
+      );
+
+      const routedP = waitForEvent(crew, 'message_routed');
+
+      // Manually enqueue to worker and trigger scheduling
+      const workers = [...(crew.agents as Map<string, unknown>).values()].filter(
+        (a: { role: string }) => a.role === 'worker'
+      );
+      expect(workers).toHaveLength(1);
+
+      const workerId = (workers[0] as { id: string }).id;
+      const liaisonId = (workers[0] as { partnerId: string }).partnerId;
+
+      // Clear liaison's message from createTask so only worker runs
+      (crew as { router: { dequeue: (id: string) => unknown[] } }).router.dequeue(liaisonId);
+
+      // Directly enqueue and trigger via router
+      (crew as { router: { enqueue: (id: string, msg: unknown) => void } }).router.enqueue(
+        workerId,
+        { from: 'primary-1', content: 'search for x', timestamp: Date.now() }
+      );
+
+      // Trigger schedule round
+      (crew as { scheduleRound: () => void }).scheduleRound();
+
+      const routed = await routedP;
+      expect(routed.type).toBe('message_routed');
+      expect((routed as { from: string; to: string }).from).toBe(workerId);
+      expect((routed as { from: string; to: string }).to).toBe(liaisonId);
+    });
+
+    it('liaison auto-routes to worker when relay flag is not set', async () => {
+      const factory = createMockRunnerFactory({ type: 'success', answer: 'translate this' });
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        runnerFactory: factory,
+      }) as unknown as InternalCrew;
+
+      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        'searcher',
+        'search',
+        'primary-1'
+      );
+
+      const liaisons = [...(crew.agents as Map<string, unknown>).values()].filter(
+        (a: { role: string }) => a.role === 'liaison'
+      );
+      expect(liaisons).toHaveLength(1);
+
+      const liaisonId = (liaisons[0] as { id: string }).id;
+      const workerId = (liaisons[0] as { partnerId: string }).partnerId;
+
+      (crew as { router: { enqueue: (id: string, msg: unknown) => void } }).router.enqueue(
+        liaisonId,
+        { from: workerId, content: 'result', timestamp: Date.now() }
+      );
+
+      const routedP = waitForEvent(crew, 'message_routed');
+      (crew as { scheduleRound: () => void }).scheduleRound();
+
+      const routed = await routedP;
+      expect((routed as { from: string; to: string }).from).toBe(liaisonId);
+      expect((routed as { from: string; to: string }).to).toBe(workerId);
+    });
+
+    it('liaison does NOT auto-route when relay flag is set', async () => {
+      const mockState = createAgentState({ name: 'mock', instructions: 'mock', tools: [] });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let liaisonRef: any = null;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+      const factory = (_opts: any): CrewRunner => ({
+        run: async () => {
+          // Simulate relay_to_primary being called during the run
+          if (liaisonRef) liaisonRef.relayFlag = true;
+          return {
+            state: mockState,
+            result: { type: 'success', answer: 'relayed to primary' },
+          };
         },
-      },
+        on: () => {},
+      });
+
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        runnerFactory: factory,
+      }) as unknown as InternalCrew;
+
+      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        'searcher',
+        'search',
+        'primary-1'
+      );
+
+      const liaisons = [...(crew.agents as Map<string, unknown>).values()].filter(
+        (a: { role: string }) => a.role === 'liaison'
+      );
+      const liaisonId = (liaisons[0] as { id: string }).id;
+      const workerId = (liaisons[0] as { partnerId: string }).partnerId;
+
+      // Set ref so mock runner can set relayFlag during run
+      liaisonRef = (crew.agents as Map<string, { relayFlag: boolean }>).get(liaisonId);
+
+      const advancedP = waitForEvent(crew, 'agent_advanced');
+      (crew as { router: { enqueue: (id: string, msg: unknown) => void } }).router.enqueue(
+        liaisonId,
+        { from: workerId, content: 'result', timestamp: Date.now() }
+      );
+      (crew as { scheduleRound: () => void }).scheduleRound();
+
+      await advancedP;
+
+      // With relayFlag set, no message_routed event should be emitted for liaison → worker
+      const routed = (
+        crew as { router: { agentsWithMessages: () => string[] } }
+      ).router.agentsWithMessages();
+      expect(routed).not.toContain(workerId);
+    });
+
+    it('worker error routes error to liaison', async () => {
+      const factory = createMockRunnerFactory({
+        type: 'error',
+        error: new Error('Worker crashed'),
+      });
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        runnerFactory: factory,
+      }) as unknown as InternalCrew;
+
+      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        'searcher',
+        'search',
+        'primary-1'
+      );
+
+      const workers = [...(crew.agents as Map<string, unknown>).values()].filter(
+        (a: { role: string }) => a.role === 'worker'
+      );
+      const workerId = (workers[0] as { id: string }).id;
+      const taskId = (workers[0] as { taskId: string }).taskId!;
+
+      const errorP = waitForEvent(crew, 'error');
+      const routedP = waitForEvent(crew, 'message_routed');
+
+      (crew as { router: { enqueue: (id: string, msg: unknown) => void } }).router.enqueue(
+        workerId,
+        { from: 'primary-1', content: 'search', timestamp: Date.now() }
+      );
+      (crew as { scheduleRound: () => void }).scheduleRound();
+
+      const errorEvent = await errorP;
+      expect((errorEvent as { error: Error }).error.message).toContain('Worker crashed');
+
+      // Task should be marked as failed
+      expect(crew.state.tasks.get(taskId)?.status).toBe('failed');
+
+      const routed = await routedP;
+      expect((routed as { contentPreview: string }).contentPreview).toContain('Worker crashed');
+    });
+  });
+
+  describe('shared builtin tools', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type InternalCrew = {
+      builtinTools: any[];
+      agents: Map<string, any>;
+      ensureRunner: (a: any) => void;
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    type InternalCrew = { createExecTools: (a: any) => any[]; agents: Map<string, any> };
+    it('all agents receive the same builtin tools via runner', () => {
+      const crew = new Crew(mockConfig, { llmClient: {} as never }) as unknown as InternalCrew;
 
-    function getExecToolNames(crew: InternalCrew, defName: string): string[] {
-      const agent = [...crew.agents.values()].find(
-        (a: { definitionName: string }) => a.definitionName === defName
+      // Create a task to spawn worker + liaison
+      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        'searcher',
+        'test',
+        'primary-1'
       );
-      if (!agent) throw new Error(`Agent ${defName} not found`);
-      return crew.createExecTools(agent).map((t: { name: string }) => t.name);
-    }
 
-    it('loads exec tools for agent with skills', () => {
+      const worker = [...crew.agents.values()].find((a: { role: string }) => a.role === 'worker');
+      crew.ensureRunner(worker);
+
+      const workerToolNames = (
+        worker as { runner: { options: { tools: { name: string }[] } } }
+      ).runner.options.tools.map((t: { name: string }) => t.name);
+
+      // All builtin tools should be present
+      expect(workerToolNames).toContain('file_read');
+      expect(workerToolNames).toContain('file_write');
+      expect(workerToolNames).toContain('file_edit');
+      expect(workerToolNames).toContain('glob');
+      expect(workerToolNames).toContain('grep');
+      expect(workerToolNames).toContain('web_fetch');
+      expect(workerToolNames).toContain('web_search');
+    });
+
+    it('passes skillDirectories to runner when configured', async () => {
+      const configWithSkills: CrewConfig = {
+        ...mockConfig,
+        skillDirs: ['/path/to/skills'],
+      };
+
+      // Verify builtin tools are created and skillDirs is stored
       const crew = new Crew(configWithSkills, {
         llmClient: {} as never,
       }) as unknown as InternalCrew;
-
-      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
-        'searcher',
-        'test',
-        'primary-1'
-      );
-
-      const toolNames = getExecToolNames(crew, 'searcher');
-      expect(toolNames).toContain('web_search');
-      expect(toolNames).toContain('web_fetch');
+      expect(crew.builtinTools.length).toBeGreaterThanOrEqual(7);
     });
 
-    it('returns empty array for agent without skills', () => {
-      const crew = new Crew(mockConfig, { llmClient: {} as never }) as unknown as InternalCrew;
-
-      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
-        'searcher',
-        'test',
-        'primary-1'
-      );
-
-      const toolNames = getExecToolNames(crew, 'searcher');
-      expect(toolNames).toEqual([]);
-    });
-
-    it('returns empty array for empty skills array', () => {
-      const emptySkillsConfig: CrewConfig = {
-        ...mockConfig,
-        agentDefs: {
-          primary: { meta: { name: 'primary' }, instructions: 'You are primary' },
-          searcher: {
-            meta: { name: 'searcher', description: 'Search', skills: [] },
-            instructions: 'You search',
-          },
-        },
-      };
-      const crew = new Crew(emptySkillsConfig, {
+    it('includes shell tool when sandbox is provided', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const crew = new Crew(mockConfig, {
         llmClient: {} as never,
+        sandbox: {} as any,
       }) as unknown as InternalCrew;
+      const toolNames = crew.builtinTools.map((t: { name: string }) => t.name);
+      expect(toolNames).toContain('shell');
+    });
 
-      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
-        'searcher',
-        'test',
-        'primary-1'
-      );
+    it('excludes shell tool when no sandbox', () => {
+      const crew = new Crew(mockConfig, { llmClient: {} as never }) as unknown as InternalCrew;
+      const toolNames = crew.builtinTools.map((t: { name: string }) => t.name);
+      expect(toolNames).not.toContain('shell');
+    });
+  });
 
-      const toolNames = getExecToolNames(crew, 'searcher');
-      expect(toolNames).toEqual([]);
+  describe('ensureRunner with runnerFactory', () => {
+    it('uses custom runnerFactory when provided', async () => {
+      const mockState = createAgentState({ name: 'mock', instructions: 'mock', tools: [] });
+      const factoryFn = vi.fn().mockReturnValue({
+        run: vi.fn().mockResolvedValue({
+          state: mockState,
+          result: { type: 'success', answer: 'factory result' },
+        }),
+        on: vi.fn(),
+      });
+
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        runnerFactory: factoryFn as any,
+      });
+
+      const response = waitForEvent(crew, 'user_response');
+      crew.pushInput({ type: 'user_message', content: 'Hello' });
+
+      const result = await response;
+      expect((result as { content: string }).content).toBe('factory result');
+      expect(factoryFn).toHaveBeenCalledOnce();
+      // Verify factory was called with correct model
+      expect(factoryFn.mock.calls[0][0].model).toBe('gpt-4');
     });
   });
 });

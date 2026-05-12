@@ -7,7 +7,11 @@ import type {
   CrewEventHandler,
   AgentInstanceInfo,
   TaskInfo,
+  CrewMessage,
+  AgentRole,
 } from './types.js';
+import type { Tool, AgentState } from '@agentskillmania/colts';
+import type { ZodTypeAny } from 'zod';
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { AgentInstance } from './agent-instance.js';
 import { MessageRouter } from './message-router.js';
@@ -20,17 +24,7 @@ import {
   createReadCrewTodolistTool,
   createUpdateCrewTodolistTool,
 } from './crew-tools.js';
-import {
-  createWebSearchTool,
-  createWebFetchTool,
-  createShellTool,
-  createFileReadTool,
-  createFileWriteTool,
-  createFileEditTool,
-  createGlobTool,
-  createGrepTool,
-} from '../tools/builtin/index.js';
-import type { WorkspaceToolDeps } from '../tools/builtin/workspace-deps.js';
+import { createBuiltinTools } from '../tools/builtin/index.js';
 
 export class Crew {
   private config: CrewConfig;
@@ -46,11 +40,17 @@ export class Crew {
   private taskIdCounter = 0;
   private agentIdCounter = 0;
   private abortController = new AbortController();
+  private builtinTools: Tool<ZodTypeAny>[];
 
   constructor(config: CrewConfig, options: CrewOptions) {
     this.config = config;
     this.options = options;
     this._id = `crew-${Date.now()}`;
+    this.builtinTools = createBuiltinTools({
+      workspacePath: options.workspaceDeps?.workspacePath ?? process.cwd(),
+      searchProvider: options.searchProvider,
+      sandbox: options.sandbox,
+    });
   }
 
   get state(): CrewState {
@@ -166,10 +166,21 @@ export class Crew {
 
   // ─── Agent advancement ───
 
-  private async advanceAgent(
-    agent: AgentInstance,
-    messages: import('./types.js').CrewMessage[]
-  ): Promise<void> {
+  private async advanceAgent(agent: AgentInstance, messages: CrewMessage[]): Promise<void> {
+    // Max-hop guard: prevent infinite auto-routing loops
+    const MAX_ADVANCES = 50;
+    agent.advanceCount++;
+    if (agent.advanceCount > MAX_ADVANCES) {
+      this.emit({
+        type: 'error',
+        error: new Error(
+          `Agent ${agent.id} exceeded max advances (${MAX_ADVANCES}). Possible infinite routing loop.`
+        ),
+      });
+      this.failAgentTask(agent, 'Exceeded max advances');
+      return;
+    }
+
     this.ensureRunner(agent);
 
     // Reset relay flag at start of each advance
@@ -188,7 +199,7 @@ export class Crew {
       signal: this.abortController.signal,
     });
     const duration = Date.now() - startTime;
-    agent.agentState = runResult.state;
+    agent.agentState = runResult.state as AgentState;
 
     this.emit({
       type: 'agent_advanced',
@@ -199,7 +210,7 @@ export class Crew {
     });
 
     if (runResult.result.type === 'success') {
-      const answer = runResult.result.answer;
+      const answer = runResult.result.answer ?? '';
 
       // Worker → auto-route to Liaison
       if (agent.role === 'worker' && agent.partnerId) {
@@ -238,6 +249,40 @@ export class Crew {
           this.emit({ type: 'user_response', content: answer });
         }
       }
+    } else {
+      // Handle non-success results: error, max_steps, abort
+      const errResult = runResult.result;
+      const errorMsg =
+        errResult.type === 'error'
+          ? (errResult as { error: Error }).error.message
+          : `Agent run ended with status: ${errResult.type}`;
+
+      this.emit({
+        type: 'error',
+        error: new Error(`Agent ${agent.id} (${agent.role}): ${errorMsg}`),
+      });
+
+      this.failAgentTask(agent, errorMsg);
+
+      // Route error to partner so upstream knows
+      if (agent.partnerId) {
+        this.router.enqueue(agent.partnerId, {
+          from: agent.id,
+          content: `[error] ${errorMsg}`,
+          timestamp: Date.now(),
+        });
+        this.emit({
+          type: 'message_routed',
+          from: agent.id,
+          to: agent.partnerId,
+          contentPreview: `[error] ${errorMsg}`,
+        });
+      }
+
+      // Primary always emits user_response on failure so the caller knows
+      if (agent.role === 'primary') {
+        this.emit({ type: 'user_response', content: `Error: ${errorMsg}` });
+      }
     }
   }
 
@@ -271,12 +316,16 @@ export class Crew {
       systemPrompt += '\n\n' + this.buildAgentCatalog();
     }
 
-    const runner = new AgentRunner({
+    const runnerOptions = {
       model,
       llmClient: this.options.llmClient,
       tools,
       systemPrompt,
-    });
+      skillDirectories: [...this.config.skillDirs],
+    };
+    const runner = this.options.runnerFactory
+      ? this.options.runnerFactory(runnerOptions)
+      : new AgentRunner(runnerOptions);
 
     // Track callId → toolName for tool:end mapping
     const pendingToolNames = new Map<string, string>();
@@ -311,19 +360,11 @@ export class Crew {
     });
   }
 
-  private createToolsForRole(
-    agent: AgentInstance
-  ): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
-    return [
-      ...this.createCommTools(agent),
-      ...this.createExecTools(agent),
-      ...this.createTodolistTools(),
-    ];
+  private createToolsForRole(agent: AgentInstance): Tool<ZodTypeAny>[] {
+    return [...this.createCommTools(agent), ...this.builtinTools, ...this.createTodolistTools()];
   }
 
-  private createCommTools(
-    agent: AgentInstance
-  ): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
+  private createCommTools(agent: AgentInstance): Tool<ZodTypeAny>[] {
     switch (agent.role) {
       case 'primary':
         return [
@@ -363,17 +404,7 @@ export class Crew {
     }
   }
 
-  private createExecTools(
-    agent: AgentInstance
-  ): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
-    const agentDef = this.config.agentDefs[agent.definitionName];
-    const skillNames = agentDef?.meta?.skills;
-    if (!skillNames?.length) return [];
-
-    return this.resolveSkillTools(skillNames);
-  }
-
-  private createTodolistTools(): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
+  private createTodolistTools(): Tool<ZodTypeAny>[] {
     return [
       createReadCrewTodolistTool({ getTodolist: () => [...this.todolist.items] }),
       createUpdateCrewTodolistTool({
@@ -383,46 +414,6 @@ export class Crew {
         },
       }),
     ];
-  }
-
-  private resolveSkillTools(
-    skillNames: string[]
-  ): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
-    const deps: WorkspaceToolDeps = this.options.workspaceDeps ?? {
-      workspacePath: process.cwd(),
-    };
-    const tools: import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] = [];
-
-    for (const name of skillNames) {
-      switch (name) {
-        case 'web-search':
-          tools.push(createWebSearchTool(this.options.searchProvider));
-          break;
-        case 'web-fetch':
-          tools.push(createWebFetchTool(deps));
-          break;
-        case 'shell':
-          if (this.options.sandbox) tools.push(createShellTool(this.options.sandbox));
-          break;
-        case 'file-read':
-          tools.push(createFileReadTool(deps));
-          break;
-        case 'file-write':
-          tools.push(createFileWriteTool(deps));
-          break;
-        case 'file-edit':
-          tools.push(createFileEditTool(deps));
-          break;
-        case 'glob':
-          tools.push(createGlobTool(deps));
-          break;
-        case 'grep':
-          tools.push(createGrepTool(deps));
-          break;
-      }
-    }
-
-    return tools;
   }
 
   // ─── Task creation ───
@@ -498,7 +489,7 @@ export class Crew {
   // ─── Agent instance factory ───
 
   private createAgentInstance(
-    role: import('./types.js').AgentRole,
+    role: AgentRole,
     definitionName: string,
     id?: string,
     partnerId?: string,
@@ -517,6 +508,16 @@ export class Crew {
   }
 
   // ─── Helpers ───
+
+  private failAgentTask(agent: AgentInstance, reason: string): void {
+    if (agent.taskId) {
+      const task = this.tasks.get(agent.taskId);
+      if (task && task.status === 'running') {
+        this.tasks.set(agent.taskId, { ...task, status: 'failed' });
+        this.emit({ type: 'task_failed', taskId: agent.taskId, error: reason });
+      }
+    }
+  }
 
   private findPrimary(): AgentInstance | undefined {
     for (const agent of this.agents.values()) {

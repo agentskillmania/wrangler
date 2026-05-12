@@ -1,13 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { parseAgentMd } from '../../../src/agent/agent-loader.js';
 
+/**
+ * parseAgentMd now auto-injects current time into instructions via enrichSystemPrompt.
+ * Tests verify the original body content is present in the enriched output.
+ */
 describe('parseAgentMd', () => {
   it('parses agent with frontmatter and body', () => {
     const content = `---
 name: developer
 description: Code specialist
-skills:
-  - testing
 thinking:
   enabled: true
 ---
@@ -17,22 +19,23 @@ You are a senior developer.`;
     const result = parseAgentMd(content);
     expect(result.meta.name).toBe('developer');
     expect(result.meta.description).toBe('Code specialist');
-    expect(result.meta.skills).toEqual(['testing']);
     expect(result.meta.thinking?.enabled).toBe(true);
-    expect(result.instructions).toBe('You are a senior developer.');
+    expect(result.instructions).toContain('You are a senior developer.');
+    expect(result.instructions).toContain('当前时间');
   });
 
   it('parses agent without frontmatter using fallbackName', () => {
     const content = 'You are a helpful assistant.';
     const result = parseAgentMd(content, 'fallback');
     expect(result.meta.name).toBe('fallback');
-    expect(result.instructions).toBe('You are a helpful assistant.');
+    expect(result.instructions).toContain('You are a helpful assistant.');
+    expect(result.instructions).toContain('当前时间');
   });
 
   it('handles empty content', () => {
     const result = parseAgentMd('', 'empty');
     expect(result.meta.name).toBe('empty');
-    expect(result.instructions).toBe('');
+    expect(result.instructions).toContain('当前时间');
   });
 
   it('handles missing name in frontmatter', () => {
@@ -43,7 +46,8 @@ description: No name
 Instructions here`;
     const result = parseAgentMd(content, 'fallback');
     expect(result.meta.name).toBe('fallback');
-    expect(result.instructions).toBe('Instructions here');
+    expect(result.instructions).toContain('Instructions here');
+    expect(result.instructions).toContain('当前时间');
   });
 
   it('handles unclosed frontmatter', () => {

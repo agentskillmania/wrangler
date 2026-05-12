@@ -81,6 +81,8 @@ export type {
   TaskStatus,
   TaskInfo,
   CrewOptions,
+  CrewRunner,
+  RunnerFactory,
   CrewToolInvokedEvent,
   CrewToolCompletedEvent,
   CrewAgentAdvancedEvent,

@@ -41,9 +41,6 @@ describe('US1: 从 AGENT.md 创建 agent', () => {
       const content = `---
 name: code-reviewer
 description: Reviews code for quality
-skills:
-  - testing
-  - review
 thinking:
   enabled: true
 ---
@@ -58,7 +55,6 @@ You are a senior code reviewer. Focus on:
 
       expect(def.meta.name).toBe('code-reviewer');
       expect(def.meta.description).toBe('Reviews code for quality');
-      expect(def.meta.skills).toEqual(['testing', 'review']);
       expect(def.meta.thinking?.enabled).toBe(true);
       expect(def.instructions).toContain('senior code reviewer');
     });
