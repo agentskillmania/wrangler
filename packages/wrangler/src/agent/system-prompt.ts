@@ -13,16 +13,13 @@ const TIME_BLOCK = `<context>
  *
  * LLMs have no built-in sense of "now" — this ensures the model
  * knows the actual date and time when generating responses.
+ * Timezone is read from the runtime environment automatically.
  */
 export function enrichSystemPrompt(systemPrompt: string): string {
-  const timestamp = new Date().toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    weekday: 'long',
-  });
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const now = new Date();
+  const timestamp = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, '0')}月${String(now.getDate()).padStart(2, '0')}日 ${WEEKDAYS[now.getDay()]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} (${tz})`;
   return TIME_BLOCK.replace('{timestamp}', timestamp) + systemPrompt;
 }
+
+const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
