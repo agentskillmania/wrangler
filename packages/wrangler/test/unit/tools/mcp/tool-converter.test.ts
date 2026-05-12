@@ -133,6 +133,28 @@ describe('tool-converter', () => {
       expect(result.parse(withOptional)).toEqual(withOptional);
     });
 
+    it('converts array without items to z.array(z.any())', () => {
+      const schema = { type: 'array' };
+      const result = jsonSchemaToZod(schema);
+      expect(result).toBeInstanceOf(z.ZodArray);
+      // z.any() accepts anything
+      expect(result.parse([1, 'two', null, { key: 'val' }])).toEqual([
+        1,
+        'two',
+        null,
+        { key: 'val' },
+      ]);
+    });
+
+    it('converts unknown type to z.any()', () => {
+      const schema = { type: 'custom-unknown-type' };
+      const result = jsonSchemaToZod(schema);
+      // z.any() accepts anything
+      expect(result.parse('anything')).toBe('anything');
+      expect(result.parse(42)).toBe(42);
+      expect(result.parse(null)).toBe(null);
+    });
+
     it('handles array of objects', () => {
       const schema = {
         type: 'array',
@@ -279,6 +301,15 @@ describe('tool-converter', () => {
       const result = await tool.execute({});
 
       expect(result).toBe('Error: MCP call failed');
+    });
+
+    it('returns error string when callTool throws non-Error', async () => {
+      const callTool = vi.fn().mockRejectedValue('string error');
+      const tool = createMCPTool('server', 'tool', 'description', {}, callTool);
+
+      const result = await tool.execute({});
+
+      expect(result).toBe('Error: Unknown error');
     });
 
     it('returns error string with error message', async () => {
