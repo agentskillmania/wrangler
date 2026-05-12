@@ -27,6 +27,9 @@ export type { WorkspaceToolDeps } from './tools/builtin/index.js';
 export type { Tool } from '@agentskillmania/colts';
 export { loadMCPTools } from './tools/mcp/index.js';
 export type { MCPLoaderOptions } from './tools/mcp/index.js';
+export type { MCPServerDef, MCPConfig } from './tools/mcp/index.js';
+export { mergeMCPConfigs, readConfigFile, discoverGlobalConfigPath } from './tools/mcp/index.js';
+export { createMCPTool, jsonSchemaToZod } from './tools/mcp/index.js';
 
 // Todolist (Layer 3)
 export { createTodolistSupport } from './todolist/index.js';
