@@ -85,7 +85,9 @@ export async function loadMCPTools(options?: MCPLoaderOptions): Promise<Tool<Zod
     runtime = await createRuntime({ servers: serverDefs });
   } catch (error) {
     // Warn and return empty on runtime creation failure
-    console.warn(`Failed to create MCP runtime: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(
+      `Failed to create MCP runtime: ${error instanceof Error ? error.message : String(error)}`
+    );
     return [];
   }
 
@@ -130,14 +132,14 @@ export async function loadMCPTools(options?: MCPLoaderOptions): Promise<Tool<Zod
                 const message = error instanceof Error ? error.message : String(error);
                 return `Error calling MCP tool ${srv}__${tool}: ${message}`;
               }
-            },
+            }
           );
           tools.push(tool);
         }
       } catch (error) {
         // Warn and continue on per-server errors
         console.warn(
-          `Failed to list tools from MCP server ${serverName}: ${error instanceof Error ? error.message : String(error)}`,
+          `Failed to list tools from MCP server ${serverName}: ${error instanceof Error ? error.message : String(error)}`
         );
         continue;
       }
@@ -148,7 +150,9 @@ export async function loadMCPTools(options?: MCPLoaderOptions): Promise<Tool<Zod
       await runtime.close();
     } catch (error) {
       // Silently fail on close errors
-      console.warn(`Failed to close MCP runtime: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(
+        `Failed to close MCP runtime: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 

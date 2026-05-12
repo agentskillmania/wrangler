@@ -148,10 +148,7 @@ describe('tool-converter', () => {
       const result = jsonSchemaToZod(schema);
       expect(result).toBeInstanceOf(z.ZodArray);
 
-      const valid = [
-        { id: 1, name: 'Item 1' },
-        { id: 2 },
-      ];
+      const valid = [{ id: 1, name: 'Item 1' }, { id: 2 }];
       expect(result.parse(valid)).toEqual(valid);
     });
   });
@@ -204,9 +201,7 @@ describe('tool-converter', () => {
         properties: {},
       });
 
-      await expect(tool.execute({})).rejects.toThrow(
-        'MCP tool not implemented: server__tool'
-      );
+      await expect(tool.execute({})).rejects.toThrow('MCP tool not implemented: server__tool');
     });
 
     it('handles empty properties (empty object schema)', () => {
@@ -242,7 +237,7 @@ describe('tool-converter', () => {
           },
           required: ['arg1'],
         },
-        callTool,
+        callTool
       );
 
       const result = await tool.execute({ arg1: 'value1' });
@@ -266,7 +261,7 @@ describe('tool-converter', () => {
           },
           required: ['arg1'],
         },
-        callTool,
+        callTool
       );
 
       const signal = new AbortController().signal;
@@ -287,9 +282,7 @@ describe('tool-converter', () => {
     });
 
     it('returns error string with error message', async () => {
-      const callTool = vi
-        .fn()
-        .mockRejectedValue(new Error('Connection timeout'));
+      const callTool = vi.fn().mockRejectedValue(new Error('Connection timeout'));
       const tool = createMCPTool('server', 'tool', 'description', {}, callTool);
 
       const result = await tool.execute({});

@@ -102,7 +102,7 @@ describe('config-merger', () => {
 
     it('handles undefined global config', () => {
       const local: MCPConfig = {
-        servers: { 'local': { command: 'local-cmd' } },
+        servers: { local: { command: 'local-cmd' } },
       };
       const result = mergeMCPConfigs(undefined, local);
       expect(result).toEqual(local);
@@ -110,7 +110,7 @@ describe('config-merger', () => {
 
     it('handles undefined local config', () => {
       const global: MCPConfig = {
-        servers: { 'global': { command: 'global-cmd' } },
+        servers: { global: { command: 'global-cmd' } },
       };
       const result = mergeMCPConfigs(global, undefined);
       expect(result).toEqual(global);

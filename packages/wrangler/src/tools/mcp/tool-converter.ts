@@ -9,10 +9,7 @@ import type { Tool } from '@agentskillmania/colts';
  * @param schema - Full schema object (needed for array items and object properties)
  * @returns Zod type corresponding to the JSON Schema type
  */
-function jsonSchemaTypeToZod(
-  typeStr: string,
-  schema?: Record<string, unknown>,
-): ZodTypeAny {
+function jsonSchemaTypeToZod(typeStr: string, schema?: Record<string, unknown>): ZodTypeAny {
   switch (typeStr) {
     case 'string':
       return z.string();
@@ -107,7 +104,7 @@ export function convertMCPTool(
   serverName: string,
   toolName: string,
   description: string,
-  inputSchema?: Record<string, unknown>,
+  inputSchema?: Record<string, unknown>
 ): Tool<ZodTypeAny> {
   const name = `${serverName}__${toolName}`;
   const parameters = jsonSchemaToZod(inputSchema);
@@ -144,8 +141,8 @@ export function createMCPTool(
   callTool: (
     serverName: string,
     toolName: string,
-    args: Record<string, unknown>,
-  ) => Promise<unknown>,
+    args: Record<string, unknown>
+  ) => Promise<unknown>
 ): Tool<ZodTypeAny> {
   const name = `${serverName}__${toolName}`;
   const parameters = jsonSchemaToZod(inputSchema);
@@ -154,10 +151,7 @@ export function createMCPTool(
     name,
     description,
     parameters,
-    async execute(
-      args: z.infer<typeof parameters>,
-      options?: { signal?: AbortSignal },
-    ) {
+    async execute(args: z.infer<typeof parameters>, options?: { signal?: AbortSignal }) {
       // Validate input parameters against the schema
       const parsedArgs = parameters.parse(args);
 

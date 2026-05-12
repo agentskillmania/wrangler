@@ -39,9 +39,12 @@ describe('loadMCPTools', () => {
   it('returns empty array when serverFilter excludes all servers', async () => {
     // Write a temp mcp.json with one server, but filter to different name
     const configPath = join(testDir, 'mcp.json');
-    await writeFile(configPath, JSON.stringify({
-      servers: { myserver: { command: 'echo' } }
-    }));
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        servers: { myserver: { command: 'echo' } },
+      })
+    );
 
     const tools = await loadMCPTools({
       localConfigPath: configPath,
@@ -54,9 +57,12 @@ describe('loadMCPTools', () => {
   it('handles mcporter runtime creation failure gracefully', async () => {
     // Write a config with an invalid server that will fail to connect
     const configPath = join(testDir, 'mcp.json');
-    await writeFile(configPath, JSON.stringify({
-      servers: { badserver: { command: 'nonexistent-command-xyz' } }
-    }));
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        servers: { badserver: { command: 'nonexistent-command-xyz' } },
+      })
+    );
 
     const tools = await loadMCPTools({
       localConfigPath: configPath,
@@ -83,13 +89,16 @@ describe('loadMCPTools', () => {
   it('applies server filter correctly when matching servers exist', async () => {
     // Write config with multiple servers
     const configPath = join(testDir, 'mcp.json');
-    await writeFile(configPath, JSON.stringify({
-      servers: {
-        'server-a': { command: 'echo' },
-        'server-b': { command: 'echo' },
-        'server-c': { command: 'echo' },
-      }
-    }));
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        servers: {
+          'server-a': { command: 'echo' },
+          'server-b': { command: 'echo' },
+          'server-c': { command: 'echo' },
+        },
+      })
+    );
 
     const tools = await loadMCPTools({
       localConfigPath: configPath,
@@ -128,17 +137,23 @@ describe('loadMCPTools', () => {
     const globalConfigPath = join(testDir, 'mcporter.json');
     const localConfigPath = join(testDir, 'mcp.json');
 
-    await writeFile(globalConfigPath, JSON.stringify({
-      servers: {
-        'global-server': { command: 'echo' },
-      }
-    }));
+    await writeFile(
+      globalConfigPath,
+      JSON.stringify({
+        servers: {
+          'global-server': { command: 'echo' },
+        },
+      })
+    );
 
-    await writeFile(localConfigPath, JSON.stringify({
-      servers: {
-        'local-server': { command: 'echo' },
-      }
-    }));
+    await writeFile(
+      localConfigPath,
+      JSON.stringify({
+        servers: {
+          'local-server': { command: 'echo' },
+        },
+      })
+    );
 
     const tools = await loadMCPTools({
       globalConfigPath,
@@ -150,9 +165,12 @@ describe('loadMCPTools', () => {
 
   it('handles empty serverFilter array', async () => {
     const configPath = join(testDir, 'mcp.json');
-    await writeFile(configPath, JSON.stringify({
-      servers: { myserver: { command: 'echo' } }
-    }));
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        servers: { myserver: { command: 'echo' } },
+      })
+    );
 
     const tools = await loadMCPTools({
       localConfigPath: configPath,

@@ -378,7 +378,12 @@ export class Crew {
   }
 
   private createToolsForRole(agent: AgentInstance): Tool<ZodTypeAny>[] {
-    return [...this.createCommTools(agent), ...this.builtinTools, ...this.mcpTools, ...this.createTodolistTools()];
+    return [
+      ...this.createCommTools(agent),
+      ...this.builtinTools,
+      ...this.mcpTools,
+      ...this.createTodolistTools(),
+    ];
   }
 
   private createCommTools(agent: AgentInstance): Tool<ZodTypeAny>[] {

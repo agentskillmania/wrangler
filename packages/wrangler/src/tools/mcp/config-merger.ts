@@ -30,10 +30,7 @@ export interface MCPConfig {
  * @param localConfig - Local mcp.json config (optional)
  * @returns Merged configuration with local overrides applied
  */
-export function mergeMCPConfigs(
-  globalConfig?: MCPConfig,
-  localConfig?: MCPConfig,
-): MCPConfig {
+export function mergeMCPConfigs(globalConfig?: MCPConfig, localConfig?: MCPConfig): MCPConfig {
   const merged: MCPConfig = { servers: {} };
 
   // Add global servers
