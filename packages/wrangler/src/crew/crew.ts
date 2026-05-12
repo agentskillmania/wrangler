@@ -25,6 +25,7 @@ import {
   createUpdateCrewTodolistTool,
 } from './crew-tools.js';
 import { createBuiltinTools } from '../tools/builtin/index.js';
+import { loadMCPTools } from '../tools/mcp/index.js';
 
 export class Crew {
   private config: CrewConfig;
@@ -41,6 +42,8 @@ export class Crew {
   private agentIdCounter = 0;
   private abortController = new AbortController();
   private builtinTools: Tool<ZodTypeAny>[];
+  private mcpTools: Tool<ZodTypeAny>[] = [];
+  private mcpToolsLoaded = false;
 
   constructor(config: CrewConfig, options: CrewOptions) {
     this.config = config;
@@ -300,6 +303,20 @@ export class Crew {
       agentDef?.instructions ??
       `You are a ${agent.definitionName} agent.`;
 
+    // Load MCP tools once (lazy loading on first agent creation)
+    if (!this.mcpToolsLoaded) {
+      // Load asynchronously - tools will be available for next agent creation
+      loadMCPTools({ localConfigPath: this.config.mcpConfigPath })
+        .then((tools) => {
+          this.mcpTools = tools;
+          this.mcpToolsLoaded = true;
+        })
+        .catch(() => {
+          // MCP tools are optional - failure is OK
+          this.mcpToolsLoaded = true;
+        });
+    }
+
     const tools = this.createToolsForRole(agent);
     let systemPrompt =
       agent.role === 'liaison'
@@ -361,7 +378,7 @@ export class Crew {
   }
 
   private createToolsForRole(agent: AgentInstance): Tool<ZodTypeAny>[] {
-    return [...this.createCommTools(agent), ...this.builtinTools, ...this.createTodolistTools()];
+    return [...this.createCommTools(agent), ...this.builtinTools, ...this.mcpTools, ...this.createTodolistTools()];
   }
 
   private createCommTools(agent: AgentInstance): Tool<ZodTypeAny>[] {

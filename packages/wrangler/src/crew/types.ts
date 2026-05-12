@@ -178,6 +178,7 @@ export interface CrewConfig {
   readonly memory: string;
   readonly agentDefs: Readonly<Record<string, AgentDefinition>>;
   readonly skillDirs: readonly string[];
+  readonly mcpConfigPath?: string;
 }
 
 // ─── Runner factory (testability) ───
