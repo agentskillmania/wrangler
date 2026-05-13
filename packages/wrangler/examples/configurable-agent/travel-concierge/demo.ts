@@ -1,8 +1,12 @@
 /**
  * Demo: Travel Concierge (Configurable Agent)
  *
- * Atlas plans a Tokyo trip using web_search and web_fetch for real info.
- * Demonstrates: web_search → web_fetch → analysis.
+ * Atlas plans a Tokyo trip using web_search (backed by Zhipu MCP) and web_fetch for real info.
+ * Demonstrates: MCP-powered web_search → web_fetch → analysis.
+ *
+ * Required env vars:
+ *   OPENAI_API_KEY  — LLM access
+ *   ZHIPU_API_KEY   — Zhipu MCP web search (optional; falls back to no search)
  *
  * Run: cd packages/wrangler && pnpm demo:travel-concierge
  */
@@ -13,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { parseAgentMd, createSessionSupport, createBuiltinTools } from '@agentskillmania/wrangler';
 import { getDemoConfig } from '../../demo-config.js';
+import { createMCPSearchProvider } from '../../mcp-search-provider.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -34,14 +39,35 @@ async function main() {
   const { provider: llmProvider, model } = getDemoConfig();
   console.log(`  ✓ 模型: ${model}\n`);
 
-  // ── Step 3: Assemble ──
-  console.log('【步骤 3】组装 Session + 内置工具...');
+  // ── Step 3: Setup MCP search provider ──
+  console.log('【步骤 3】配置 MCP 搜索...');
+  let searchProvider = undefined;
+  let mcpCleanup = async () => {};
+  const apiKey = process.env.OPENAI_API_KEY; // same key for Zhipu LLM + MCP
+  if (apiKey) {
+    try {
+      const { provider, cleanup } = await createMCPSearchProvider({ apiKey });
+      searchProvider = provider;
+      mcpCleanup = cleanup;
+      console.log('  ✓ 智谱 MCP 搜索已就绪\n');
+    } catch (e) {
+      console.warn(`  ⚠ MCP 搜索加载失败: ${(e as Error).message}\n`);
+    }
+  } else {
+    console.log('  ⚠ 未设置 OPENAI_API_KEY，搜索不可用\n');
+  }
+
+  // ── Step 4: Assemble ──
+  console.log('【步骤 4】组装 Session + 内置工具...');
   const session = createSessionSupport({ workspacePath: process.cwd() });
-  const builtinTools = createBuiltinTools({ workspacePath: process.cwd() });
+  const builtinTools = createBuiltinTools({
+    workspacePath: process.cwd(),
+    searchProvider,
+  });
   console.log(`  ✓ 工具: ${[...session.tools, ...builtinTools].map((t) => t.name).join(', ')}\n`);
 
-  // ── Step 4: Create Runner ──
-  console.log('【步骤 4】创建 AgentRunner...');
+  // ── Step 5: Create Runner ──
+  console.log('【步骤 5】创建 AgentRunner...');
   const runner = new AgentRunner({
     model,
     llmClient: llmProvider,
@@ -53,7 +79,7 @@ async function main() {
 
   console.log('  ✓ Runner 就绪\n');
 
-  // ── Step 5: Submit travel request ──
+  // ── Step 6: Submit travel request ──
   const request = `
 请为 3 人家庭规划 5 天东京行程，具体要求如下：
 
@@ -70,7 +96,7 @@ async function main() {
   `.trim();
 
   console.log('═══════════════════════════════════════════');
-  console.log('【步骤 5】提交旅行需求');
+  console.log('【步骤 6】提交旅行需求');
   console.log('═══════════════════════════════════════════\n');
 
   let state = createAgentState({
@@ -118,6 +144,8 @@ async function main() {
   console.log(`\n═══ 运行结束 ═══`);
   console.log(`总步骤数: ${stepNum}`);
   console.log('✓ 行程规划完成');
+
+  await mcpCleanup();
 }
 
 main().catch(console.error);
