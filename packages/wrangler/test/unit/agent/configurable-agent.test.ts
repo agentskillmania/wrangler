@@ -21,6 +21,14 @@ vi.mock('@agentskillmania/colts', async (importOriginal) => {
   };
 });
 
+vi.mock('../../../src/tools/mcp/mcp-loader.js', () => ({
+  loadMCPTools: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('../../../src/tools/mcp/config-merger.js', () => ({
+  discoverGlobalConfigPath: vi.fn().mockReturnValue('/fake/global/mcporter.json'),
+}));
+
 const mockAgentDef: AgentDefinition = {
   meta: {
     name: 'test-agent',
@@ -153,5 +161,18 @@ describe('ConfigurableAgent', () => {
     expect(callArgs.middleware).toBeDefined();
     expect(callArgs.middleware).toHaveLength(1);
     expect(callArgs.middleware[0].name).toBe('session');
+  });
+
+  it('should inject current time as YAML frontmatter via systemPrompt', async () => {
+    const agent = new ConfigurableAgent(mockAgentDef, '/test/workspace', makeOptions());
+    await agent.run('test');
+
+    const calls = await getAgentRunnerCalls();
+    const callArgs = calls[calls.length - 1][0];
+    // Runner's systemPrompt should be YAML frontmatter with time only
+    expect(callArgs.systemPrompt).toContain('时间:');
+    expect(callArgs.systemPrompt).toContain('时区:');
+    expect(callArgs.systemPrompt).toContain('---');
+    expect(callArgs.systemPrompt).not.toContain('You are a test agent.');
   });
 });

@@ -4,7 +4,29 @@ import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/
 import { createSessionSupport } from '../session/support.js';
 import { createBuiltinTools } from '../tools/builtin/index.js';
 import { loadMCPTools } from '../tools/mcp/index.js';
+import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
+import { buildTimeContext } from './system-prompt.js';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { AgentDefinition, ConfigurableAgentOptions } from './types.js';
+
+/**
+ * Build MCP config paths for this agent:
+ * 1. Global mcporter config (auto-discovered)
+ * 2. Workspace-local mcp.json (if present)
+ */
+function buildMCPConfigPaths(workspacePath: string): string[] {
+  const paths: string[] = [];
+  const globalPath = discoverGlobalConfigPath();
+  if (existsSync(globalPath)) {
+    paths.push(globalPath);
+  }
+  const localPath = join(workspacePath, 'mcp.json');
+  if (existsSync(localPath)) {
+    paths.push(localPath);
+  }
+  return paths;
+}
 
 /**
  * A single-agent runner configured from an AgentDefinition.
@@ -33,16 +55,18 @@ export class ConfigurableAgent {
     });
 
     const mcpTools = await loadMCPTools({
-      localConfigPath: this.options.localMcpConfigPath,
+      configPaths: buildMCPConfigPaths(this.workspacePath),
     });
 
+    // Runner gets time context; state gets agent instructions.
+    // The message assembler combines both into the final system message.
     const runner = new AgentRunner({
       model,
       llmClient: this.options.llmClient,
       tools: [...session.tools, ...builtinTools, ...mcpTools],
       middleware: [session.middleware],
       skillDirectories: this.options.skillDirectories,
-      systemPrompt: this.agentDef.instructions,
+      systemPrompt: buildTimeContext(),
       thinkingEnabled: this.agentDef.meta.thinking?.enabled,
     });
 

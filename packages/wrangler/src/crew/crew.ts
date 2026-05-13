@@ -17,7 +17,7 @@ import { AgentInstance } from './agent-instance.js';
 import { MessageRouter } from './message-router.js';
 import { CrewTodoList } from './crew-todolist.js';
 import { buildLiaisonPrompt } from './liaison-prompt.js';
-import { enrichSystemPrompt } from '../agent/system-prompt.js';
+import { buildTimeContext } from '../agent/system-prompt.js';
 import {
   createCreateTaskTool,
   createSendMessageTool,
@@ -345,14 +345,13 @@ export class Crew {
       systemPrompt += '\n\n' + this.buildAgentCatalog();
     }
 
-    // Inject runtime context (current time) for all agents
-    systemPrompt = enrichSystemPrompt(systemPrompt);
-
+    // Runner gets time context; state gets the assembled agent prompt.
+    // The message assembler combines both into the final system message.
     const runnerOptions = {
       model,
       llmClient: this.options.llmClient,
       tools,
-      systemPrompt,
+      systemPrompt: buildTimeContext(),
       skillDirectories: [...this.config.skillDirs],
     };
     const runner = this.options.runnerFactory
