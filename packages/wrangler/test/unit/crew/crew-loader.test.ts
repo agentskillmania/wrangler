@@ -16,8 +16,8 @@ describe('CrewLoader', () => {
     expect(config.memory).toContain('shared context');
     expect(config.agentDefs).toHaveProperty('primary');
     expect(config.agentDefs).toHaveProperty('searcher');
-    expect(config.agentDefs.primary.meta.model).toBe('gpt-4o');
-    expect(config.agentDefs.searcher.meta.description).toBe('Searches the web');
+    expect(config.agentDefs.primary.model).toBe('gpt-4o');
+    expect(config.agentDefs.searcher.description).toBe('Searches the web');
     expect(config.agentDefs.searcher.instructions).toContain('search agent');
     expect(config.skillDirs).toEqual([]);
   });
@@ -26,8 +26,8 @@ describe('CrewLoader', () => {
     const loader = new CrewLoader(FIXTURE_DIR);
     const config = await loader.load();
 
-    expect(config.agentDefs.primary.meta.name).toBe('primary');
-    expect(config.agentDefs.searcher.meta.name).toBe('searcher');
+    expect(config.agentDefs.primary.name).toBe('primary');
+    expect(config.agentDefs.searcher.name).toBe('searcher');
   });
 
   it('throws when directory does not exist', async () => {

@@ -13,9 +13,9 @@ thinking:
 You are a senior developer.`;
 
     const result = parseAgentMd(content);
-    expect(result.meta.name).toBe('developer');
-    expect(result.meta.description).toBe('Code specialist');
-    expect(result.meta.thinking?.enabled).toBe(true);
+    expect(result.name).toBe('developer');
+    expect(result.description).toBe('Code specialist');
+    expect(result.thinking?.enabled).toBe(true);
     expect(result.instructions).toContain('You are a senior developer.');
     expect(result.instructions).not.toContain('当前时间');
   });
@@ -23,13 +23,13 @@ You are a senior developer.`;
   it('parses agent without frontmatter using fallbackName', () => {
     const content = 'You are a helpful assistant.';
     const result = parseAgentMd(content, 'fallback');
-    expect(result.meta.name).toBe('fallback');
+    expect(result.name).toBe('fallback');
     expect(result.instructions).toContain('You are a helpful assistant.');
   });
 
   it('handles empty content', () => {
     const result = parseAgentMd('', 'empty');
-    expect(result.meta.name).toBe('empty');
+    expect(result.name).toBe('empty');
     expect(result.instructions).toBe('');
   });
 
@@ -40,7 +40,7 @@ description: No name
 
 Instructions here`;
     const result = parseAgentMd(content, 'fallback');
-    expect(result.meta.name).toBe('fallback');
+    expect(result.name).toBe('fallback');
     expect(result.instructions).toContain('Instructions here');
   });
 
@@ -49,7 +49,7 @@ Instructions here`;
 name: broken
 this has no closing dashes`;
     const result = parseAgentMd(content, 'fallback');
-    expect(result.meta.name).toBe('fallback');
+    expect(result.name).toBe('fallback');
   });
 
   it('handles yaml parse error gracefully', () => {
@@ -59,12 +59,12 @@ name: [invalid: yaml
 
 Body`;
     const result = parseAgentMd(content, 'fallback');
-    expect(result.meta.name).toBe('fallback');
+    expect(result.name).toBe('fallback');
   });
 
   it('defaults name to unknown when no fallback provided', () => {
     const content = 'Just instructions';
     const result = parseAgentMd(content);
-    expect(result.meta.name).toBe('unknown');
+    expect(result.name).toBe('unknown');
   });
 });

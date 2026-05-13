@@ -19,8 +19,8 @@ export { EnhancedRunner, buildTimeContext } from './runner/index.js';
 export type { EnhancedRunnerOptions } from './runner/index.js';
 
 // Agent (Layer 5)
-export { parseAgentMd, ConfigurableAgent } from './agent/index.js';
-export type { AgentMeta, AgentDefinition, ConfigurableAgentOptions } from './agent/index.js';
+export { parseAgentMd } from './agent/index.js';
+export type { ParsedAgent } from './agent/index.js';
 
 // Tools (Layer 2)
 export { createBuiltinTools } from './tools/builtin/index.js';

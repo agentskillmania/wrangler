@@ -1,4 +1,4 @@
-import type { AgentDefinition } from '../agent/types.js';
+import type { ParsedAgent } from '../agent/agent-loader.js';
 import type { ILLMProvider, AskHumanHandler, Tool } from '@agentskillmania/colts';
 import type { WorkspaceToolDeps } from '../tools/builtin/workspace-deps.js';
 import type { SearchProvider } from '../tools/builtin/web-search.js';
@@ -176,7 +176,7 @@ export interface CrewConfig {
     readonly primaryAgent: string;
   };
   readonly memory: string;
-  readonly agentDefs: Readonly<Record<string, AgentDefinition>>;
+  readonly agentDefs: Readonly<Record<string, ParsedAgent>>;
   readonly skillDirs: readonly string[];
 }
 

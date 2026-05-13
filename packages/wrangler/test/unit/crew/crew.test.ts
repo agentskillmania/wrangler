@@ -7,9 +7,10 @@ const mockConfig: CrewConfig = {
   meta: { name: 'test-crew', description: 'test', primaryAgent: 'primary' },
   memory: 'test memory',
   agentDefs: {
-    primary: { meta: { name: 'primary' }, instructions: 'You are primary' },
+    primary: { name: 'primary', instructions: 'You are primary' },
     searcher: {
-      meta: { name: 'searcher', description: 'Searches the web' },
+      name: 'searcher',
+      description: 'Searches the web',
       instructions: 'You search',
     },
   },

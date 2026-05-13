@@ -300,7 +300,7 @@ export class Crew {
     if (agent.runner) return;
 
     const agentDef = this.config.agentDefs[agent.definitionName];
-    const model = agentDef?.meta?.model ?? this.options.defaultModel ?? 'gpt-4';
+    const model = agentDef?.model ?? this.options.defaultModel ?? 'gpt-4';
 
     // Custom instructions take priority for ad-hoc workers, then catalog definition
     const instructions =
@@ -352,7 +352,7 @@ export class Crew {
         searchProvider: this.options.searchProvider,
         sandbox: this.options.sandbox,
         skillDirectories: [...this.config.skillDirs],
-        thinkingEnabled: agentDef?.meta?.thinking?.enabled,
+        thinkingEnabled: agentDef?.thinking?.enabled,
       });
     }
 
@@ -621,7 +621,7 @@ export class Crew {
 
     const lines = ['Available worker agents (prefer these over ad-hoc creation):'];
     for (const [name, def] of entries) {
-      const desc = def.meta.description ?? 'No description';
+      const desc = def.description ?? 'No description';
       lines.push(`- ${name}: ${desc}`);
     }
     return lines.join('\n');

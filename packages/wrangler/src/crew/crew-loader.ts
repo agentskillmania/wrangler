@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import yaml from 'js-yaml';
 import { parseAgentMd } from '../agent/agent-loader.js';
 import type { CrewConfig } from './types.js';
-import type { AgentDefinition } from '../agent/types.js';
+import type { ParsedAgent } from '../agent/agent-loader.js';
 
 interface CrewMeta {
   name: string;
@@ -84,9 +84,9 @@ export class CrewLoader {
     return { meta, memory };
   }
 
-  private async loadAgents(absDir: string): Promise<Record<string, AgentDefinition>> {
+  private async loadAgents(absDir: string): Promise<Record<string, ParsedAgent>> {
     const agentsDir = join(absDir, 'agents');
-    const agentDefs: Record<string, AgentDefinition> = {};
+    const agentDefs: Record<string, ParsedAgent> = {};
 
     try {
       const entries = await readdir(agentsDir);
@@ -94,8 +94,8 @@ export class CrewLoader {
 
       for (const file of mdFiles) {
         const content = await readFile(join(agentsDir, file), 'utf-8');
-        const def = parseAgentMd(content, file.replace(/\.md$/, ''));
-        agentDefs[def.meta.name] = def;
+        const parsed = parseAgentMd(content, file.replace(/\.md$/, ''));
+        agentDefs[parsed.name] = parsed;
       }
     } catch {
       // agents/ directory doesn't exist — empty agentDefs is fine
