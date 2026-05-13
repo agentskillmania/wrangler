@@ -1,8 +1,12 @@
 /**
  * Demo: Newsroom (Crew multi-agent)
  *
- * Editor-in-chief receives a pitch, reporters use web_search/web_fetch
+ * Editor-in-chief receives a pitch, reporters use web_search (backed by Zhipu MCP)
  * to research real data, editor synthesizes into a feature article.
+ *
+ * Required env vars:
+ *   OPENAI_API_KEY  — LLM access
+ *   ZHIPU_API_KEY   — Zhipu MCP web search (optional; falls back to no search)
  *
  * Run: cd packages/wrangler && pnpm demo:newsroom
  */
@@ -11,7 +15,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Crew, CrewLoader } from '@agentskillmania/wrangler';
 import type { CrewOutputEvent } from '@agentskillmania/wrangler';
-import { getDemoConfig } from '../../../demo-config.js';
+import { getDemoConfig } from '../../demo-config.js';
+import { createMCPSearchProvider } from '../../mcp-search-provider.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -46,7 +51,7 @@ function formatNewsroomEvent(event: CrewOutputEvent): string {
       return `  >> 截稿未完成: [${event.taskId}] — ${event.error}`;
     case 'todolist_updated': {
       const items = event.todolist.map(
-        (t) => `${t.status === 'done' ? '✓' : t.status === 'in_progress' ? '►' : '○'} ${t.title}`
+        (t) => `${t.status === 'done' ? '✓' : t.status === 'in_progress' ? '►' : '○'} ${t.content}`
       );
       return `  >> 编辑部待办: ${items.join(' | ')}`;
     }
@@ -69,6 +74,20 @@ async function main() {
   const config = await loader.load();
   const { provider: llmProvider, model } = getDemoConfig();
 
+  // Setup MCP search
+  let searchProvider = undefined;
+  let mcpCleanup = async () => {};
+  const apiKey = process.env.OPENAI_API_KEY; // same key for Zhipu LLM + MCP
+  if (apiKey) {
+    try {
+      const { provider, cleanup } = await createMCPSearchProvider({ apiKey });
+      searchProvider = provider;
+      mcpCleanup = cleanup;
+    } catch (e) {
+      console.warn(`  ⚠ MCP 搜索加载失败: ${(e as Error).message}`);
+    }
+  }
+
   console.log(`刊物:         ${config.meta.name}`);
   console.log(`主编:         ${config.meta.primaryAgent}`);
   console.log(
@@ -77,12 +96,15 @@ async function main() {
       .join(', ')}`
   );
   console.log(`风格指南:      ${config.skillDirs.length > 0 ? '特稿写作技能已加载' : '(无)'}`);
+  console.log(`搜索:         ${searchProvider ? '智谱 MCP (真实)' : '(无)'}`);
   console.log(`模型:         ${model}\n`);
 
   const crew = new Crew(config, {
     llmClient: llmProvider,
     defaultModel: model,
     workspaceDeps: { workspacePath: process.cwd() },
+    searchProvider,
+    mcpConfigPaths: [],
   });
 
   const eventTypes: CrewOutputEvent['type'][] = [
@@ -118,11 +140,31 @@ async function main() {
   crew.pushInput({ type: 'user_message', content: pitch });
 
   const article = await new Promise<string>((resolve) => {
-    crew.on('user_response', (event) => resolve(event.content));
+    // Take the last non-empty user_response
+    let latest = '';
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    crew.on('user_response', (event) => {
+      const content = event.content?.trim() ?? '';
+      if (content) latest = content;
+      // Debounce: resolve 3s after the last response
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => resolve(latest), 3000);
+    });
   });
 
   console.log('\n═══ 发表特稿 ═══');
-  console.log(article);
+  if (article) {
+    console.log(article);
+  } else {
+    console.log('(主编未返回文字回复，特稿可能已写入文件)');
+  }
+
+  // Stop the crew and clean up
+  crew.pushInput({ type: 'stop' });
+  await mcpCleanup();
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error('Demo failed:', err);
+  process.exit(1);
+});

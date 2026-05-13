@@ -11,7 +11,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Crew, CrewLoader } from '@agentskillmania/wrangler';
 import type { CrewOutputEvent } from '@agentskillmania/wrangler';
-import { getDemoConfig } from '../../../demo-config.js';
+import { getDemoConfig } from '../../demo-config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -46,12 +46,16 @@ function formatEvent(event: CrewOutputEvent): string {
       return `[${ts()}] 任务失败: [${event.taskId}] 错误: ${event.error}`;
     case 'todolist_updated': {
       const items = event.todolist.map(
-        (t) => `${t.status === 'done' ? '✓' : t.status === 'in_progress' ? '►' : '○'} ${t.title}`
+        (t) => `${t.status === 'done' ? '✓' : t.status === 'in_progress' ? '►' : '○'} ${t.content}`
       );
       return `[${ts()}] 待办列表: ${items.join(' | ')}`;
     }
-    case 'user_response':
-      return `\n[${ts()}] ━━━ 最终建议 ━━━\n`;
+    case 'user_response': {
+      const content = event.content;
+      if (!content || content.trim().length === 0) return '';
+      const preview = content.length > 200 ? content.slice(0, 200) + '...' : content;
+      return `\n[${ts()}] ━━━ 主编回复 ━━━\n${preview}`;
+    }
     case 'error':
       return `[${ts()}] 错误: ${event.error.message}`;
     default:
@@ -84,6 +88,7 @@ async function main() {
     llmClient: llmProvider,
     defaultModel: model,
     workspaceDeps: { workspacePath: process.cwd() },
+    mcpConfigPaths: [],
   });
 
   const eventTypes: CrewOutputEvent['type'][] = [
@@ -117,10 +122,24 @@ async function main() {
   crew.pushInput({ type: 'user_message', content: question });
 
   const response = await new Promise<string>((resolve) => {
-    crew.on('user_response', (event) => resolve(event.content));
+    let latest = '';
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    crew.on('user_response', (event) => {
+      const content = event.content?.trim() ?? '';
+      if (content) latest = content;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => resolve(latest), 3000);
+    });
   });
 
-  console.log(response);
+  console.log('\n━━━ 最终评估建议 ━━━');
+  if (response) {
+    console.log(response);
+  } else {
+    console.log('(主编未返回文字回复，评估报告可能已写入文件)');
+  }
+
+  crew.pushInput({ type: 'stop' });
 }
 
 main().catch(console.error);

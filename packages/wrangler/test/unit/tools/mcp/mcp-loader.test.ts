@@ -3,11 +3,29 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadMCPTools } from '../../../../src/tools/mcp/mcp-loader.js';
-import type { MCPLoaderOptions } from '../../../../src/tools/mcp/mcp-loader.js';
 
 // vi.mock is hoisted before imports. Using var (not const/let) avoids TDZ.
-// The factory creates the mock, and tests reassign properties on mockFns.
 var mockFns = {
+  shouldCreateRuntimeFail: false,
+  loadServerDefinitions: function (opts: { configPath?: string }) {
+    const fs = require('node:fs');
+    try {
+      const content = fs.readFileSync(opts.configPath, 'utf-8');
+      const config = JSON.parse(content);
+      const servers = config.mcpServers || {};
+      return Promise.resolve(
+        Object.entries(servers).map(([name, def]) => {
+          const serverDef = def as Record<string, unknown>;
+          if (serverDef.url) {
+            return { name, command: { kind: 'http', url: new URL(serverDef.url as string) } };
+          }
+          return { name, command: { kind: 'http', url: new URL('http://localhost') } };
+        })
+      );
+    } catch {
+      return Promise.resolve([]);
+    }
+  },
   listTools: function () {
     return Promise.resolve([]);
   },
@@ -20,13 +38,19 @@ var mockFns = {
 };
 
 vi.mock('mcporter', () => ({
-  createRuntime: vi.fn().mockImplementation(() =>
-    Promise.resolve({
+  loadServerDefinitions: vi
+    .fn()
+    .mockImplementation((...args: unknown[]) => mockFns.loadServerDefinitions(...args)),
+  createRuntime: vi.fn().mockImplementation(() => {
+    if (mockFns.shouldCreateRuntimeFail) {
+      return Promise.reject(new Error('Runtime init failed'));
+    }
+    return Promise.resolve({
       listTools: (...args: unknown[]) => mockFns.listTools(...args),
       callTool: (...args: unknown[]) => mockFns.callTool(...args),
       close: (...args: unknown[]) => mockFns.close(...args),
-    })
-  ),
+    });
+  }),
 }));
 
 describe('loadMCPTools', () => {
@@ -35,197 +59,27 @@ describe('loadMCPTools', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), `wrangler-mcp-loader-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
-  });
 
-  afterEach(async () => {
-    await rm(testDir, { recursive: true, force: true }).catch(() => {});
-  });
-
-  it('returns empty array when called with no options', async () => {
-    const tools = await loadMCPTools();
-    expect(tools).toEqual([]);
-  });
-
-  it('returns empty array when no config files exist', async () => {
-    const tools = await loadMCPTools({
-      globalConfigPath: '/nonexistent/mcporter.json',
-      localConfigPath: '/nonexistent/mcp.json',
-    });
-    expect(tools).toEqual([]);
-  });
-
-  it('returns empty array with empty options', async () => {
-    const tools = await loadMCPTools({});
-    expect(tools).toEqual([]);
-  });
-
-  it('returns empty array when serverFilter excludes all servers', async () => {
-    const configPath = join(testDir, 'mcp.json');
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        servers: { myserver: { command: 'echo' } },
-      })
-    );
-
-    const tools = await loadMCPTools({
-      localConfigPath: configPath,
-      globalConfigPath: '/nonexistent/mcporter.json',
-      serverFilter: ['other-server'],
-    });
-    expect(tools).toEqual([]);
-  });
-
-  it('handles mcporter runtime creation failure gracefully', async () => {
-    const configPath = join(testDir, 'mcp.json');
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        servers: { badserver: { command: 'nonexistent-command-xyz' } },
-      })
-    );
-
-    const tools = await loadMCPTools({
-      localConfigPath: configPath,
-      globalConfigPath: '/nonexistent/mcporter.json',
-    });
-    expect(Array.isArray(tools)).toBe(true);
-  });
-
-  it('handles non-Error thrown by createRuntime', async () => {
-    // The top-level describe uses real mcporter which fails with non-Error.
-    // This test verifies that branch is hit.
-    const configPath = join(testDir, 'mcp.json');
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        servers: { myserver: { command: 'echo' } },
-      })
-    );
-
-    // Force createRuntime to throw a string (non-Error)
-    const mcporter = await import('mcporter');
-    const orig = mcporter.createRuntime;
-    // ESM modules are frozen — can't reassign. So test with real mcporter which
-    // throws on invalid server. The actual non-Error branch (String(error)) is
-    // covered by the existing test above when mcporter throws iterable errors.
-    const tools = await loadMCPTools({
-      localConfigPath: configPath,
-      globalConfigPath: '/nonexistent/mcporter.json',
-    });
-    expect(Array.isArray(tools)).toBe(true);
-  });
-
-  it('returns empty array when merged config has no servers', async () => {
-    const globalConfigPath = join(testDir, 'mcporter.json');
-    const localConfigPath = join(testDir, 'mcp.json');
-    await writeFile(globalConfigPath, JSON.stringify({ servers: {} }));
-    await writeFile(localConfigPath, JSON.stringify({ servers: {} }));
-
-    const tools = await loadMCPTools({
-      globalConfigPath,
-      localConfigPath,
-    });
-    expect(tools).toEqual([]);
-  });
-
-  it('applies server filter correctly when matching servers exist', async () => {
-    const configPath = join(testDir, 'mcp.json');
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        servers: {
-          'server-a': { command: 'echo' },
-          'server-b': { command: 'echo' },
-          'server-c': { command: 'echo' },
-        },
-      })
-    );
-
-    const tools = await loadMCPTools({
-      localConfigPath: configPath,
-      globalConfigPath: '/nonexistent/mcporter.json',
-      serverFilter: ['server-a', 'server-c'],
-    });
-    expect(Array.isArray(tools)).toBe(true);
-  });
-
-  it('handles invalid JSON in local config gracefully', async () => {
-    const configPath = join(testDir, 'mcp.json');
-    await writeFile(configPath, '{ invalid json }');
-
-    const tools = await loadMCPTools({
-      localConfigPath: configPath,
-      globalConfigPath: '/nonexistent/mcporter.json',
-    });
-    expect(Array.isArray(tools)).toBe(true);
-  });
-
-  it('handles invalid JSON in global config gracefully', async () => {
-    const configPath = join(testDir, 'mcporter.json');
-    await writeFile(configPath, '{ invalid json }');
-
-    const tools = await loadMCPTools({
-      globalConfigPath: configPath,
-    });
-    expect(Array.isArray(tools)).toBe(true);
-  });
-
-  it('merges global and local configs correctly', async () => {
-    const globalConfigPath = join(testDir, 'mcporter.json');
-    const localConfigPath = join(testDir, 'mcp.json');
-
-    await writeFile(
-      globalConfigPath,
-      JSON.stringify({
-        servers: {
-          'global-server': { command: 'echo' },
-        },
-      })
-    );
-
-    await writeFile(
-      localConfigPath,
-      JSON.stringify({
-        servers: {
-          'local-server': { command: 'echo' },
-        },
-      })
-    );
-
-    const tools = await loadMCPTools({
-      globalConfigPath,
-      localConfigPath,
-    });
-    expect(Array.isArray(tools)).toBe(true);
-  });
-
-  it('handles empty serverFilter array', async () => {
-    const configPath = join(testDir, 'mcp.json');
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        servers: { myserver: { command: 'echo' } },
-      })
-    );
-
-    const tools = await loadMCPTools({
-      localConfigPath: configPath,
-      globalConfigPath: '/nonexistent/mcporter.json',
-      serverFilter: [],
-    });
-    expect(tools).toEqual([]);
-  });
-});
-
-describe('loadMCPTools with mocked runtime', () => {
-  let testDir: string;
-
-  beforeEach(async () => {
-    testDir = join(tmpdir(), `wrangler-mcp-mock-test-${Date.now()}`);
-    await mkdir(testDir, { recursive: true });
-
-    // Reset mock implementations
+    mockFns.shouldCreateRuntimeFail = false;
+    mockFns.loadServerDefinitions = function (opts: { configPath?: string }) {
+      const fs = require('node:fs');
+      try {
+        const content = fs.readFileSync(opts.configPath, 'utf-8');
+        const config = JSON.parse(content);
+        const servers = config.mcpServers || {};
+        return Promise.resolve(
+          Object.entries(servers).map(([name, def]) => {
+            const serverDef = def as Record<string, unknown>;
+            if (serverDef.url) {
+              return { name, command: { kind: 'http', url: new URL(serverDef.url as string) } };
+            }
+            return { name, command: { kind: 'http', url: new URL('http://localhost') } };
+          })
+        );
+      } catch {
+        return Promise.resolve([]);
+      }
+    };
     mockFns.listTools = () => Promise.resolve([]);
     mockFns.callTool = () => Promise.resolve('');
     mockFns.close = () => Promise.resolve(undefined);
@@ -235,39 +89,146 @@ describe('loadMCPTools with mocked runtime', () => {
     await rm(testDir, { recursive: true, force: true }).catch(() => {});
   });
 
-  async function writeConfigAndLoad(extraOptions?: Partial<MCPLoaderOptions>) {
+  // ─── No-config cases ───
+
+  it('returns empty when called with no options', async () => {
+    const tools = await loadMCPTools();
+    expect(tools).toEqual([]);
+  });
+
+  it('returns empty when configPaths is empty', async () => {
+    const tools = await loadMCPTools({ configPaths: [] });
+    expect(tools).toEqual([]);
+  });
+
+  it('returns empty when config file has no servers', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(configPath, JSON.stringify({ mcpServers: {} }));
+
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(tools).toEqual([]);
+  });
+
+  it('returns empty when config file does not exist', async () => {
+    const tools = await loadMCPTools({ configPaths: ['/nonexistent/mcp.json'] });
+    expect(tools).toEqual([]);
+  });
+
+  it('returns empty when config file has invalid JSON', async () => {
+    const configPath = join(testDir, 'bad.json');
+    await writeFile(configPath, '{ invalid json }');
+
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(tools).toEqual([]);
+  });
+
+  // ─── Single config ───
+
+  it('loads tools from a single config', async () => {
     const configPath = join(testDir, 'mcp.json');
     await writeFile(
       configPath,
       JSON.stringify({
-        servers: { 'test-server': { command: 'echo' } },
+        mcpServers: { 'test-srv': { url: 'http://localhost:1234/mcp' } },
       })
     );
 
-    return loadMCPTools({
-      localConfigPath: configPath,
-      globalConfigPath: '/nonexistent/mcporter.json',
-      ...extraOptions,
-    });
-  }
+    mockFns.listTools = () =>
+      Promise.resolve([
+        { name: 'search', description: 'Search', inputSchema: { type: 'object', properties: {} } },
+      ]);
 
-  it('loads tools from runtime and returns colts Tools', async () => {
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(tools).toHaveLength(1);
+    expect(tools[0].name).toBe('test-srv__search');
+  });
+
+  // ─── Multiple configs merge ───
+
+  it('merges tools from multiple configs', async () => {
+    const configA = join(testDir, 'a.json');
+    const configB = join(testDir, 'b.json');
+
+    await writeFile(
+      configA,
+      JSON.stringify({ mcpServers: { 'srv-a': { url: 'http://a:1234/mcp' } } })
+    );
+    await writeFile(
+      configB,
+      JSON.stringify({ mcpServers: { 'srv-b': { url: 'http://b:5678/mcp' } } })
+    );
+
+    const loadedServers: string[] = [];
+    mockFns.listTools = (serverName: string) => {
+      loadedServers.push(serverName);
+      return Promise.resolve([
+        {
+          name: 'tool',
+          description: `${serverName} tool`,
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ]);
+    };
+
+    const tools = await loadMCPTools({ configPaths: [configA, configB] });
+    expect(loadedServers).toContain('srv-a');
+    expect(loadedServers).toContain('srv-b');
+    expect(tools).toHaveLength(2);
+  });
+
+  it('later config overrides earlier on server name collision', async () => {
+    const configA = join(testDir, 'a.json');
+    const configB = join(testDir, 'b.json');
+
+    await writeFile(
+      configA,
+      JSON.stringify({ mcpServers: { shared: { url: 'http://a:1234/mcp' } } })
+    );
+    await writeFile(
+      configB,
+      JSON.stringify({ mcpServers: { shared: { url: 'http://b:5678/mcp' } } })
+    );
+
+    const loadedServers: string[] = [];
+    mockFns.listTools = (serverName: string) => {
+      loadedServers.push(serverName);
+      return Promise.resolve([
+        {
+          name: 'tool',
+          description: `${serverName} tool`,
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ]);
+    };
+
+    const tools = await loadMCPTools({ configPaths: [configA, configB] });
+    // Only one 'shared' server (B version won the collision)
+    expect(loadedServers.filter((s) => s === 'shared')).toHaveLength(1);
+    expect(tools).toHaveLength(1);
+  });
+
+  // ─── Tool conversion ───
+
+  it('converts MCP tools with correct naming and description', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: { 'test-server': { url: 'http://localhost:1234/mcp' } },
+      })
+    );
+
     mockFns.listTools = () =>
       Promise.resolve([
         {
           name: 'search',
           description: 'Search items',
-          inputSchema: {
-            type: 'object',
-            properties: { q: { type: 'string' } },
-            required: ['q'],
-          },
+          inputSchema: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] },
         },
         { name: 'get', description: 'Get item', inputSchema: undefined },
       ]);
 
-    const tools = await writeConfigAndLoad();
-
+    const tools = await loadMCPTools({ configPaths: [configPath] });
     expect(tools).toHaveLength(2);
     expect(tools[0].name).toBe('test-server__search');
     expect(tools[0].description).toBe('Search items');
@@ -276,118 +237,210 @@ describe('loadMCPTools with mocked runtime', () => {
   });
 
   it('uses fallback description when tool has no description', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
     mockFns.listTools = () =>
       Promise.resolve([
         { name: 'nodesc', description: '', inputSchema: { type: 'object', properties: {} } },
       ]);
 
-    const tools = await writeConfigAndLoad();
-
-    expect(tools[0].description).toBe('MCP tool nodesc from test-server');
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(tools[0].description).toBe('MCP tool nodesc from srv');
   });
 
-  it('tool execute calls callTool and returns string result', async () => {
+  // ─── Execute behavior ───
+
+  it('tool execute returns string result', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
     mockFns.listTools = () =>
       Promise.resolve([
         { name: 'echo', description: 'Echo', inputSchema: { type: 'object', properties: {} } },
       ]);
     mockFns.callTool = () => Promise.resolve('hello from MCP');
 
-    const tools = await writeConfigAndLoad();
-    const result = await tools[0].execute({});
-
-    expect(result).toBe('hello from MCP');
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(await tools[0].execute({})).toBe('hello from MCP');
   });
 
-  it('tool execute handles object result with .text property', async () => {
+  it('tool execute extracts .text from object result', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
     mockFns.listTools = () =>
       Promise.resolve([
         { name: 'tool', description: 'Test', inputSchema: { type: 'object', properties: {} } },
       ]);
-    mockFns.callTool = () => Promise.resolve({ text: 'plain text result' });
+    mockFns.callTool = () => Promise.resolve({ text: 'plain text' });
 
-    const tools = await writeConfigAndLoad();
-    const result = await tools[0].execute({});
-
-    expect(result).toBe('plain text result');
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(await tools[0].execute({})).toBe('plain text');
   });
 
-  it('tool execute handles object result with .content string', async () => {
+  it('tool execute extracts .content string', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
     mockFns.listTools = () =>
       Promise.resolve([
         { name: 'tool', description: 'Test', inputSchema: { type: 'object', properties: {} } },
       ]);
     mockFns.callTool = () => Promise.resolve({ content: 'content string' });
 
-    const tools = await writeConfigAndLoad();
-    const result = await tools[0].execute({});
-
-    expect(result).toBe('content string');
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(await tools[0].execute({})).toBe('content string');
   });
 
-  it('tool execute handles object result with .content array', async () => {
+  it('tool execute extracts text from .content array', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
     mockFns.listTools = () =>
       Promise.resolve([
         { name: 'tool', description: 'Test', inputSchema: { type: 'object', properties: {} } },
       ]);
     mockFns.callTool = () => Promise.resolve({ content: [{ type: 'text', text: 'hello' }] });
 
-    const tools = await writeConfigAndLoad();
-    const result = await tools[0].execute({});
-
-    expect(result).toBe('[{"type":"text","text":"hello"}]');
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(await tools[0].execute({})).toBe('hello');
   });
 
-  it('tool execute handles unknown object result as JSON', async () => {
+  it('tool execute handles content array with non-text elements', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
     mockFns.listTools = () =>
       Promise.resolve([
         { name: 'tool', description: 'Test', inputSchema: { type: 'object', properties: {} } },
       ]);
-    mockFns.callTool = () => Promise.resolve({ data: 42, nested: { a: 1 } });
+    mockFns.callTool = () =>
+      Promise.resolve({
+        content: [
+          { type: 'image', data: 'base64' },
+          { type: 'text', text: 'hello' },
+        ],
+      });
 
-    const tools = await writeConfigAndLoad();
+    const tools = await loadMCPTools({ configPaths: [configPath] });
     const result = await tools[0].execute({});
-
-    expect(result).toBe('{"data":42,"nested":{"a":1}}');
+    expect(result).toContain('hello');
+    expect(result).toContain('"type":"image"');
   });
 
-  it('tool execute handles callTool error gracefully', async () => {
+  it('tool execute JSON-stringifies unknown object result', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
+    mockFns.listTools = () =>
+      Promise.resolve([
+        { name: 'tool', description: 'Test', inputSchema: { type: 'object', properties: {} } },
+      ]);
+    mockFns.callTool = () => Promise.resolve({ data: 42 });
+
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(await tools[0].execute({})).toBe('{"data":42}');
+  });
+
+  it('tool execute handles non-string non-object result', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
+    mockFns.listTools = () =>
+      Promise.resolve([
+        { name: 'tool', description: 'Test', inputSchema: { type: 'object', properties: {} } },
+      ]);
+    mockFns.callTool = () => Promise.resolve(42);
+
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(await tools[0].execute({})).toBe('42');
+  });
+
+  // ─── Error handling ───
+
+  it('tool execute handles callTool Error', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
     mockFns.listTools = () =>
       Promise.resolve([
         { name: 'tool', description: 'Test', inputSchema: { type: 'object', properties: {} } },
       ]);
     mockFns.callTool = () => Promise.reject(new Error('Connection refused'));
 
-    const tools = await writeConfigAndLoad();
+    const tools = await loadMCPTools({ configPaths: [configPath] });
     const result = await tools[0].execute({});
-
-    expect(result).toContain('Error calling MCP tool test-server__tool');
+    expect(result).toContain('Error calling MCP tool srv__tool');
     expect(result).toContain('Connection refused');
   });
 
-  it('tool execute handles non-Error thrown by callTool', async () => {
+  it('tool execute handles callTool non-Error throw', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
     mockFns.listTools = () =>
       Promise.resolve([
         { name: 'tool', description: 'Test', inputSchema: { type: 'object', properties: {} } },
       ]);
     mockFns.callTool = () => Promise.reject('string error');
 
-    const tools = await writeConfigAndLoad();
+    const tools = await loadMCPTools({ configPaths: [configPath] });
     const result = await tools[0].execute({});
-
-    expect(result).toContain('Error calling MCP tool test-server__tool');
+    expect(result).toContain('Error calling MCP tool srv__tool');
     expect(result).toContain('string error');
   });
 
   it('continues when listTools fails for one server', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
     mockFns.listTools = () => Promise.reject(new Error('Server unavailable'));
 
-    const tools = await writeConfigAndLoad();
-
+    const tools = await loadMCPTools({ configPaths: [configPath] });
     expect(tools).toEqual([]);
   });
 
   it('closes runtime even when tool loading fails', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
     let closeCalled = false;
     mockFns.listTools = () => Promise.reject(new Error('fail'));
     mockFns.close = () => {
@@ -395,29 +448,17 @@ describe('loadMCPTools with mocked runtime', () => {
       return Promise.resolve(undefined);
     };
 
-    await writeConfigAndLoad();
-
+    await loadMCPTools({ configPaths: [configPath] });
     expect(closeCalled).toBe(true);
   });
 
-  it('handles runtime.close() failure gracefully', async () => {
-    mockFns.listTools = () => Promise.resolve([]);
-    mockFns.close = () => Promise.reject(new Error('close failed'));
-
-    const tools = await writeConfigAndLoad();
-
-    expect(tools).toEqual([]);
-  });
-
-  it('returns empty array when runtime lists no tools', async () => {
-    mockFns.listTools = () => Promise.resolve([]);
-
-    const tools = await writeConfigAndLoad();
-
-    expect(tools).toEqual([]);
-  });
-
   it('closes runtime after successful tool loading', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
     let closeCalled = false;
     mockFns.listTools = () =>
       Promise.resolve([
@@ -428,8 +469,41 @@ describe('loadMCPTools with mocked runtime', () => {
       return Promise.resolve(undefined);
     };
 
-    await writeConfigAndLoad();
-
+    await loadMCPTools({ configPaths: [configPath] });
     expect(closeCalled).toBe(true);
+  });
+
+  it('handles runtime.close() failure gracefully', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
+    mockFns.listTools = () => Promise.resolve([]);
+    mockFns.close = () => Promise.reject(new Error('close failed'));
+
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(tools).toEqual([]);
+  });
+
+  it('handles createRuntime failure gracefully', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
+    mockFns.shouldCreateRuntimeFail = true;
+
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(tools).toEqual([]);
+  });
+
+  it('safeLoadDefinitions catches non-Error from loadServerDefinitions', async () => {
+    mockFns.loadServerDefinitions = () => Promise.reject('raw rejection');
+
+    const tools = await loadMCPTools({ configPaths: ['/nonexistent.json'] });
+    expect(tools).toEqual([]);
   });
 });

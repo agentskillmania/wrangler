@@ -1,161 +1,145 @@
-import { createRuntime } from 'mcporter';
+import { createRuntime, loadServerDefinitions } from 'mcporter';
+import type { ServerDefinition } from 'mcporter';
 import type { ZodTypeAny } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
-import {
-  mergeMCPConfigs,
-  readConfigFile,
-  discoverGlobalConfigPath,
-  type MCPServerDef,
-  type MCPConfig,
-} from './config-merger.js';
 import { createMCPTool } from './tool-converter.js';
 
 /**
- * Options for loading MCP tools
+ * Options for loading MCP tools.
+ *
+ * Accepts an ordered list of mcporter-standard config file paths.
+ * Each is loaded via `loadServerDefinitions()`, then merged:
+ * later paths override earlier ones on server name collision.
+ *
+ * The caller is responsible for deciding which paths to pass
+ * (e.g. global auto-discovered config + local workspace mcp.json).
  */
 export interface MCPLoaderOptions {
-  /** Explicit path to global mcporter config */
-  globalConfigPath?: string;
-  /** Path to a local mcp.json (crew/agent level) */
-  localConfigPath?: string;
-  /** Server names to filter */
-  serverFilter?: string[];
+  /**
+   * Ordered list of mcporter config file paths.
+   * Later entries override earlier ones on server name collision.
+   * Empty or undefined → returns no tools.
+   */
+  configPaths?: string[];
+}
+
+/** Merge multiple ServerDefinition arrays; later entries override earlier on name collision. */
+function mergeServerDefinitions(allDefs: ServerDefinition[][]): ServerDefinition[] {
+  const merged: ServerDefinition[] = [];
+  for (const defs of allDefs) {
+    for (const def of defs) {
+      const idx = merged.findIndex((d) => d.name === def.name);
+      if (idx >= 0) {
+        merged[idx] = def;
+      } else {
+        merged.push(def);
+      }
+    }
+  }
+  return merged;
+}
+
+/** Load server definitions, returning empty array on failure. */
+async function safeLoadDefinitions(configPath: string): Promise<ServerDefinition[]> {
+  try {
+    return await loadServerDefinitions({ configPath });
+  } catch (error) {
+    console.warn(
+      `[wrangler/mcp] Failed to load config from ${configPath}: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return [];
+  }
 }
 
 /**
- * Loads MCP tools from global and local configurations
+ * Load MCP tools from one or more mcporter config files.
  *
- * @param options - Configuration options for loading MCP tools
- * @returns Array of Tools loaded from MCP servers
+ * Each config path is loaded independently via `loadServerDefinitions()`,
+ * then merged at the `ServerDefinition[]` level. Later config paths
+ * override earlier ones on server name collision.
  */
 export async function loadMCPTools(options?: MCPLoaderOptions): Promise<Tool<ZodTypeAny>[]> {
-  const tools: Tool<ZodTypeAny>[] = [];
-
-  // Step 1: Load global config
-  let globalConfig: MCPConfig;
-  try {
-    const globalConfigPath = discoverGlobalConfigPath(options?.globalConfigPath);
-    globalConfig = await readConfigFile(globalConfigPath);
-  } catch (error) {
-    // Silently fail on global config errors
-    globalConfig = { servers: {} };
-  }
-
-  // Step 2: Load local config if provided
-  let localConfig: MCPConfig;
-  if (options?.localConfigPath) {
-    try {
-      localConfig = await readConfigFile(options.localConfigPath);
-    } catch (error) {
-      // Silently fail on local config errors
-      localConfig = { servers: {} };
-    }
-  } else {
-    localConfig = { servers: {} };
-  }
-
-  // Step 3: Merge configs
-  const mergedConfig = mergeMCPConfigs(globalConfig, localConfig);
-
-  // Step 4: Check if any servers exist
-  const serverNames = Object.keys(mergedConfig.servers);
-  if (serverNames.length === 0) {
+  const paths = options?.configPaths;
+  if (!paths || paths.length === 0) {
     return [];
   }
 
-  // Step 5: Apply server filter if provided
-  let filteredServers = serverNames;
-  if (options?.serverFilter) {
-    filteredServers = serverNames.filter((name) => options.serverFilter!.includes(name));
-  }
+  const allDefs = mergeServerDefinitions(
+    await Promise.all(paths.map((p) => safeLoadDefinitions(p)))
+  );
 
-  // Step 6: Check if any servers remain after filtering
-  if (filteredServers.length === 0) {
+  if (allDefs.length === 0) {
     return [];
-  }
-
-  // Step 7: Create mcporter runtime
-  const serverDefs: Record<string, MCPServerDef> = {};
-  for (const name of filteredServers) {
-    serverDefs[name] = mergedConfig.servers[name]!;
   }
 
   let runtime;
   try {
-    runtime = await createRuntime({ servers: serverDefs });
+    runtime = await createRuntime({ servers: allDefs });
   } catch (error) {
-    // Warn and return empty on runtime creation failure
     console.warn(
-      `Failed to create MCP runtime: ${error instanceof Error ? error.message : String(error)}`
+      `[wrangler/mcp] Failed to create MCP runtime: ${error instanceof Error ? error.message : String(error)}`
     );
     return [];
   }
 
-  try {
-    // Step 8: Load tools from each server
-    for (const serverName of filteredServers) {
-      try {
-        const mcpTools = await runtime.listTools(serverName);
+  const tools: Tool<ZodTypeAny>[] = [];
 
-        // Step 9: Convert each tool to colts Tool
+  try {
+    for (const serverDef of allDefs) {
+      try {
+        const mcpTools = await runtime.listTools(serverDef.name);
+
         for (const mcpTool of mcpTools) {
-          const tool = createMCPTool(
-            serverName,
-            mcpTool.name,
-            mcpTool.description || `MCP tool ${mcpTool.name} from ${serverName}`,
-            mcpTool.inputSchema,
-            async (srv, tool, args) => {
-              try {
-                const result = await runtime.callTool(srv, tool, { args });
-                // Extract text/content from result
-                if (typeof result === 'string') {
-                  return result;
+          tools.push(
+            createMCPTool(
+              serverDef.name,
+              mcpTool.name,
+              mcpTool.description || `MCP tool ${mcpTool.name} from ${serverDef.name}`,
+              mcpTool.inputSchema as Record<string, unknown> | undefined,
+              async (srv, tool, args) => {
+                try {
+                  const result = await runtime.callTool(srv, tool, { args });
+                  if (typeof result === 'string') return result;
+                  if (result && typeof result === 'object') {
+                    const res = result as Record<string, unknown>;
+                    if (typeof res.text === 'string') return res.text;
+                    if (typeof res.content === 'string') return res.content;
+                    if (Array.isArray(res.content)) {
+                      return res.content
+                        .map((c: unknown) => {
+                          if (typeof c === 'object' && c !== null && 'text' in (c as object)) {
+                            return (c as { text: string }).text;
+                          }
+                          return JSON.stringify(c);
+                        })
+                        .join('\n');
+                    }
+                    return JSON.stringify(res);
+                  }
+                  return String(result);
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : String(error);
+                  return `Error calling MCP tool ${srv}__${tool}: ${message}`;
                 }
-                if (result && typeof result === 'object') {
-                  // Check for common result properties
-                  const res = result as Record<string, unknown>;
-                  if (typeof res.text === 'string') {
-                    return res.text;
-                  }
-                  if (typeof res.content === 'string') {
-                    return res.content;
-                  }
-                  if (Array.isArray(res.content)) {
-                    // Handle content array (common in MCP)
-                    return JSON.stringify(res.content);
-                  }
-                  // Return JSON string of entire result
-                  return JSON.stringify(res);
-                }
-                return String(result);
-              } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                return `Error calling MCP tool ${srv}__${tool}: ${message}`;
               }
-            }
+            )
           );
-          tools.push(tool);
         }
       } catch (error) {
-        // Warn and continue on per-server errors
         console.warn(
-          `Failed to list tools from MCP server ${serverName}: ${error instanceof Error ? error.message : String(error)}`
+          `[wrangler/mcp] Failed to list tools from server "${serverDef.name}": ${error instanceof Error ? error.message : String(error)}`
         );
-        continue;
       }
     }
   } finally {
-    // Step 10: Close runtime
     try {
       await runtime.close();
     } catch (error) {
-      // Silently fail on close errors
       console.warn(
-        `Failed to close MCP runtime: ${error instanceof Error ? error.message : String(error)}`
+        `[wrangler/mcp] Failed to close runtime: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
 
-  // Step 11: Return tools
   return tools;
 }

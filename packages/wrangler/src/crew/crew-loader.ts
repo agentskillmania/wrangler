@@ -49,9 +49,6 @@ export class CrewLoader {
     // 3. Scan skills/
     const skillDirs = await this.loadSkillDirs(absDir);
 
-    // 4. Scan for mcp.json
-    const mcpConfigPath = await this.loadMCPConfigPath(absDir);
-
     return {
       meta: {
         name: meta.name,
@@ -61,7 +58,6 @@ export class CrewLoader {
       memory,
       agentDefs,
       skillDirs,
-      mcpConfigPath,
     };
   }
 
@@ -122,15 +118,5 @@ export class CrewLoader {
     }
 
     return skillDirs;
-  }
-
-  private async loadMCPConfigPath(absDir: string): Promise<string | undefined> {
-    const mcpPath = join(absDir, 'mcp.json');
-    try {
-      await readFile(mcpPath, 'utf-8');
-      return mcpPath;
-    } catch {
-      return undefined;
-    }
   }
 }

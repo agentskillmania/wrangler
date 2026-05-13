@@ -17,6 +17,7 @@ import { AgentInstance } from './agent-instance.js';
 import { MessageRouter } from './message-router.js';
 import { CrewTodoList } from './crew-todolist.js';
 import { buildLiaisonPrompt } from './liaison-prompt.js';
+import { enrichSystemPrompt } from '../agent/system-prompt.js';
 import {
   createCreateTaskTool,
   createSendMessageTool,
@@ -26,6 +27,9 @@ import {
 } from './crew-tools.js';
 import { createBuiltinTools } from '../tools/builtin/index.js';
 import { loadMCPTools } from '../tools/mcp/index.js';
+import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 export class Crew {
   private config: CrewConfig;
@@ -44,6 +48,7 @@ export class Crew {
   private builtinTools: Tool<ZodTypeAny>[];
   private mcpTools: Tool<ZodTypeAny>[] = [];
   private mcpToolsLoaded = false;
+  private todoIdByTaskId = new Map<string, string>();
 
   constructor(config: CrewConfig, options: CrewOptions) {
     this.config = config;
@@ -159,6 +164,16 @@ export class Crew {
           // Agent completion may have produced auto-routed messages or tool calls
           // that created new agents — kick a new scheduling round
           this.scheduleRound();
+          // Emit user_response for primary when all work is truly done
+          if (
+            agent.role === 'primary' &&
+            !this.hasRunningTasks() &&
+            !this.hasRunningAgents() &&
+            !this.hasPendingWork()
+          ) {
+            const answer = agent.lastAnswer ?? '';
+            this.emit({ type: 'user_response', content: answer });
+          }
           // Update overall status
           if (!this.hasPendingWork() && !this.hasRunningAgents()) {
             this._status = 'idle';
@@ -245,12 +260,9 @@ export class Crew {
         });
       }
 
-      // Emit user_response only for primary when no pending tasks remain
+      // Save answer for potential user_response emission in .finally()
       if (agent.role === 'primary') {
-        const hasPending = [...this.tasks.values()].some((t) => t.status === 'running');
-        if (!hasPending) {
-          this.emit({ type: 'user_response', content: answer });
-        }
+        agent.lastAnswer = answer;
       }
     } else {
       // Handle non-success results: error, max_steps, abort
@@ -305,8 +317,8 @@ export class Crew {
 
     // Load MCP tools once (lazy loading on first agent creation)
     if (!this.mcpToolsLoaded) {
-      // Load asynchronously - tools will be available for next agent creation
-      loadMCPTools({ localConfigPath: this.config.mcpConfigPath })
+      const mcpConfigPaths = this.buildMCPConfigPaths();
+      loadMCPTools({ configPaths: mcpConfigPaths })
         .then((tools) => {
           this.mcpTools = tools;
           this.mcpToolsLoaded = true;
@@ -332,6 +344,9 @@ export class Crew {
     if (agent.role === 'primary') {
       systemPrompt += '\n\n' + this.buildAgentCatalog();
     }
+
+    // Inject runtime context (current time) for all agents
+    systemPrompt = enrichSystemPrompt(systemPrompt);
 
     const runnerOptions = {
       model,
@@ -412,10 +427,7 @@ export class Crew {
               });
               agent.relayFlag = true;
               if (agent.taskId) {
-                const task = this.tasks.get(agent.taskId);
-                if (task) {
-                  this.tasks.set(agent.taskId, { ...task, status: 'completed' });
-                }
+                this.completeTask(agent.taskId);
               }
             },
           }),
@@ -498,6 +510,12 @@ export class Crew {
 
     this.emit({ type: 'task_started', taskId, workerType, description });
 
+    // Auto-populate todolist so agents can track progress
+    const todoId = this.todolist.add(`${workerType}: ${description}`, workerId);
+    this.todoIdByTaskId.set(taskId, todoId);
+    this.todolist.update(todoId, 'in_progress');
+    this.emit({ type: 'todolist_updated', todolist: this.todolist.snapshot() });
+
     // Enqueue task description to liaison
     this.router.enqueue(liaisonId, {
       from: primaryId,
@@ -537,7 +555,25 @@ export class Crew {
       if (task && task.status === 'running') {
         this.tasks.set(agent.taskId, { ...task, status: 'failed' });
         this.emit({ type: 'task_failed', taskId: agent.taskId, error: reason });
+        this.updateTodoForTask(agent.taskId, 'pending');
       }
+    }
+  }
+
+  private completeTask(taskId: string): void {
+    const task = this.tasks.get(taskId);
+    if (task && task.status === 'running') {
+      this.tasks.set(taskId, { ...task, status: 'completed' });
+      this.emit({ type: 'task_completed', taskId, result: '' });
+      this.updateTodoForTask(taskId, 'completed');
+    }
+  }
+
+  private updateTodoForTask(taskId: string, status: 'pending' | 'in_progress' | 'completed'): void {
+    const todoId = this.todoIdByTaskId.get(taskId);
+    if (todoId) {
+      this.todolist.update(todoId, status);
+      this.emit({ type: 'todolist_updated', todolist: this.todolist.snapshot() });
     }
   }
 
@@ -546,6 +582,13 @@ export class Crew {
       if (agent.role === 'primary') return agent;
     }
     return undefined;
+  }
+
+  private hasRunningTasks(): boolean {
+    for (const task of this.tasks.values()) {
+      if (task.status === 'running') return true;
+    }
+    return false;
   }
 
   private hasPendingWork(): boolean {
@@ -560,6 +603,24 @@ export class Crew {
       if (agent.status === 'running') return true;
     }
     return false;
+  }
+
+  private buildMCPConfigPaths(): string[] {
+    // Explicit config takes priority
+    if (this.options.mcpConfigPaths !== undefined) {
+      return this.options.mcpConfigPaths;
+    }
+
+    const paths: string[] = [];
+    const globalPath = discoverGlobalConfigPath();
+    if (existsSync(globalPath)) {
+      paths.push(globalPath);
+    }
+    const localPath = join(this.options.workspaceDeps?.workspacePath ?? process.cwd(), 'mcp.json');
+    if (existsSync(localPath)) {
+      paths.push(localPath);
+    }
+    return paths;
   }
 
   private buildAgentCatalog(): string {

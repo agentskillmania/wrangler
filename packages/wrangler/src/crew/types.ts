@@ -178,7 +178,6 @@ export interface CrewConfig {
   readonly memory: string;
   readonly agentDefs: Readonly<Record<string, AgentDefinition>>;
   readonly skillDirs: readonly string[];
-  readonly mcpConfigPath?: string;
 }
 
 // ─── Runner factory (testability) ───
@@ -212,4 +211,6 @@ export interface CrewOptions {
   readonly searchProvider?: SearchProvider;
   readonly sandbox?: Sandbox;
   readonly runnerFactory?: RunnerFactory;
+  /** Explicit MCP config paths. Empty array = skip MCP loading entirely. Undefined = auto-discover. */
+  readonly mcpConfigPaths?: string[];
 }

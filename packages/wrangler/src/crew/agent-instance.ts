@@ -35,6 +35,8 @@ export class AgentInstance {
   relayFlag = false;
   /** Number of times this agent has been advanced; used to detect infinite routing loops */
   advanceCount = 0;
+  /** Last answer from a successful run (used for user_response emission) */
+  lastAnswer?: string;
 
   constructor(options: AgentInstanceOptions) {
     this.id = options.id;

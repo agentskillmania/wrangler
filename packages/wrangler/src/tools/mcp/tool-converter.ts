@@ -37,12 +37,12 @@ function jsonSchemaTypeToZod(typeStr: string, schema?: Record<string, unknown>):
  * @param schema - JSON Schema object definition
  * @returns Zod object schema
  */
-function convertObjectSchema(schema?: Record<string, unknown>): z.ZodObject<any> {
+function convertObjectSchema(schema?: Record<string, unknown>): z.ZodObject<z.ZodRawShape> {
   const properties = schema?.properties as Record<string, Record<string, unknown>> | undefined;
   const required = schema?.required as string[] | undefined;
 
   if (!properties || Object.keys(properties).length === 0) {
-    return z.object({}).strict();
+    return z.object({}).passthrough();
   }
 
   const shape: Record<string, z.ZodTypeAny> = {};
@@ -75,14 +75,14 @@ function convertObjectSchema(schema?: Record<string, unknown>): z.ZodObject<any>
  */
 export function jsonSchemaToZod(schema?: Record<string, unknown>): ZodTypeAny {
   if (!schema || typeof schema !== 'object') {
-    return z.object({}).strict();
+    return z.object({}).passthrough();
   }
 
   const type = schema.type as string;
 
   if (!type) {
-    // If no type specified, default to empty object
-    return z.object({}).strict();
+    // No type specified — accept any object shape (MCP servers may not declare schemas)
+    return z.object({}).passthrough();
   }
 
   return jsonSchemaTypeToZod(type, schema);
@@ -113,7 +113,7 @@ export function convertMCPTool(
     name,
     description,
     parameters,
-    async execute(args: z.infer<typeof parameters>) {
+    async execute(_args: z.infer<typeof parameters>) {
       throw new Error(`MCP tool not implemented: ${name}`);
     },
   };
@@ -151,7 +151,7 @@ export function createMCPTool(
     name,
     description,
     parameters,
-    async execute(args: z.infer<typeof parameters>, options?: { signal?: AbortSignal }) {
+    async execute(args: z.infer<typeof parameters>, _options?: { signal?: AbortSignal }) {
       // Validate input parameters against the schema
       const parsedArgs = parameters.parse(args);
 

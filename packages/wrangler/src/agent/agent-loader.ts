@@ -1,6 +1,5 @@
 import yaml from 'js-yaml';
 import type { AgentDefinition, AgentMeta } from './types.js';
-import { enrichSystemPrompt } from './system-prompt.js';
 
 /**
  * Parse an agent .md file into AgentDefinition.
@@ -12,7 +11,7 @@ export function parseAgentMd(content: string, fallbackName?: string): AgentDefin
   if (!trimmed.startsWith('---')) {
     return {
       meta: { name: fallbackName ?? 'unknown' },
-      instructions: enrichSystemPrompt(trimmed),
+      instructions: trimmed,
     };
   }
 
@@ -20,7 +19,7 @@ export function parseAgentMd(content: string, fallbackName?: string): AgentDefin
   if (secondDash === -1) {
     return {
       meta: { name: fallbackName ?? 'unknown' },
-      instructions: enrichSystemPrompt(trimmed),
+      instructions: trimmed,
     };
   }
 
@@ -32,11 +31,11 @@ export function parseAgentMd(content: string, fallbackName?: string): AgentDefin
     if (!meta.name) {
       meta.name = fallbackName ?? 'unknown';
     }
-    return { meta, instructions: enrichSystemPrompt(body) };
+    return { meta, instructions: body };
   } catch {
     return {
       meta: { name: fallbackName ?? 'unknown' },
-      instructions: enrichSystemPrompt(body),
+      instructions: body,
     };
   }
 }

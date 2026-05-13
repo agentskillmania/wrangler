@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseAgentMd } from '../../../src/agent/agent-loader.js';
 
-/**
- * parseAgentMd now auto-injects current time into instructions via enrichSystemPrompt.
- * Tests verify the original body content is present in the enriched output.
- */
 describe('parseAgentMd', () => {
   it('parses agent with frontmatter and body', () => {
     const content = `---
@@ -21,7 +17,7 @@ You are a senior developer.`;
     expect(result.meta.description).toBe('Code specialist');
     expect(result.meta.thinking?.enabled).toBe(true);
     expect(result.instructions).toContain('You are a senior developer.');
-    expect(result.instructions).toContain('当前时间');
+    expect(result.instructions).not.toContain('当前时间');
   });
 
   it('parses agent without frontmatter using fallbackName', () => {
@@ -29,13 +25,12 @@ You are a senior developer.`;
     const result = parseAgentMd(content, 'fallback');
     expect(result.meta.name).toBe('fallback');
     expect(result.instructions).toContain('You are a helpful assistant.');
-    expect(result.instructions).toContain('当前时间');
   });
 
   it('handles empty content', () => {
     const result = parseAgentMd('', 'empty');
     expect(result.meta.name).toBe('empty');
-    expect(result.instructions).toContain('当前时间');
+    expect(result.instructions).toBe('');
   });
 
   it('handles missing name in frontmatter', () => {
@@ -47,7 +42,6 @@ Instructions here`;
     const result = parseAgentMd(content, 'fallback');
     expect(result.meta.name).toBe('fallback');
     expect(result.instructions).toContain('Instructions here');
-    expect(result.instructions).toContain('当前时间');
   });
 
   it('handles unclosed frontmatter', () => {
