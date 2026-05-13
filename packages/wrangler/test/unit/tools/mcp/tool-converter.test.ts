@@ -100,10 +100,25 @@ describe('tool-converter', () => {
       expect(result.parse({})).toEqual({});
     });
 
+    it('empty properties schema accepts unknown keys (passthrough)', () => {
+      const schema = {
+        type: 'object',
+        properties: {},
+      };
+      const result = jsonSchemaToZod(schema);
+      // MCP tools with undeclared schemas should still accept any parameters
+      expect(result.parse({ query: 'test', limit: 10 })).toEqual({ query: 'test', limit: 10 });
+    });
+
     it('handles missing schema (undefined)', () => {
       const result = jsonSchemaToZod(undefined);
       expect(result).toBeInstanceOf(z.ZodObject);
       expect(result.parse({})).toEqual({});
+    });
+
+    it('missing schema accepts unknown keys (passthrough)', () => {
+      const result = jsonSchemaToZod(undefined);
+      expect(result.parse({ any: 'key', works: true })).toEqual({ any: 'key', works: true });
     });
 
     it('handles nested object properties', () => {
@@ -385,6 +400,15 @@ describe('tool-converter', () => {
       await tool.execute({});
 
       expect(callTool).toHaveBeenCalledWith('server', 'tool', {});
+    });
+
+    it('undefined schema accepts arbitrary parameters', async () => {
+      const callTool = vi.fn().mockResolvedValue('search results');
+      const tool = createMCPTool('server', 'search', 'search tool', undefined, callTool);
+
+      await tool.execute({ query: 'test query', limit: 5 });
+
+      expect(callTool).toHaveBeenCalledWith('server', 'search', { query: 'test query', limit: 5 });
     });
   });
 });
