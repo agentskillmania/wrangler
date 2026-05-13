@@ -14,6 +14,10 @@ export type { ConversationMessage } from './session/types.js';
 // Middleware (advanced usage)
 export { createSessionMiddleware } from './middleware/session-middleware.js';
 
+// Runner (Layer 2)
+export { EnhancedRunner, buildTimeContext } from './runner/index.js';
+export type { EnhancedRunnerOptions } from './runner/index.js';
+
 // Agent (Layer 5)
 export { parseAgentMd, ConfigurableAgent } from './agent/index.js';
 export type { AgentMeta, AgentDefinition, ConfigurableAgentOptions } from './agent/index.js';
