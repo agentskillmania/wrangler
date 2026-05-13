@@ -9,10 +9,11 @@ import type {
   TaskInfo,
   CrewMessage,
   AgentRole,
+  CrewRunner,
 } from './types.js';
 import type { Tool, AgentState } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
-import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { AgentInstance } from './agent-instance.js';
 import { MessageRouter } from './message-router.js';
 import { CrewTodoList } from './crew-todolist.js';
@@ -26,7 +27,7 @@ import {
   createUpdateCrewTodolistTool,
 } from './crew-tools.js';
 import { createBuiltinTools } from '../tools/builtin/index.js';
-import { loadMCPTools } from '../tools/mcp/index.js';
+import { EnhancedRunner } from '../runner/enhanced-runner.js';
 import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -45,20 +46,12 @@ export class Crew {
   private taskIdCounter = 0;
   private agentIdCounter = 0;
   private abortController = new AbortController();
-  private builtinTools: Tool<ZodTypeAny>[];
-  private mcpTools: Tool<ZodTypeAny>[] = [];
-  private mcpToolsLoaded = false;
   private todoIdByTaskId = new Map<string, string>();
 
   constructor(config: CrewConfig, options: CrewOptions) {
     this.config = config;
     this.options = options;
     this._id = `crew-${Date.now()}`;
-    this.builtinTools = createBuiltinTools({
-      workspacePath: options.workspaceDeps?.workspacePath ?? process.cwd(),
-      searchProvider: options.searchProvider,
-      sandbox: options.sandbox,
-    });
   }
 
   get state(): CrewState {
@@ -199,7 +192,7 @@ export class Crew {
       return;
     }
 
-    this.ensureRunner(agent);
+    await this.ensureRunner(agent);
 
     // Reset relay flag at start of each advance
     agent.relayFlag = false;
@@ -303,7 +296,7 @@ export class Crew {
 
   // ─── Runner setup ───
 
-  private ensureRunner(agent: AgentInstance): void {
+  private async ensureRunner(agent: AgentInstance): Promise<void> {
     if (agent.runner) return;
 
     const agentDef = this.config.agentDefs[agent.definitionName];
@@ -315,21 +308,6 @@ export class Crew {
       agentDef?.instructions ??
       `You are a ${agent.definitionName} agent.`;
 
-    // Load MCP tools once (lazy loading on first agent creation)
-    if (!this.mcpToolsLoaded) {
-      const mcpConfigPaths = this.buildMCPConfigPaths();
-      loadMCPTools({ configPaths: mcpConfigPaths })
-        .then((tools) => {
-          this.mcpTools = tools;
-          this.mcpToolsLoaded = true;
-        })
-        .catch(() => {
-          // MCP tools are optional - failure is OK
-          this.mcpToolsLoaded = true;
-        });
-    }
-
-    const tools = this.createToolsForRole(agent);
     let systemPrompt =
       agent.role === 'liaison'
         ? buildLiaisonPrompt({
@@ -345,40 +323,62 @@ export class Crew {
       systemPrompt += '\n\n' + this.buildAgentCatalog();
     }
 
-    // Runner gets time context; state gets the assembled agent prompt.
-    // The message assembler combines both into the final system message.
-    const runnerOptions = {
-      model,
-      llmClient: this.options.llmClient,
-      tools,
-      systemPrompt: buildTimeContext(),
-      skillDirectories: [...this.config.skillDirs],
-    };
-    const runner = this.options.runnerFactory
-      ? this.options.runnerFactory(runnerOptions)
-      : new AgentRunner(runnerOptions);
+    let runner: EnhancedRunner | CrewRunner;
+
+    if (this.options.runnerFactory) {
+      // Legacy path for backward compatibility
+      const commTools = this.createCommTools(agent);
+      const builtinTools = createBuiltinTools({
+        workspacePath: this.options.workspaceDeps?.workspacePath ?? process.cwd(),
+        searchProvider: this.options.searchProvider,
+        sandbox: this.options.sandbox,
+      });
+      runner = this.options.runnerFactory({
+        model,
+        llmClient: this.options.llmClient,
+        tools: [...commTools, ...builtinTools],
+        systemPrompt: buildTimeContext(),
+      }) as CrewRunner;
+    } else {
+      // New path: use EnhancedRunner
+      const commTools = this.createCommTools(agent);
+      const todolistTools = this.createTodolistTools();
+      runner = await EnhancedRunner.create({
+        llmClient: this.options.llmClient,
+        model,
+        workspacePath: this.options.workspaceDeps?.workspacePath ?? process.cwd(),
+        extraTools: [...commTools, ...todolistTools],
+        mcpConfigPaths: this.buildMCPConfigPaths(),
+        searchProvider: this.options.searchProvider,
+        sandbox: this.options.sandbox,
+        skillDirectories: [...this.config.skillDirs],
+        thinkingEnabled: agentDef?.meta?.thinking?.enabled,
+      });
+    }
 
     // Track callId → toolName for tool:end mapping
     const pendingToolNames = new Map<string, string>();
 
-    runner.on('tool:start', (e: { action: { id: string; tool: string; arguments: unknown } }) => {
-      pendingToolNames.set(e.action.id, e.action.tool);
+    runner.on('tool:start', (e: unknown) => {
+      const event = e as { action: { id: string; tool: string; arguments: unknown } };
+      pendingToolNames.set(event.action.id, event.action.tool);
       this.emit({
         type: 'tool_invoked',
         agentId: agent.id,
-        toolName: e.action.tool,
-        args: e.action.arguments,
+        toolName: event.action.tool,
+        args: event.action.arguments,
       });
     });
 
-    runner.on('tool:end', (e: { result: unknown; callId?: string }) => {
-      const toolName = (e.callId && pendingToolNames.get(e.callId)) ?? 'unknown';
-      if (e.callId) pendingToolNames.delete(e.callId);
+    runner.on('tool:end', (e: unknown) => {
+      const event = e as { result: unknown; callId?: string };
+      const toolName = (event.callId && pendingToolNames.get(event.callId)) ?? 'unknown';
+      if (event.callId) pendingToolNames.delete(event.callId);
       this.emit({
         type: 'tool_completed',
         agentId: agent.id,
         toolName,
-        result: String(e.result),
+        result: String(event.result),
         duration: 0,
       });
     });
@@ -389,15 +389,6 @@ export class Crew {
       instructions: systemPrompt,
       tools: [],
     });
-  }
-
-  private createToolsForRole(agent: AgentInstance): Tool<ZodTypeAny>[] {
-    return [
-      ...this.createCommTools(agent),
-      ...this.builtinTools,
-      ...this.mcpTools,
-      ...this.createTodolistTools(),
-    ];
   }
 
   private createCommTools(agent: AgentInstance): Tool<ZodTypeAny>[] {
