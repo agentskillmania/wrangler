@@ -28,8 +28,8 @@ async function main() {
   // ── Step 1: Load agent definition ──
   console.log('【步骤 1】加载智能体定义...');
   const loaded = await AgentLoader.loadFrom(join(__dirname, 'agent'));
-  console.log(`  ✓ 已加载: ${loaded.meta.name}`);
-  console.log(`  ✓ 描述: ${loaded.meta.description}\n`);
+  console.log(`  ✓ 已加载: ${loaded.name}`);
+  console.log(`  ✓ 描述: ${loaded.description}\n`);
 
   // ── Step 2: Initialize ──
   console.log('【步骤 2】初始化...');
@@ -62,7 +62,7 @@ async function main() {
     workspacePath: process.cwd(),
     searchProvider,
     skillDirectories: loaded.skillDirs,
-    thinkingEnabled: loaded.meta.thinking?.enabled,
+    thinkingEnabled: loaded.thinking?.enabled,
   });
 
   console.log('  ✓ Runner 就绪\n');

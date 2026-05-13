@@ -23,8 +23,8 @@ async function main() {
   // ── Step 1: Load agent definition from AGENT.md ──
   console.log('【步骤 1】加载智能体定义...');
   const loaded = await AgentLoader.loadFrom(join(__dirname, 'agent'));
-  console.log(`  ✓ 已加载: ${loaded.meta.name}`);
-  console.log(`  ✓ 描述: ${loaded.meta.description}\n`);
+  console.log(`  ✓ 已加载: ${loaded.name}`);
+  console.log(`  ✓ 描述: ${loaded.description}\n`);
 
   // ── Step 2: Initialize LLM client ──
   console.log('【步骤 2】初始化 LLM 客户端...');
@@ -41,7 +41,7 @@ async function main() {
     model,
     workspacePath,
     skillDirectories: loaded.skillDirs,
-    thinkingEnabled: loaded.meta.thinking?.enabled,
+    thinkingEnabled: loaded.thinking?.enabled,
   });
 
   console.log('  ✓ Runner 就绪\n');
