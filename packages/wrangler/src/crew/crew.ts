@@ -17,7 +17,7 @@ import { AgentInstance } from './agent-instance.js';
 import { MessageRouter } from './message-router.js';
 import { CrewTodoList } from './crew-todolist.js';
 import { buildLiaisonPrompt } from './liaison-prompt.js';
-import { buildTimeContext } from '../agent/system-prompt.js';
+import { buildTimeContext } from '../runner/system-prompt.js';
 import {
   createCreateTaskTool,
   createSendMessageTool,

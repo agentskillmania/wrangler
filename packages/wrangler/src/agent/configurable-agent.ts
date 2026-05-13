@@ -5,7 +5,7 @@ import { createSessionSupport } from '../session/support.js';
 import { createBuiltinTools } from '../tools/builtin/index.js';
 import { loadMCPTools } from '../tools/mcp/index.js';
 import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
-import { buildTimeContext } from './system-prompt.js';
+import { buildTimeContext } from '../runner/system-prompt.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentDefinition, ConfigurableAgentOptions } from './types.js';
