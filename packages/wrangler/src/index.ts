@@ -94,3 +94,7 @@ export type {
   CrewAgentAdvancedEvent,
   CrewMessageRoutedEvent,
 } from './crew/index.js';
+
+// Loader (Layer 4)
+export { AgentLoader } from './loader/index.js';
+export type { AgentLoadResult } from './loader/index.js';
