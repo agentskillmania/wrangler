@@ -17,8 +17,8 @@
     "test:intg": "vitest run test/integration",
     "test:coverage": "vitest run test/unit --coverage",
     "test:watch": "vitest watch test/unit",
-    "demo:code-reviewer": "node --import tsx examples/configurable-agent/code-reviewer/demo.ts",
-    "demo:travel-concierge": "node --import tsx examples/configurable-agent/travel-concierge/demo.ts",
+    "demo:code-reviewer": "node --import tsx examples/agent/code-reviewer/demo.ts",
+    "demo:travel-concierge": "node --import tsx examples/agent/travel-concierge/demo.ts",
     "demo:tech-evaluation": "node --import tsx examples/crew/tech-evaluation/demo.ts",
     "demo:newsroom": "node --import tsx examples/crew/newsroom/demo.ts",
     "prepublishOnly": "pnpm test:unit && pnpm build"

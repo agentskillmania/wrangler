@@ -1,5 +1,5 @@
 /**
- * Demo: Travel Concierge (Configurable Agent)
+ * Demo: Travel Concierge (Agent)
  *
  * Atlas plans a Tokyo trip using web_search (backed by Zhipu MCP) and web_fetch for real info.
  * Demonstrates: MCP-powered web_search → web_fetch → analysis.
@@ -11,11 +11,10 @@
  * Run: cd packages/wrangler && pnpm demo:travel-concierge
  */
 
-import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
-import { parseAgentMd, createSessionSupport, createBuiltinTools } from '@agentskillmania/wrangler';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+import { AgentLoader, EnhancedRunner } from '@agentskillmania/wrangler';
 import { getDemoConfig } from '../../demo-config.js';
 import { createMCPSearchProvider } from '../../mcp-search-provider.js';
 
@@ -23,16 +22,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 async function main() {
   console.log('═══════════════════════════════════════════');
-  console.log('  Atlas 旅行管家 — 配置化智能体演示');
+  console.log('  Atlas 旅行管家 — 智能体演示');
   console.log('═══════════════════════════════════════════\n');
 
   // ── Step 1: Load agent definition ──
   console.log('【步骤 1】加载智能体定义...');
-  const agentMdPath = join(__dirname, 'agent', 'travel-concierge.md');
-  const agentMd = await readFile(agentMdPath, 'utf-8');
-  const agentDef = parseAgentMd(agentMd);
-  console.log(`  ✓ 已加载: ${agentDef.meta.name}`);
-  console.log(`  ✓ 描述: ${agentDef.meta.description}\n`);
+  const loaded = await AgentLoader.loadFrom(join(__dirname, 'agent'));
+  console.log(`  ✓ 已加载: ${loaded.meta.name}`);
+  console.log(`  ✓ 描述: ${loaded.meta.description}\n`);
 
   // ── Step 2: Initialize ──
   console.log('【步骤 2】初始化...');
@@ -57,29 +54,20 @@ async function main() {
     console.log('  ⚠ 未设置 OPENAI_API_KEY，搜索不可用\n');
   }
 
-  // ── Step 4: Assemble ──
-  console.log('【步骤 4】组装 Session + 内置工具...');
-  const session = createSessionSupport({ workspacePath: process.cwd() });
-  const builtinTools = createBuiltinTools({
+  // ── Step 4: Create EnhancedRunner ──
+  console.log('【步骤 4】创建 EnhancedRunner...');
+  const runner = await EnhancedRunner.create({
+    llmClient: llmProvider,
+    model,
     workspacePath: process.cwd(),
     searchProvider,
-  });
-  console.log(`  ✓ 工具: ${[...session.tools, ...builtinTools].map((t) => t.name).join(', ')}\n`);
-
-  // ── Step 5: Create Runner ──
-  console.log('【步骤 5】创建 AgentRunner...');
-  const runner = new AgentRunner({
-    model,
-    llmClient: llmProvider,
-    tools: [...session.tools, ...builtinTools],
-    middleware: [session.middleware],
-    systemPrompt: agentDef.instructions,
-    thinkingEnabled: agentDef.meta.thinking?.enabled,
+    skillDirectories: loaded.skillDirs,
+    thinkingEnabled: loaded.meta.thinking?.enabled,
   });
 
   console.log('  ✓ Runner 就绪\n');
 
-  // ── Step 6: Submit travel request ──
+  // ── Step 5: Submit travel request ──
   const request = `
 请为 3 人家庭规划 5 天东京行程，具体要求如下：
 
@@ -96,12 +84,12 @@ async function main() {
   `.trim();
 
   console.log('═══════════════════════════════════════════');
-  console.log('【步骤 6】提交旅行需求');
+  console.log('【步骤 5】提交旅行需求');
   console.log('═══════════════════════════════════════════\n');
 
   let state = createAgentState({
-    name: agentDef.meta.name,
-    instructions: agentDef.instructions,
+    name: loaded.name,
+    instructions: loaded.instructions,
     tools: [],
   });
   state = addUserMessage(state, request);
