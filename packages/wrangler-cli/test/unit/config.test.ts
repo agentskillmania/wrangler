@@ -101,9 +101,6 @@ llm:
   provider: openai
   apiKey: sk-test-key
   model: gpt-4
-agent:
-  name: test-agent
-  instructions: "You are a test assistant."
 `;
       const localConfig = path.join(testDir, 'wrangler.yaml');
       await fs.writeFile(localConfig, yamlContent, 'utf-8');
@@ -117,8 +114,6 @@ agent:
         expect(config.llm?.provider).toBe('openai');
         expect(config.llm?.apiKey).toBe('sk-test-key');
         expect(config.llm?.model).toBe('gpt-4');
-        expect(config.agent?.name).toBe('test-agent');
-        expect(config.agent?.instructions).toBe('You are a test assistant.');
       } finally {
         process.chdir(originalCwd);
       }
@@ -266,76 +261,6 @@ llm:
       }
     });
 
-    it('should return default maxSteps and requestTimeout when not specified', async () => {
-      const yamlContent = `
-llm:
-  provider: openai
-  apiKey: sk-test-key
-  model: gpt-4
-`;
-      const localConfig = path.join(testDir, 'wrangler.yaml');
-      await fs.writeFile(localConfig, yamlContent, 'utf-8');
-
-      const originalCwd = process.cwd();
-      process.chdir(testDir);
-
-      try {
-        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
-        expect(config.hasValidConfig).toBe(true);
-        expect(config.maxSteps).toBe(20);
-        expect(config.requestTimeout).toBe(1_800_000);
-      } finally {
-        process.chdir(originalCwd);
-      }
-    });
-
-    it('should return custom maxSteps and requestTimeout when specified', async () => {
-      const yamlContent = `
-llm:
-  provider: openai
-  apiKey: sk-test-key
-  model: gpt-4
-maxSteps: 50
-requestTimeout: 60000
-`;
-      const localConfig = path.join(testDir, 'wrangler.yaml');
-      await fs.writeFile(localConfig, yamlContent, 'utf-8');
-
-      const originalCwd = process.cwd();
-      process.chdir(testDir);
-
-      try {
-        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
-        expect(config.hasValidConfig).toBe(true);
-        expect(config.maxSteps).toBe(50);
-        expect(config.requestTimeout).toBe(60000);
-      } finally {
-        process.chdir(originalCwd);
-      }
-    });
-
-    it('should return default agent name when not specified', async () => {
-      const yamlContent = `
-llm:
-  provider: openai
-  apiKey: sk-test-key
-  model: gpt-4
-`;
-      const localConfig = path.join(testDir, 'wrangler.yaml');
-      await fs.writeFile(localConfig, yamlContent, 'utf-8');
-
-      const originalCwd = process.cwd();
-      process.chdir(testDir);
-
-      try {
-        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
-        expect(config.hasValidConfig).toBe(true);
-        expect(config.agent?.name).toBe('wrangler-agent');
-      } finally {
-        process.chdir(originalCwd);
-      }
-    });
-
     it('should return default model when not specified', async () => {
       const yamlContent = `
 llm:
@@ -375,35 +300,6 @@ llm:
         const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
         expect(config.hasValidConfig).toBe(true);
         expect(config.llm?.baseUrl).toBe('https://custom.api.com/v1');
-      } finally {
-        process.chdir(originalCwd);
-      }
-    });
-
-    it('should return skills and confirmTools when specified', async () => {
-      const yamlContent = `
-llm:
-  provider: openai
-  apiKey: sk-test-key
-  model: gpt-4
-skills:
-  - ./skills
-  - /absolute/skills
-confirmTools:
-  - shell
-  - file-write
-`;
-      const localConfig = path.join(testDir, 'wrangler.yaml');
-      await fs.writeFile(localConfig, yamlContent, 'utf-8');
-
-      const originalCwd = process.cwd();
-      process.chdir(testDir);
-
-      try {
-        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
-        expect(config.hasValidConfig).toBe(true);
-        expect(config.skills).toEqual(['./skills', '/absolute/skills']);
-        expect(config.confirmTools).toEqual(['shell', 'file-write']);
       } finally {
         process.chdir(originalCwd);
       }

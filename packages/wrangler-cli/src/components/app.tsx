@@ -6,7 +6,7 @@ import { SetupWizard } from './setup/setup-wizard.js';
 import { useAgent } from '../hooks/use-agent.js';
 import { SessionManager } from '../hooks/use-session-manager.js';
 import { InteractionContext } from '../context/interaction-context.js';
-import { createLLMClientFromConfig, createInitialStateFromConfig } from '../runner-setup.js';
+import { createLLMClientFromConfig, createInitialState } from '../runner-setup.js';
 import type { AppConfig } from '../config.js';
 import { loadConfig, saveSetup } from '../config.js';
 import type { DetectedMode } from '../types.js';
@@ -41,8 +41,8 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
       const llmClient = createLLMClientFromConfig(config);
       if (!llmClient) return;
 
-      let name = config.agent?.name ?? 'wrangler-agent';
-      let instr = config.agent?.instructions ?? 'You are a helpful assistant.';
+      let name = 'wrangler-agent';
+      let instr = 'You are a helpful assistant.';
       let dirs: string[] = [];
 
       if (mode.mode === 'agent') {
@@ -83,14 +83,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
   );
 
   // Create initial state from runner (only when runner is ready)
-  const initialState = runner
-    ? createInitialStateFromConfig(config) ??
-      createInitialStateFromConfig({
-        hasValidConfig: true,
-        llm: { provider: 'openai', apiKey: '', model: config.llm?.model ?? 'gpt-4o' },
-        agent: { name: agentName, instructions },
-      })
-    : null;
+  const initialState = runner ? createInitialState(agentName, instructions) : null;
 
   const agentHook = useAgent(runner, initialState);
 

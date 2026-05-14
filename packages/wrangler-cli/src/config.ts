@@ -28,21 +28,6 @@ export interface WranglerConfig extends Record<string, unknown> {
     /** Custom base URL for the provider API */
     baseUrl?: string;
   };
-  /** Agent character settings */
-  agent?: {
-    /** Agent name */
-    name?: string;
-    /** System instructions */
-    instructions?: string;
-  };
-  /** Maximum number of execution steps */
-  maxSteps?: number;
-  /** Request timeout in milliseconds */
-  requestTimeout?: number;
-  /** Skill directory paths */
-  skills?: string[];
-  /** List of tools requiring user confirmation */
-  confirmTools?: string[];
 }
 
 /**
@@ -60,48 +45,12 @@ export interface AppConfig {
     model: string;
     baseUrl?: string;
   };
-  /** Agent configuration */
-  agent?: {
-    name: string;
-    instructions: string;
-  };
-  /** Default max steps for run mode */
-  maxSteps?: number;
-  /** Request timeout in milliseconds */
-  requestTimeout?: number;
-  /** Skill directory list */
-  skills?: string[];
-  /** List of tools requiring user confirmation */
-  confirmTools?: string[];
 }
-
-/** Default maximum number of steps */
-const DEFAULT_MAX_STEPS = 20;
-
-/** Default request timeout (ms) */
-const DEFAULT_REQUEST_TIMEOUT = 1_800_000;
 
 /** Default configuration YAML */
 const DEFAULT_CONFIG_YAML = `llm:
   provider: openai
   model: gpt-4o
-
-agent:
-  name: wrangler-agent
-  instructions: |
-    You are an intelligent agent. Follow these principles:
-    - Analyze the user's request carefully before acting.
-    - Use available tools to gather information and complete tasks.
-    - Break complex tasks into smaller, manageable steps.
-    - Report results clearly and concisely.
-    - If something is unclear, ask the user for clarification.
-
-maxSteps: 20
-requestTimeout: 1800000
-
-skills:
-  - ./skills
-  - ~/.agentskillmania/wrangler/skills
 
 `;
 
@@ -194,14 +143,6 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
         model: config.llm!.model ?? 'gpt-4o',
         baseUrl: config.llm!.baseUrl,
       },
-      agent: {
-        name: config.agent?.name ?? 'wrangler-agent',
-        instructions: config.agent?.instructions ?? '',
-      },
-      maxSteps: config.maxSteps ?? DEFAULT_MAX_STEPS,
-      requestTimeout: config.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT,
-      skills: config.skills,
-      confirmTools: config.confirmTools,
     };
   } catch {
     return { hasValidConfig: false, configPath };

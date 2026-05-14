@@ -3,7 +3,7 @@
  *
  * Provides two factory functions used by the App component:
  * - createLLMClientFromConfig: builds and configures an LLMClient with provider + apiKey
- * - createInitialStateFromConfig: builds an initial AgentState for a fresh session
+ * - createInitialState: builds an initial AgentState for a fresh session
  *
  * The actual EnhancedRunner.create() call is deferred to the App component
  * because workspacePath is determined at runtime via mode detection.
@@ -59,18 +59,21 @@ export function createLLMClientFromConfig(config: AppConfig): LLMClient | null {
 /**
  * Create initial AgentState from AppConfig
  *
- * Builds a fresh agent state with name and instructions from config.agent.
- * Returns null if config is missing required LLM fields.
+ * Builds a fresh agent state with hardcoded defaults.
+ * Agent name/instructions come from directory detection (AgentLoader),
+ * not from config. This function provides fallback defaults.
  *
- * @param config - Validated application config
- * @returns AgentState instance, or null if config is invalid
+ * @param agentName - Agent name (from directory detection or fallback)
+ * @param instructions - Agent instructions (from directory detection or fallback)
+ * @returns AgentState instance
  */
-export function createInitialStateFromConfig(config: AppConfig): AgentState | null {
-  if (!config.hasValidConfig || !config.llm) return null;
-
+export function createInitialState(
+  agentName: string = 'wrangler-agent',
+  instructions: string = 'You are a helpful assistant.'
+): AgentState {
   return createAgentState({
-    name: config.agent?.name ?? 'wrangler-agent',
-    instructions: config.agent?.instructions ?? 'You are a helpful assistant.',
+    name: agentName,
+    instructions,
     tools: [],
   });
 }
