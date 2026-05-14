@@ -16,7 +16,7 @@ export const InteractionContext = React.createContext<InteractionCallbacks | nul
  */
 export function createInteractionCallbacks(): InteractionCallbacks {
   return {
-    askHuman: async () => '',
+    askHuman: async () => ({}),
     confirm: async () => true,
   };
 }

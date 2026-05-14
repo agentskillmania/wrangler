@@ -114,7 +114,8 @@ export class StreamConsumer {
           type: 'run-complete',
           id: this.nextId(),
           seq: this.nextSeq(),
-          result: event.result as TimelineEntry & { type: 'run-complete' }['result'],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          result: event.result as any,
           timestamp,
         });
         break;

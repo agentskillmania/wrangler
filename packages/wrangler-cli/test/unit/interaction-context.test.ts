@@ -14,10 +14,10 @@ describe('InteractionContext', () => {
     expect(typeof callbacks.confirm).toBe('function');
   });
 
-  it('askHuman stub returns empty string', async () => {
+  it('askHuman stub returns empty object', async () => {
     const callbacks = createInteractionCallbacks();
-    const result = await callbacks.askHuman({ question: 'test' });
-    expect(result).toBe('');
+    const result = await callbacks.askHuman({ questions: [] });
+    expect(result).toEqual({});
   });
 
   it('confirm stub returns true', async () => {
