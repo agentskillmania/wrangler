@@ -393,4 +393,93 @@ describe('MarkdownMessageAssembler', () => {
     expect(subAgentsIdx).toBeGreaterThan(activeSkillIdx);
     expect(thinkingIdx).toBeGreaterThan(subAgentsIdx);
   });
+
+  describe('Current Task List section', () => {
+    it('produces ## Current Task List when todoList has items', () => {
+      const assembler = new MarkdownMessageAssembler();
+      const state = makeState({ instructions: 'Be helpful.' });
+      (state.context as any).todoList = {
+        items: [
+          { id: 1, subject: 'Task A', status: 'pending', description: undefined, blockedBy: [] },
+          {
+            id: 2,
+            subject: 'Task B',
+            status: 'in_progress',
+            description: undefined,
+            blockedBy: [],
+          },
+          { id: 3, subject: 'Task C', status: 'completed', description: undefined, blockedBy: [] },
+        ],
+        nextId: 4,
+      };
+      const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
+
+      const messages = assembler.build(state, opts);
+      const content = typeof messages[0].content === 'string' ? messages[0].content : '';
+
+      expect(content).toContain('## Current Task List');
+      expect(content).toContain('[ ] 1. Task A');
+      expect(content).toContain('[~] 2. Task B');
+      expect(content).toContain('[x] 3. Task C');
+      expect(content).toContain(
+        'When you complete a task, use the todolist tool to mark it completed.'
+      );
+      expect(content).toContain('If you identify new sub-tasks, add them to the list.');
+    });
+
+    it('does not produce ## Current Task List when todoList is empty', () => {
+      const assembler = new MarkdownMessageAssembler();
+      const state = makeState({ instructions: 'Be helpful.' });
+      (state.context as any).todoList = {
+        items: [],
+        nextId: 1,
+      };
+      const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
+
+      const messages = assembler.build(state, opts);
+      const content = typeof messages[0].content === 'string' ? messages[0].content : '';
+
+      expect(content).not.toContain('## Current Task List');
+    });
+
+    it('does not produce ## Current Task List when todoList is undefined', () => {
+      const assembler = new MarkdownMessageAssembler();
+      const state = makeState({ instructions: 'Be helpful.' });
+      // todoList is undefined
+      const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
+
+      const messages = assembler.build(state, opts);
+      const content = typeof messages[0].content === 'string' ? messages[0].content : '';
+
+      expect(content).not.toContain('## Current Task List');
+    });
+
+    it('Current Task List section appears between Instructions and Available Skills', () => {
+      const assembler = new MarkdownMessageAssembler();
+      const state = makeState({ instructions: 'Be helpful.' });
+      (state.context as any).todoList = {
+        items: [
+          { id: 1, subject: 'Task A', status: 'pending', description: undefined, blockedBy: [] },
+        ],
+        nextId: 2,
+      };
+      const opts = makeOpts({
+        systemPrompt: '---\ntime: now\n---',
+        skillProvider: {
+          listSkills: () => [{ name: 'test', description: 'A skill' }],
+        } as any,
+      });
+
+      const messages = assembler.build(state, opts);
+      const content = typeof messages[0].content === 'string' ? messages[0].content : '';
+
+      const instructionsIdx = content.indexOf('## Instructions');
+      const currentTaskListIdx = content.indexOf('## Current Task List');
+      const availableSkillsIdx = content.indexOf('## Available Skills');
+
+      expect(instructionsIdx).toBeGreaterThan(-1);
+      expect(currentTaskListIdx).toBeGreaterThan(instructionsIdx);
+      expect(availableSkillsIdx).toBeGreaterThan(currentTaskListIdx);
+    });
+  });
 });

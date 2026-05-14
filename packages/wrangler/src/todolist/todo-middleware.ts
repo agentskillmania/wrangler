@@ -1,12 +1,7 @@
 import type { AgentMiddleware, AgentState } from '@agentskillmania/colts';
 import { updateState } from '@agentskillmania/colts';
 import type { TodoList, TodoStatus } from './types.js';
-import {
-  createEmptyTodoList,
-  addTodo,
-  updateTodo,
-  deleteTodo,
-} from './todo-state.js';
+import { createEmptyTodoList, addTodo, updateTodo, deleteTodo } from './todo-state.js';
 
 function getTodoList(state: AgentState): TodoList | undefined {
   return state.context.todoList;
@@ -58,11 +53,13 @@ function applyActions(list: TodoList, actions: unknown[]): TodoList {
         break;
       }
       case 'reset': {
-        const tasks = action.tasks as Array<{
-          subject: string;
-          description?: string;
-          status?: TodoStatus;
-        }> | undefined;
+        const tasks = action.tasks as
+          | Array<{
+              subject: string;
+              description?: string;
+              status?: TodoStatus;
+            }>
+          | undefined;
         if (!tasks) continue;
         let newList = createEmptyTodoList();
         for (const t of tasks) {

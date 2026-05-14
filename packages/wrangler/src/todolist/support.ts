@@ -1,6 +1,5 @@
 import type { Tool, AgentMiddleware } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
-import type { TodoList } from './types.js';
 import { createTodolistTool } from './todo-tool.js';
 import { createTodolistMiddleware } from './todo-middleware.js';
 
