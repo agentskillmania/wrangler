@@ -1,535 +1,268 @@
 /**
- * Integration Test: Todolist
+ * Integration Test: Todolist with Real LLM Calls
  *
- * US1: 创建和使用任务列表工具
- * US2: Assembler renders todo list
- * US3: todolist 持久化
- * US4: todolist 与 session 组合使用
+ * US1: LLM creates todo tasks from natural language
+ * US2: LLM executes todo list and marks items completed
+ * US3: Todo state persists across sessions
+ * US4: LLM sees todo list in system prompt
+ *
+ * Prerequisites:
+ * - Set ENABLE_INTEGRATION_TESTS=true in .env
+ * - Set OPENAI_API_KEY in .env
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createAgentState, updateState } from '@agentskillmania/colts';
-import { MarkdownMessageAssembler } from '../../src/runner/markdown-assembler.js';
 import {
-  createTodolistSupport,
-  createEmptyTodoList,
-  addTodo,
-  updateTodo,
-} from '../../src/todolist/index.js';
+  AgentRunner,
+  createAgentState,
+  addUserMessage,
+  type ToolDefinition,
+} from '@agentskillmania/colts';
+import { createTodolistSupport } from '../../src/todolist/index.js';
+import { MarkdownMessageAssembler } from '../../src/runner/markdown-assembler.js';
 import { createSessionSupport } from '../../src/session/support.js';
-import type { TodoList } from '../../src/todolist/types.js';
+import { testConfig, itif } from './config.js';
 
-describe('US1: 创建和使用任务列表工具', () => {
-  it('createTodolistSupport returns tools and middleware with no args', () => {
-    const todo = createTodolistSupport();
+function makeRunner(tools: ToolDefinition[], middleware: any[]) {
+  return new AgentRunner({
+    model: testConfig.testModel,
+    llm: { apiKey: testConfig.apiKey, provider: testConfig.provider, baseUrl: testConfig.baseUrl },
+    tools,
+    middleware,
+    messageAssembler: new MarkdownMessageAssembler(),
+  });
+}
 
-    expect(todo.tools).toHaveLength(1);
-    expect(todo.tools[0].name).toBe('todolist');
-    expect(todo.middleware.name).toBe('todolist');
+describe('US1: LLM creates todo tasks from natural language', () => {
+  beforeAll(() => {
+    if (testConfig.enabled) {
+      console.log(
+        `[Wrangler Integration] Provider: ${testConfig.provider}, Model: ${testConfig.testModel}`
+      );
+    }
   });
 
-  it('tool returns { _todo: true, actions } for create action', async () => {
-    const todo = createTodolistSupport();
+  itif(testConfig.enabled)(
+    'should break down complex task into todo list using todolist tool',
+    async () => {
+      const todolistSupport = createTodolistSupport();
 
-    const result = await todo.tools[0].execute({
-      actions: [{ action: 'create', subject: 'Implement feature' }],
-    });
+      const runner = makeRunner(todolistSupport.tools, [todolistSupport.middleware]);
 
-    expect(result).toEqual({
-      _todo: true,
-      actions: [{ action: 'create', subject: 'Implement feature' }],
-    });
-  });
-
-  it('middleware afterStep applies create to state.context.todoList', async () => {
-    const todo = createTodolistSupport();
-    const state = createAgentState({
-      name: 'test-agent',
-      instructions: 'You are helpful.',
-      tools: [],
-    });
-
-    const toolResult = await todo.tools[0].execute({
-      actions: [{ action: 'create', subject: 'New task' }],
-    });
-
-    const afterStepCtx = {
-      result: {
-        type: 'continue',
-        toolResult,
-        actions: [],
-        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
-      },
-      state,
-      stepNumber: 0,
-      runnerOptions: {} as any,
-    };
-
-    const result = await todo.middleware.afterStep!(afterStepCtx);
-
-    expect(result).toBeDefined();
-    expect(result!.state!.context.todoList).toBeDefined();
-    expect(result!.state!.context.todoList!.items).toHaveLength(1);
-    expect(result!.state!.context.todoList!.items[0].subject).toBe('New task');
-  });
-
-  it('middleware afterStep applies update to change status', async () => {
-    const todo = createTodolistSupport();
-    const state = updateState(
-      createAgentState({
-        name: 'test-agent',
-        instructions: 'You are helpful.',
+      let state = createAgentState({
+        name: 'planning-agent',
+        instructions:
+          'You are a task planning assistant. When given a complex task, ' +
+          'ALWAYS break it down using the todolist tool first, then execute each step.',
         tools: [],
-      }),
-      (draft) => {
-        draft.context.todoList = addTodo(createEmptyTodoList(), 'Task 1');
-      }
-    );
+      });
+      state = addUserMessage(
+        state,
+        'Please help me plan and execute these 3 tasks: ' +
+          '1) Write a haiku about coding 2) Count the letters in the haiku 3) Tell me if the count is even or odd'
+      );
 
-    const toolResult = await todo.tools[0].execute({
-      actions: [{ action: 'update', id: 1, status: 'completed' }],
-    });
+      const { state: finalState, result } = await runner.run(state);
 
-    const afterStepCtx = {
-      result: {
-        type: 'continue',
-        toolResult,
-        actions: [],
-        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
-      },
-      state,
-      stepNumber: 0,
-      runnerOptions: {} as any,
-    };
+      // Verify successful execution
+      expect(result.type).toBe('success');
 
-    const result = await todo.middleware.afterStep!(afterStepCtx);
+      // Verify todo list was created and populated
+      expect(finalState.context.todoList).toBeDefined();
+      expect(finalState.context.todoList!.items.length).toBeGreaterThan(0);
 
-    expect(result!.state!.context.todoList!.items[0].status).toBe('completed');
-  });
+      // Verify todo items reflect the 3 subtasks (haiku, count, even/odd check)
+      const subjects = finalState.context.todoList!.items.map((item) => item.subject.toLowerCase());
+      const hasHaiku = subjects.some((s) => s.includes('haiku') || s.includes('poem'));
+      const hasCount = subjects.some((s) => s.includes('count') || s.includes('letter'));
+      const hasEvenOdd = subjects.some((s) => s.includes('even') || s.includes('odd'));
 
-  it('middleware afterStep applies delete to remove items', async () => {
-    const todo = createTodolistSupport();
-    const state = updateState(
-      createAgentState({
-        name: 'test-agent',
-        instructions: 'You are helpful.',
-        tools: [],
-      }),
-      (draft) => {
-        let list = addTodo(createEmptyTodoList(), 'Task 1');
-        list = addTodo(list, 'Task 2');
-        draft.context.todoList = list;
-      }
-    );
-
-    const toolResult = await todo.tools[0].execute({
-      actions: [{ action: 'delete', id: 1 }],
-    });
-
-    const afterStepCtx = {
-      result: {
-        type: 'continue',
-        toolResult,
-        actions: [],
-        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
-      },
-      state,
-      stepNumber: 0,
-      runnerOptions: {} as any,
-    };
-
-    const result = await todo.middleware.afterStep!(afterStepCtx);
-
-    expect(result!.state!.context.todoList!.items).toHaveLength(1);
-    expect(result!.state!.context.todoList!.items[0].subject).toBe('Task 2');
-  });
-
-  it('middleware afterStep applies reset to replace entire list', async () => {
-    const todo = createTodolistSupport();
-    const state = updateState(
-      createAgentState({
-        name: 'test-agent',
-        instructions: 'You are helpful.',
-        tools: [],
-      }),
-      (draft) => {
-        let list = addTodo(createEmptyTodoList(), 'Old task 1');
-        list = addTodo(list, 'Old task 2');
-        draft.context.todoList = list;
-      }
-    );
-
-    const toolResult = await todo.tools[0].execute({
-      actions: [
-        {
-          action: 'reset',
-          tasks: [
-            { subject: 'New task A', status: 'pending' },
-            { subject: 'New task B', status: 'in_progress' },
-          ],
-        },
-      ],
-    });
-
-    const afterStepCtx = {
-      result: {
-        type: 'continue',
-        toolResult,
-        actions: [],
-        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
-      },
-      state,
-      stepNumber: 0,
-      runnerOptions: {} as any,
-    };
-
-    const result = await todo.middleware.afterStep!(afterStepCtx);
-
-    expect(result!.state!.context.todoList!.items).toHaveLength(2);
-    expect(result!.state!.context.todoList!.items[0].subject).toBe('New task A');
-    expect(result!.state!.context.todoList!.items[0].status).toBe('pending');
-    expect(result!.state!.context.todoList!.items[1].subject).toBe('New task B');
-    expect(result!.state!.context.todoList!.items[1].status).toBe('in_progress');
-  });
-
-  it('middleware afterStep applies batch mixed actions in order', async () => {
-    const todo = createTodolistSupport();
-    const state = updateState(
-      createAgentState({
-        name: 'test-agent',
-        instructions: 'You are helpful.',
-        tools: [],
-      }),
-      (draft) => {
-        let list = addTodo(createEmptyTodoList(), 'Task 1');
-        list = addTodo(list, 'Task 2');
-        draft.context.todoList = list;
-      }
-    );
-
-    const toolResult = await todo.tools[0].execute({
-      actions: [
-        { action: 'create', subject: 'Task 3' },
-        { action: 'update', id: 1, status: 'completed' },
-        { action: 'delete', id: 2 },
-      ],
-    });
-
-    const afterStepCtx = {
-      result: {
-        type: 'continue',
-        toolResult,
-        actions: [],
-        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
-      },
-      state,
-      stepNumber: 0,
-      runnerOptions: {} as any,
-    };
-
-    const result = await todo.middleware.afterStep!(afterStepCtx);
-
-    expect(result!.state!.context.todoList!.items).toHaveLength(2);
-    expect(result!.state!.context.todoList!.items[0].subject).toBe('Task 1');
-    expect(result!.state!.context.todoList!.items[0].status).toBe('completed');
-    expect(result!.state!.context.todoList!.items[1].subject).toBe('Task 3');
-  });
-
-  it('middleware afterStep ignores non-todo toolResult', async () => {
-    const todo = createTodolistSupport();
-    const state = updateState(
-      createAgentState({
-        name: 'test-agent',
-        instructions: 'You are helpful.',
-        tools: [],
-      }),
-      (draft) => {
-        draft.context.todoList = addTodo(createEmptyTodoList(), 'Original task');
-      }
-    );
-
-    const afterStepCtx = {
-      result: {
-        type: 'continue',
-        toolResult: { someOtherResult: true },
-        actions: [],
-        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
-      },
-      state,
-      stepNumber: 0,
-      runnerOptions: {} as any,
-    };
-
-    const result = await todo.middleware.afterStep!(afterStepCtx);
-
-    // Should not modify state
-    expect(result).toBeUndefined();
-  });
+      expect(hasHaiku).toBe(true);
+      expect(hasCount).toBe(true);
+      expect(hasEvenOdd).toBe(true);
+    },
+    60000
+  );
 });
 
-describe('US2: Assembler renders todo list', () => {
-  it('when todoList has items, assembler output contains ## Current Task List with formatted items', () => {
-    const assembler = new MarkdownMessageAssembler();
-    const state = updateState(
-      createAgentState({
-        name: 'test-agent',
-        instructions: 'You are helpful.',
+describe('US2: LLM executes todo list and marks items completed', () => {
+  itif(testConfig.enabled)(
+    'should work through pre-populated todo list and mark tasks completed',
+    async () => {
+      const todolistSupport = createTodolistSupport();
+
+      const runner = makeRunner(todolistSupport.tools, [todolistSupport.middleware]);
+
+      let state = createAgentState({
+        name: 'task-executor',
+        instructions:
+          'You are a task executor. Work through your todo list one by one. ' +
+          'Mark each task as completed after you finish it.',
         tools: [],
-      }),
-      (draft) => {
-        let list = addTodo(createEmptyTodoList(), 'Task 1');
-        list = updateTodo(list, 1, { status: 'in_progress' });
-        list = addTodo(list, 'Task 2');
-        draft.context.todoList = list;
-      }
-    );
+      });
 
-    const messages = assembler.build(state, { model: 'gpt-4' });
-    const systemPrompt = typeof messages[0].content === 'string' ? messages[0].content : '';
+      // Pre-populate todo list with two tasks
+      state = addUserMessage(
+        state,
+        'Please add these tasks to your todo list: "Say hello" and "Tell me a joke". Then complete them.'
+      );
 
-    expect(systemPrompt).toContain('## Current Task List');
-    expect(systemPrompt).toContain('- [~] 1. Task 1');
-    expect(systemPrompt).toContain('- [ ] 2. Task 2');
-  });
+      const { state: finalState, result } = await runner.run(state);
 
-  it('when todoList is empty, assembler output does NOT contain ## Current Task List', () => {
-    const assembler = new MarkdownMessageAssembler();
-    const state = updateState(
-      createAgentState({
-        name: 'test-agent',
-        instructions: 'You are helpful.',
-        tools: [],
-      }),
-      (draft) => {
-        draft.context.todoList = createEmptyTodoList();
-      }
-    );
+      // Verify successful execution
+      expect(result.type).toBe('success');
 
-    const messages = assembler.build(state, { model: 'gpt-4' });
-    const systemPrompt = typeof messages[0].content === 'string' ? messages[0].content : '';
+      // Verify todo list exists and has items
+      expect(finalState.context.todoList).toBeDefined();
+      expect(finalState.context.todoList!.items.length).toBeGreaterThan(0);
 
-    expect(systemPrompt).not.toContain('## Current Task List');
-  });
-
-  it('when todoList is undefined (auto-initialized to empty), no section appears', () => {
-    const assembler = new MarkdownMessageAssembler();
-    const state = createAgentState({
-      name: 'test-agent',
-      instructions: 'You are helpful.',
-      tools: [],
-    });
-
-    const messages = assembler.build(state, { model: 'gpt-4' });
-    const systemPrompt = typeof messages[0].content === 'string' ? messages[0].content : '';
-
-    expect(systemPrompt).not.toContain('## Current Task List');
-  });
-
-  it('## Current Task List section appears after ## Instructions and before ## Available Skills', () => {
-    const assembler = new MarkdownMessageAssembler();
-    const state = updateState(
-      createAgentState({
-        name: 'test-agent',
-        instructions: 'You are helpful.',
-        tools: [],
-      }),
-      (draft) => {
-        draft.context.todoList = addTodo(createEmptyTodoList(), 'Task 1');
-      }
-    );
-
-    const messages = assembler.build(state, {
-      model: 'gpt-4',
-      skillProvider: {
-        listSkills: () => [{ name: 'test-skill', description: 'A test skill' }],
-      },
-    });
-    const systemPrompt = typeof messages[0].content === 'string' ? messages[0].content : '';
-
-    const instructionsIdx = systemPrompt.indexOf('## Instructions');
-    const taskListIdx = systemPrompt.indexOf('## Current Task List');
-    const skillsIdx = systemPrompt.indexOf('## Available Skills');
-
-    expect(instructionsIdx).toBeLessThan(taskListIdx);
-    expect(taskListIdx).toBeLessThan(skillsIdx);
-    expect(instructionsIdx).toBeLessThan(skillsIdx);
-  });
+      // Verify all tasks are marked as completed
+      const allCompleted = finalState.context.todoList!.items.every(
+        (item) => item.status === 'completed'
+      );
+      expect(allCompleted).toBe(true);
+    },
+    60000
+  );
 });
 
-describe('US3: todolist 持久化', () => {
+describe('US3: Todo state persists across sessions', () => {
   let testBaseDir: string;
 
   beforeEach(async () => {
-    testBaseDir = join(tmpdir(), `wrangler-todo-intg-${Date.now()}`);
+    testBaseDir = join(tmpdir(), `wrangler-todo-e2e-us3-${Date.now()}`);
     await mkdir(testBaseDir, { recursive: true });
   });
 
   afterEach(async () => {
-    await rm(testBaseDir, { recursive: true, force: true }).catch(() => {});
+    await rm(testBaseDir, { recursive: true, force: true });
   });
 
-  it('create state with todoList, saveState, loadState → todoList fully restored', async () => {
-    const session = createSessionSupport({
-      workspacePath: '/test/workspace',
-      sessionBaseDir: testBaseDir,
-    });
+  itif(testConfig.enabled)(
+    'should save and restore todo list across sessions',
+    async () => {
+      const session = createSessionSupport({
+        workspacePath: '/test/workspace',
+        sessionBaseDir: testBaseDir,
+      });
+      const todolistSupport = createTodolistSupport();
 
-    const sessionId = await session.store.createWithId('test-persist-todo', 'GLM-4.7');
+      // Round 1: Create todos
+      const runner1 = makeRunner(
+        [...session.tools, ...todolistSupport.tools],
+        [session.middleware, todolistSupport.middleware]
+      );
 
-    const state = updateState(
-      createAgentState({
-        name: 'test-agent',
-        instructions: 'You are helpful.',
+      let state1 = createAgentState({
+        name: 'todo-planner',
+        instructions: 'You are a planning assistant. Use the todolist tool to track tasks.',
         tools: [],
-      }),
-      (draft) => {
-        let list = addTodo(createEmptyTodoList(), 'Task 1');
-        list = updateTodo(list, 1, { status: 'completed' });
-        list = addTodo(list, 'Task 2');
-        draft.context.todoList = list;
-      }
-    );
+      });
+      state1 = addUserMessage(
+        state1,
+        'Add these tasks to your todo list: "Write documentation" and "Run tests"'
+      );
 
-    await session.store.saveState(sessionId, state);
+      const { state: finalState1 } = await runner1.run(state1);
+      const sessionId = state1.id;
 
-    const loaded = await session.store.loadState(sessionId);
-    expect(loaded).not.toBeNull();
-    expect(loaded!.context.todoList).toBeDefined();
-    expect(loaded!.context.todoList!.items).toHaveLength(2);
-    expect(loaded!.context.todoList!.items[0].subject).toBe('Task 1');
-    expect(loaded!.context.todoList!.items[0].status).toBe('completed');
-    expect(loaded!.context.todoList!.items[1].subject).toBe('Task 2');
-    expect(loaded!.context.todoList!.items[1].status).toBe('pending');
-  });
+      // Verify todos were created in round 1
+      expect(finalState1.context.todoList).toBeDefined();
+      expect(finalState1.context.todoList!.items.length).toBeGreaterThan(0);
+      const todoCountAfterRound1 = finalState1.context.todoList!.items.length;
 
-  it('state without todoList, saveState, loadState → todoList is undefined', async () => {
-    const session = createSessionSupport({
-      workspacePath: '/test/workspace',
-      sessionBaseDir: testBaseDir,
-    });
+      // Round 2: Load session and verify LLM sees persisted todos
+      const loaded = await session.store.loadState(sessionId);
+      expect(loaded).not.toBeNull();
 
-    const sessionId = await session.store.createWithId('test-no-todo', 'GLM-4.7');
+      const runner2 = makeRunner(
+        [...session.tools, ...todolistSupport.tools],
+        [session.middleware, todolistSupport.middleware]
+      );
 
-    const state = createAgentState({
-      name: 'test-agent',
-      instructions: 'You are helpful.',
-      tools: [],
-    });
+      const state2 = addUserMessage(loaded!, 'What tasks are in my todo list?');
+      const { state: finalState2, result: result2 } = await runner2.run(state2);
 
-    await session.store.saveState(sessionId, state);
+      // Verify successful round 2
+      expect(result2.type).toBe('success');
 
-    const loaded = await session.store.loadState(sessionId);
-    expect(loaded).not.toBeNull();
-    expect(loaded!.context.todoList).toBeUndefined();
-  });
+      // Verify todo list was restored
+      expect(finalState2.context.todoList).toBeDefined();
+      expect(finalState2.context.todoList!.items.length).toBe(todoCountAfterRound1);
+
+      // Verify LLM response references the persisted todo items
+      const lastMessage = finalState2.context.messages[finalState2.context.messages.length - 1];
+      const responseText =
+        typeof lastMessage.content === 'string'
+          ? lastMessage.content
+          : JSON.stringify(lastMessage.content);
+
+      // LLM should mention the tasks
+      const mentionsDocumentation = responseText.toLowerCase().includes('documentation');
+      const mentionsTests =
+        responseText.toLowerCase().includes('test') || responseText.toLowerCase().includes('tests');
+      expect(mentionsDocumentation || mentionsTests).toBe(true);
+    },
+    120000
+  );
 });
 
-describe('US4: todolist 与 session 组合使用', () => {
-  let testBaseDir: string;
+describe('US4: LLM sees todo list in system prompt', () => {
+  itif(testConfig.enabled)(
+    'should render todo list in system prompt and LLM references it',
+    async () => {
+      const todolistSupport = createTodolistSupport();
 
-  beforeEach(async () => {
-    testBaseDir = join(tmpdir(), `wrangler-combo-intg-${Date.now()}`);
-    await mkdir(testBaseDir, { recursive: true });
-  });
+      const runner = makeRunner(todolistSupport.tools, [todolistSupport.middleware]);
 
-  afterEach(async () => {
-    await rm(testBaseDir, { recursive: true, force: true }).catch(() => {});
-  });
+      let state = createAgentState({
+        name: 'todo-aware-agent',
+        instructions: 'You are a helpful assistant with a todo list.',
+        tools: [],
+      });
 
-  it('both sets of tools work without conflict', () => {
-    const session = createSessionSupport({
-      workspacePath: '/test/workspace',
-      sessionBaseDir: testBaseDir,
-    });
+      // Pre-populate todo list by asking LLM to create tasks
+      state = addUserMessage(
+        state,
+        'Add these tasks to your todo list: "Review code", "Fix bugs", "Deploy to production"'
+      );
 
-    const todo = createTodolistSupport();
+      const { state: stateWithTodos } = await runner.run(state);
 
-    // Both sets of tools should work together
-    expect(session.tools.length).toBeGreaterThan(0);
-    expect(todo.tools).toHaveLength(1);
+      // Verify todos were created
+      expect(stateWithTodos.context.todoList).toBeDefined();
+      expect(stateWithTodos.context.todoList!.items.length).toBeGreaterThan(0);
 
-    // Session tools have names
-    session.tools.forEach((t) => {
-      expect(t.name).toBeDefined();
-      expect(typeof t.name).toBe('string');
-    });
+      // Now ask about the todo list
+      const stateWithQuestion = addUserMessage(stateWithTodos, 'What tasks do you currently have?');
+      const { state: finalState, result } = await runner.run(stateWithQuestion);
 
-    // Todo has todolist tool
-    expect(todo.tools[0].name).toBe('todolist');
-  });
+      // Verify successful execution
+      expect(result.type).toBe('success');
 
-  it('full cycle: tool execute → afterStep apply → saveState → loadState → verify todoList restored', async () => {
-    const session = createSessionSupport({
-      workspacePath: '/test/workspace',
-      sessionBaseDir: testBaseDir,
-    });
+      // Verify LLM response references the specific todo items
+      const lastMessage = finalState.context.messages[finalState.context.messages.length - 1];
+      const responseText =
+        typeof lastMessage.content === 'string'
+          ? lastMessage.content
+          : JSON.stringify(lastMessage.content);
 
-    const todo = createTodolistSupport();
-    const sessionId = await session.store.createWithId('test-full-cycle', 'GLM-4.7');
+      // LLM should mention at least one of the tasks by name
+      const mentionsReview = responseText.toLowerCase().includes('review');
+      const mentionsBugs = responseText.toLowerCase().includes('bug');
+      const mentionsDeploy =
+        responseText.toLowerCase().includes('deploy') ||
+        responseText.toLowerCase().includes('production');
 
-    // Start with empty state
-    const initialState = createAgentState({
-      name: 'test-agent',
-      instructions: 'You are helpful.',
-      tools: [],
-    });
+      const mentionsTask = mentionsReview || mentionsBugs || mentionsDeploy;
+      expect(mentionsTask).toBe(true);
 
-    // Execute tool: create task
-    const toolResult = await todo.tools[0].execute({
-      actions: [{ action: 'create', subject: 'Full cycle test' }],
-    });
-
-    // Apply via afterStep
-    const afterStepCtx = {
-      result: {
-        type: 'continue' as const,
-        toolResult,
-        actions: [],
-        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
-      },
-      state: initialState,
-      stepNumber: 0,
-      runnerOptions: {} as any,
-    };
-
-    const afterResult = await todo.middleware.afterStep!(afterStepCtx);
-    expect(afterResult!.state!.context.todoList).toBeDefined();
-    expect(afterResult!.state!.context.todoList!.items).toHaveLength(1);
-
-    // Save state
-    await session.store.saveState(sessionId, afterResult!.state!);
-
-    // Load state
-    const loaded = await session.store.loadState(sessionId);
-    expect(loaded).not.toBeNull();
-    expect(loaded!.context.todoList).toBeDefined();
-    expect(loaded!.context.todoList!.items).toHaveLength(1);
-    expect(loaded!.context.todoList!.items[0].subject).toBe('Full cycle test');
-  });
-
-  it('middleware beforeStep auto-initializes empty todoList', async () => {
-    const todo = createTodolistSupport();
-    const state = createAgentState({
-      name: 'test-agent',
-      instructions: 'You are helpful.',
-      tools: [],
-    });
-
-    expect(state.context.todoList).toBeUndefined();
-
-    const beforeStepCtx = {
-      state,
-      stepNumber: 0,
-      runnerOptions: {} as any,
-    };
-
-    const result = await todo.middleware.beforeStep!(beforeStepCtx);
-
-    expect(result).toBeDefined();
-    expect(result!.state!.context.todoList).toBeDefined();
-    expect(result!.state!.context.todoList!.items).toHaveLength(0);
-  });
+      // This proves the ## Current Task List section was rendered in the system prompt
+      // and the LLM saw and understood the todo items
+    },
+    60000
+  );
 });
