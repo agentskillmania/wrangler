@@ -33,12 +33,19 @@
     "directory": "packages/wrangler-cli"
   },
   "dependencies": {
+    "@agentskillmania/colts": "^0.2.2",
+    "@agentskillmania/llm-client": "^0.2.2",
     "@agentskillmania/wrangler": "workspace:*",
-    "commander": "^13.0.0"
+    "@inkjs/ui": "^2.0.0",
+    "ink": "^5.1.0",
+    "react": "^18.3.1",
+    "throttleit": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/react": "^18.3.0",
     "@vitest/coverage-v8": "^2.0.0",
+    "ink-testing-library": "^4.0.0",
     "typescript": "^5.0.0",
     "vitest": "^2.0.0"
   },
