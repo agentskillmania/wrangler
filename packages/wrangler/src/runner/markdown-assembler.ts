@@ -221,6 +221,25 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
       sections.push(`## Instructions\n\n${shiftHeadings(state.config.instructions, 2)}`);
     }
 
+    // Current Task List section — read directly from state
+    const todoList = state.context.todoList;
+    if (todoList && todoList.items.length > 0) {
+      const statusCheck: Record<string, string> = {
+        pending: '[ ]',
+        in_progress: '[~]',
+        completed: '[x]',
+      };
+      const lines = todoList.items.map(
+        (item) => `- ${statusCheck[item.status] ?? '[ ]'} ${item.id}. ${item.subject}`
+      );
+      sections.push(
+        '## Current Task List\n\n' +
+          lines.join('\n') +
+          '\n\nWhen you complete a task, use the todolist tool to mark it completed.\n' +
+          'If you identify new sub-tasks, add them to the list.'
+      );
+    }
+
     // Available Skills section
     if (opts.skillProvider) {
       const skills = opts.skillProvider.listSkills();

@@ -79,10 +79,7 @@ export class EnhancedRunner {
       askHumanHandler: options.askHumanHandler,
     });
 
-    const todolistSupport = createTodolistSupport({
-      getList: () => null,
-      setList: () => {},
-    });
+    const todolistSupport = createTodolistSupport();
 
     const allTools: Tool<ZodTypeAny>[] = [
       ...sessionSupport.tools,

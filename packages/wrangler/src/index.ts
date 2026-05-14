@@ -1,6 +1,9 @@
 // @agentskillmania/wrangler
 // Wrangler 核心库 — agent crew 编排、skill 管理、workspace 组合
 
+// Side-effect imports (must be first)
+import './types/colts-augmentation.js';
+
 // Types
 export type { SessionMeta, TranscriptEntry } from './types.js';
 

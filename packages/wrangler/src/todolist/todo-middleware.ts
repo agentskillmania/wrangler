@@ -1,54 +1,112 @@
 import type { AgentMiddleware, AgentState } from '@agentskillmania/colts';
 import { updateState } from '@agentskillmania/colts';
-import type { TodoList } from './types.js';
-import { formatTodoForContext } from './todo-state.js';
+import type { TodoList, TodoStatus } from './types.js';
+import {
+  createEmptyTodoList,
+  addTodo,
+  updateTodo,
+  deleteTodo,
+} from './todo-state.js';
 
-const MARKER_START = '=== Current Task List ===';
+function getTodoList(state: AgentState): TodoList | undefined {
+  return state.context.todoList;
+}
 
-/**
- * 创建 todolist 上下文注入 middleware
- *
- * 在 beforeStep 中将 todolist 状态注入 instructions，
- * 每步用原始 instructions + 当前 todolist 重建，不累积。
- */
-export function createTodolistMiddleware(getList: () => TodoList | null): AgentMiddleware {
-  // 保存原始 instructions 的 WeakMap，key 是 state 对象
-  const originalInstructions = new WeakMap<AgentState, string>();
+function setTodoList(state: AgentState, list: TodoList): AgentState {
+  return updateState(state, (draft) => {
+    draft.context.todoList = list;
+  });
+}
 
+function isTodoActionResult(result: unknown): result is { _todo: true; actions: unknown[] } {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    '_todo' in result &&
+    (result as Record<string, unknown>)._todo === true &&
+    'actions' in result &&
+    Array.isArray((result as Record<string, unknown>).actions)
+  );
+}
+
+function applyActions(list: TodoList, actions: unknown[]): TodoList {
+  let current = list;
+  for (const raw of actions) {
+    const action = raw as Record<string, unknown>;
+    switch (action.action) {
+      case 'create': {
+        const subject = action.subject as string | undefined;
+        if (!subject) continue;
+        current = addTodo(current, subject, action.description as string | undefined);
+        break;
+      }
+      case 'update': {
+        const id = action.id as number | undefined;
+        if (!id) continue;
+        const updates: { status?: TodoStatus; subject?: string; description?: string } = {};
+        if (action.status) updates.status = action.status as TodoStatus;
+        if (action.subject) updates.subject = action.subject as string;
+        if (action.description !== undefined) updates.description = action.description as string;
+        if (Object.keys(updates).length === 0) continue;
+        current = updateTodo(current, id, updates);
+        break;
+      }
+      case 'delete': {
+        const id = action.id as number | undefined;
+        if (!id) continue;
+        current = deleteTodo(current, id);
+        break;
+      }
+      case 'reset': {
+        const tasks = action.tasks as Array<{
+          subject: string;
+          description?: string;
+          status?: TodoStatus;
+        }> | undefined;
+        if (!tasks) continue;
+        let newList = createEmptyTodoList();
+        for (const t of tasks) {
+          newList = addTodo(newList, t.subject, t.description);
+          if (t.status && t.status !== 'pending') {
+            newList = updateTodo(newList, newList.items[newList.items.length - 1].id, {
+              status: t.status,
+            });
+          }
+        }
+        current = newList;
+        break;
+      }
+    }
+  }
+  return current;
+}
+
+export function createTodolistMiddleware(): AgentMiddleware {
   return {
     name: 'todolist',
 
-    async beforeStep(ctx) {
-      const list = getList();
-      if (!list || list.items.length === 0) return;
+    async afterStep(ctx) {
+      const { result, state } = ctx;
 
-      const formatted = formatTodoForContext(list);
-      if (!formatted) return;
+      if (result.type !== 'continue') return;
+      if (!isTodoActionResult(result.toolResult)) return;
 
-      // 获取原始 instructions：第一次注入时保存，后续使用保存的原始值
-      let original = originalInstructions.get(ctx.state);
-      if (!original) {
-        original = stripPreviousInjection(ctx.state.config.instructions);
-        originalInstructions.set(ctx.state, original);
-      } else {
-        // state 可能被其他 middleware 替换，更新引用
-        original = stripPreviousInjection(ctx.state.config.instructions);
-        originalInstructions.set(ctx.state, original);
-      }
-
-      const newInstructions = original + '\n\n' + formatted;
-      const newState = updateState(ctx.state, (draft) => {
-        draft.config.instructions = newInstructions;
-      });
+      const currentList = getTodoList(state) ?? createEmptyTodoList();
+      const updatedList = applyActions(currentList, result.toolResult.actions);
+      const newState = setTodoList(state, updatedList);
 
       return { state: newState };
     },
-  };
-}
 
-/** 移除之前的 todolist 注入，恢复原始 instructions */
-function stripPreviousInjection(instructions: string): string {
-  const idx = instructions.indexOf('\n\n' + MARKER_START);
-  if (idx === -1) return instructions;
-  return instructions.slice(0, idx);
+    async beforeStep(ctx) {
+      let state = ctx.state;
+
+      // Auto-initialize empty list if missing
+      if (!getTodoList(state)) {
+        state = setTodoList(state, createEmptyTodoList());
+      }
+
+      return { state };
+    },
+  };
 }
