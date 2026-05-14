@@ -9,16 +9,10 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     coverage: {
-      provider: 'v8',
+      provider: 'istanbul',
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.ts'],
-      exclude: [
-        'src/**/*.d.ts',
-        'src/index.ts',
-        'src/**/*.tsx',
-        'src/components/**',
-        'src/hooks/use-agent.ts',
-      ],
+      exclude: ['src/**/*.d.ts', 'src/index.ts', 'src/**/*.tsx', 'src/components/**'],
       thresholds: {
         lines: 90,
         functions: 90,
