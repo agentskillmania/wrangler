@@ -9,7 +9,6 @@ import type { AgentState, Snapshot } from '@agentskillmania/colts';
 import { writeMeta, readMeta } from './meta.js';
 import { formatTranscriptEntry } from './transcript.js';
 import type { SessionMeta, TranscriptEntry } from '../types.js';
-import type { TodoList } from '../todolist/types.js';
 import type { ConversationMessage } from './types.js';
 
 /**
@@ -151,23 +150,6 @@ export class SessionStore {
   async deleteSession(sessionId: string): Promise<void> {
     const dir = this.getSessionDir(sessionId);
     await rm(dir, { recursive: true, force: true });
-  }
-
-  /** 保存 TodoList 到 session 目录 */
-  async saveTodoList(sessionId: string, todoList: TodoList): Promise<void> {
-    const dir = this.getSessionDir(sessionId);
-    await writeFile(join(dir, 'todolist.json'), JSON.stringify(todoList, null, 2), 'utf-8');
-  }
-
-  /** 从 session 目录加载 TodoList */
-  async loadTodoList(sessionId: string): Promise<TodoList | null> {
-    try {
-      const dir = this.getSessionDir(sessionId);
-      const raw = await readFile(join(dir, 'todolist.json'), 'utf-8');
-      return JSON.parse(raw) as TodoList;
-    } catch {
-      return null;
-    }
   }
 
   // ─── Conversation model (Layer 5+, replaces transcript) ───
