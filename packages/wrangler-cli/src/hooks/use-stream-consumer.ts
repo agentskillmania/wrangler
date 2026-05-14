@@ -20,8 +20,14 @@ export class StreamConsumer {
     timestamp: number;
   } | null = null;
 
+  // Track tool names from tool:start events for matching with tool:end
+  private activeToolNames: Map<string, string> = new Map();
+
   /**
    * Consume a single stream event, return any new timeline entries.
+   *
+   * Handles both TUI-level events (text-delta, tool-start, etc.) and
+   * colts RunStreamEvent types (token, tool:start, tool:end, complete, etc.).
    */
   consume(event: Record<string, unknown>): TimelineEntry[] {
     const entries: TimelineEntry[] = [];
@@ -29,7 +35,7 @@ export class StreamConsumer {
     const timestamp = (event.timestamp as number) ?? Date.now();
 
     // Flush any buffered assistant before processing non-text events
-    if (type !== 'text-delta' && this.bufferedAssistant) {
+    if (type !== 'text-delta' && type !== 'token' && this.bufferedAssistant) {
       entries.push({
         type: 'assistant',
         ...this.bufferedAssistant,
@@ -48,8 +54,10 @@ export class StreamConsumer {
         });
         break;
       }
-      case 'text-delta': {
-        const text = event.text as string;
+      case 'text-delta':
+      case 'token': {
+        // 'token' is the colts stream event, 'text-delta' is the TUI-level event
+        const text = (event.text ?? event.token) as string;
         if (!this.bufferedAssistant) {
           this.bufferedAssistant = {
             id: this.nextId(),
@@ -79,6 +87,25 @@ export class StreamConsumer {
         });
         break;
       }
+      case 'tool:start': {
+        // Colts stream event: tool:start has action.tool as toolName
+        const action = event.action as Record<string, unknown> | undefined;
+        const toolName = (action?.tool as string) ?? 'unknown';
+        const callId = (action?.id as string) ?? '';
+        if (callId) {
+          this.activeToolNames.set(callId, toolName);
+        }
+        entries.push({
+          type: 'tool',
+          id: this.nextId(),
+          seq: this.nextSeq(),
+          tool: toolName,
+          summary: '',
+          isRunning: true,
+          timestamp,
+        });
+        break;
+      }
       case 'tool-end': {
         const resultStr =
           typeof event.result === 'string' ? event.result : JSON.stringify(event.result);
@@ -87,6 +114,26 @@ export class StreamConsumer {
           id: this.nextId(),
           seq: this.nextSeq(),
           tool: event.toolName as string,
+          summary: resultStr.length > 100 ? resultStr.slice(0, 100) + '...' : resultStr,
+          isRunning: false,
+          timestamp,
+        });
+        break;
+      }
+      case 'tool:end': {
+        // Colts stream event: tool:end has result and optional callId
+        const callId = event.callId as string | undefined;
+        const toolName = (callId && this.activeToolNames.get(callId)) ?? 'unknown';
+        if (callId) {
+          this.activeToolNames.delete(callId);
+        }
+        const resultStr =
+          typeof event.result === 'string' ? event.result : JSON.stringify(event.result);
+        entries.push({
+          type: 'tool',
+          id: this.nextId(),
+          seq: this.nextSeq(),
+          tool: toolName,
           summary: resultStr.length > 100 ? resultStr.slice(0, 100) + '...' : resultStr,
           isRunning: false,
           timestamp,
@@ -104,7 +151,9 @@ export class StreamConsumer {
         });
         break;
       }
-      case 'run-complete': {
+      case 'run-complete':
+      case 'complete': {
+        // 'complete' is the colts stream event, 'run-complete' is TUI-level
         entries.push({
           type: 'run-complete',
           id: this.nextId(),

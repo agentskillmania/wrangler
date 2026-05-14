@@ -8,7 +8,10 @@
   "bin": {
     "wrangler": "dist/index.js"
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -42,10 +45,14 @@
     "throttleit": "^2.1.0"
   },
   "devDependencies": {
+    "@testing-library/react": "14",
     "@types/node": "^20.0.0",
     "@types/react": "^18.3.0",
+    "@vitest/coverage-istanbul": "2",
     "@vitest/coverage-v8": "^2.0.0",
     "ink-testing-library": "^4.0.0",
+    "jsdom": "^29.1.1",
+    "react-dom": "18",
     "typescript": "^5.0.0",
     "vitest": "^2.0.0"
   },

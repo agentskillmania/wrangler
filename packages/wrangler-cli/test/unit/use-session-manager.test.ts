@@ -60,4 +60,10 @@ describe('SessionManager', () => {
     mgr.addSession('searcher', 'running');
     expect(mgr.sessions).toHaveLength(2);
   });
+
+  it('updateStatus with unknown name does nothing', () => {
+    const mgr = new SessionManager();
+    mgr.updateStatus('nonexistent', 'running');
+    expect(mgr.sessions[0].status).toBe('idle');
+  });
 });
