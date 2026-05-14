@@ -129,6 +129,9 @@ importers:
       '@agentskillmania/llm-client':
         specifier: ^0.2.2
         version: 0.2.2(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)
+      '@agentskillmania/settings-yaml':
+        specifier: ^0.3.0
+        version: 0.3.0
       '@agentskillmania/wrangler':
         specifier: workspace:*
         version: link:../wrangler
@@ -215,6 +218,10 @@ packages:
 
   '@agentskillmania/settings-yaml@0.2.2':
     resolution: {integrity: sha512-UzLH9j7DvEwgUWz43dWcTPphN8gMNNV1uxM4bX48uSWL2x/05ksdft1X59AgCgr9Yz1VCTWhkoh81s5WSnkxwg==}
+    engines: {node: '>=18.0.0'}
+
+  '@agentskillmania/settings-yaml@0.3.0':
+    resolution: {integrity: sha512-6Q7OyLxLHN91nK0XlVeNtIAnD3SjO2n9dmxFMzN0B6/Nv+2rlJbHBZc22v9DOTWo7OwzrJcve9xOnj54GJZfqA==}
     engines: {node: '>=18.0.0'}
 
   '@alcalzone/ansi-tokenize@0.1.3':
@@ -3725,6 +3732,10 @@ snapshots:
       mkdirp: 3.0.1
 
   '@agentskillmania/settings-yaml@0.2.2':
+    dependencies:
+      js-yaml: 4.1.1
+
+  '@agentskillmania/settings-yaml@0.3.0':
     dependencies:
       js-yaml: 4.1.1
 
