@@ -32,14 +32,14 @@ const crewConfig: CrewConfig = {
   memory: '',
   agentDefs: {
     primary: {
-      meta: { name: 'primary' },
+      name: 'primary',
       instructions: `你是协调者。当用户提出问题时：
 1. 使用 create_task 创建一个 searcher 类型的 worker 来搜索答案
 2. 等待 liaison 通过 relay_to_primary 传回结果
 3. 收到结果后，直接把答案告诉用户（用中文回复）`,
     },
     searcher: {
-      meta: { name: 'searcher' },
+      name: 'searcher',
       instructions: `你是搜索员。收到搜索任务后，直接回答搜索结果。
 你的回答会自动传给liaison。结果要简洁。`,
     },

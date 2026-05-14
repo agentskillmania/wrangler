@@ -19,7 +19,7 @@ vi.mock('@agentskillmania/colts', async (importOriginal) => {
       run: mockRun,
       runStream: mockRunStream,
       on: mockOn,
-      ...options
+      ...options,
     })),
     createAgentState: actual.createAgentState,
     addUserMessage: actual.addUserMessage,
@@ -70,9 +70,7 @@ vi.mock('../../../src/runner/system-prompt.js', () => ({
 describe('EnhancedRunner', () => {
   let testBaseDir: string;
   const mockLLMClient: ILLMProvider = {} as any;
-  const mockExtraTools: Tool<any>[] = [
-    { name: 'mock-tool', schema: {} as any, execute: vi.fn() },
-  ];
+  const mockExtraTools: Tool<any>[] = [{ name: 'mock-tool', schema: {} as any, execute: vi.fn() }];
 
   beforeEach(async () => {
     testBaseDir = join(tmpdir(), `wrangler-test-enhanced-runner-${Date.now()}`);
@@ -122,18 +120,14 @@ describe('EnhancedRunner', () => {
     await EnhancedRunner.create(makeOptions({ model: 'claude-3' }));
 
     const calls = await getAgentRunnerCalls();
-    expect(calls[calls.length - 1][0]).toEqual(
-      expect.objectContaining({ model: 'claude-3' })
-    );
+    expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ model: 'claude-3' }));
   });
 
   it('should create() defaults model to gpt-4', async () => {
     await EnhancedRunner.create(makeOptions({ model: undefined }));
 
     const calls = await getAgentRunnerCalls();
-    expect(calls[calls.length - 1][0]).toEqual(
-      expect.objectContaining({ model: 'gpt-4' })
-    );
+    expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ model: 'gpt-4' }));
   });
 
   it('should create() loads MCP tools via loadMCPTools', async () => {
@@ -180,12 +174,14 @@ describe('EnhancedRunner', () => {
   });
 
   it('should create() passes skillDirectories to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ skillDirectories: ['/skills/dir1', '/skills/dir2'] }));
+    await EnhancedRunner.create(
+      makeOptions({ skillDirectories: ['/skills/dir1', '/skills/dir2'] })
+    );
 
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(
       expect.objectContaining({
-        skillDirectories: ['/skills/dir1', '/skills/dir2']
+        skillDirectories: ['/skills/dir1', '/skills/dir2'],
       })
     );
   });
@@ -194,9 +190,7 @@ describe('EnhancedRunner', () => {
     await EnhancedRunner.create(makeOptions({ thinkingEnabled: true }));
 
     const calls = await getAgentRunnerCalls();
-    expect(calls[calls.length - 1][0]).toEqual(
-      expect.objectContaining({ thinkingEnabled: true })
-    );
+    expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ thinkingEnabled: true }));
   });
 
   it('should create() passes middleware array (length 2: session + todolist) to AgentRunner', async () => {
@@ -217,7 +211,7 @@ describe('EnhancedRunner', () => {
     const runner = await EnhancedRunner.create(makeOptions());
     mockRun.mockResolvedValue({
       state: mockState,
-      result: { type: 'success', answer: 'test', totalSteps: 1 }
+      result: { type: 'success', answer: 'test', totalSteps: 1 },
     });
 
     await runner.run(mockState, mockOptions);
@@ -232,7 +226,7 @@ describe('EnhancedRunner', () => {
     const runner = await EnhancedRunner.create(makeOptions());
     mockRun.mockResolvedValue({
       state: mockState,
-      result: { type: 'success', answer: 'test', totalSteps: 1 }
+      result: { type: 'success', answer: 'test', totalSteps: 1 },
     });
 
     await runner.run(mockState, mockOptions);
