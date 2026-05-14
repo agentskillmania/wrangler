@@ -2,15 +2,17 @@
  * Integration Test: Todolist
  *
  * US1: 创建和使用任务列表工具
- * US2: 上下文自动注入
+ * US2: Assembler renders todo list
  * US3: todolist 持久化
  * US4: todolist 与 session 组合使用
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm, readFile } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createAgentState, updateState } from '@agentskillmania/colts';
+import { MarkdownMessageAssembler } from '../../src/runner/markdown-assembler.js';
 import {
   createTodolistSupport,
   createEmptyTodoList,
@@ -21,185 +23,339 @@ import { createSessionSupport } from '../../src/session/support.js';
 import type { TodoList } from '../../src/todolist/types.js';
 
 describe('US1: 创建和使用任务列表工具', () => {
-  it('createTodolistSupport returns tools and middleware', () => {
-    let list: TodoList | null = null;
-    const todo = createTodolistSupport({
-      getList: () => list,
-      setList: (l) => {
-        list = l;
-      },
-    });
+  it('createTodolistSupport returns tools and middleware with no args', () => {
+    const todo = createTodolistSupport();
 
     expect(todo.tools).toHaveLength(1);
     expect(todo.tools[0].name).toBe('todolist');
     expect(todo.middleware.name).toBe('todolist');
   });
 
-  it('tool executes create action', async () => {
-    let list: TodoList | null = null;
-    const todo = createTodolistSupport({
-      getList: () => list,
-      setList: (l) => {
-        list = l;
-      },
-    });
+  it('tool returns { _todo: true, actions } for create action', async () => {
+    const todo = createTodolistSupport();
 
     const result = await todo.tools[0].execute({
-      action: 'create',
-      subject: 'Implement feature',
+      actions: [{ action: 'create', subject: 'Implement feature' }],
     });
 
-    expect(result).toContain('Implement feature');
-    expect(result).toContain('[ ]');
-    expect(list).not.toBeNull();
-    expect(list!.items).toHaveLength(1);
+    expect(result).toEqual({
+      _todo: true,
+      actions: [{ action: 'create', subject: 'Implement feature' }],
+    });
   });
 
-  it('tool executes update action', async () => {
-    let list: TodoList | null = createEmptyTodoList();
-    list = addTodo(list, 'Task 1');
-    const todo = createTodolistSupport({
-      getList: () => list,
-      setList: (l) => {
-        list = l;
+  it('middleware afterStep applies create to state.context.todoList', async () => {
+    const todo = createTodolistSupport();
+    const state = createAgentState({
+      name: 'test-agent',
+      instructions: 'You are helpful.',
+      tools: [],
+    });
+
+    const toolResult = await todo.tools[0].execute({
+      actions: [{ action: 'create', subject: 'New task' }],
+    });
+
+    const afterStepCtx = {
+      result: {
+        type: 'continue',
+        toolResult,
+        actions: [],
+        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
       },
-    });
+      state,
+      stepNumber: 0,
+      runnerOptions: {} as any,
+    };
 
-    const result = await todo.tools[0].execute({
-      action: 'update',
-      id: 1,
-      status: 'completed',
-    });
+    const result = await todo.middleware.afterStep!(afterStepCtx);
 
-    expect(result).toContain('[x]');
-    expect(list!.items[0].status).toBe('completed');
+    expect(result).toBeDefined();
+    expect(result!.state!.context.todoList).toBeDefined();
+    expect(result!.state!.context.todoList!.items).toHaveLength(1);
+    expect(result!.state!.context.todoList!.items[0].subject).toBe('New task');
   });
 
-  it('tool executes delete action', async () => {
-    let list: TodoList | null = createEmptyTodoList();
-    list = addTodo(list, 'Task 1');
-    list = addTodo(list, 'Task 2');
-    const todo = createTodolistSupport({
-      getList: () => list,
-      setList: (l) => {
-        list = l;
+  it('middleware afterStep applies update to change status', async () => {
+    const todo = createTodolistSupport();
+    const state = updateState(
+      createAgentState({
+        name: 'test-agent',
+        instructions: 'You are helpful.',
+        tools: [],
+      }),
+      (draft) => {
+        draft.context.todoList = addTodo(createEmptyTodoList(), 'Task 1');
+      }
+    );
+
+    const toolResult = await todo.tools[0].execute({
+      actions: [{ action: 'update', id: 1, status: 'completed' }],
+    });
+
+    const afterStepCtx = {
+      result: {
+        type: 'continue',
+        toolResult,
+        actions: [],
+        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
       },
-    });
+      state,
+      stepNumber: 0,
+      runnerOptions: {} as any,
+    };
 
-    const result = await todo.tools[0].execute({
-      action: 'delete',
-      id: 1,
-    });
+    const result = await todo.middleware.afterStep!(afterStepCtx);
 
-    expect(result).not.toContain('Task 1');
-    expect(result).toContain('Task 2');
-    expect(list!.items).toHaveLength(1);
+    expect(result!.state!.context.todoList!.items[0].status).toBe('completed');
   });
 
-  it('tool executes list action', async () => {
-    let list: TodoList | null = createEmptyTodoList();
-    list = addTodo(list, 'Task 1');
-    const todo = createTodolistSupport({
-      getList: () => list,
-      setList: (l) => {
-        list = l;
-      },
+  it('middleware afterStep applies delete to remove items', async () => {
+    const todo = createTodolistSupport();
+    const state = updateState(
+      createAgentState({
+        name: 'test-agent',
+        instructions: 'You are helpful.',
+        tools: [],
+      }),
+      (draft) => {
+        let list = addTodo(createEmptyTodoList(), 'Task 1');
+        list = addTodo(list, 'Task 2');
+        draft.context.todoList = list;
+      }
+    );
+
+    const toolResult = await todo.tools[0].execute({
+      actions: [{ action: 'delete', id: 1 }],
     });
 
-    const result = await todo.tools[0].execute({ action: 'list' });
-    expect(result).toContain('Task 1');
+    const afterStepCtx = {
+      result: {
+        type: 'continue',
+        toolResult,
+        actions: [],
+        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
+      },
+      state,
+      stepNumber: 0,
+      runnerOptions: {} as any,
+    };
+
+    const result = await todo.middleware.afterStep!(afterStepCtx);
+
+    expect(result!.state!.context.todoList!.items).toHaveLength(1);
+    expect(result!.state!.context.todoList!.items[0].subject).toBe('Task 2');
   });
 
-  it('tool returns error for unknown action', async () => {
-    let list: TodoList | null = createEmptyTodoList();
-    const todo = createTodolistSupport({
-      getList: () => list,
-      setList: (l) => {
-        list = l;
-      },
+  it('middleware afterStep applies reset to replace entire list', async () => {
+    const todo = createTodolistSupport();
+    const state = updateState(
+      createAgentState({
+        name: 'test-agent',
+        instructions: 'You are helpful.',
+        tools: [],
+      }),
+      (draft) => {
+        let list = addTodo(createEmptyTodoList(), 'Old task 1');
+        list = addTodo(list, 'Old task 2');
+        draft.context.todoList = list;
+      }
+    );
+
+    const toolResult = await todo.tools[0].execute({
+      actions: [
+        {
+          action: 'reset',
+          tasks: [
+            { subject: 'New task A', status: 'pending' },
+            { subject: 'New task B', status: 'in_progress' },
+          ],
+        },
+      ],
     });
 
-    const result = await todo.tools[0].execute({ action: 'foobar' as any });
-    expect(result).toContain('Error');
+    const afterStepCtx = {
+      result: {
+        type: 'continue',
+        toolResult,
+        actions: [],
+        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
+      },
+      state,
+      stepNumber: 0,
+      runnerOptions: {} as any,
+    };
+
+    const result = await todo.middleware.afterStep!(afterStepCtx);
+
+    expect(result!.state!.context.todoList!.items).toHaveLength(2);
+    expect(result!.state!.context.todoList!.items[0].subject).toBe('New task A');
+    expect(result!.state!.context.todoList!.items[0].status).toBe('pending');
+    expect(result!.state!.context.todoList!.items[1].subject).toBe('New task B');
+    expect(result!.state!.context.todoList!.items[1].status).toBe('in_progress');
+  });
+
+  it('middleware afterStep applies batch mixed actions in order', async () => {
+    const todo = createTodolistSupport();
+    const state = updateState(
+      createAgentState({
+        name: 'test-agent',
+        instructions: 'You are helpful.',
+        tools: [],
+      }),
+      (draft) => {
+        let list = addTodo(createEmptyTodoList(), 'Task 1');
+        list = addTodo(list, 'Task 2');
+        draft.context.todoList = list;
+      }
+    );
+
+    const toolResult = await todo.tools[0].execute({
+      actions: [
+        { action: 'create', subject: 'Task 3' },
+        { action: 'update', id: 1, status: 'completed' },
+        { action: 'delete', id: 2 },
+      ],
+    });
+
+    const afterStepCtx = {
+      result: {
+        type: 'continue',
+        toolResult,
+        actions: [],
+        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
+      },
+      state,
+      stepNumber: 0,
+      runnerOptions: {} as any,
+    };
+
+    const result = await todo.middleware.afterStep!(afterStepCtx);
+
+    expect(result!.state!.context.todoList!.items).toHaveLength(2);
+    expect(result!.state!.context.todoList!.items[0].subject).toBe('Task 1');
+    expect(result!.state!.context.todoList!.items[0].status).toBe('completed');
+    expect(result!.state!.context.todoList!.items[1].subject).toBe('Task 3');
+  });
+
+  it('middleware afterStep ignores non-todo toolResult', async () => {
+    const todo = createTodolistSupport();
+    const state = updateState(
+      createAgentState({
+        name: 'test-agent',
+        instructions: 'You are helpful.',
+        tools: [],
+      }),
+      (draft) => {
+        draft.context.todoList = addTodo(createEmptyTodoList(), 'Original task');
+      }
+    );
+
+    const afterStepCtx = {
+      result: {
+        type: 'continue',
+        toolResult: { someOtherResult: true },
+        actions: [],
+        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
+      },
+      state,
+      stepNumber: 0,
+      runnerOptions: {} as any,
+    };
+
+    const result = await todo.middleware.afterStep!(afterStepCtx);
+
+    // Should not modify state
+    expect(result).toBeUndefined();
   });
 });
 
-describe('US2: 上下文自动注入', () => {
-  it('middleware injects todolist into instructions', async () => {
-    let list: TodoList | null = createEmptyTodoList();
-    list = addTodo(list, 'Important task');
-    list = updateTodo(list, 1, { status: 'in_progress' });
+describe('US2: Assembler renders todo list', () => {
+  it('when todoList has items, assembler output contains ## Current Task List with formatted items', () => {
+    const assembler = new MarkdownMessageAssembler();
+    const state = updateState(
+      createAgentState({
+        name: 'test-agent',
+        instructions: 'You are helpful.',
+        tools: [],
+      }),
+      (draft) => {
+        let list = addTodo(createEmptyTodoList(), 'Task 1');
+        list = updateTodo(list, 1, { status: 'in_progress' });
+        list = addTodo(list, 'Task 2');
+        draft.context.todoList = list;
+      }
+    );
 
-    const todo = createTodolistSupport({
-      getList: () => list,
-      setList: (l) => {
-        list = l;
+    const messages = assembler.build(state, { model: 'gpt-4' });
+    const systemPrompt = typeof messages[0].content === 'string' ? messages[0].content : '';
+
+    expect(systemPrompt).toContain('## Current Task List');
+    expect(systemPrompt).toContain('- [~] 1. Task 1');
+    expect(systemPrompt).toContain('- [ ] 2. Task 2');
+  });
+
+  it('when todoList is empty, assembler output does NOT contain ## Current Task List', () => {
+    const assembler = new MarkdownMessageAssembler();
+    const state = updateState(
+      createAgentState({
+        name: 'test-agent',
+        instructions: 'You are helpful.',
+        tools: [],
+      }),
+      (draft) => {
+        draft.context.todoList = createEmptyTodoList();
+      }
+    );
+
+    const messages = assembler.build(state, { model: 'gpt-4' });
+    const systemPrompt = typeof messages[0].content === 'string' ? messages[0].content : '';
+
+    expect(systemPrompt).not.toContain('## Current Task List');
+  });
+
+  it('when todoList is undefined (auto-initialized to empty), no section appears', () => {
+    const assembler = new MarkdownMessageAssembler();
+    const state = createAgentState({
+      name: 'test-agent',
+      instructions: 'You are helpful.',
+      tools: [],
+    });
+
+    const messages = assembler.build(state, { model: 'gpt-4' });
+    const systemPrompt = typeof messages[0].content === 'string' ? messages[0].content : '';
+
+    expect(systemPrompt).not.toContain('## Current Task List');
+  });
+
+  it('## Current Task List section appears after ## Instructions and before ## Available Skills', () => {
+    const assembler = new MarkdownMessageAssembler();
+    const state = updateState(
+      createAgentState({
+        name: 'test-agent',
+        instructions: 'You are helpful.',
+        tools: [],
+      }),
+      (draft) => {
+        draft.context.todoList = addTodo(createEmptyTodoList(), 'Task 1');
+      }
+    );
+
+    const messages = assembler.build(state, {
+      model: 'gpt-4',
+      skillProvider: {
+        listSkills: () => [{ name: 'test-skill', description: 'A test skill' }],
       },
     });
+    const systemPrompt = typeof messages[0].content === 'string' ? messages[0].content : '';
 
-    const { createAgentState } = await import('@agentskillmania/colts');
-    const state = createAgentState({
-      name: 'test-agent',
-      instructions: 'You are helpful.',
-      tools: [],
-    });
+    const instructionsIdx = systemPrompt.indexOf('## Instructions');
+    const taskListIdx = systemPrompt.indexOf('## Current Task List');
+    const skillsIdx = systemPrompt.indexOf('## Available Skills');
 
-    const result = await todo.middleware.beforeStep!({
-      state,
-      stepNumber: 0,
-      runnerOptions: {} as any,
-    });
-
-    expect(result).toBeDefined();
-    expect(result!.state!.config.instructions).toContain('=== Current Task List ===');
-    expect(result!.state!.config.instructions).toContain('Important task');
-    expect(result!.state!.config.instructions).toContain('[~]');
-    expect(result!.state!.config.instructions).toContain('You are helpful.');
-  });
-
-  it('middleware does not inject for empty list', async () => {
-    const list: TodoList | null = createEmptyTodoList();
-    const todo = createTodolistSupport({
-      getList: () => list,
-      setList: () => {},
-    });
-
-    const { createAgentState } = await import('@agentskillmania/colts');
-    const state = createAgentState({
-      name: 'test-agent',
-      instructions: 'You are helpful.',
-      tools: [],
-    });
-
-    const result = await todo.middleware.beforeStep!({
-      state,
-      stepNumber: 0,
-      runnerOptions: {} as any,
-    });
-
-    expect(result).toBeUndefined();
-  });
-
-  it('middleware does not inject for null list', async () => {
-    const todo = createTodolistSupport({
-      getList: () => null,
-      setList: () => {},
-    });
-
-    const { createAgentState } = await import('@agentskillmania/colts');
-    const state = createAgentState({
-      name: 'test-agent',
-      instructions: 'You are helpful.',
-      tools: [],
-    });
-
-    const result = await todo.middleware.beforeStep!({
-      state,
-      stepNumber: 0,
-      runnerOptions: {} as any,
-    });
-
-    expect(result).toBeUndefined();
+    expect(instructionsIdx).toBeLessThan(taskListIdx);
+    expect(taskListIdx).toBeLessThan(skillsIdx);
+    expect(instructionsIdx).toBeLessThan(skillsIdx);
   });
 });
 
@@ -215,52 +371,59 @@ describe('US3: todolist 持久化', () => {
     await rm(testBaseDir, { recursive: true, force: true }).catch(() => {});
   });
 
-  it('saves and loads todolist via SessionStore', async () => {
+  it('create state with todoList, saveState, loadState → todoList fully restored', async () => {
     const session = createSessionSupport({
       workspacePath: '/test/workspace',
       sessionBaseDir: testBaseDir,
     });
 
-    await session.store.createWithId('1745800100-todo-test', 'GLM-4.7');
+    const sessionId = await session.store.createWithId('test-persist-todo', 'GLM-4.7');
 
-    const list = addTodo(createEmptyTodoList(), 'Task 1');
-    await session.store.saveTodoList('1745800100-todo-test', list);
+    const state = updateState(
+      createAgentState({
+        name: 'test-agent',
+        instructions: 'You are helpful.',
+        tools: [],
+      }),
+      (draft) => {
+        let list = addTodo(createEmptyTodoList(), 'Task 1');
+        list = updateTodo(list, 1, { status: 'completed' });
+        list = addTodo(list, 'Task 2');
+        draft.context.todoList = list;
+      }
+    );
 
-    const loaded = await session.store.loadTodoList('1745800100-todo-test');
+    await session.store.saveState(sessionId, state);
+
+    const loaded = await session.store.loadState(sessionId);
     expect(loaded).not.toBeNull();
-    expect(loaded!.items).toHaveLength(1);
-    expect(loaded!.items[0].subject).toBe('Task 1');
+    expect(loaded!.context.todoList).toBeDefined();
+    expect(loaded!.context.todoList!.items).toHaveLength(2);
+    expect(loaded!.context.todoList!.items[0].subject).toBe('Task 1');
+    expect(loaded!.context.todoList!.items[0].status).toBe('completed');
+    expect(loaded!.context.todoList!.items[1].subject).toBe('Task 2');
+    expect(loaded!.context.todoList!.items[1].status).toBe('pending');
   });
 
-  it('returns null for non-existent todolist', async () => {
+  it('state without todoList, saveState, loadState → todoList is undefined', async () => {
     const session = createSessionSupport({
       workspacePath: '/test/workspace',
       sessionBaseDir: testBaseDir,
     });
 
-    await session.store.createWithId('1745800101-no-todo', 'GLM-4.7');
-    const loaded = await session.store.loadTodoList('1745800101-no-todo');
-    expect(loaded).toBeNull();
-  });
+    const sessionId = await session.store.createWithId('test-no-todo', 'GLM-4.7');
 
-  it('overwrites previous todolist on save', async () => {
-    const session = createSessionSupport({
-      workspacePath: '/test/workspace',
-      sessionBaseDir: testBaseDir,
+    const state = createAgentState({
+      name: 'test-agent',
+      instructions: 'You are helpful.',
+      tools: [],
     });
 
-    await session.store.createWithId('1745800102-overwrite', 'GLM-4.7');
+    await session.store.saveState(sessionId, state);
 
-    let list = addTodo(createEmptyTodoList(), 'Task 1');
-    await session.store.saveTodoList('1745800102-overwrite', list);
-
-    list = addTodo(list, 'Task 2');
-    list = updateTodo(list, 1, { status: 'completed' });
-    await session.store.saveTodoList('1745800102-overwrite', list);
-
-    const loaded = await session.store.loadTodoList('1745800102-overwrite');
-    expect(loaded!.items).toHaveLength(2);
-    expect(loaded!.items[0].status).toBe('completed');
+    const loaded = await session.store.loadState(sessionId);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.context.todoList).toBeUndefined();
   });
 });
 
@@ -276,62 +439,97 @@ describe('US4: todolist 与 session 组合使用', () => {
     await rm(testBaseDir, { recursive: true, force: true }).catch(() => {});
   });
 
-  it('todolist + session tools coexist without conflict', async () => {
-    let todoList: TodoList | null = null;
-
+  it('both sets of tools work without conflict', () => {
     const session = createSessionSupport({
       workspacePath: '/test/workspace',
       sessionBaseDir: testBaseDir,
     });
 
-    const todo = createTodolistSupport({
-      getList: () => todoList,
-      setList: (l) => {
-        todoList = l;
-      },
-    });
+    const todo = createTodolistSupport();
 
     // Both sets of tools should work together
     expect(session.tools.length).toBeGreaterThan(0);
     expect(todo.tools).toHaveLength(1);
 
-    // Use todolist tool
-    const result = await todo.tools[0].execute({
-      action: 'create',
-      subject: 'Combined test',
+    // Session tools have names
+    session.tools.forEach((t) => {
+      expect(t.name).toBeDefined();
+      expect(typeof t.name).toBe('string');
     });
-    expect(result).toContain('Combined test');
-    expect(todoList).not.toBeNull();
+
+    // Todo has todolist tool
+    expect(todo.tools[0].name).toBe('todolist');
   });
 
-  it('todolist state persists alongside session state', async () => {
-    let todoList: TodoList | null = null;
-
+  it('full cycle: tool execute → afterStep apply → saveState → loadState → verify todoList restored', async () => {
     const session = createSessionSupport({
       workspacePath: '/test/workspace',
       sessionBaseDir: testBaseDir,
     });
 
-    const todo = createTodolistSupport({
-      getList: () => todoList,
-      setList: (l) => {
-        todoList = l;
-      },
+    const todo = createTodolistSupport();
+    const sessionId = await session.store.createWithId('test-full-cycle', 'GLM-4.7');
+
+    // Start with empty state
+    const initialState = createAgentState({
+      name: 'test-agent',
+      instructions: 'You are helpful.',
+      tools: [],
     });
 
-    const sessionId = await session.store.createWithId('1745800200-persist', 'GLM-4.7');
+    // Execute tool: create task
+    const toolResult = await todo.tools[0].execute({
+      actions: [{ action: 'create', subject: 'Full cycle test' }],
+    });
 
-    // Create a task via tool
-    await todo.tools[0].execute({ action: 'create', subject: 'Persist test' });
-    expect(todoList).not.toBeNull();
+    // Apply via afterStep
+    const afterStepCtx = {
+      result: {
+        type: 'continue' as const,
+        toolResult,
+        actions: [],
+        tokens: { input: 0, output: 0, total: 0, cost: { input: 0, output: 0, total: 0 } },
+      },
+      state: initialState,
+      stepNumber: 0,
+      runnerOptions: {} as any,
+    };
 
-    // Save todolist to session
-    await session.store.saveTodoList(sessionId, todoList!);
+    const afterResult = await todo.middleware.afterStep!(afterStepCtx);
+    expect(afterResult!.state!.context.todoList).toBeDefined();
+    expect(afterResult!.state!.context.todoList!.items).toHaveLength(1);
 
-    // Simulate restore: clear in-memory, load from disk
-    todoList = null;
-    const loaded = await session.store.loadTodoList(sessionId);
+    // Save state
+    await session.store.saveState(sessionId, afterResult!.state!);
+
+    // Load state
+    const loaded = await session.store.loadState(sessionId);
     expect(loaded).not.toBeNull();
-    expect(loaded!.items[0].subject).toBe('Persist test');
+    expect(loaded!.context.todoList).toBeDefined();
+    expect(loaded!.context.todoList!.items).toHaveLength(1);
+    expect(loaded!.context.todoList!.items[0].subject).toBe('Full cycle test');
+  });
+
+  it('middleware beforeStep auto-initializes empty todoList', async () => {
+    const todo = createTodolistSupport();
+    const state = createAgentState({
+      name: 'test-agent',
+      instructions: 'You are helpful.',
+      tools: [],
+    });
+
+    expect(state.context.todoList).toBeUndefined();
+
+    const beforeStepCtx = {
+      state,
+      stepNumber: 0,
+      runnerOptions: {} as any,
+    };
+
+    const result = await todo.middleware.beforeStep!(beforeStepCtx);
+
+    expect(result).toBeDefined();
+    expect(result!.state!.context.todoList).toBeDefined();
+    expect(result!.state!.context.todoList!.items).toHaveLength(0);
   });
 });
