@@ -5,9 +5,7 @@ import type { SessionInfo } from '../types.js';
  * Tested independently of React hooks.
  */
 export class SessionManager {
-  private _sessions: SessionInfo[] = [
-    { name: 'primary', status: 'idle', isCurrent: true },
-  ];
+  private _sessions: SessionInfo[] = [{ name: 'primary', status: 'idle', isCurrent: true }];
 
   get currentSession(): string {
     return this._sessions.find((s) => s.isCurrent)?.name ?? 'primary';
@@ -21,10 +19,7 @@ export class SessionManager {
     return this._sessions.length > 1;
   }
 
-  addSession(
-    name: string,
-    status: 'running' | 'completed' | 'idle',
-  ): void {
+  addSession(name: string, status: 'running' | 'completed' | 'idle'): void {
     if (this._sessions.some((s) => s.name === name)) return;
     this._sessions.push({ name, status, isCurrent: false });
   }
@@ -36,10 +31,7 @@ export class SessionManager {
     return true;
   }
 
-  updateStatus(
-    name: string,
-    status: 'running' | 'completed' | 'idle',
-  ): void {
+  updateStatus(name: string, status: 'running' | 'completed' | 'idle'): void {
     const session = this._sessions.find((s) => s.name === name);
     if (session) session.status = status;
   }

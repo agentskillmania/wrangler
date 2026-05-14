@@ -81,18 +81,13 @@ export class StreamConsumer {
       }
       case 'tool-end': {
         const resultStr =
-          typeof event.result === 'string'
-            ? event.result
-            : JSON.stringify(event.result);
+          typeof event.result === 'string' ? event.result : JSON.stringify(event.result);
         entries.push({
           type: 'tool',
           id: this.nextId(),
           seq: this.nextSeq(),
           tool: event.toolName as string,
-          summary:
-            resultStr.length > 100
-              ? resultStr.slice(0, 100) + '...'
-              : resultStr,
+          summary: resultStr.length > 100 ? resultStr.slice(0, 100) + '...' : resultStr,
           isRunning: false,
           timestamp,
         });

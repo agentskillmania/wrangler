@@ -42,64 +42,79 @@ export function useAgent(
     setStatus('ready');
   }, []);
 
-  const sendMessage = useCallback(async (input: string) => {
-    const runner = runnerRef.current;
-    let state = stateRef.current;
-    if (!runner || !state) return;
+  const sendMessage = useCallback(
+    async (input: string) => {
+      const runner = runnerRef.current;
+      let state = stateRef.current;
+      if (!runner || !state) return;
 
-    // Add user message to entries
-    const userEntry: TimelineEntry = {
-      type: 'user',
-      id: `user-${Date.now()}`,
-      seq: entries.length + 1,
-      content: input,
-      timestamp: Date.now(),
-    };
-    setEntries((prev) => [...prev, userEntry]);
+      // Add user message to entries
+      const userEntry: TimelineEntry = {
+        type: 'user',
+        id: `user-${Date.now()}`,
+        seq: entries.length + 1,
+        content: input,
+        timestamp: Date.now(),
+      };
+      setEntries((prev) => [...prev, userEntry]);
 
-    // Update state with user message
-    state = addUserMessage(state, input);
-    stateRef.current = state;
+      // Update state with user message
+      state = addUserMessage(state, input);
+      stateRef.current = state;
 
-    setStatus('running');
+      setStatus('running');
 
-    const abortController = new AbortController();
-    abortRef.current = abortController;
-    const consumer = new StreamConsumer();
-    consumerRef.current = consumer;
+      const abortController = new AbortController();
+      abortRef.current = abortController;
+      const consumer = new StreamConsumer();
+      consumerRef.current = consumer;
 
-    try {
-      const stream = runner.runStream(state, { signal: abortController.signal });
-      for await (const event of stream) {
-        const newEntries = consumer.consume(event as Record<string, unknown>);
-        if (newEntries.length > 0) {
-          setEntries((prev) => [...prev, ...newEntries]);
+      try {
+        const stream = runner.runStream(state, { signal: abortController.signal });
+        for await (const event of stream) {
+          const newEntries = consumer.consume(event as Record<string, unknown>);
+          if (newEntries.length > 0) {
+            setEntries((prev) => [...prev, ...newEntries]);
+          }
         }
-      }
 
-      // Flush remaining buffered content
-      const flushed = consumer.flush();
-      if (flushed.length > 0) {
-        setEntries((prev) => [...prev, ...flushed]);
+        // Flush remaining buffered content
+        const flushed = consumer.flush();
+        if (flushed.length > 0) {
+          setEntries((prev) => [...prev, ...flushed]);
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          setEntries((prev) => [
+            ...prev,
+            {
+              type: 'system',
+              id: `sys-${Date.now()}`,
+              seq: prev.length + 1,
+              content: 'Run interrupted',
+              timestamp: Date.now(),
+            },
+          ]);
+        } else {
+          const message = err instanceof Error ? err.message : String(err);
+          setEntries((prev) => [
+            ...prev,
+            {
+              type: 'error',
+              id: `err-${Date.now()}`,
+              seq: prev.length + 1,
+              message,
+              timestamp: Date.now(),
+            },
+          ]);
+        }
+      } finally {
+        setStatus('ready');
+        abortRef.current = null;
       }
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        setEntries((prev) => [
-          ...prev,
-          { type: 'system', id: `sys-${Date.now()}`, seq: prev.length + 1, content: 'Run interrupted', timestamp: Date.now() },
-        ]);
-      } else {
-        const message = err instanceof Error ? err.message : String(err);
-        setEntries((prev) => [
-          ...prev,
-          { type: 'error', id: `err-${Date.now()}`, seq: prev.length + 1, message, timestamp: Date.now() },
-        ]);
-      }
-    } finally {
-      setStatus('ready');
-      abortRef.current = null;
-    }
-  }, [entries.length]);
+    },
+    [entries.length]
+  );
 
   return { entries, state: stateRef.current, status, sendMessage, abort };
 }

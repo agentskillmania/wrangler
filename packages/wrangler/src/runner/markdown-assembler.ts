@@ -16,7 +16,10 @@
 
 import type { Message as PiAIMessage, TextContent } from '@mariozechner/pi-ai';
 import type { AgentState, SkillState } from '@agentskillmania/colts';
-import type { BuildMessagesOptions, IMessageAssembler } from '@agentskillmania/colts';
+import type {
+  BuildMessagesOptions,
+  IMessageAssembler,
+} from '@agentskillmania/colts/dist/message-assembler/index.js';
 import { shiftHeadings } from './shift-headings.js';
 
 /**
@@ -244,7 +247,9 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
     if (opts.skillProvider) {
       const skills = opts.skillProvider.listSkills();
       if (skills.length > 0) {
-        const skillLines = skills.map((s: { name: string; description: string }) => `- ${s.name}: ${s.description}`).join('\n');
+        const skillLines = skills
+          .map((s: { name: string; description: string }) => `- ${s.name}: ${s.description}`)
+          .join('\n');
         sections.push(
           `## Available Skills\n\n${skillLines}\n\nUse the load_skill tool to load detailed instructions when needed.`
         );
@@ -273,7 +278,10 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
     // Sub-Agents section
     if (opts.subAgentConfigs && opts.subAgentConfigs.size > 0) {
       const subAgentLines = Array.from(opts.subAgentConfigs.values())
-        .map((sa: { name: string; description: string }) => `- ${sa.name}: ${sa.description}`)
+        .map((sa: unknown) => {
+          const agent = sa as { name: string; description: string };
+          return `- ${agent.name}: ${agent.description}`;
+        })
         .join('\n');
       sections.push(
         `## Sub-Agents\n\n${subAgentLines}\n\nUse the delegate tool to delegate tasks to specialized sub-agents.`

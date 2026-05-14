@@ -5,9 +5,7 @@ describe('SessionManager', () => {
   it('starts with primary as current session', () => {
     const mgr = new SessionManager();
     expect(mgr.currentSession).toBe('primary');
-    expect(mgr.sessions).toEqual([
-      { name: 'primary', status: 'idle', isCurrent: true },
-    ]);
+    expect(mgr.sessions).toEqual([{ name: 'primary', status: 'idle', isCurrent: true }]);
   });
 
   it('adds a new session', () => {
@@ -27,12 +25,8 @@ describe('SessionManager', () => {
     const result = mgr.switchTo('searcher');
     expect(result).toBe(true);
     expect(mgr.currentSession).toBe('searcher');
-    expect(
-      mgr.sessions.find((s) => s.name === 'searcher')?.isCurrent,
-    ).toBe(true);
-    expect(
-      mgr.sessions.find((s) => s.name === 'primary')?.isCurrent,
-    ).toBe(false);
+    expect(mgr.sessions.find((s) => s.name === 'searcher')?.isCurrent).toBe(true);
+    expect(mgr.sessions.find((s) => s.name === 'primary')?.isCurrent).toBe(false);
   });
 
   it('returns false when switching to unknown session', () => {
@@ -46,9 +40,7 @@ describe('SessionManager', () => {
     const mgr = new SessionManager();
     mgr.addSession('searcher', 'running');
     mgr.updateStatus('searcher', 'completed');
-    expect(
-      mgr.sessions.find((s) => s.name === 'searcher')?.status,
-    ).toBe('completed');
+    expect(mgr.sessions.find((s) => s.name === 'searcher')?.status).toBe('completed');
   });
 
   it('isCrewMode returns false with only primary', () => {

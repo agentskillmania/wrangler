@@ -33,7 +33,7 @@
     "directory": "packages/wrangler-cli"
   },
   "dependencies": {
-    "@agentskillmania/colts": "^0.2.2",
+    "@agentskillmania/colts": "^0.3.0",
     "@agentskillmania/llm-client": "^0.2.2",
     "@agentskillmania/wrangler": "workspace:*",
     "@inkjs/ui": "^2.0.0",

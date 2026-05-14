@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { InteractionContext, createInteractionCallbacks } from '../../src/context/interaction-context.js';
+import {
+  InteractionContext,
+  createInteractionCallbacks,
+} from '../../src/context/interaction-context.js';
 
 describe('InteractionContext', () => {
   it('exports context with null default', () => {

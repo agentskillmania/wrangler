@@ -8,7 +8,8 @@ import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
 import { createSessionSupport } from '../session/support.js';
 import { createTodolistSupport } from '../todolist/support.js';
 import { buildTimeContext } from './system-prompt.js';
-import { MarkdownMessageAssembler } from './markdown-assembler.js';
+// TODO: Wire MarkdownMessageAssembler when colts publishes 0.3.x with RunnerOptions.messageAssembler support
+// import { MarkdownMessageAssembler } from './markdown-assembler.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { EnhancedRunnerOptions } from './types.js';
@@ -97,7 +98,6 @@ export class EnhancedRunner {
       systemPrompt: buildTimeContext(),
       skillDirectories: options.skillDirectories,
       thinkingEnabled: options.thinkingEnabled,
-      messageAssembler: new MarkdownMessageAssembler(),
     });
 
     return new EnhancedRunner(runner);
