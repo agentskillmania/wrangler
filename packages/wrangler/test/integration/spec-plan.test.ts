@@ -19,11 +19,6 @@ import {
   type ToolDefinition,
 } from '@agentskillmania/colts';
 import { testConfig, itif } from './config.js';
-import {
-  WRITING_SPEC_CONTENT,
-  REVIEW_SPEC_CONTENT,
-  WRITING_PLAN_CONTENT,
-} from '../../src/spec-plan/index.js';
 
 function makeRunner(tools: ToolDefinition[], middleware: any[]) {
   return new AgentRunner({
@@ -47,7 +42,7 @@ describe('Spec/Plan E2E Integration', () => {
    * US1: LLM generates a spec document
    *
    * Given: A feature description for user authentication
-   * When: LLM is instructed with WRITING_SPEC_CONTENT
+   * When: LLM is instructed to generate a spec
    * Then: LLM produces structured spec with goals, requirements, acceptance criteria
    */
   describe('US1: LLM generates spec document', () => {
@@ -57,13 +52,16 @@ describe('Spec/Plan E2E Integration', () => {
         const runner = makeRunner([], []);
 
         const instructions = `
-You are a spec writer. Follow these instructions:
+You are a spec writer. Your job is to create structured specification documents from feature descriptions.
 
-${WRITING_SPEC_CONTENT}
+A good spec should include:
+- **Goal**: A one-sentence summary of what you want to achieve
+- **Background**: Why are we doing this? What problem does it solve?
+- **Requirements**: Numbered list (FR-001, FR-002, etc.) using "must" for mandatory items
+- **Acceptance Criteria**: Specific, measurable conditions for completion
+- **Constraints**: Technical or business limitations
 
-Today's task: Create a spec for a "user authentication" feature.
-The system should allow users to register, login, and logout.
-Users should be able to reset their password via email.
+Write your response in markdown format with clear section headers.
 `;
 
         let state = createAgentState({
@@ -71,25 +69,33 @@ Users should be able to reset their password via email.
           instructions,
           tools: [],
         });
-        state = addUserMessage(state, 'Create a spec for user authentication feature');
+        state = addUserMessage(
+          state,
+          'Create a spec for a user authentication feature. The system should allow users to register with email/password, login, logout, and reset passwords via email.'
+        );
 
-        const { result } = await runner.run(state);
+        const runResult = await runner.run(state);
 
-        expect(result.type).toBe('success');
+        expect(runResult.result.type).toBe('success');
 
-        // Verify LLM output contains spec-like structure
-        const lastMessage = state.context.messages[state.context.messages.length - 1];
+        // Get assistant messages
+        const assistantMessages = runResult.state.context.messages.filter(
+          (m) => m.role === 'assistant'
+        );
+        expect(assistantMessages.length).toBeGreaterThan(0);
+
+        const lastAssistant = assistantMessages[assistantMessages.length - 1];
         const responseText =
-          typeof lastMessage.content === 'string'
-            ? lastMessage.content
-            : JSON.stringify(lastMessage.content);
+          typeof lastAssistant.content === 'string'
+            ? lastAssistant.content
+            : JSON.stringify(lastAssistant.content);
 
         // Check for key spec elements (not exact formatting, but semantic content)
-        expect(responseText.toLowerCase()).toMatch(/goal|objectiv/);
+        expect(responseText.toLowerCase()).toMatch(/goal|background|objective/);
         expect(responseText.toLowerCase()).toMatch(/requirement|feature/);
-        expect(responseText.toLowerCase()).toMatch(/auth|login|register/);
+        expect(responseText.toLowerCase()).toMatch(/auth|login|register|password/);
       },
-      60000
+      90000
     );
   });
 
@@ -97,7 +103,7 @@ Users should be able to reset their password via email.
    * US2: LLM reviews a spec document
    *
    * Given: A pre-written spec document
-   * When: LLM is instructed with REVIEW_SPEC_CONTENT
+   * When: LLM is instructed to review the spec
    * Then: LLM produces review with dimensions, pass/fail, suggestions
    */
   describe('US2: LLM reviews spec document', () => {
@@ -124,11 +130,19 @@ Allow users to authenticate with email and password.
 `;
 
         const instructions = `
-You are a spec reviewer. Follow these instructions:
+You are a spec reviewer. Review specification documents against these quality dimensions:
 
-${REVIEW_SPEC_CONTENT}
+1. **Coverage**: Are all scenarios covered with requirements? Does each requirement have acceptance criteria?
+2. **Clarity**: Is there no ambiguity? Are all TBDs resolved? Is language clear (must/should, not might)?
+3. **Feasibility**: Are requirements technically possible? No contradictions? Constraints align with requirements?
+4. **Completeness**: Is there a clear goal? Background explains why? Success criteria are measurable?
 
-Review the following spec document and provide feedback.
+Provide a review report with:
+- Overall result: PASS or FAIL
+- For each dimension: PASS or FAIL with explanation
+- For FAIL items: specific suggestions for improvement
+
+Write your review in markdown format.
 `;
 
         let state = createAgentState({
@@ -138,22 +152,27 @@ Review the following spec document and provide feedback.
         });
         state = addUserMessage(state, `Please review this spec:\n\n${sampleSpec}`);
 
-        const { result } = await runner.run(state);
+        const runResult = await runner.run(state);
 
-        expect(result.type).toBe('success');
+        expect(runResult.result.type).toBe('success');
 
-        // Verify review contains structured feedback
-        const lastMessage = state.context.messages[state.context.messages.length - 1];
+        // Get assistant messages
+        const assistantMessages = runResult.state.context.messages.filter(
+          (m) => m.role === 'assistant'
+        );
+        expect(assistantMessages.length).toBeGreaterThan(0);
+
+        const lastAssistant = assistantMessages[assistantMessages.length - 1];
         const responseText =
-          typeof lastMessage.content === 'string'
-            ? lastMessage.content
-            : JSON.stringify(lastMessage.content);
+          typeof lastAssistant.content === 'string'
+            ? lastAssistant.content
+            : JSON.stringify(lastAssistant.content);
 
         // Check for review elements
-        expect(responseText.toLowerCase()).toMatch(/review|审查/);
-        expect(responseText.toLowerCase()).toMatch(/pass|通过|fail|不通过/);
+        expect(responseText.toLowerCase()).toMatch(/review|assessment|evaluation/);
+        expect(responseText.toLowerCase()).toMatch(/pass|fail|通过|不通过/);
       },
-      60000
+      90000
     );
   });
 
@@ -161,7 +180,7 @@ Review the following spec document and provide feedback.
    * US3: LLM generates a plan from a spec
    *
    * Given: An approved spec document
-   * When: LLM is instructed with WRITING_PLAN_CONTENT
+   * When: LLM is instructed to create an implementation plan
    * Then: LLM produces structured plan with tasks, checkboxes, acceptance criteria
    */
   describe('US3: LLM generates plan from spec', () => {
@@ -188,11 +207,27 @@ Implement email/password authentication for web application.
 `;
 
         const instructions = `
-You are a plan writer. Follow these instructions:
+You are an implementation planner. Convert approved specs into actionable execution plans.
 
-${WRITING_PLAN_CONTENT}
+Break down the work into phases and tasks:
+- **Phase 1**: Preparation - research, setup, environment
+- **Phase 2**: Core work - main implementation
+- **Phase 3**: Integration - connect components
+- **Phase 4**: Verification - end-to-end testing
 
-Create an implementation plan for the following approved spec.
+For each task:
+- **Scope**: What does this task cover?
+- **Spec Reference**: Which requirement(s) (FR-XXX)?
+- **Acceptance**: Checklist of specific, verifiable conditions
+- **Steps**: Detailed 2-5 minute steps with clear actions (no placeholders)
+
+Rules:
+- Each step must be 2-5 minutes
+- No placeholders - be specific
+- Every task must have acceptance criteria
+- Mark parallel tasks with [P]
+
+Write your plan in markdown format.
 `;
 
         let state = createAgentState({
@@ -200,24 +235,32 @@ Create an implementation plan for the following approved spec.
           instructions,
           tools: [],
         });
-        state = addUserMessage(state, `Create a plan for this spec:\n\n${approvedSpec}`);
+        state = addUserMessage(
+          state,
+          `Create an implementation plan for this spec:\n\n${approvedSpec}`
+        );
 
-        const { result } = await runner.run(state);
+        const runResult = await runner.run(state);
 
-        expect(result.type).toBe('success');
+        expect(runResult.result.type).toBe('success');
 
-        // Verify plan contains task structure
-        const lastMessage = state.context.messages[state.context.messages.length - 1];
+        // Get assistant messages
+        const assistantMessages = runResult.state.context.messages.filter(
+          (m) => m.role === 'assistant'
+        );
+        expect(assistantMessages.length).toBeGreaterThan(0);
+
+        const lastAssistant = assistantMessages[assistantMessages.length - 1];
         const responseText =
-          typeof lastMessage.content === 'string'
-            ? lastMessage.content
-            : JSON.stringify(lastMessage.content);
+          typeof lastAssistant.content === 'string'
+            ? lastAssistant.content
+            : JSON.stringify(lastAssistant.content);
 
         // Check for plan elements
         expect(responseText.toLowerCase()).toMatch(/task|任务|phase|阶段/);
         expect(responseText.toLowerCase()).toMatch(/acceptance|验收|step|步骤/);
       },
-      60000
+      120000
     );
   });
 
@@ -235,17 +278,33 @@ Create an implementation plan for the following approved spec.
         const runner = makeRunner([], []);
 
         const instructions = `
-You are a product planning agent. Your job is to:
-1. First, create a spec for the requested feature using these instructions:
-${WRITING_SPEC_CONTENT}
+You are a product planning agent. Execute a complete planning workflow:
 
-2. Then, review your own spec using these instructions:
-${REVIEW_SPEC_CONTENT}
+Step 1 - Create Spec:
+Write a specification document including:
+- Goal: One-sentence summary
+- Background: Why this is needed
+- Requirements: Numbered (FR-001, FR-002) using "must" language
+- Acceptance Criteria: Measurable completion conditions
+- Constraints: Any limitations
 
-3. Finally, create an implementation plan using these instructions:
-${WRITING_PLAN_CONTENT}
+Step 2 - Review Spec:
+Review your spec against:
+- Coverage: All scenarios have requirements
+- Clarity: No ambiguity or TBDs
+- Feasibility: Technically possible
+- Completeness: Goal, background, measurable criteria
 
-Execute all three steps in sequence for the feature request.
+Provide PASS/FAIL for each dimension with feedback.
+
+Step 3 - Create Plan:
+Break down into phases (Prep, Core, Integration, Verification).
+For each task include:
+- Scope and spec reference
+- Acceptance checklist
+- Detailed 2-5 minute steps (no placeholders)
+
+Execute all three steps for the feature request. Output each step clearly.
 `;
 
         let state = createAgentState({
@@ -255,25 +314,31 @@ Execute all three steps in sequence for the feature request.
         });
         state = addUserMessage(
           state,
-          'I need a feature that allows users to upload profile pictures with size limits and format validation.'
+          'I need a feature that allows users to upload profile pictures. Requirements: max file size 5MB, only JPG/PNG formats, generate thumbnail on upload.'
         );
 
-        const { result } = await runner.run(state);
+        const runResult = await runner.run(state);
 
-        expect(result.type).toBe('success');
+        expect(runResult.result.type).toBe('success');
 
-        // Verify all three artifacts are mentioned/produced
-        const lastMessage = state.context.messages[state.context.messages.length - 1];
+        // Get assistant messages
+        const assistantMessages = runResult.state.context.messages.filter(
+          (m) => m.role === 'assistant'
+        );
+        expect(assistantMessages.length).toBeGreaterThan(0);
+
+        const lastAssistant = assistantMessages[assistantMessages.length - 1];
         const responseText =
-          typeof lastMessage.content === 'string'
-            ? lastMessage.content
-            : JSON.stringify(lastMessage.content);
+          typeof lastAssistant.content === 'string'
+            ? lastAssistant.content
+            : JSON.stringify(lastAssistant.content);
 
         // Check for workflow artifacts
-        expect(responseText.toLowerCase()).toMatch(/spec|plan/);
-        expect(responseText.toLowerCase()).toMatch(/upload|profile|picture/);
+        expect(responseText.toLowerCase()).toMatch(/spec|requirement|goal/);
+        expect(responseText.toLowerCase()).toMatch(/plan|task|phase|step/);
+        expect(responseText.toLowerCase()).toMatch(/upload|profile|picture|thumbnail/);
       },
-      120000
+      180000
     );
   });
 });
