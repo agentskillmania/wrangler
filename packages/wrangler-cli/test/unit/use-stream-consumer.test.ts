@@ -84,6 +84,94 @@ describe('StreamConsumer', () => {
     }
   });
 
+  it('creates run-complete entry from run-complete event', () => {
+    const entries = consumer.consume({
+      type: 'run-complete',
+      result: { steps: 5 },
+      timestamp: Date.now(),
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].type).toBe('run-complete');
+    if (entries[0].type === 'run-complete') {
+      expect(entries[0].result).toEqual({ steps: 5 });
+    }
+  });
+
+  it('flush() returns assistant entry with isStreaming false when buffer has content', () => {
+    consumer.consume({ type: 'text-delta', text: 'Hello', timestamp: Date.now() });
+    const flushed = consumer.flush();
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0].type).toBe('assistant');
+    if (flushed[0].type === 'assistant') {
+      expect(flushed[0].content).toBe('Hello');
+      expect(flushed[0].isStreaming).toBe(false);
+    }
+  });
+
+  it('flush() returns empty array when no buffered content', () => {
+    const flushed = consumer.flush();
+    expect(flushed).toEqual([]);
+  });
+
+  it('tool-end with object result serializes to JSON', () => {
+    const entries = consumer.consume({
+      type: 'tool-end',
+      toolName: 'test',
+      toolCallId: 'tc1',
+      result: { key: 'value' },
+      timestamp: Date.now(),
+    });
+    const tool = entries.find((e) => e.type === 'tool');
+    expect(tool).toBeDefined();
+    if (tool && tool.type === 'tool') {
+      expect(tool.summary).toBe(JSON.stringify({ key: 'value' }));
+      expect(tool.isRunning).toBe(false);
+    }
+  });
+
+  it('tool-end truncates result longer than 100 chars', () => {
+    const longResult = 'a'.repeat(120);
+    const entries = consumer.consume({
+      type: 'tool-end',
+      toolName: 'test',
+      toolCallId: 'tc1',
+      result: longResult,
+      timestamp: Date.now(),
+    });
+    const tool = entries.find((e) => e.type === 'tool');
+    expect(tool).toBeDefined();
+    if (tool && tool.type === 'tool') {
+      expect(tool.summary).toBe('a'.repeat(100) + '...');
+      expect(tool.summary.length).toBe(103);
+    }
+  });
+
+  it('error with non-Error string value uses string as message', () => {
+    const entries = consumer.consume({
+      type: 'error',
+      error: 'string error',
+      timestamp: Date.now(),
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].type).toBe('error');
+    if (entries[0].type === 'error') {
+      expect(entries[0].message).toBe('string error');
+    }
+  });
+
+  it('error with null error produces message "null"', () => {
+    const entries = consumer.consume({
+      type: 'error',
+      error: null,
+      timestamp: Date.now(),
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].type).toBe('error');
+    if (entries[0].type === 'error') {
+      expect(entries[0].message).toBe('null');
+    }
+  });
+
   it('each instance has independent seq counter (P4 fix)', () => {
     const consumer2 = new StreamConsumer();
     const e1 = consumer.consume({

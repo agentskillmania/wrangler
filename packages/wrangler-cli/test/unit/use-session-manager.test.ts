@@ -53,4 +53,11 @@ describe('SessionManager', () => {
     mgr.addSession('searcher', 'running');
     expect(mgr.isCrewMode).toBe(true);
   });
+
+  it('addSession ignores duplicate name', () => {
+    const mgr = new SessionManager();
+    mgr.addSession('searcher', 'running');
+    mgr.addSession('searcher', 'running');
+    expect(mgr.sessions).toHaveLength(2);
+  });
 });

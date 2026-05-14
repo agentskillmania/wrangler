@@ -17,6 +17,10 @@ describe('parseCommand', () => {
   it('parses /help command', () => {
     expect(parseCommand('/help')).toEqual({ type: 'help' });
   });
+  it('parses /session without name arg as empty name', () => {
+    expect(parseCommand('/session')).toEqual({ type: 'switch-session', name: '' });
+  });
+
   it('treats unknown /command as message', () => {
     expect(parseCommand('/unknown foo')).toEqual({ type: 'message', content: '/unknown foo' });
   });
