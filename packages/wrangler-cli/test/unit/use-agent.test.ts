@@ -22,6 +22,7 @@ vi.mock('../../src/hooks/use-stream-consumer.js', () => ({
   StreamConsumer: class {
     consume = vi.fn(() => mockConsumeResult);
     flush = vi.fn(() => mockFlushResult);
+    reset = vi.fn();
   },
 }));
 

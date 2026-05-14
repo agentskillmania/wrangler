@@ -66,8 +66,8 @@ export function useAgent(
 
       const abortController = new AbortController();
       abortRef.current = abortController;
-      const consumer = new StreamConsumer();
-      consumerRef.current = consumer;
+      const consumer = consumerRef.current;
+      consumer.reset();
 
       try {
         const stream = runner.runStream(state, { signal: abortController.signal });

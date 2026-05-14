@@ -24,6 +24,16 @@ export class StreamConsumer {
   private activeToolNames: Map<string, string> = new Map();
 
   /**
+   * Reset internal state for a new run.
+   * Clears buffered content and tool tracking, but preserves seq/id counters
+   * to avoid key collisions across runs.
+   */
+  reset(): void {
+    this.bufferedAssistant = null;
+    this.activeToolNames.clear();
+  }
+
+  /**
    * Consume a single stream event, return any new timeline entries.
    *
    * Handles both TUI-level events (text-delta, tool-start, etc.) and

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useApp } from 'ink';
+import { useApp, Text } from 'ink';
 import { AgentLoader, EnhancedRunner } from '@agentskillmania/wrangler';
 import { MainTUI } from './main-tui.js';
 import { SetupWizard } from './setup/setup-wizard.js';
@@ -20,8 +20,12 @@ interface AppProps {
 /**
  * Root application component.
  *
- * Routes to SetupWizard when config is invalid,
- * otherwise initializes EnhancedRunner and renders MainTUI.
+ * Three states:
+ * 1. Config invalid → SetupWizard
+ * 2. Config valid, runner loading → loading indicator
+ * 3. Config valid, runner ready → MainTUI
+ *
+ * All hooks must be called unconditionally (React Rules of Hooks).
  */
 export function App({ config: initialConfig, mode, dir }: AppProps) {
   const { exit } = useApp();
@@ -30,8 +34,6 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
   const [agentName, setAgentName] = useState('wrangler-agent');
   const [instructions, setInstructions] = useState('You are a helpful assistant.');
   const [sessionManager] = useState(() => new SessionManager());
-
-  const ready = config.hasValidConfig && runner !== null;
 
   // Initialize runner when config becomes valid
   useEffect(() => {
@@ -82,15 +84,21 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
     [],
   );
 
-  // Create initial state from runner (only when runner is ready)
+  // Hooks must be called unconditionally — useAgent handles null runner gracefully
   const initialState = runner ? createInitialState(agentName, instructions) : null;
-
   const agentHook = useAgent(runner, initialState);
 
-  if (!ready) {
+  // State 1: config invalid → show setup wizard
+  if (!config.hasValidConfig) {
     return <SetupWizard onComplete={handleSetupComplete} />;
   }
 
+  // State 2: config valid but runner still loading
+  if (!runner) {
+    return <Text>Initializing runner...</Text>;
+  }
+
+  // State 3: config valid, runner ready
   return (
     <InteractionContext.Provider value={null}>
       <MainTUI
