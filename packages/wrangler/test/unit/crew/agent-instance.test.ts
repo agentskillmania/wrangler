@@ -81,4 +81,35 @@ describe('AgentInstance', () => {
     expect(info.taskId).toBe('task-1');
     expect(info.queueSize).toBe(0);
   });
+
+  it('relayFlag starts false and can be set', () => {
+    const inst = new AgentInstance({
+      id: 'liaison-1',
+      role: 'liaison',
+      definitionName: 'liaison',
+      partnerId: 'worker-1',
+    });
+    expect(inst.relayFlag).toBe(false);
+    inst.relayFlag = true;
+    expect(inst.relayFlag).toBe(true);
+  });
+
+  it('stores customInstructions', () => {
+    const inst = new AgentInstance({
+      id: 'worker-1',
+      role: 'worker',
+      definitionName: 'custom',
+      customInstructions: 'You are a custom agent.',
+    });
+    expect(inst.customInstructions).toBe('You are a custom agent.');
+  });
+
+  it('customInstructions is undefined when not provided', () => {
+    const inst = new AgentInstance({
+      id: 'worker-1',
+      role: 'worker',
+      definitionName: 'searcher',
+    });
+    expect(inst.customInstructions).toBeUndefined();
+  });
 });

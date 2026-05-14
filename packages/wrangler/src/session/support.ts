@@ -1,6 +1,6 @@
 // packages/core/src/session/support.ts
 
-import type { Tool, AskHumanHandler } from '@agentskillmania/colts';
+import type { Tool, AskHumanHandler, AgentMiddleware } from '@agentskillmania/colts';
 import { calculatorTool, createAskHumanTool } from '@agentskillmania/colts';
 import { SessionStore } from './session-store.js';
 import { createSessionMiddleware } from '../middleware/session-middleware.js';
@@ -36,7 +36,7 @@ export function createSessionSupport(options: {
   /** 可选，传入则注册 ask_human 工具 */
   askHumanHandler?: AskHumanHandler;
 }): {
-  middleware: import('@agentskillmania/colts').AgentMiddleware;
+  middleware: AgentMiddleware;
   store: SessionStore;
   tools: Tool<ZodTypeAny>[];
 } {

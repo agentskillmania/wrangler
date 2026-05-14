@@ -8,9 +8,6 @@ export {
   createCreateTaskTool,
   createSendMessageTool,
   createRelayToPrimaryTool,
-  createSendToWorkerTool,
-  createSendToLiaisonTool,
-  createAskUserTool,
   createReadCrewTodolistTool,
   createUpdateCrewTodolistTool,
 } from './crew-tools.js';
@@ -18,9 +15,9 @@ export {
 // Internal components
 export { AgentInstance } from './agent-instance.js';
 export { MessageRouter } from './message-router.js';
-export { Scheduler } from './scheduler.js';
 export { CrewTodoList } from './crew-todolist.js';
 export { buildLiaisonPrompt } from './liaison-prompt.js';
+export { CrewLoader } from './crew-loader.js';
 
 // Types
 export type {
@@ -44,7 +41,13 @@ export type {
   CrewAgentCreatedEvent,
   CrewAgentDestroyedEvent,
   CrewErrorEvent,
+  CrewToolInvokedEvent,
+  CrewToolCompletedEvent,
+  CrewAgentAdvancedEvent,
+  CrewMessageRoutedEvent,
   CrewMessage,
   CrewConfig,
   CrewOptions,
+  CrewRunner,
+  RunnerFactory,
 } from './types.js';

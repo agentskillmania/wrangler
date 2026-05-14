@@ -1,5 +1,9 @@
-import type { AgentDefinition } from '../agent/types.js';
-import type { ILLMProvider, AskHumanHandler } from '@agentskillmania/colts';
+import type { ParsedAgent } from '../agent/agent-loader.js';
+import type { ILLMProvider, AskHumanHandler, Tool } from '@agentskillmania/colts';
+import type { WorkspaceToolDeps } from '../tools/builtin/workspace-deps.js';
+import type { SearchProvider } from '../tools/builtin/web-search.js';
+import type { Sandbox } from '@agentskillmania/sandbox';
+import type { ZodTypeAny } from 'zod';
 
 // ─── Agent roles ───
 
@@ -109,6 +113,36 @@ export interface CrewErrorEvent {
   readonly error: Error;
 }
 
+export interface CrewToolInvokedEvent {
+  readonly type: 'tool_invoked';
+  readonly agentId: string;
+  readonly toolName: string;
+  readonly args: unknown;
+}
+
+export interface CrewToolCompletedEvent {
+  readonly type: 'tool_completed';
+  readonly agentId: string;
+  readonly toolName: string;
+  readonly result: string;
+  readonly duration: number;
+}
+
+export interface CrewAgentAdvancedEvent {
+  readonly type: 'agent_advanced';
+  readonly agentId: string;
+  readonly role: AgentRole;
+  readonly duration: number;
+  readonly resultType: string;
+}
+
+export interface CrewMessageRoutedEvent {
+  readonly type: 'message_routed';
+  readonly from: string;
+  readonly to: string;
+  readonly contentPreview: string;
+}
+
 export type CrewOutputEvent =
   | CrewUserResponseEvent
   | CrewTaskStartedEvent
@@ -117,7 +151,11 @@ export type CrewOutputEvent =
   | CrewTodolistUpdatedEvent
   | CrewAgentCreatedEvent
   | CrewAgentDestroyedEvent
-  | CrewErrorEvent;
+  | CrewErrorEvent
+  | CrewToolInvokedEvent
+  | CrewToolCompletedEvent
+  | CrewAgentAdvancedEvent
+  | CrewMessageRoutedEvent;
 
 export type CrewEventHandler = (event: CrewOutputEvent) => void;
 
@@ -138,9 +176,30 @@ export interface CrewConfig {
     readonly primaryAgent: string;
   };
   readonly memory: string;
-  readonly agentDefs: Readonly<Record<string, AgentDefinition>>;
+  readonly agentDefs: Readonly<Record<string, ParsedAgent>>;
   readonly skillDirs: readonly string[];
 }
+
+// ─── Runner factory (testability) ───
+
+export interface CrewRunner {
+  run(
+    state: unknown,
+    options?: { signal?: AbortSignal }
+  ): Promise<{
+    state: unknown;
+    result: { type: string; answer?: string; error?: Error };
+  }>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string, handler: (...args: any[]) => void): void;
+}
+
+export type RunnerFactory = (options: {
+  model: string;
+  llmClient: ILLMProvider;
+  tools: Tool<ZodTypeAny>[];
+  systemPrompt: string;
+}) => CrewRunner;
 
 // ─── Crew constructor options ───
 
@@ -148,4 +207,10 @@ export interface CrewOptions {
   readonly llmClient: ILLMProvider;
   readonly defaultModel?: string;
   readonly askHumanHandler?: AskHumanHandler;
+  readonly workspaceDeps?: WorkspaceToolDeps;
+  readonly searchProvider?: SearchProvider;
+  readonly sandbox?: Sandbox;
+  readonly runnerFactory?: RunnerFactory;
+  /** Explicit MCP config paths. Empty array = skip MCP loading entirely. Undefined = auto-discover. */
+  readonly mcpConfigPaths?: string[];
 }

@@ -44,8 +44,12 @@ describe('crew types', () => {
       'agent_created',
       'agent_destroyed',
       'error',
+      'tool_invoked',
+      'tool_completed',
+      'agent_advanced',
+      'message_routed',
     ];
-    expect(events).toHaveLength(8);
+    expect(events).toHaveLength(12);
   });
 
   it('CrewMessage has required fields', () => {

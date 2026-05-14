@@ -1,16 +1,19 @@
 import yaml from 'js-yaml';
-import type { AgentDefinition, AgentMeta } from './types.js';
 
-/**
- * Parse an agent .md file into AgentDefinition.
- * Layer 6's CrewLoader reuses this to parse agents/*.md files.
- */
-export function parseAgentMd(content: string, fallbackName?: string): AgentDefinition {
+export interface ParsedAgent {
+  name: string;
+  description?: string;
+  instructions: string;
+  model?: string;
+  thinking?: { enabled?: boolean };
+}
+
+export function parseAgentMd(content: string, fallbackName?: string): ParsedAgent {
   const trimmed = content.trim();
 
   if (!trimmed.startsWith('---')) {
     return {
-      meta: { name: fallbackName ?? 'unknown' },
+      name: fallbackName ?? 'unknown',
       instructions: trimmed,
     };
   }
@@ -18,7 +21,7 @@ export function parseAgentMd(content: string, fallbackName?: string): AgentDefin
   const secondDash = trimmed.indexOf('---', 4);
   if (secondDash === -1) {
     return {
-      meta: { name: fallbackName ?? 'unknown' },
+      name: fallbackName ?? 'unknown',
       instructions: trimmed,
     };
   }
@@ -27,14 +30,17 @@ export function parseAgentMd(content: string, fallbackName?: string): AgentDefin
   const body = trimmed.slice(secondDash + 3).trim();
 
   try {
-    const meta = yaml.load(yamlStr, { schema: yaml.DEFAULT_SCHEMA }) as AgentMeta;
-    if (!meta.name) {
-      meta.name = fallbackName ?? 'unknown';
-    }
-    return { meta, instructions: body };
+    const raw = yaml.load(yamlStr, { schema: yaml.DEFAULT_SCHEMA }) as Record<string, unknown>;
+    return {
+      name: (raw.name as string) ?? fallbackName ?? 'unknown',
+      description: raw.description as string | undefined,
+      instructions: body,
+      model: raw.model as string | undefined,
+      thinking: raw.thinking as { enabled?: boolean } | undefined,
+    };
   } catch {
     return {
-      meta: { name: fallbackName ?? 'unknown' },
+      name: fallbackName ?? 'unknown',
       instructions: body,
     };
   }

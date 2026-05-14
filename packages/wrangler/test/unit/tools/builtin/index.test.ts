@@ -40,4 +40,21 @@ describe('createBuiltinTools', () => {
     const result = await webSearch.execute({ query: 'test' });
     expect(result).toContain('not configured');
   });
+
+  it('includes shell tool when sandbox provided', () => {
+    const tools = createBuiltinTools({
+      workspacePath: '/tmp/test-workspace',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      sandbox: {} as any,
+    });
+    expect(tools).toHaveLength(8);
+    const names = tools.map((t) => t.name);
+    expect(names).toContain('shell');
+  });
+
+  it('does not include shell tool when no sandbox', () => {
+    const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
+    const names = tools.map((t) => t.name);
+    expect(names).not.toContain('shell');
+  });
 });

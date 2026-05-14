@@ -8,18 +8,23 @@ import type { CrewTodoItem, CrewTodoStatus } from './types.js';
 const CreateTaskSchema = z.object({
   workerType: z.string().describe('Agent definition name to create as worker'),
   task: z.string().describe('Task description for the worker'),
+  instructions: z
+    .string()
+    .optional()
+    .describe('Custom instructions for ad-hoc worker creation when type is not in catalog'),
 });
 
 export function createCreateTaskTool(deps: {
-  onCreateTask: (workerType: string, task: string) => Promise<string>;
+  onCreateTask: (workerType: string, task: string, instructions?: string) => Promise<string>;
 }): Tool<ZodTypeAny> {
   return {
     name: 'create_task',
-    description: 'Create a new worker agent with a liaison. Returns a taskId immediately.',
+    description:
+      'Create a new worker agent with a liaison. Prefer existing agent types from the catalog. Use instructions only when no suitable type exists.',
     parameters: CreateTaskSchema,
     async execute(args: z.infer<typeof CreateTaskSchema>) {
       try {
-        const taskId = await deps.onCreateTask(args.workerType, args.task);
+        const taskId = await deps.onCreateTask(args.workerType, args.task, args.instructions);
         return `Task created. ID: ${taskId}. Worker type: ${args.workerType}. Status: started.`;
       } catch (e) {
         return `Failed to create task: ${(e as Error).message}`;
@@ -64,63 +69,6 @@ export function createRelayToPrimaryTool(deps: {
     async execute(args: z.infer<typeof RelayToPrimarySchema>) {
       await deps.onRelay(args.content);
       return 'Relayed to primary.';
-    },
-  };
-}
-
-const SendToWorkerSchema = z.object({
-  content: z.string().describe('Content to send to the worker'),
-});
-
-export function createSendToWorkerTool(deps: {
-  onSend: (content: string) => Promise<void>;
-}): Tool<ZodTypeAny> {
-  return {
-    name: 'send_to_worker',
-    description: 'Send a message to your assigned worker.',
-    parameters: SendToWorkerSchema,
-    async execute(args: z.infer<typeof SendToWorkerSchema>) {
-      await deps.onSend(args.content);
-      return 'Sent to worker.';
-    },
-  };
-}
-
-// ─── Worker tools ───
-
-const SendToLiaisonSchema = z.object({
-  content: z.string().describe('Content to send to your liaison'),
-});
-
-export function createSendToLiaisonTool(deps: {
-  onSend: (content: string) => Promise<void>;
-}): Tool<ZodTypeAny> {
-  return {
-    name: 'send_to_liaison',
-    description: 'Send a message to your liaison. Use to report results or ask questions.',
-    parameters: SendToLiaisonSchema,
-    async execute(args: z.infer<typeof SendToLiaisonSchema>) {
-      await deps.onSend(args.content);
-      return 'Sent to liaison.';
-    },
-  };
-}
-
-const AskUserSchema = z.object({
-  question: z.string().describe('Question to ask the user'),
-});
-
-export function createAskUserTool(deps: {
-  onAskUser: (question: string) => Promise<void>;
-}): Tool<ZodTypeAny> {
-  return {
-    name: 'ask_user',
-    description:
-      'Ask the user a question. The question will be relayed through your liaison to the primary agent.',
-    parameters: AskUserSchema,
-    async execute(args: z.infer<typeof AskUserSchema>) {
-      await deps.onAskUser(args.question);
-      return 'Question sent to user.';
     },
   };
 }

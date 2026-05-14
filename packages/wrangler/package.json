@@ -17,6 +17,10 @@
     "test:intg": "vitest run test/integration",
     "test:coverage": "vitest run test/unit --coverage",
     "test:watch": "vitest watch test/unit",
+    "demo:code-reviewer": "node --import tsx examples/agent/code-reviewer/demo.ts",
+    "demo:travel-concierge": "node --import tsx examples/agent/travel-concierge/demo.ts",
+    "demo:tech-evaluation": "node --import tsx examples/crew/tech-evaluation/demo.ts",
+    "demo:newsroom": "node --import tsx examples/crew/newsroom/demo.ts",
     "prepublishOnly": "pnpm test:unit && pnpm build"
   },
   "author": {
@@ -42,6 +46,7 @@
     "isbinaryfile": "^6.0.0",
     "js-yaml": "^4.1.0",
     "jsdom": "^29.1.1",
+    "mcporter": "^0.10.2",
     "ripgrep": "^0.3.1",
     "turndown": "^7.2.4",
     "zod": "^3.25.76"

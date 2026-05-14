@@ -7,22 +7,30 @@ import type {
   CrewEventHandler,
   AgentInstanceInfo,
   TaskInfo,
+  CrewMessage,
+  AgentRole,
+  CrewRunner,
 } from './types.js';
-import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
+import type { Tool, AgentState } from '@agentskillmania/colts';
+import type { ZodTypeAny } from 'zod';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { AgentInstance } from './agent-instance.js';
 import { MessageRouter } from './message-router.js';
 import { CrewTodoList } from './crew-todolist.js';
 import { buildLiaisonPrompt } from './liaison-prompt.js';
+import { buildTimeContext } from '../runner/system-prompt.js';
 import {
   createCreateTaskTool,
   createSendMessageTool,
   createRelayToPrimaryTool,
-  createSendToWorkerTool,
-  createSendToLiaisonTool,
-  createAskUserTool,
   createReadCrewTodolistTool,
   createUpdateCrewTodolistTool,
 } from './crew-tools.js';
+import { createBuiltinTools } from '../tools/builtin/index.js';
+import { EnhancedRunner } from '../runner/enhanced-runner.js';
+import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 export class Crew {
   private config: CrewConfig;
@@ -37,7 +45,8 @@ export class Crew {
   private primaryId = '';
   private taskIdCounter = 0;
   private agentIdCounter = 0;
-  private scheduling = false;
+  private abortController = new AbortController();
+  private todoIdByTaskId = new Map<string, string>();
 
   constructor(config: CrewConfig, options: CrewOptions) {
     this.config = config;
@@ -62,6 +71,7 @@ export class Crew {
 
   pushInput(input: CrewInput): void {
     if (input.type === 'stop') {
+      this.abortController.abort();
       this._status = 'stopped';
       return;
     }
@@ -109,66 +119,83 @@ export class Crew {
     this.runScheduler();
   }
 
-  // ─── Scheduling loop ───
+  // ─── Scheduling — fire-and-forget ───
 
   private runScheduler(): void {
-    if (this.scheduling) return;
-    this.scheduling = true;
     this._status = 'running';
-
-    this.scheduleLoop().finally(() => {
-      this.scheduling = false;
-      if (!this.hasPendingWork()) {
-        this._status = 'idle';
-      }
-    });
+    this.scheduleRound();
   }
 
-  private async scheduleLoop(): Promise<void> {
-    let maxIterations = 100;
-    while (maxIterations-- > 0) {
-      let didWork = false;
+  /** Start advancing all idle agents with messages. Returns immediately. */
+  private scheduleRound(): void {
+    for (const agent of this.agents.values()) {
+      if (agent.status !== 'idle') continue;
 
-      for (const agent of this.agents.values()) {
-        if (agent.status !== 'idle') continue;
+      // Transfer messages from router to agent's queue
+      const routed = this.router.dequeue(agent.id);
+      for (const msg of routed) {
+        agent.enqueue(msg);
+      }
 
-        // Transfer messages from router to agent's queue
-        const routed = this.router.dequeue(agent.id);
-        for (const msg of routed) {
-          agent.enqueue(msg);
-        }
+      if (!agent.hasMessages) continue;
 
-        if (!agent.hasMessages) continue;
+      const messages = agent.dequeue();
+      agent.setRunning();
 
-        const messages = agent.dequeue();
-        agent.setRunning();
-
-        try {
-          await this.advanceAgent(agent, messages);
-        } catch (e) {
+      // Fire-and-forget: advance independently, callback triggers next round
+      this.advanceAgent(agent, messages)
+        .catch((e) => {
           this.emit({
             type: 'error',
             error: e instanceof Error ? e : new Error(String(e)),
           });
-        } finally {
+        })
+        .finally(() => {
           agent.setIdle();
-        }
-
-        didWork = true;
-        break; // restart loop to pick up new messages from tool calls
-      }
-
-      if (!didWork) break;
+          // Check if crew was stopped
+          if (this._status === 'stopped') return;
+          // Agent completion may have produced auto-routed messages or tool calls
+          // that created new agents — kick a new scheduling round
+          this.scheduleRound();
+          // Emit user_response for primary when all work is truly done
+          if (
+            agent.role === 'primary' &&
+            !this.hasRunningTasks() &&
+            !this.hasRunningAgents() &&
+            !this.hasPendingWork()
+          ) {
+            const answer = agent.lastAnswer ?? '';
+            this.emit({ type: 'user_response', content: answer });
+          }
+          // Update overall status
+          if (!this.hasPendingWork() && !this.hasRunningAgents()) {
+            this._status = 'idle';
+          }
+        });
     }
   }
 
   // ─── Agent advancement ───
 
-  private async advanceAgent(
-    agent: AgentInstance,
-    messages: import('./types.js').CrewMessage[]
-  ): Promise<void> {
-    this.ensureRunner(agent);
+  private async advanceAgent(agent: AgentInstance, messages: CrewMessage[]): Promise<void> {
+    // Max-hop guard: prevent infinite auto-routing loops
+    const MAX_ADVANCES = 50;
+    agent.advanceCount++;
+    if (agent.advanceCount > MAX_ADVANCES) {
+      this.emit({
+        type: 'error',
+        error: new Error(
+          `Agent ${agent.id} exceeded max advances (${MAX_ADVANCES}). Possible infinite routing loop.`
+        ),
+      });
+      this.failAgentTask(agent, 'Exceeded max advances');
+      return;
+    }
+
+    await this.ensureRunner(agent);
+
+    // Reset relay flag at start of each advance
+    agent.relayFlag = false;
 
     // Inject crew messages into agent state as user messages
     let state = agent.agentState!;
@@ -178,29 +205,110 @@ export class Crew {
     }
 
     // Run the agent (ReAct loop until completion)
-    const runResult = await agent.runner!.run(state);
-    agent.agentState = runResult.state;
+    const startTime = Date.now();
+    const runResult = await agent.runner!.run(state, {
+      signal: this.abortController.signal,
+    });
+    const duration = Date.now() - startTime;
+    agent.agentState = runResult.state as AgentState;
 
-    // Emit user_response only for primary when no pending tasks remain
-    if (runResult.result.type === 'success' && agent.role === 'primary') {
-      const hasPending = [...this.tasks.values()].some((t) => t.status === 'running');
-      if (!hasPending) {
-        this.emit({ type: 'user_response', content: runResult.result.answer });
+    this.emit({
+      type: 'agent_advanced',
+      agentId: agent.id,
+      role: agent.role,
+      duration,
+      resultType: runResult.result.type,
+    });
+
+    if (runResult.result.type === 'success') {
+      const answer = runResult.result.answer ?? '';
+
+      // Worker → auto-route to Liaison
+      if (agent.role === 'worker' && agent.partnerId) {
+        this.router.enqueue(agent.partnerId, {
+          from: agent.id,
+          content: answer,
+          timestamp: Date.now(),
+        });
+        this.emit({
+          type: 'message_routed',
+          from: agent.id,
+          to: agent.partnerId,
+          contentPreview: answer.slice(0, 100),
+        });
+      }
+
+      // Liaison → auto-route to Worker (unless relay_to_primary was called)
+      if (agent.role === 'liaison' && !agent.relayFlag && agent.partnerId) {
+        this.router.enqueue(agent.partnerId, {
+          from: agent.id,
+          content: answer,
+          timestamp: Date.now(),
+        });
+        this.emit({
+          type: 'message_routed',
+          from: agent.id,
+          to: agent.partnerId,
+          contentPreview: answer.slice(0, 100),
+        });
+      }
+
+      // Save answer for potential user_response emission in .finally()
+      if (agent.role === 'primary') {
+        agent.lastAnswer = answer;
+      }
+    } else {
+      // Handle non-success results: error, max_steps, abort
+      const errResult = runResult.result;
+      const errorMsg =
+        errResult.type === 'error'
+          ? (errResult as { error: Error }).error.message
+          : `Agent run ended with status: ${errResult.type}`;
+
+      this.emit({
+        type: 'error',
+        error: new Error(`Agent ${agent.id} (${agent.role}): ${errorMsg}`),
+      });
+
+      this.failAgentTask(agent, errorMsg);
+
+      // Route error to partner so upstream knows
+      if (agent.partnerId) {
+        this.router.enqueue(agent.partnerId, {
+          from: agent.id,
+          content: `[error] ${errorMsg}`,
+          timestamp: Date.now(),
+        });
+        this.emit({
+          type: 'message_routed',
+          from: agent.id,
+          to: agent.partnerId,
+          contentPreview: `[error] ${errorMsg}`,
+        });
+      }
+
+      // Primary always emits user_response on failure so the caller knows
+      if (agent.role === 'primary') {
+        this.emit({ type: 'user_response', content: `Error: ${errorMsg}` });
       }
     }
   }
 
   // ─── Runner setup ───
 
-  private ensureRunner(agent: AgentInstance): void {
+  private async ensureRunner(agent: AgentInstance): Promise<void> {
     if (agent.runner) return;
 
-    const model = this.options.defaultModel ?? 'gpt-4';
     const agentDef = this.config.agentDefs[agent.definitionName];
-    const instructions = agentDef?.instructions ?? `You are a ${agent.definitionName} agent.`;
+    const model = agentDef?.model ?? this.options.defaultModel ?? 'gpt-4';
 
-    const tools = this.createToolsForRole(agent);
-    const systemPrompt =
+    // Custom instructions take priority for ad-hoc workers, then catalog definition
+    const instructions =
+      agent.customInstructions ??
+      agentDef?.instructions ??
+      `You are a ${agent.definitionName} agent.`;
+
+    let systemPrompt =
       agent.role === 'liaison'
         ? buildLiaisonPrompt({
             workerType: agent.partnerId
@@ -210,11 +318,69 @@ export class Crew {
           })
         : instructions;
 
-    const runner = new AgentRunner({
-      model,
-      llmClient: this.options.llmClient,
-      tools,
-      systemPrompt,
+    // Inject agent catalog into Primary context
+    if (agent.role === 'primary') {
+      systemPrompt += '\n\n' + this.buildAgentCatalog();
+    }
+
+    let runner: EnhancedRunner | CrewRunner;
+
+    if (this.options.runnerFactory) {
+      // Legacy path for backward compatibility
+      const commTools = this.createCommTools(agent);
+      const builtinTools = createBuiltinTools({
+        workspacePath: this.options.workspaceDeps?.workspacePath ?? process.cwd(),
+        searchProvider: this.options.searchProvider,
+        sandbox: this.options.sandbox,
+      });
+      runner = this.options.runnerFactory({
+        model,
+        llmClient: this.options.llmClient,
+        tools: [...commTools, ...builtinTools],
+        systemPrompt: buildTimeContext(),
+      }) as CrewRunner;
+    } else {
+      // New path: use EnhancedRunner
+      const commTools = this.createCommTools(agent);
+      const todolistTools = this.createTodolistTools();
+      runner = await EnhancedRunner.create({
+        llmClient: this.options.llmClient,
+        model,
+        workspacePath: this.options.workspaceDeps?.workspacePath ?? process.cwd(),
+        extraTools: [...commTools, ...todolistTools],
+        mcpConfigPaths: this.buildMCPConfigPaths(),
+        searchProvider: this.options.searchProvider,
+        sandbox: this.options.sandbox,
+        skillDirectories: [...this.config.skillDirs],
+        thinkingEnabled: agentDef?.thinking?.enabled,
+      });
+    }
+
+    // Track callId → toolName for tool:end mapping
+    const pendingToolNames = new Map<string, string>();
+
+    runner.on('tool:start', (e: unknown) => {
+      const event = e as { action: { id: string; tool: string; arguments: unknown } };
+      pendingToolNames.set(event.action.id, event.action.tool);
+      this.emit({
+        type: 'tool_invoked',
+        agentId: agent.id,
+        toolName: event.action.tool,
+        args: event.action.arguments,
+      });
+    });
+
+    runner.on('tool:end', (e: unknown) => {
+      const event = e as { result: unknown; callId?: string };
+      const toolName = (event.callId && pendingToolNames.get(event.callId)) ?? 'unknown';
+      if (event.callId) pendingToolNames.delete(event.callId);
+      this.emit({
+        type: 'tool_completed',
+        agentId: agent.id,
+        toolName,
+        result: String(event.result),
+        duration: 0,
+      });
     });
 
     agent.runner = runner;
@@ -225,31 +391,19 @@ export class Crew {
     });
   }
 
-  private createToolsForRole(
-    agent: AgentInstance
-  ): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
-    const todolistTools = [
-      createReadCrewTodolistTool({ getTodolist: () => [...this.todolist.items] }),
-      createUpdateCrewTodolistTool({
-        onUpdate: async (itemId, status) => {
-          this.todolist.update(itemId, status);
-          this.emit({ type: 'todolist_updated', todolist: this.todolist.snapshot() });
-        },
-      }),
-    ];
-
+  private createCommTools(agent: AgentInstance): Tool<ZodTypeAny>[] {
     switch (agent.role) {
       case 'primary':
         return [
           createCreateTaskTool({
-            onCreateTask: async (workerType, task) => this.createTask(workerType, task, agent.id),
+            onCreateTask: async (workerType, task, instructions) =>
+              this.createTask(workerType, task, agent.id, instructions),
           }),
           createSendMessageTool({
             onSend: async (to, content) => {
               this.router.enqueue(to, { from: agent.id, content, timestamp: Date.now() });
             },
           }),
-          ...todolistTools,
         ];
 
       case 'liaison':
@@ -261,57 +415,47 @@ export class Crew {
                 content,
                 timestamp: Date.now(),
               });
-              // Mark task as completed when liaison relays result back
+              agent.relayFlag = true;
               if (agent.taskId) {
-                const task = this.tasks.get(agent.taskId);
-                if (task) {
-                  this.tasks.set(agent.taskId, { ...task, status: 'completed' });
-                }
+                this.completeTask(agent.taskId);
               }
             },
           }),
-          createSendToWorkerTool({
-            onSend: async (content) => {
-              const workerId = agent.partnerId;
-              if (workerId) {
-                this.router.enqueue(workerId, { from: agent.id, content, timestamp: Date.now() });
-              }
-            },
-          }),
-          ...todolistTools,
         ];
 
       case 'worker':
-        return [
-          createSendToLiaisonTool({
-            onSend: async (content) => {
-              const liaisonId = agent.partnerId;
-              if (liaisonId) {
-                this.router.enqueue(liaisonId, { from: agent.id, content, timestamp: Date.now() });
-              }
-            },
-          }),
-          createAskUserTool({
-            onAskUser: async (question) => {
-              // Route through liaison
-              const liaisonId = agent.partnerId;
-              if (liaisonId) {
-                this.router.enqueue(liaisonId, {
-                  from: agent.id,
-                  content: `[ask_user] ${question}`,
-                  timestamp: Date.now(),
-                });
-              }
-            },
-          }),
-          ...todolistTools,
-        ];
+        return [];
     }
+  }
+
+  private createTodolistTools(): Tool<ZodTypeAny>[] {
+    return [
+      createReadCrewTodolistTool({ getTodolist: () => [...this.todolist.items] }),
+      createUpdateCrewTodolistTool({
+        onUpdate: async (itemId, status) => {
+          this.todolist.update(itemId, status);
+          this.emit({ type: 'todolist_updated', todolist: this.todolist.snapshot() });
+        },
+      }),
+    ];
   }
 
   // ─── Task creation ───
 
-  private createTask(workerType: string, description: string, primaryId: string): string {
+  private createTask(
+    workerType: string,
+    description: string,
+    primaryId: string,
+    instructions?: string
+  ): string {
+    // Resolve worker definition from catalog or ad-hoc instructions
+    const workerDef = this.config.agentDefs[workerType];
+    if (!workerDef && !instructions) {
+      throw new Error(
+        `Unknown worker type: ${workerType}. Available: ${Object.keys(this.config.agentDefs).join(', ')}. Or provide instructions.`
+      );
+    }
+
     const taskId = `task-${++this.taskIdCounter}`;
     const liaisonId = `liaison-${++this.agentIdCounter}`;
     const workerId = `worker-${this.agentIdCounter}`;
@@ -326,8 +470,15 @@ export class Crew {
       definitionName: 'liaison',
     });
 
-    // Create worker
-    const worker = this.createAgentInstance('worker', workerType, workerId, liaisonId, taskId);
+    // Create worker (with optional custom instructions for ad-hoc creation)
+    const worker = this.createAgentInstance(
+      'worker',
+      workerType,
+      workerId,
+      liaisonId,
+      taskId,
+      instructions
+    );
     this.agents.set(worker.id, worker);
     this.emit({
       type: 'agent_created',
@@ -349,6 +500,12 @@ export class Crew {
 
     this.emit({ type: 'task_started', taskId, workerType, description });
 
+    // Auto-populate todolist so agents can track progress
+    const todoId = this.todolist.add(`${workerType}: ${description}`, workerId);
+    this.todoIdByTaskId.set(taskId, todoId);
+    this.todolist.update(todoId, 'in_progress');
+    this.emit({ type: 'todolist_updated', todolist: this.todolist.snapshot() });
+
     // Enqueue task description to liaison
     this.router.enqueue(liaisonId, {
       from: primaryId,
@@ -362,11 +519,12 @@ export class Crew {
   // ─── Agent instance factory ───
 
   private createAgentInstance(
-    role: import('./types.js').AgentRole,
+    role: AgentRole,
     definitionName: string,
     id?: string,
     partnerId?: string,
-    taskId?: string
+    taskId?: string,
+    customInstructions?: string
   ): AgentInstance {
     const instance = new AgentInstance({
       id: id ?? `${role}-${++this.agentIdCounter}`,
@@ -374,11 +532,40 @@ export class Crew {
       definitionName,
       partnerId,
       taskId,
+      customInstructions,
     });
     return instance;
   }
 
   // ─── Helpers ───
+
+  private failAgentTask(agent: AgentInstance, reason: string): void {
+    if (agent.taskId) {
+      const task = this.tasks.get(agent.taskId);
+      if (task && task.status === 'running') {
+        this.tasks.set(agent.taskId, { ...task, status: 'failed' });
+        this.emit({ type: 'task_failed', taskId: agent.taskId, error: reason });
+        this.updateTodoForTask(agent.taskId, 'pending');
+      }
+    }
+  }
+
+  private completeTask(taskId: string): void {
+    const task = this.tasks.get(taskId);
+    if (task && task.status === 'running') {
+      this.tasks.set(taskId, { ...task, status: 'completed' });
+      this.emit({ type: 'task_completed', taskId, result: '' });
+      this.updateTodoForTask(taskId, 'completed');
+    }
+  }
+
+  private updateTodoForTask(taskId: string, status: 'pending' | 'in_progress' | 'completed'): void {
+    const todoId = this.todoIdByTaskId.get(taskId);
+    if (todoId) {
+      this.todolist.update(todoId, status);
+      this.emit({ type: 'todolist_updated', todolist: this.todolist.snapshot() });
+    }
+  }
 
   private findPrimary(): AgentInstance | undefined {
     for (const agent of this.agents.values()) {
@@ -387,10 +574,56 @@ export class Crew {
     return undefined;
   }
 
+  private hasRunningTasks(): boolean {
+    for (const task of this.tasks.values()) {
+      if (task.status === 'running') return true;
+    }
+    return false;
+  }
+
   private hasPendingWork(): boolean {
     for (const agent of this.agents.values()) {
       if (agent.hasMessages) return true;
     }
     return this.router.agentsWithMessages().length > 0;
+  }
+
+  private hasRunningAgents(): boolean {
+    for (const agent of this.agents.values()) {
+      if (agent.status === 'running') return true;
+    }
+    return false;
+  }
+
+  private buildMCPConfigPaths(): string[] {
+    // Explicit config takes priority
+    if (this.options.mcpConfigPaths !== undefined) {
+      return this.options.mcpConfigPaths;
+    }
+
+    const paths: string[] = [];
+    const globalPath = discoverGlobalConfigPath();
+    if (existsSync(globalPath)) {
+      paths.push(globalPath);
+    }
+    const localPath = join(this.options.workspaceDeps?.workspacePath ?? process.cwd(), 'mcp.json');
+    if (existsSync(localPath)) {
+      paths.push(localPath);
+    }
+    return paths;
+  }
+
+  private buildAgentCatalog(): string {
+    const entries = Object.entries(this.config.agentDefs).filter(
+      ([name]) => name !== this.config.meta.primaryAgent
+    );
+    if (entries.length === 0) return 'No predefined worker agents available.';
+
+    const lines = ['Available worker agents (prefer these over ad-hoc creation):'];
+    for (const [name, def] of entries) {
+      const desc = def.description ?? 'No description';
+      lines.push(`- ${name}: ${desc}`);
+    }
+    return lines.join('\n');
   }
 }

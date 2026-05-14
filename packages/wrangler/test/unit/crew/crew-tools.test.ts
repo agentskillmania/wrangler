@@ -3,21 +3,34 @@ import {
   createCreateTaskTool,
   createSendMessageTool,
   createRelayToPrimaryTool,
-  createSendToWorkerTool,
-  createSendToLiaisonTool,
-  createAskUserTool,
   createReadCrewTodolistTool,
   createUpdateCrewTodolistTool,
 } from '../../../src/crew/crew-tools.js';
 
 describe('crew tools', () => {
   describe('createCreateTaskTool', () => {
-    it('calls onCreateTask callback', async () => {
+    it('calls onCreateTask callback without instructions', async () => {
       const onCreateTask = vi.fn().mockResolvedValue('task-1');
       const tool = createCreateTaskTool({ onCreateTask });
       const result = await tool.execute({ workerType: 'searcher', task: 'search x' });
-      expect(onCreateTask).toHaveBeenCalledWith('searcher', 'search x');
+      expect(onCreateTask).toHaveBeenCalledWith('searcher', 'search x', undefined);
       expect(result).toContain('task-1');
+    });
+
+    it('calls onCreateTask callback with instructions', async () => {
+      const onCreateTask = vi.fn().mockResolvedValue('task-2');
+      const tool = createCreateTaskTool({ onCreateTask });
+      const result = await tool.execute({
+        workerType: 'custom',
+        task: 'do something',
+        instructions: 'You are a custom agent.',
+      });
+      expect(onCreateTask).toHaveBeenCalledWith(
+        'custom',
+        'do something',
+        'You are a custom agent.'
+      );
+      expect(result).toContain('task-2');
     });
 
     it('handles callback error', async () => {
@@ -43,33 +56,6 @@ describe('crew tools', () => {
       const tool = createRelayToPrimaryTool({ onRelay });
       await tool.execute({ content: 'important update' });
       expect(onRelay).toHaveBeenCalledWith('important update');
-    });
-  });
-
-  describe('createSendToWorkerTool', () => {
-    it('sends to worker', async () => {
-      const onSend = vi.fn().mockResolvedValue(undefined);
-      const tool = createSendToWorkerTool({ onSend });
-      await tool.execute({ content: 'do this' });
-      expect(onSend).toHaveBeenCalledWith('do this');
-    });
-  });
-
-  describe('createSendToLiaisonTool', () => {
-    it('sends to liaison', async () => {
-      const onSend = vi.fn().mockResolvedValue(undefined);
-      const tool = createSendToLiaisonTool({ onSend });
-      await tool.execute({ content: 'result' });
-      expect(onSend).toHaveBeenCalledWith('result');
-    });
-  });
-
-  describe('createAskUserTool', () => {
-    it('routes question through callback', async () => {
-      const onAskUser = vi.fn().mockResolvedValue(undefined);
-      const tool = createAskUserTool({ onAskUser });
-      await tool.execute({ question: 'A or B?' });
-      expect(onAskUser).toHaveBeenCalledWith('A or B?');
     });
   });
 

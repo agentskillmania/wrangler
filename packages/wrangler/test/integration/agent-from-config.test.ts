@@ -1,8 +1,8 @@
 /**
- * US1: 从 AGENT.md 创建 agent
+ * US1: Load agent from AGENT.md and run with EnhancedRunner
  *
- * 作为开发者，我通过 parseAgentMd 解析 AGENT.md 文件，
- * 获取 agent 定义，然后用 ConfigurableAgent 自动组装 AgentRunner 运行。
+ * As a developer, I use AgentLoader.loadFrom() to parse an AGENT.md directory,
+ * then create an EnhancedRunner to run the agent with all wrangler mechanisms.
  *
  * Prerequisites:
  * - Set ENABLE_INTEGRATION_TESTS=true in .env
@@ -10,25 +10,27 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { LLMClient } from '@agentskillmania/llm-client';
 import { parseAgentMd } from '../../src/agent/agent-loader.js';
-import { ConfigurableAgent } from '../../src/agent/configurable-agent.js';
-import { SessionStore } from '../../src/session/session-store.js';
+import { AgentLoader } from '../../src/loader/agent-loader.js';
+import { EnhancedRunner } from '../../src/runner/enhanced-runner.js';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { testConfig, itif } from './config.js';
 
-describe('US1: 从 AGENT.md 创建 agent', () => {
+describe('US1: Load agent from AGENT.md and run with EnhancedRunner', () => {
   let testBaseDir: string;
 
   beforeAll(() => {
     if (testConfig.enabled) {
-      console.log(`[Layer5 US1] Provider: ${testConfig.provider}, Model: ${testConfig.testModel}`);
+      console.log(`[Layer4 US1] Provider: ${testConfig.provider}, Model: ${testConfig.testModel}`);
     }
   });
 
   beforeEach(async () => {
-    testBaseDir = join(tmpdir(), `wrangler-intg-l5us1-${Date.now()}`);
+    testBaseDir = join(tmpdir(), `wrangler-intg-l4us1-${Date.now()}`);
     await mkdir(testBaseDir, { recursive: true });
   });
 
@@ -36,14 +38,11 @@ describe('US1: 从 AGENT.md 创建 agent', () => {
     await rm(testBaseDir, { recursive: true, force: true });
   });
 
-  describe('parseAgentMd', () => {
+  describe('parseAgentMd (flat ParsedAgent)', () => {
     it('parses AGENT.md with frontmatter and instructions', () => {
       const content = `---
 name: code-reviewer
 description: Reviews code for quality
-skills:
-  - testing
-  - review
 thinking:
   enabled: true
 ---
@@ -56,53 +55,127 @@ You are a senior code reviewer. Focus on:
 
       const def = parseAgentMd(content);
 
-      expect(def.meta.name).toBe('code-reviewer');
-      expect(def.meta.description).toBe('Reviews code for quality');
-      expect(def.meta.skills).toEqual(['testing', 'review']);
-      expect(def.meta.thinking?.enabled).toBe(true);
+      expect(def.name).toBe('code-reviewer');
+      expect(def.description).toBe('Reviews code for quality');
+      expect(def.thinking?.enabled).toBe(true);
       expect(def.instructions).toContain('senior code reviewer');
     });
 
-    it('parses AGENT.md with only instructions', () => {
+    it('parses AGENT.md with only instructions (no frontmatter)', () => {
       const content = 'You are a helpful assistant that answers questions concisely.';
       const def = parseAgentMd(content, 'simple-agent');
 
-      expect(def.meta.name).toBe('simple-agent');
+      expect(def.name).toBe('simple-agent');
       expect(def.instructions).toContain('helpful assistant');
+    });
+
+    it('parses AGENT.md with model field', () => {
+      const content = `---
+name: tester
+model: gpt-4o
+---
+
+You test things.`;
+
+      const def = parseAgentMd(content);
+      expect(def.name).toBe('tester');
+      expect(def.model).toBe('gpt-4o');
+      expect(def.instructions).toContain('You test things.');
+    });
+  });
+
+  describe('AgentLoader.loadFrom', () => {
+    it('loads agent from directory with AGENT.md', async () => {
+      const agentDir = join(testBaseDir, 'my-agent');
+      await mkdir(agentDir, { recursive: true });
+      await writeFile(
+        join(agentDir, 'AGENT.md'),
+        `---
+name: code-reviewer
+description: Reviews code
+model: gpt-4o
+---
+
+You are a code reviewer.`
+      );
+
+      const result = await AgentLoader.loadFrom(agentDir);
+      expect(result.name).toBe('code-reviewer');
+      expect(result.description).toBe('Reviews code');
+      expect(result.model).toBe('gpt-4o');
+      expect(result.instructions).toContain('You are a code reviewer.');
+      expect(result.skillDirs).toEqual([]);
+      expect(result.mcpPaths).toEqual([]);
+    });
+
+    it('loads agent with skills and mcp.json', async () => {
+      const agentDir = join(testBaseDir, 'agent-with-extras');
+      await mkdir(agentDir, { recursive: true });
+      await mkdir(join(agentDir, 'skills', 'search'), { recursive: true });
+      await writeFile(join(agentDir, 'AGENT.md'), `---\nname: search-agent\n---\nSearch things.`);
+      await writeFile(join(agentDir, 'mcp.json'), '{}');
+
+      const result = await AgentLoader.loadFrom(agentDir);
+      expect(result.name).toBe('search-agent');
+      expect(result.skillDirs).toHaveLength(1);
+      expect(result.mcpPaths).toHaveLength(1);
+    });
+
+    it('throws when AGENT.md not found', async () => {
+      const emptyDir = join(testBaseDir, 'empty');
+      await mkdir(emptyDir, { recursive: true });
+
+      await expect(AgentLoader.loadFrom(emptyDir)).rejects.toThrow('AGENT.md not found');
     });
   });
 
   itif(testConfig.enabled)(
-    'ConfigurableAgent runs with parsed AGENT.md definition',
+    'EnhancedRunner runs with AgentLoader result',
     async () => {
-      const agentMd = `---
+      const agentDir = join(testBaseDir, 'test-agent');
+      await mkdir(agentDir, { recursive: true });
+      await writeFile(
+        join(agentDir, 'AGENT.md'),
+        `---
 name: test-helper
 description: A simple helper
 ---
 
-You are a helpful assistant. Answer in one short sentence.`;
+You are a helpful assistant. Answer in one short sentence.`
+      );
 
-      const agentDef = parseAgentMd(agentMd);
-      expect(agentDef.meta.name).toBe('test-helper');
+      const loaded = await AgentLoader.loadFrom(agentDir);
+      expect(loaded.name).toBe('test-helper');
 
-      const agent = new ConfigurableAgent(agentDef, testBaseDir, {
-        llmClient: {
-          apiKey: testConfig.apiKey,
-          provider: testConfig.provider,
-          baseUrl: testConfig.baseUrl,
-        } as any,
-        defaultModel: testConfig.testModel,
-        sessionBaseDir: testBaseDir,
+      const llmClient = new LLMClient({ baseUrl: testConfig.baseUrl });
+      llmClient.registerProvider({ name: testConfig.provider, maxConcurrency: 5 });
+      llmClient.registerApiKey({
+        key: testConfig.apiKey,
+        provider: testConfig.provider,
+        maxConcurrency: 5,
+        models: [{ modelId: testConfig.testModel, maxConcurrency: 5 }],
       });
 
-      const result = await agent.run('What is 2 + 2?');
-      expect(result).toBeTruthy();
-      expect(typeof result).toBe('string');
+      const runner = await EnhancedRunner.create({
+        llmClient,
+        model: testConfig.testModel,
+        workspacePath: testBaseDir,
+        mcpConfigPaths: [],
+        skillDirectories: loaded.skillDirs,
+      });
 
-      // Verify session was persisted
-      const store = new SessionStore(testBaseDir, testBaseDir);
-      const sessions = await store.listSessions();
-      expect(sessions.length).toBeGreaterThan(0);
+      let state = createAgentState({
+        name: loaded.name,
+        instructions: loaded.instructions,
+        tools: [],
+      });
+      state = addUserMessage(state, 'What is 2 + 2?');
+
+      const result = await runner.run(state, { maxSteps: 5 });
+      expect(result).toBeDefined();
+      expect(result.state).toBeDefined();
+      expect(result.result.type).toBe('success');
+      expect(result.result.answer).toBeTruthy();
     },
     60000
   );

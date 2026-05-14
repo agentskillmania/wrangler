@@ -1,18 +1,14 @@
 import type { Tool, AgentMiddleware } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
-import type { TodoList } from './types.js';
 import { createTodolistTool } from './todo-tool.js';
 import { createTodolistMiddleware } from './todo-middleware.js';
 
 /**
- * 创建 todolist 支持 — 返回工具和中间件
+ * Create todolist support — returns tools and middleware
  *
- * 调用方通过 getList/setList 管理状态（通常存在 session 中）：
+ * Uses AgentContext.todoList for state management (set via module augmentation).
  * ```typescript
- * const todo = createTodolistSupport({
- *   getList: () => todoList,
- *   setList: (list) => { todoList = list; },
- * });
+ * const todo = createTodolistSupport();
  *
  * const runner = new AgentRunner({
  *   model: 'glm-4',
@@ -22,15 +18,12 @@ import { createTodolistMiddleware } from './todo-middleware.js';
  * });
  * ```
  */
-export function createTodolistSupport(deps: {
-  getList: () => TodoList | null;
-  setList: (list: TodoList) => void;
-}): {
+export function createTodolistSupport(): {
   tools: Tool<ZodTypeAny>[];
   middleware: AgentMiddleware;
 } {
-  const tool = createTodolistTool(deps.getList, deps.setList);
-  const middleware = createTodolistMiddleware(deps.getList);
+  const tool = createTodolistTool();
+  const middleware = createTodolistMiddleware();
 
   return {
     tools: [tool],
