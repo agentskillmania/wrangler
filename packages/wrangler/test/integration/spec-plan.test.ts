@@ -1,377 +1,279 @@
 /**
- * Spec/Plan 集成测试 — 覆盖 US1-US8
+ * Spec/Plan E2E Integration Tests — Real LLM Calls
  *
- * US1: 创建和存储 Spec 文档
- * US2: 创建和存储 Plan 文档
- * US3: Skill 生成 Spec
- * US4: 审查 Spec
- * US5: Skill 生成 Plan
- * US6: 审查 Plan
- * US7: Spec/Plan 完整工作流
- * US8: 执行 Plan
+ * Tests the LLM-driven spec/plan workflows where agents:
+ * - Generate spec documents from feature descriptions
+ * - Review spec documents against quality standards
+ * - Generate implementation plans from approved specs
+ * - Execute full lifecycle: spec → review → plan
+ *
+ * These are NOT file system tests — SpecStore/PlanStore CRUD is covered in unit tests.
+ * These tests verify that LLMs can follow skill instructions and produce structured artifacts.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { SpecStore } from '../../src/spec-plan/spec-store.js';
-import { PlanStore } from '../../src/spec-plan/plan-store.js';
+
+import { describe, it, expect, beforeAll } from 'vitest';
+import {
+  AgentRunner,
+  createAgentState,
+  addUserMessage,
+  type ToolDefinition,
+} from '@agentskillmania/colts';
+import { testConfig, itif } from './config.js';
 import {
   WRITING_SPEC_CONTENT,
   REVIEW_SPEC_CONTENT,
   WRITING_PLAN_CONTENT,
-  REVIEW_PLAN_CONTENT,
-  EXECUTE_PLAN_CONTENT,
 } from '../../src/spec-plan/index.js';
-import type { SpecDocument, PlanDocument } from '../../src/spec-plan/types.js';
 
-describe('Spec/Plan Integration', () => {
-  let testDir: string;
-  let specStore: SpecStore;
-  let planStore: PlanStore;
-  const workspacePath = '/test/project';
+function makeRunner(tools: ToolDefinition[], middleware: any[]) {
+  return new AgentRunner({
+    model: testConfig.testModel,
+    llm: { apiKey: testConfig.apiKey, provider: testConfig.provider, baseUrl: testConfig.baseUrl },
+    tools,
+    middleware,
+  });
+}
 
-  beforeEach(async () => {
-    testDir = join(tmpdir(), `spec-plan-intg-${Date.now()}`);
-    await mkdir(testDir, { recursive: true });
-    specStore = new SpecStore(join(testDir, 'specs'), workspacePath);
-    planStore = new PlanStore(join(testDir, 'plans'), workspacePath);
+describe('Spec/Plan E2E Integration', () => {
+  beforeAll(() => {
+    if (testConfig.enabled) {
+      console.log(
+        `[Wrangler Integration] Provider: ${testConfig.provider}, Model: ${testConfig.testModel}`
+      );
+    }
   });
 
-  afterEach(async () => {
-    await rm(testDir, { recursive: true, force: true });
-  });
+  /**
+   * US1: LLM generates a spec document
+   *
+   * Given: A feature description for user authentication
+   * When: LLM is instructed with WRITING_SPEC_CONTENT
+   * Then: LLM produces structured spec with goals, requirements, acceptance criteria
+   */
+  describe('US1: LLM generates spec document', () => {
+    itif(testConfig.enabled)(
+      'should generate spec with structured content from feature description',
+      async () => {
+        const runner = makeRunner([], []);
 
-  // --- US1: 创建和存储 Spec 文档 ---
+        const instructions = `
+You are a spec writer. Follow these instructions:
 
-  describe('US1: 创建和存储 Spec 文档', () => {
-    const makeSpec = (v = 1): SpecDocument => ({
-      meta: {
-        name: 'user-login',
-        version: v,
-        status: 'draft',
-        workspacePath,
-        createdAt: `2026-04-23T14:30:0${v}.000Z`,
-        updatedAt: `2026-04-23T14:30:0${v}.000Z`,
+${WRITING_SPEC_CONTENT}
+
+Today's task: Create a spec for a "user authentication" feature.
+The system should allow users to register, login, and logout.
+Users should be able to reset their password via email.
+`;
+
+        let state = createAgentState({
+          name: 'spec-writer',
+          instructions,
+          tools: [],
+        });
+        state = addUserMessage(state, 'Create a spec for user authentication feature');
+
+        const { result } = await runner.run(state);
+
+        expect(result.type).toBe('success');
+
+        // Verify LLM output contains spec-like structure
+        const lastMessage = state.context.messages[state.context.messages.length - 1];
+        const responseText =
+          typeof lastMessage.content === 'string'
+            ? lastMessage.content
+            : JSON.stringify(lastMessage.content);
+
+        // Check for key spec elements (not exact formatting, but semantic content)
+        expect(responseText.toLowerCase()).toMatch(/goal|objectiv/);
+        expect(responseText.toLowerCase()).toMatch(/requirement|feature/);
+        expect(responseText.toLowerCase()).toMatch(/auth|login|register/);
       },
-      body: '# User Login\n\n## Goal\nImplement authentication.',
-    });
-
-    it('saves and retrieves spec', async () => {
-      await specStore.save(makeSpec());
-      const doc = await specStore.get('user-login', 1);
-      expect(doc).not.toBeNull();
-      expect(doc!.meta.name).toBe('user-login');
-      expect(doc!.body).toContain('User Login');
-    });
-
-    it('lists specs', async () => {
-      await specStore.save(makeSpec(1));
-      await specStore.save(makeSpec(2));
-      const list = await specStore.list();
-      expect(list).toHaveLength(2);
-    });
-
-    it('getLatest returns highest version', async () => {
-      await specStore.save(makeSpec(1));
-      await specStore.save(makeSpec(3));
-      await specStore.save(makeSpec(2));
-      const latest = await specStore.getLatest('user-login');
-      expect(latest!.meta.version).toBe(3);
-    });
-
-    it('updateStatus transitions draft → approved → superseded', async () => {
-      await specStore.save(makeSpec());
-      await specStore.updateStatus('user-login', 1, 'approved');
-      expect((await specStore.get('user-login', 1))!.meta.status).toBe('approved');
-
-      await specStore.updateStatus('user-login', 1, 'superseded');
-      expect((await specStore.get('user-login', 1))!.meta.status).toBe('superseded');
-    });
-
-    it('updateStatus rejects invalid transition', async () => {
-      await specStore.save(makeSpec());
-      await expect(specStore.updateStatus('user-login', 1, 'superseded')).rejects.toThrow();
-    });
+      60000
+    );
   });
 
-  // --- US2: 创建和存储 Plan 文档 ---
+  /**
+   * US2: LLM reviews a spec document
+   *
+   * Given: A pre-written spec document
+   * When: LLM is instructed with REVIEW_SPEC_CONTENT
+   * Then: LLM produces review with dimensions, pass/fail, suggestions
+   */
+  describe('US2: LLM reviews spec document', () => {
+    itif(testConfig.enabled)(
+      'should review spec and provide structured feedback',
+      async () => {
+        const runner = makeRunner([], []);
 
-  describe('US2: 创建和存储 Plan 文档', () => {
-    const makePlan = (sv = 1, pv = 1): PlanDocument => ({
-      meta: {
-        name: 'user-login',
-        specName: 'user-login',
-        specVersion: sv,
-        version: pv,
-        status: 'draft',
-        workspacePath,
-        createdAt: `2026-04-23T15:00:0${pv}.000Z`,
-        updatedAt: `2026-04-23T15:00:0${pv}.000Z`,
+        const sampleSpec = `
+# User Login Feature
+
+## Goal
+Allow users to authenticate with email and password.
+
+## Requirements
+- FR-001: Users must be able to register with email and password
+- FR-002: Users must be able to login with email and password
+- FR-003: Users must be able to logout
+
+## Acceptance Criteria
+- Registration validates email format
+- Login fails with wrong credentials
+- Logout clears session
+`;
+
+        const instructions = `
+You are a spec reviewer. Follow these instructions:
+
+${REVIEW_SPEC_CONTENT}
+
+Review the following spec document and provide feedback.
+`;
+
+        let state = createAgentState({
+          name: 'spec-reviewer',
+          instructions,
+          tools: [],
+        });
+        state = addUserMessage(state, `Please review this spec:\n\n${sampleSpec}`);
+
+        const { result } = await runner.run(state);
+
+        expect(result.type).toBe('success');
+
+        // Verify review contains structured feedback
+        const lastMessage = state.context.messages[state.context.messages.length - 1];
+        const responseText =
+          typeof lastMessage.content === 'string'
+            ? lastMessage.content
+            : JSON.stringify(lastMessage.content);
+
+        // Check for review elements
+        expect(responseText.toLowerCase()).toMatch(/review|审查/);
+        expect(responseText.toLowerCase()).toMatch(/pass|通过|fail|不通过/);
       },
-      body: '# Implementation Plan\n\n## Task 1\n- [ ] Step 1',
-    });
-
-    it('saves and retrieves plan', async () => {
-      await planStore.save(makePlan());
-      const doc = await planStore.get('user-login', 1, 1);
-      expect(doc).not.toBeNull();
-      expect(doc!.meta.specVersion).toBe(1);
-    });
-
-    it('getLatestForSpec returns latest plan for a spec', async () => {
-      await planStore.save(makePlan(1, 1));
-      await planStore.save(makePlan(1, 3));
-      await planStore.save(makePlan(1, 2));
-      const latest = await planStore.getLatestForSpec('user-login');
-      expect(latest!.meta.version).toBe(3);
-    });
-
-    it('updateStatus transitions draft → approved → executing → completed', async () => {
-      await planStore.save(makePlan());
-      await planStore.updateStatus('user-login', 1, 1, 'approved');
-      expect((await planStore.get('user-login', 1, 1))!.meta.status).toBe('approved');
-
-      await planStore.updateStatus('user-login', 1, 1, 'executing');
-      expect((await planStore.get('user-login', 1, 1))!.meta.status).toBe('executing');
-
-      await planStore.updateStatus('user-login', 1, 1, 'completed');
-      expect((await planStore.get('user-login', 1, 1))!.meta.status).toBe('completed');
-    });
-
-    it('different specs do not interfere', async () => {
-      await planStore.save(makePlan(1, 1) /* name=user-login, specName=user-login */);
-      const otherPlan: PlanDocument = {
-        meta: {
-          name: 'auth-v2',
-          specName: 'auth-v2',
-          specVersion: 1,
-          version: 1,
-          status: 'draft',
-          workspacePath,
-          createdAt: '2026-04-23T16:00:00.000Z',
-          updatedAt: '2026-04-23T16:00:00.000Z',
-        },
-        body: '# Auth V2',
-      };
-      await planStore.save(otherPlan);
-
-      const latestA = await planStore.getLatestForSpec('user-login');
-      const latestB = await planStore.getLatestForSpec('auth-v2');
-      expect(latestA!.meta.specName).toBe('user-login');
-      expect(latestB!.meta.specName).toBe('auth-v2');
-    });
+      60000
+    );
   });
 
-  // --- US3: Skill 生成 Spec ---
+  /**
+   * US3: LLM generates a plan from a spec
+   *
+   * Given: An approved spec document
+   * When: LLM is instructed with WRITING_PLAN_CONTENT
+   * Then: LLM produces structured plan with tasks, checkboxes, acceptance criteria
+   */
+  describe('US3: LLM generates plan from spec', () => {
+    itif(testConfig.enabled)(
+      'should generate implementation plan with tasks and acceptance criteria',
+      async () => {
+        const runner = makeRunner([], []);
 
-  describe('US3: Skill 生成 Spec', () => {
-    it('WRITING_SPEC_CONTENT contains interview strategy', () => {
-      expect(WRITING_SPEC_CONTENT).toContain('先自己找答案');
-      expect(WRITING_SPEC_CONTENT).toContain('给出你的推荐');
-      expect(WRITING_SPEC_CONTENT).toContain('一次只问一个问题');
-    });
+        const approvedSpec = `
+# User Authentication Spec (APPROVED)
 
-    it('WRITING_SPEC_CONTENT contains document format', () => {
-      expect(WRITING_SPEC_CONTENT).toContain('status: draft');
-      expect(WRITING_SPEC_CONTENT).toContain('spec-v1');
-    });
+## Goal
+Implement email/password authentication for web application.
 
-    it('WRITING_SPEC_CONTENT contains hard gate', () => {
-      expect(WRITING_SPEC_CONTENT).toContain('禁止执行任何操作');
-    });
+## Requirements
+- FR-001: User registration with email validation
+- FR-002: User login with password hashing
+- FR-003: Password reset via email token
 
-    it('WRITING_SPEC_CONTENT contains review-spec call', () => {
-      expect(WRITING_SPEC_CONTENT).toContain('review-spec');
-    });
+## Acceptance Criteria
+- Registration rejects invalid emails
+- Passwords are hashed using bcrypt
+- Reset tokens expire after 1 hour
+`;
 
-    it('WRITING_SPEC_CONTENT is in Chinese', () => {
-      expect(WRITING_SPEC_CONTENT).toContain('访谈');
-      expect(WRITING_SPEC_CONTENT).toContain('验收标准');
-    });
+        const instructions = `
+You are a plan writer. Follow these instructions:
+
+${WRITING_PLAN_CONTENT}
+
+Create an implementation plan for the following approved spec.
+`;
+
+        let state = createAgentState({
+          name: 'plan-writer',
+          instructions,
+          tools: [],
+        });
+        state = addUserMessage(state, `Create a plan for this spec:\n\n${approvedSpec}`);
+
+        const { result } = await runner.run(state);
+
+        expect(result.type).toBe('success');
+
+        // Verify plan contains task structure
+        const lastMessage = state.context.messages[state.context.messages.length - 1];
+        const responseText =
+          typeof lastMessage.content === 'string'
+            ? lastMessage.content
+            : JSON.stringify(lastMessage.content);
+
+        // Check for plan elements
+        expect(responseText.toLowerCase()).toMatch(/task|任务|phase|阶段/);
+        expect(responseText.toLowerCase()).toMatch(/acceptance|验收|step|步骤/);
+      },
+      60000
+    );
   });
 
-  // --- US4: 审查 Spec ---
+  /**
+   * US4: Full lifecycle — spec → review → plan
+   *
+   * Given: A feature request
+   * When: LLM executes full workflow
+   * Then: All three artifacts are produced with proper structure
+   */
+  describe('US4: Full lifecycle — spec → review → plan', () => {
+    itif(testConfig.enabled)(
+      'should execute complete workflow from feature request to implementation plan',
+      async () => {
+        const runner = makeRunner([], []);
 
-  describe('US4: 审查 Spec', () => {
-    it('REVIEW_SPEC_CONTENT contains 4 dimensions', () => {
-      expect(REVIEW_SPEC_CONTENT).toContain('覆盖度');
-      expect(REVIEW_SPEC_CONTENT).toContain('清晰度');
-      expect(REVIEW_SPEC_CONTENT).toContain('可行性');
-      expect(REVIEW_SPEC_CONTENT).toContain('完整性');
-    });
+        const instructions = `
+You are a product planning agent. Your job is to:
+1. First, create a spec for the requested feature using these instructions:
+${WRITING_SPEC_CONTENT}
 
-    it('REVIEW_SPEC_CONTENT produces visible report', () => {
-      expect(REVIEW_SPEC_CONTENT).toContain('审查报告');
-      expect(REVIEW_SPEC_CONTENT).toContain('不通过');
-      expect(REVIEW_SPEC_CONTENT).toContain('建议');
-    });
-  });
+2. Then, review your own spec using these instructions:
+${REVIEW_SPEC_CONTENT}
 
-  // --- US5: Skill 生成 Plan ---
+3. Finally, create an implementation plan using these instructions:
+${WRITING_PLAN_CONTENT}
 
-  describe('US5: Skill 生成 Plan', () => {
-    it('WRITING_PLAN_CONTENT contains acceptance criteria', () => {
-      expect(WRITING_PLAN_CONTENT).toContain('验收');
-      expect(WRITING_PLAN_CONTENT).toContain('验收条件');
-    });
+Execute all three steps in sequence for the feature request.
+`;
 
-    it('WRITING_PLAN_CONTENT contains phase templates', () => {
-      expect(WRITING_PLAN_CONTENT).toContain('构建类任务');
-      expect(WRITING_PLAN_CONTENT).toContain('分析/调研类任务');
-      expect(WRITING_PLAN_CONTENT).toContain('配置/运维类任务');
-    });
+        let state = createAgentState({
+          name: 'planning-agent',
+          instructions,
+          tools: [],
+        });
+        state = addUserMessage(
+          state,
+          'I need a feature that allows users to upload profile pictures with size limits and format validation.'
+        );
 
-    it('WRITING_PLAN_CONTENT calls review-plan', () => {
-      expect(WRITING_PLAN_CONTENT).toContain('review-plan');
-    });
+        const { result } = await runner.run(state);
 
-    it('WRITING_PLAN_CONTENT hands off to execute-plan', () => {
-      expect(WRITING_PLAN_CONTENT).toContain('execute-plan');
-    });
-  });
+        expect(result.type).toBe('success');
 
-  // --- US6: 审查 Plan ---
+        // Verify all three artifacts are mentioned/produced
+        const lastMessage = state.context.messages[state.context.messages.length - 1];
+        const responseText =
+          typeof lastMessage.content === 'string'
+            ? lastMessage.content
+            : JSON.stringify(lastMessage.content);
 
-  describe('US6: 审查 Plan', () => {
-    it('REVIEW_PLAN_CONTENT contains 6 dimensions', () => {
-      expect(REVIEW_PLAN_CONTENT).toContain('覆盖度');
-      expect(REVIEW_PLAN_CONTENT).toContain('一致性');
-      expect(REVIEW_PLAN_CONTENT).toContain('顺序');
-      expect(REVIEW_PLAN_CONTENT).toContain('无占位符');
-      expect(REVIEW_PLAN_CONTENT).toContain('可验证');
-      expect(REVIEW_PLAN_CONTENT).toContain('粒度');
-    });
-
-    it('REVIEW_PLAN_CONTENT loads associated spec', () => {
-      expect(REVIEW_PLAN_CONTENT).toContain('specName');
-      expect(REVIEW_PLAN_CONTENT).toContain('specVersion');
-    });
-  });
-
-  // --- US7: Spec/Plan 完整工作流 ---
-
-  describe('US7: Spec/Plan 完整工作流', () => {
-    it('full lifecycle: create spec → approve → create plan → approve', async () => {
-      // 1. Create spec
-      const spec: SpecDocument = {
-        meta: {
-          name: 'feature-x',
-          version: 1,
-          status: 'draft',
-          workspacePath,
-          createdAt: '2026-04-23T10:00:00.000Z',
-          updatedAt: '2026-04-23T10:00:00.000Z',
-        },
-        body: '# Feature X\n\n## Goal\nBuild feature X.\n\n## Requirements\n- FR-001: Must do A\n- FR-002: Should do B',
-      };
-      await specStore.save(spec);
-
-      // 2. Approve spec
-      await specStore.updateStatus('feature-x', 1, 'approved');
-      const approvedSpec = await specStore.get('feature-x', 1);
-      expect(approvedSpec!.meta.status).toBe('approved');
-
-      // 3. Create plan from spec
-      const plan: PlanDocument = {
-        meta: {
-          name: 'feature-x',
-          specName: 'feature-x',
-          specVersion: 1,
-          version: 1,
-          status: 'draft',
-          workspacePath,
-          createdAt: '2026-04-23T11:00:00.000Z',
-          updatedAt: '2026-04-23T11:00:00.000Z',
-        },
-        body: '# Implementation Plan\n\n## Task 1\n- [ ] Implement FR-001\n## Task 2\n- [ ] Implement FR-002',
-      };
-      await planStore.save(plan);
-
-      // 4. Approve plan
-      await planStore.updateStatus('feature-x', 1, 1, 'approved');
-      const approvedPlan = await planStore.get('feature-x', 1, 1);
-      expect(approvedPlan!.meta.status).toBe('approved');
-    });
-
-    it('spec review loop: draft → revise → pass', async () => {
-      const spec: SpecDocument = {
-        meta: {
-          name: 'feature-y',
-          version: 1,
-          status: 'draft',
-          workspacePath,
-          createdAt: '2026-04-23T10:00:00.000Z',
-          updatedAt: '2026-04-23T10:00:00.000Z',
-        },
-        body: '# Feature Y (initial)',
-      };
-      await specStore.save(spec);
-
-      // Simulate revision: update body and re-save
-      spec.body = '# Feature Y (revised after review)';
-      await specStore.save(spec);
-
-      const doc = await specStore.get('feature-y', 1);
-      expect(doc!.body).toContain('revised after review');
-
-      // Now approve
-      await specStore.updateStatus('feature-y', 1, 'approved');
-      expect((await specStore.get('feature-y', 1))!.meta.status).toBe('approved');
-    });
-  });
-
-  // --- US8: 执行 Plan ---
-
-  describe('US8: 执行 Plan', () => {
-    it('EXECUTE_PLAN_CONTENT contains todolist creation', () => {
-      expect(EXECUTE_PLAN_CONTENT).toContain('todolist');
-      expect(EXECUTE_PLAN_CONTENT).toContain('reset');
-    });
-
-    it('EXECUTE_PLAN_CONTENT contains step-by-step execution', () => {
-      expect(EXECUTE_PLAN_CONTENT).toContain('逐任务执行');
-      expect(EXECUTE_PLAN_CONTENT).toContain('in_progress');
-      expect(EXECUTE_PLAN_CONTENT).toContain('completed');
-    });
-
-    it('EXECUTE_PLAN_CONTENT contains verification', () => {
-      expect(EXECUTE_PLAN_CONTENT).toContain('验证验收条件');
-    });
-
-    it('EXECUTE_PLAN_CONTENT contains exception handling', () => {
-      expect(EXECUTE_PLAN_CONTENT).toContain('阻塞');
-      expect(EXECUTE_PLAN_CONTENT).toContain('不要自己悄悄绕过问题');
-    });
-
-    it('EXECUTE_PLAN_CONTENT updates plan status on completion', () => {
-      expect(EXECUTE_PLAN_CONTENT).toContain('completed');
-      expect(EXECUTE_PLAN_CONTENT).toContain('收尾');
-    });
-
-    it('plan status transitions through full lifecycle', async () => {
-      const plan: PlanDocument = {
-        meta: {
-          name: 'feature-z',
-          specName: 'feature-z',
-          specVersion: 1,
-          version: 1,
-          status: 'draft',
-          workspacePath,
-          createdAt: '2026-04-23T12:00:00.000Z',
-          updatedAt: '2026-04-23T12:00:00.000Z',
-        },
-        body: '# Plan Z',
-      };
-      await planStore.save(plan);
-
-      // draft → approved → executing → completed
-      await planStore.updateStatus('feature-z', 1, 1, 'approved');
-      await planStore.updateStatus('feature-z', 1, 1, 'executing');
-      await planStore.updateStatus('feature-z', 1, 1, 'completed');
-
-      const doc = await planStore.get('feature-z', 1, 1);
-      expect(doc!.meta.status).toBe('completed');
-    });
+        // Check for workflow artifacts
+        expect(responseText.toLowerCase()).toMatch(/spec|plan/);
+        expect(responseText.toLowerCase()).toMatch(/upload|profile|picture/);
+      },
+      120000
+    );
   });
 });

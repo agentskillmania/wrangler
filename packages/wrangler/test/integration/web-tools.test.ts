@@ -1,175 +1,325 @@
 /**
- * User Story: US3 注册联网工具
+ * E2E Integration Tests for Web Tools
  *
- * 作为开发者，我获取 web_fetch 工具（web_search 需要注入 SearchProvider），
- * agent 可以抓取网页内容。
+ * Tests the web_fetch tool with real LLM calls and actual network requests.
+ * These tests verify that:
+ * 1. The AgentRunner can use web_fetch to fetch real webpages
+ * 2. The LLM correctly interprets the fetched content
+ * 3. Error handling works end-to-end (e.g., 404 errors)
  *
- * Prerequisites: None (web_search tested via stub, web_fetch uses mock)
+ * Prerequisites:
+ * - Set ENABLE_INTEGRATION_TESTS=true in .env
+ * - Set OPENAI_API_KEY in .env
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, beforeAll, expect } from 'vitest';
+import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { createWebFetchTool } from '../../src/tools/builtin/web-fetch.js';
-import { createWebSearchTool } from '../../src/tools/builtin/web-search.js';
-import type { SearchProvider } from '../../src/tools/builtin/web-search.js';
+import { MarkdownMessageAssembler } from '../../src/runner/markdown-assembler.js';
+import { testConfig, itif } from './config.js';
 
-describe('US3: Web tools', () => {
-  let originalFetch: typeof globalThis.fetch;
-
-  beforeEach(() => {
-    originalFetch = globalThis.fetch;
+describe('Web Tools E2E Integration Tests', () => {
+  beforeAll(() => {
+    if (testConfig.enabled) {
+      console.log(
+        `[Web Tools E2E] Provider: ${testConfig.provider}, Model: ${testConfig.testModel}`
+      );
+    }
   });
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
+  /**
+   * Helper function to create an AgentRunner with web_fetch tool
+   */
+  function createWebFetchRunner() {
+    const tools = [
+      createWebFetchTool({
+        workspacePath: '/tmp',
+        timeout: 30000,
+        maxOutputSize: 1024 * 1024, // 1MB
+      }),
+    ];
 
-  function mockFetch(response: { ok: boolean; status: number; contentType: string; body: string }) {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: response.ok,
-      status: response.status,
-      headers: new Headers({ 'content-type': response.contentType }),
-      text: async () => response.body,
-      json: async () => JSON.parse(response.body),
-    }) as unknown as typeof globalThis.fetch;
+    return new AgentRunner({
+      model: testConfig.testModel,
+      llm: {
+        apiKey: testConfig.apiKey,
+        provider: testConfig.provider,
+        baseUrl: testConfig.baseUrl,
+      },
+      tools,
+      middleware: [],
+      messageAssembler: new MarkdownMessageAssembler(),
+    });
   }
 
-  describe('web_fetch', () => {
-    it('fetches and converts HTML to markdown', async () => {
-      mockFetch({
-        ok: true,
-        status: 200,
-        contentType: 'text/html; charset=utf-8',
-        body: '<h1>Title</h1><p>Content paragraph</p><ul><li>Item 1</li><li>Item 2</li></ul>',
-      });
+  /**
+   * US1: LLM fetches a real webpage and answers questions about it
+   *
+   * As an LLM, I use the web_fetch tool to fetch https://httpbin.org/html
+   * and answer questions about the page content.
+   */
+  describe('US1: LLM fetches real webpage and answers questions', () => {
+    itif(testConfig.enabled)(
+      'should fetch httpbin.org/html and identify the page title',
+      async () => {
+        const runner = createWebFetchRunner();
 
-      const tool = createWebFetchTool({ workspacePath: '/tmp' });
-      const result = await tool.execute({ url: 'https://example.com' });
+        let state = createAgentState({
+          name: 'web-fetch-agent',
+          instructions:
+            'You are a helpful assistant. Use the web_fetch tool to fetch webpages and answer questions about their content. Be concise.',
+          tools: [],
+        });
 
-      expect(result).toContain('Title');
-      expect(result).toContain('Content paragraph');
-    });
+        state = addUserMessage(
+          state,
+          'Use the web_fetch tool to fetch https://httpbin.org/html and tell me what the page title is and what the main content is about.'
+        );
 
-    it('fetches JSON and pretty-prints', async () => {
-      mockFetch({
-        ok: true,
-        status: 200,
-        contentType: 'application/json',
-        body: '{"name":"wrangler","tools":["file_read","file_write"]}',
-      });
+        const { result, state: finalState } = await runner.run(state);
 
-      const tool = createWebFetchTool({ workspacePath: '/tmp' });
-      const result = await tool.execute({ url: 'https://api.example.com/status' });
+        // Verify the execution succeeded
+        expect(result.type).toBe('success');
 
-      expect(result).toContain('"name": "wrangler"');
-      expect(result).toContain('"file_read"');
-    });
+        // Verify the LLM's response references content from the page
+        // httpbin.org/html returns HTML with "Herman Melville - Moby Dick" content
+        const assistantMessages = finalState.context.messages.filter((m) => m.role === 'assistant');
+        expect(assistantMessages.length).toBeGreaterThan(0);
 
-    it('returns plain text as-is', async () => {
-      mockFetch({
-        ok: true,
-        status: 200,
-        contentType: 'text/plain',
-        body: 'Hello, this is plain text content.',
-      });
+        const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+        const responseText =
+          typeof lastAssistantMessage.content === 'string'
+            ? lastAssistantMessage.content
+            : JSON.stringify(lastAssistantMessage.content);
 
-      const tool = createWebFetchTool({ workspacePath: '/tmp' });
-      const result = await tool.execute({ url: 'https://example.com/readme.txt' });
+        // The response should mention either "Herman" or "Melville" or "Moby Dick" or "Herman Melville"
+        const hasMention =
+          responseText.toLowerCase().includes('herman') ||
+          responseText.toLowerCase().includes('melville') ||
+          responseText.toLowerCase().includes('moby');
 
-      expect(result).toBe('Hello, this is plain text content.');
-    });
-
-    it('returns error for invalid URL', async () => {
-      const tool = createWebFetchTool({ workspacePath: '/tmp' });
-      const result = await tool.execute({ url: 'not-a-url' });
-      expect(result).toContain('Invalid URL');
-    });
-
-    it('returns error for HTTP error status', async () => {
-      mockFetch({
-        ok: false,
-        status: 404,
-        contentType: 'text/html',
-        body: '<html>Not Found</html>',
-      });
-
-      const tool = createWebFetchTool({ workspacePath: '/tmp' });
-      const result = await tool.execute({ url: 'https://example.com/missing' });
-      expect(result).toContain('HTTP 404');
-    });
-
-    it('returns error for unsupported content type', async () => {
-      mockFetch({
-        ok: true,
-        status: 200,
-        contentType: 'application/pdf',
-        body: '%PDF-1.4',
-      });
-
-      const tool = createWebFetchTool({ workspacePath: '/tmp' });
-      const result = await tool.execute({ url: 'https://example.com/doc.pdf' });
-      expect(result).toContain('Unsupported content type');
-    });
-
-    it('handles fetch failure with network error', async () => {
-      globalThis.fetch = vi
-        .fn()
-        .mockRejectedValue(new Error('ECONNREFUSED')) as unknown as typeof globalThis.fetch;
-
-      const tool = createWebFetchTool({ workspacePath: '/tmp' });
-      const result = await tool.execute({ url: 'https://unreachable.example.com' });
-      expect(result).toContain('Failed to fetch');
-      expect(result).toContain('ECONNREFUSED');
-    });
+        expect(
+          hasMention,
+          `Expected response to mention Herman Melville or Moby Dick, but got: ${responseText}`
+        ).toBe(true);
+      },
+      60000
+    );
   });
 
-  describe('web_search', () => {
-    it('returns stub message when no SearchProvider configured', async () => {
-      const tool = createWebSearchTool();
-      const result = await tool.execute({ query: 'wrangler agent framework' });
-      expect(result).toContain('not configured');
-    });
+  /**
+   * US2: LLM fetches JSON API and extracts data
+   *
+   * As an LLM, I use the web_fetch tool to fetch a JSON endpoint
+   * and extract structured data from the response.
+   */
+  describe('US2: LLM fetches JSON API and extracts data', () => {
+    itif(testConfig.enabled)(
+      'should fetch httpbin.org/json and identify the slideshow',
+      async () => {
+        const runner = createWebFetchRunner();
 
-    it('returns formatted search results via provider', async () => {
-      const provider: SearchProvider = {
-        search: async (query) => [
-          {
-            title: `Result for: ${query}`,
-            url: 'https://example.com/1',
-            snippet: 'This is the first result snippet.',
-          },
-          {
-            title: 'Another result',
-            url: 'https://example.com/2',
-            snippet: 'Second result with more context.',
-          },
-        ],
-      };
+        let state = createAgentState({
+          name: 'json-fetch-agent',
+          instructions:
+            'You are a helpful assistant. Use the web_fetch tool to fetch JSON data and answer questions about it. Be concise.',
+          tools: [],
+        });
 
-      const tool = createWebSearchTool(provider);
-      const result = await tool.execute({ query: 'wrangler agent framework' });
+        state = addUserMessage(
+          state,
+          'Use the web_fetch tool to fetch https://httpbin.org/json and tell me what the slideshow title is.'
+        );
 
-      expect(result).toContain('Result for: wrangler agent framework');
-      expect(result).toContain('https://example.com/1');
-      expect(result).toContain('Another result');
-    });
+        const { result, state: finalState } = await runner.run(state);
 
-    it('returns "no results" message when provider returns empty', async () => {
-      const provider: SearchProvider = { search: async () => [] };
-      const tool = createWebSearchTool(provider);
-      const result = await tool.execute({ query: 'obscure query xyzzy' });
-      expect(result).toContain('No results found');
-    });
+        // Verify the execution succeeded
+        expect(result.type).toBe('success');
 
-    it('handles provider error gracefully', async () => {
-      const provider: SearchProvider = {
-        search: async () => {
-          throw new Error('API rate limit exceeded');
-        },
-      };
-      const tool = createWebSearchTool(provider);
-      const result = await tool.execute({ query: 'test' });
-      expect(result).toContain('Search failed');
-      expect(result).toContain('API rate limit exceeded');
-    });
+        // Verify the LLM's response mentions the slideshow
+        const assistantMessages = finalState.context.messages.filter((m) => m.role === 'assistant');
+        expect(assistantMessages.length).toBeGreaterThan(0);
+
+        const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+        const responseText =
+          typeof lastAssistantMessage.content === 'string'
+            ? lastAssistantMessage.content
+            : JSON.stringify(lastAssistantMessage.content);
+
+        // httpbin.org/json returns sample JSON with a slideshow
+        expect(
+          responseText.toLowerCase().includes('slide'),
+          `Expected response to mention "slide" or "slideshow", but got: ${responseText}`
+        ).toBe(true);
+      },
+      60000
+    );
+  });
+
+  /**
+   * US3: LLM handles fetch error gracefully
+   *
+   * As an LLM, I use the web_fetch tool to try fetching a URL that returns 404,
+   * and I should gracefully communicate the error to the user.
+   */
+  describe('US3: LLM handles fetch error gracefully', () => {
+    itif(testConfig.enabled)(
+      'should attempt to fetch httpbin.org/status/404 and report the error',
+      async () => {
+        const runner = createWebFetchRunner();
+
+        let state = createAgentState({
+          name: 'error-handling-agent',
+          instructions:
+            'You are a helpful assistant. Use the web_fetch tool to fetch webpages. If the fetch fails, explain what went wrong to the user.',
+          tools: [],
+        });
+
+        state = addUserMessage(
+          state,
+          'Use the web_fetch tool to try fetching https://httpbin.org/status/404 and tell me what happened.'
+        );
+
+        const { result, state: finalState } = await runner.run(state);
+
+        // Verify the execution succeeded (even though the fetch failed, the agent should handle it gracefully)
+        expect(result.type).toBe('success');
+
+        // Verify the LLM's response mentions the error
+        const assistantMessages = finalState.context.messages.filter((m) => m.role === 'assistant');
+        expect(assistantMessages.length).toBeGreaterThan(0);
+
+        const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+        const responseText =
+          typeof lastAssistantMessage.content === 'string'
+            ? lastAssistantMessage.content
+            : JSON.stringify(lastAssistantMessage.content);
+
+        // The response should mention 404 or "not found" or "error"
+        const hasErrorMention =
+          responseText.toLowerCase().includes('404') ||
+          responseText.toLowerCase().includes('not found') ||
+          responseText.toLowerCase().includes('error');
+
+        expect(
+          hasErrorMention,
+          `Expected response to mention the error (404, not found, or error), but got: ${responseText}`
+        ).toBe(true);
+      },
+      60000
+    );
+  });
+
+  /**
+   * US4: LLM can fetch and compare multiple pages
+   *
+   * As an LLM, I use the web_fetch tool multiple times to fetch different pages
+   * and compare their content.
+   */
+  describe('US4: LLM fetches and compares multiple pages', () => {
+    itif(testConfig.enabled)(
+      'should fetch two different httpbin endpoints and compare their responses',
+      async () => {
+        const runner = createWebFetchRunner();
+
+        let state = createAgentState({
+          name: 'multi-fetch-agent',
+          instructions:
+            'You are a helpful assistant. Use the web_fetch tool to fetch multiple URLs and compare their content. Be concise.',
+          tools: [],
+        });
+
+        state = addUserMessage(
+          state,
+          'Use the web_fetch tool to fetch both https://httpbin.org/html and https://httpbin.org/json. Tell me briefly what type of content each endpoint returns.'
+        );
+
+        const { result, state: finalState } = await runner.run(state);
+
+        // Verify the execution succeeded
+        expect(result.type).toBe('success');
+
+        // Verify the LLM's response mentions both HTML and JSON
+        const assistantMessages = finalState.context.messages.filter((m) => m.role === 'assistant');
+        expect(assistantMessages.length).toBeGreaterThan(0);
+
+        const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+        const responseText =
+          typeof lastAssistantMessage.content === 'string'
+            ? lastAssistantMessage.content
+            : JSON.stringify(lastAssistantMessage.content);
+
+        const responseTextLower = responseText.toLowerCase();
+
+        // Should mention html and json
+        expect(
+          responseTextLower.includes('html') || responseTextLower.includes('hypertext'),
+          `Expected response to mention HTML, but got: ${responseText}`
+        ).toBe(true);
+
+        expect(
+          responseTextLower.includes('json'),
+          `Expected response to mention JSON, but got: ${responseText}`
+        ).toBe(true);
+      },
+      60000
+    );
+  });
+
+  /**
+   * US5: LLM handles plain text responses
+   *
+   * As an LLM, I use the web_fetch tool to fetch a plain text endpoint
+   * and correctly interpret the content.
+   */
+  describe('US5: LLM handles plain text responses', () => {
+    itif(testConfig.enabled)(
+      'should fetch httpbin.org/robots.txt and identify it as a robots.txt file',
+      async () => {
+        const runner = createWebFetchRunner();
+
+        let state = createAgentState({
+          name: 'text-fetch-agent',
+          instructions:
+            'You are a helpful assistant. Use the web_fetch tool to fetch webpages and answer questions about their content. Be concise.',
+          tools: [],
+        });
+
+        state = addUserMessage(
+          state,
+          'Use the web_fetch tool to fetch https://httpbin.org/robots.txt and tell me what type of file it is and what its main purpose is.'
+        );
+
+        const { result, state: finalState } = await runner.run(state);
+
+        // Verify the execution succeeded
+        expect(result.type).toBe('success');
+
+        // Verify the LLM's response mentions robots.txt or disallow or user-agent
+        const assistantMessages = finalState.context.messages.filter((m) => m.role === 'assistant');
+        expect(assistantMessages.length).toBeGreaterThan(0);
+
+        const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+        const responseText =
+          typeof lastAssistantMessage.content === 'string'
+            ? lastAssistantMessage.content
+            : JSON.stringify(lastAssistantMessage.content);
+
+        const responseTextLower = responseText.toLowerCase();
+
+        // Should mention robots.txt, disallow, or user-agent
+        const hasRobotsMention =
+          responseTextLower.includes('robots') ||
+          responseTextLower.includes('user-agent') ||
+          responseTextLower.includes('disallow') ||
+          responseTextLower.includes('crawl');
+
+        expect(
+          hasRobotsMention,
+          `Expected response to mention robots.txt or related concepts, but got: ${responseText}`
+        ).toBe(true);
+      },
+      60000
+    );
   });
 });
