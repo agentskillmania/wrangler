@@ -60,11 +60,11 @@ importers:
   packages/wrangler:
     dependencies:
       '@agentskillmania/colts':
-        specifier: ^0.2.2
-        version: 0.2.2(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)
+        specifier: link:../../colts/packages/colts
+        version: link:../../colts/packages/colts
       '@agentskillmania/sandbox':
-        specifier: ^0.2.2
-        version: 0.2.2
+        specifier: link:../../sandbox/sandbox/packages/sandbox
+        version: link:../../sandbox/sandbox/packages/sandbox
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
@@ -190,15 +190,6 @@ packages:
 
   '@agentskillmania/llm-client@0.2.2':
     resolution: {integrity: sha512-Gt93aE1VICPb6gDSw/dbUMJbTwnCgSs2aXfgo4+vhSMbOv1GAA0FHvUFbe+YxXE8N4Z+bh0T3wy3NYd4/4D1xQ==}
-    engines: {node: '>=18.0.0'}
-
-  '@agentskillmania/sandbox@0.2.2':
-    resolution: {integrity: sha512-gDLsPWQdns+D0sauhBREFDn4GdGUwG8Nu5qozStTPgmg4/3liEKLP5xkn5VGbIjRc9OmKvSsvmQOOaJ6+LZP6w==}
-    engines: {node: '>=16.0.0'}
-    hasBin: true
-
-  '@agentskillmania/settings-yaml@0.1.0':
-    resolution: {integrity: sha512-nbowP8R0lZLjfn47YhWNFo86/zjac3sUwRAY9+j5OuSMkYncDWHNVVkcF3Mtyj8jy6eCeos2tXTMWfK3DQL6AQ==}
     engines: {node: '>=18.0.0'}
 
   '@alcalzone/ansi-tokenize@0.1.3':
@@ -1460,10 +1451,6 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  adm-zip@0.5.17:
-    resolution: {integrity: sha512-+Ut8d9LLqwEvHHJl1+PIHqoyDxFgVN847JTVM3Izi3xHDWPE4UtzzXysMZQs64DMcrJfBeS/uoEP4AD3HQHnQQ==}
-    engines: {node: '>=12.0'}
-
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
@@ -1652,10 +1639,6 @@ packages:
 
   colorette@2.0.20:
     resolution: {integrity: sha512-IfEDxwoWIjkeXL1eXcDiow4UbKjhLdq6/EuSVR9GMN7KVH3r9gQ83e73hsz1Nd1T3ijd5xv1wcWRYO+D6kCI2w==}
-
-  commander@11.1.0:
-    resolution: {integrity: sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ==}
-    engines: {node: '>=16'}
 
   commander@14.0.3:
     resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
@@ -2491,11 +2474,6 @@ packages:
   minipass@7.1.3:
     resolution: {integrity: sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==}
     engines: {node: '>=16 || 14 >=14.17'}
-
-  mkdirp@3.0.1:
-    resolution: {integrity: sha512-+NsyUUAZDmo6YVHzL/stxSu3t9YS1iljliy3BSDrXJ/dkn1KYdmtZODGGjLcc9XLgVVpH4KshHB8XmZgMhaBXg==}
-    engines: {node: '>=10'}
-    hasBin: true
 
   mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
@@ -3355,18 +3333,6 @@ snapshots:
       - utf-8-validate
       - ws
       - zod
-
-  '@agentskillmania/sandbox@0.2.2':
-    dependencies:
-      '@agentskillmania/settings-yaml': 0.1.0
-      adm-zip: 0.5.17
-      chalk: 4.1.2
-      commander: 11.1.0
-      mkdirp: 3.0.1
-
-  '@agentskillmania/settings-yaml@0.1.0':
-    dependencies:
-      js-yaml: 4.1.1
 
   '@alcalzone/ansi-tokenize@0.1.3':
     dependencies:
@@ -4763,8 +4729,6 @@ snapshots:
 
   acorn@8.16.0: {}
 
-  adm-zip@0.5.17: {}
-
   agent-base@7.1.4: {}
 
   ajv-formats@3.0.1(ajv@8.20.0):
@@ -4938,8 +4902,6 @@ snapshots:
   color-name@1.1.4: {}
 
   colorette@2.0.20: {}
-
-  commander@11.1.0: {}
 
   commander@14.0.3: {}
 
@@ -5874,8 +5836,6 @@ snapshots:
       brace-expansion: 2.1.0
 
   minipass@7.1.3: {}
-
-  mkdirp@3.0.1: {}
 
   mri@1.2.0: {}
 

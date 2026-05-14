@@ -1,4 +1,4 @@
-import type { AgentMiddleware, AgentState } from '@agentskillmania/colts';
+import type { AgentMiddleware, AgentState, AfterStepContext, BeforeStepContext } from '@agentskillmania/colts';
 import { updateState } from '@agentskillmania/colts';
 import type { TodoList, TodoStatus } from './types.js';
 import { createEmptyTodoList, addTodo, updateTodo, deleteTodo } from './todo-state.js';
@@ -82,7 +82,7 @@ export function createTodolistMiddleware(): AgentMiddleware {
   return {
     name: 'todolist',
 
-    async afterStep(ctx) {
+    async afterStep(ctx: AfterStepContext) {
       const { result, state } = ctx;
 
       if (result.type !== 'continue') return;
@@ -95,7 +95,7 @@ export function createTodolistMiddleware(): AgentMiddleware {
       return { state: newState };
     },
 
-    async beforeStep(ctx) {
+    async beforeStep(ctx: BeforeStepContext) {
       let state = ctx.state;
 
       // Auto-initialize empty list if missing

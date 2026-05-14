@@ -37,8 +37,8 @@
     "directory": "packages/wrangler"
   },
   "dependencies": {
-    "@agentskillmania/colts": "^0.2.2",
-    "@agentskillmania/sandbox": "^0.2.2",
+    "@agentskillmania/colts": "link:../../colts/packages/colts",
+    "@agentskillmania/sandbox": "link:../../sandbox/sandbox/packages/sandbox",
     "@mozilla/readability": "^0.6.0",
     "diff": "^9.0.0",
     "fast-glob": "^3.3.3",

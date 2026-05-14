@@ -10,4 +10,5 @@ coverage/
 .vibe/
 AGENTS.md
 CLAUDE.md
-.full-review/
+.full-review/.superpowers/
+.superpowers/
