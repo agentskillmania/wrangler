@@ -1,5 +1,5 @@
 import { AgentRunner } from '@agentskillmania/colts';
-import type { AgentState, RunnerEventMap } from '@agentskillmania/colts';
+import type { AgentState, RunnerEventMap, RunResult } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
 import { createBuiltinTools } from '../tools/builtin/index.js';
@@ -8,6 +8,7 @@ import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
 import { createSessionSupport } from '../session/support.js';
 import { createTodolistSupport } from '../todolist/support.js';
 import { buildTimeContext } from './system-prompt.js';
+import { MarkdownMessageAssembler } from './markdown-assembler.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { EnhancedRunnerOptions } from './types.js';
@@ -99,6 +100,7 @@ export class EnhancedRunner {
       systemPrompt: buildTimeContext(),
       skillDirectories: options.skillDirectories,
       thinkingEnabled: options.thinkingEnabled,
+      messageAssembler: new MarkdownMessageAssembler(),
     });
 
     return new EnhancedRunner(runner);
@@ -114,7 +116,7 @@ export class EnhancedRunner {
   run(
     state: AgentState,
     options?: { maxSteps?: number; signal?: AbortSignal }
-  ): Promise<{ state: AgentState; result: unknown }> {
+  ): Promise<{ state: AgentState; result: RunResult }> {
     return this.innerRunner.run(state, options);
   }
 
