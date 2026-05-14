@@ -434,4 +434,51 @@ describe('useAgent', () => {
       expect(userEntries[1].content).toBe('second');
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Streaming — no duplicate keys
+  // ---------------------------------------------------------------------------
+
+  it('streaming updates with same id get replaced, not duplicated', async () => {
+    const runner = createMockRunner();
+    const state = createMockState();
+
+    // Simulate multiple stream events where consumer returns entries with same id
+    mockStreamEvents = [
+      { type: 'token', text: 'a' },
+      { type: 'token', text: 'b' },
+    ];
+
+    // Consumer returns same id for all calls (simulates streaming accumulator)
+    const streamingEntry = {
+      type: 'assistant' as const,
+      id: 'entry-1',
+      seq: 2,
+      content: 'streaming',
+      timestamp: Date.now(),
+      isStreaming: true,
+    };
+    mockConsumeResult = [streamingEntry];
+
+    // Flush returns final entry with same id but isStreaming=false
+    mockFlushResult = [{ ...streamingEntry, content: 'final', isStreaming: false }];
+
+    const { result } = renderHook(() => useAgent(runner as unknown, state));
+
+    await act(async () => {
+      await result.current.sendMessage('hi');
+    });
+
+    // No duplicate ids
+    const ids = result.current.entries.map((e) => e.id);
+    const uniqueIds = new Set(ids);
+    expect(uniqueIds.size).toBe(ids.length);
+
+    // Should have exactly: 1 user + 1 assistant (final, not streaming)
+    expect(result.current.entries).toHaveLength(2);
+
+    const assistantEntries = result.current.entries.filter((e) => e.type === 'assistant');
+    expect(assistantEntries).toHaveLength(1);
+    expect(assistantEntries[0].content).toBe('final');
+  });
 });

@@ -338,6 +338,25 @@ llm:
         process.chdir(originalCwd);
       }
     });
+
+    it('should fallback to real CONFIG_DIR when no globalDir provided', async () => {
+      // This tests the globalDir ?? CONFIG_DIR branch in findConfigPath
+      // Use an empty directory so no local config exists
+      const emptyDir = path.join(testDir, 'noconfig');
+      await fs.mkdir(emptyDir, { recursive: true });
+
+      const originalCwd = process.cwd();
+      process.chdir(emptyDir);
+
+      try {
+        // No globalDir — falls back to ~/.agentskillmania/wrangler/
+        const config = await loadConfig();
+        // Result depends on whether real config exists; just verify it doesn't throw
+        expect(typeof config.hasValidConfig).toBe('boolean');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
   });
 
   // ---------------------------------------------------------------------------

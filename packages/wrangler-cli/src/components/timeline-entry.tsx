@@ -24,6 +24,14 @@ export function TimelineEntry({ entry }: TimelineEntryProps) {
         </Box>
       );
 
+    case 'thought':
+      return (
+        <Box>
+          <Text color="gray" italic>{`◉ ${entry.content}`}</Text>
+          {entry.isStreaming && <Text color="gray">▌</Text>}
+        </Box>
+      );
+
     case 'tool':
       return (
         <Box>

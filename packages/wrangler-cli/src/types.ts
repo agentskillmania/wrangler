@@ -11,6 +11,14 @@ export type TimelineEntry =
       isStreaming?: boolean;
     }
   | {
+      type: 'thought';
+      id: string;
+      seq: number;
+      content: string;
+      timestamp: number;
+      isStreaming?: boolean;
+    }
+  | {
       type: 'tool';
       id: string;
       seq: number;

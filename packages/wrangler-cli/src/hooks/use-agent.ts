@@ -5,6 +5,23 @@ import type { EnhancedRunner } from '@agentskillmania/wrangler';
 import type { TimelineEntry, RunStatus } from '../types.js';
 import { StreamConsumer } from './use-stream-consumer.js';
 
+/**
+ * Merge new entries into existing list.
+ * Entries with the same id replace existing ones (streaming updates + flush).
+ */
+function mergeStreamingEntries(prev: TimelineEntry[], incoming: TimelineEntry[]): TimelineEntry[] {
+  const updated = [...prev];
+  for (const entry of incoming) {
+    const idx = updated.findIndex((e) => e.id === entry.id);
+    if (idx !== -1) {
+      updated[idx] = entry;
+    } else {
+      updated.push(entry);
+    }
+  }
+  return updated;
+}
+
 export interface UseAgentReturn {
   entries: TimelineEntry[];
   state: AgentState | null;
@@ -74,14 +91,14 @@ export function useAgent(
         for await (const event of stream) {
           const newEntries = consumer.consume(event as Record<string, unknown>);
           if (newEntries.length > 0) {
-            setEntries((prev) => [...prev, ...newEntries]);
+            setEntries((prev) => mergeStreamingEntries(prev, newEntries));
           }
         }
 
         // Flush remaining buffered content
         const flushed = consumer.flush();
         if (flushed.length > 0) {
-          setEntries((prev) => [...prev, ...flushed]);
+          setEntries((prev) => mergeStreamingEntries(prev, flushed));
         }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') {

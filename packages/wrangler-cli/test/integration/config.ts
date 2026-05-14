@@ -9,6 +9,11 @@
  * - MODEL (optional, default: 'gpt-3.5-turbo')
  */
 
+import dotenv from 'dotenv';
+
+// Load .env for integration tests only
+dotenv.config({ path: '../../.env' });
+
 export interface TestConfig {
   apiKey: string;
   baseUrl?: string;

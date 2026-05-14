@@ -20,6 +20,13 @@ export class StreamConsumer {
     timestamp: number;
   } | null = null;
 
+  private bufferedThought: {
+    id: string;
+    seq: number;
+    content: string;
+    timestamp: number;
+  } | null = null;
+
   // Track tool names from tool:start events for matching with tool:end
   private activeToolNames: Map<string, string> = new Map();
 
@@ -30,6 +37,7 @@ export class StreamConsumer {
    */
   reset(): void {
     this.bufferedAssistant = null;
+    this.bufferedThought = null;
     this.activeToolNames.clear();
   }
 
@@ -44,13 +52,25 @@ export class StreamConsumer {
     const type = event.type as string;
     const timestamp = (event.timestamp as number) ?? Date.now();
 
-    // Flush any buffered assistant before processing non-text events
-    if (type !== 'text-delta' && type !== 'token' && this.bufferedAssistant) {
+    // Flush any buffered content before processing non-streaming events
+    if (
+      type !== 'text-delta' &&
+      type !== 'token' &&
+      type !== 'thinking' &&
+      this.bufferedAssistant
+    ) {
       entries.push({
         type: 'assistant',
         ...this.bufferedAssistant,
       });
       this.bufferedAssistant = null;
+    }
+    if (type !== 'thinking' && this.bufferedThought) {
+      entries.push({
+        type: 'thought',
+        ...this.bufferedThought,
+      });
+      this.bufferedThought = null;
     }
 
     switch (type) {
@@ -150,6 +170,24 @@ export class StreamConsumer {
         });
         break;
       }
+      case 'thinking': {
+        const text = (event.content ?? event.delta ?? '') as string;
+        if (!this.bufferedThought) {
+          this.bufferedThought = {
+            id: this.nextId(),
+            seq: this.nextSeq(),
+            content: '',
+            timestamp,
+          };
+        }
+        this.bufferedThought.content += text;
+        entries.push({
+          type: 'thought',
+          ...this.bufferedThought,
+          isStreaming: true,
+        });
+        break;
+      }
       case 'error': {
         const err = event.error as Error;
         entries.push({
@@ -183,13 +221,22 @@ export class StreamConsumer {
    * Flush any buffered assistant entry (finalize streaming).
    */
   flush(): TimelineEntry[] {
-    if (!this.bufferedAssistant) return [];
-    const entry: TimelineEntry = {
-      type: 'assistant',
-      ...this.bufferedAssistant,
-      isStreaming: false,
-    };
-    this.bufferedAssistant = null;
-    return [entry];
+    const results: TimelineEntry[] = [];
+    if (this.bufferedAssistant) {
+      results.push({
+        type: 'assistant',
+        ...this.bufferedAssistant,
+        isStreaming: false,
+      });
+      this.bufferedAssistant = null;
+    }
+    if (this.bufferedThought) {
+      results.push({
+        type: 'thought',
+        ...this.bufferedThought,
+      });
+      this.bufferedThought = null;
+    }
+    return results;
   }
 }

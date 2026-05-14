@@ -62,6 +62,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
         model: config.llm!.model,
         workspacePath,
         skillDirectories: dirs,
+        thinkingEnabled: true,
       });
 
       setRunner(r);
