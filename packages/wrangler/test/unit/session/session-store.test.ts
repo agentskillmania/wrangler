@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, rm, readFile, readdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { SessionStore } from '../../../src/session/session-store.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
@@ -213,6 +213,24 @@ describe('SessionStore', () => {
 
       const sessions = await store.listSessions();
       expect(sessions).toHaveLength(1);
+    });
+  });
+
+  describe('workspace path normalization', () => {
+    it('relative and absolute paths to same workspace produce same session directory', async () => {
+      const absPath = '/test/workspace';
+      // Construct a relative path that resolves back to the same absolute path
+      const relPath = relative(process.cwd(), absPath);
+
+      const absStore = new SessionStore(testBaseDir, absPath);
+      const relStore = new SessionStore(testBaseDir, relPath);
+
+      const sessionId = '1745800000-norm';
+      await absStore.createWithId(sessionId, 'GLM-4.7');
+
+      const sessions = await relStore.listSessions();
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0].id).toBe(sessionId);
     });
   });
 

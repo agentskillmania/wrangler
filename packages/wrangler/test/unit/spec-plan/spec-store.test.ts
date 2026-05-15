@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { SpecStore } from '../../../src/spec-plan/spec-store.js';
 import type { SpecDocument } from '../../../src/spec-plan/types.js';
@@ -148,6 +148,20 @@ describe('SpecStore', () => {
 
       const after = (await store.get('user-login', 1))!.meta.updatedAt;
       expect(after).not.toBe(before);
+    });
+  });
+
+  // --- workspace path normalization ---
+
+  describe('workspace path normalization', () => {
+    it('relative and absolute paths to same workspace produce same directory', async () => {
+      await store.save(makeDoc());
+
+      const relPath = relative(process.cwd(), workspacePath);
+      const relativeStore = new SpecStore(testDir, relPath);
+      const list = await relativeStore.list();
+      expect(list).toHaveLength(1);
+      expect(list[0].meta.name).toBe('user-login');
     });
   });
 

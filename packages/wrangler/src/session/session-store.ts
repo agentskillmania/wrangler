@@ -2,7 +2,7 @@
 
 import { mkdir, rm, readFile, writeFile, readdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createSnapshot, restoreSnapshot } from '@agentskillmania/colts';
 import type { AgentState, Snapshot } from '@agentskillmania/colts';
@@ -15,7 +15,8 @@ import type { ConversationMessage } from './types.js';
  * 计算 workspace 路径的 MD5 哈希，用于 session 目录分组
  */
 function hashWorkspacePath(workspacePath: string): string {
-  return createHash('md5').update(workspacePath).digest('hex');
+  const absolute = resolve(workspacePath);
+  return createHash('md5').update(absolute).digest('hex');
 }
 
 /**

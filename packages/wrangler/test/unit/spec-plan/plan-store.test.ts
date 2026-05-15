@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PlanStore } from '../../../src/spec-plan/plan-store.js';
 import type { PlanDocument } from '../../../src/spec-plan/types.js';
@@ -180,6 +180,20 @@ describe('PlanStore', () => {
 
       const latest = await store.getLatestForSpec('user-login');
       expect(latest!.meta.version).toBe(2);
+    });
+  });
+
+  // --- workspace path normalization ---
+
+  describe('workspace path normalization', () => {
+    it('relative and absolute paths to same workspace produce same directory', async () => {
+      await store.save(makeDoc());
+
+      const relPath = relative(process.cwd(), workspacePath);
+      const relativeStore = new PlanStore(testDir, relPath);
+      const list = await relativeStore.list();
+      expect(list).toHaveLength(1);
+      expect(list[0].meta.name).toBe('user-login');
     });
   });
 

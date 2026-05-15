@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import yaml from 'js-yaml';
 import { formatSpecFileName, parseSpecFileName } from './naming.js';
@@ -13,7 +13,8 @@ const VALID_TRANSITIONS: Record<SpecStatus, SpecStatus[]> = {
 };
 
 function hashWorkspacePath(workspacePath: string): string {
-  return createHash('md5').update(workspacePath).digest('hex');
+  const absolute = resolve(workspacePath);
+  return createHash('md5').update(absolute).digest('hex');
 }
 
 /**
