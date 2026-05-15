@@ -59,7 +59,11 @@ export interface ToolDeps {
   glob(pattern: string, options?: { cwd?: string }): Promise<string[]>;
 
   /** Search for a pattern in files */
-  grep(pattern: string, path: string, options?: { cwd?: string }): Promise<string>;
+  grep(
+    pattern: string,
+    path: string,
+    options?: { cwd?: string; include?: string }
+  ): Promise<string>;
 }
 
 /**
@@ -155,13 +159,24 @@ export class HostToolDeps implements ToolDeps {
     return files;
   }
 
-  async grep(pattern: string, path: string, options?: { cwd?: string }): Promise<string> {
+  async grep(
+    pattern: string,
+    path: string,
+    options?: { cwd?: string; include?: string }
+  ): Promise<string> {
     const cwd = options?.cwd ?? this.workspaceRoot;
     const searchPath = resolve(cwd, path);
     const args = [pattern, searchPath, '--no-heading', '--line-number'];
 
+    if (options?.include) {
+      // Need to escape the glob pattern for shell to prevent expansion
+      args.push('--glob', `'${options.include}'`);
+    }
+
+    const cmd = `${rgPath} ${args.join(' ')}`;
+
     try {
-      const result = await this.exec(`${rgPath} ${args.join(' ')}`);
+      const result = await this.exec(cmd);
       return result.stdout || 'No matches found';
     } catch {
       return 'No matches found';

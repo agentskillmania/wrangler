@@ -29,11 +29,11 @@ export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAn
   const hostDeps = new HostToolDeps(options.workspacePath, options.maxOutputSize ?? 1024 * 1024);
 
   const tools: Tool<ZodTypeAny>[] = [
-    createFileReadTool(workspaceDeps),
-    createFileWriteTool(workspaceDeps),
-    createFileEditTool(workspaceDeps),
-    createGlobTool(workspaceDeps),
-    createGrepTool(workspaceDeps),
+    createFileReadTool(hostDeps),
+    createFileWriteTool(hostDeps),
+    createFileEditTool(hostDeps),
+    createGlobTool(hostDeps),
+    createGrepTool(hostDeps),
     createWebFetchTool(workspaceDeps),
     createWebSearchTool(options.searchProvider),
     createShellTool(hostDeps),

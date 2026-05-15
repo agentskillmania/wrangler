@@ -4,8 +4,8 @@ import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
-import type { WorkspaceToolDeps } from './workspace-deps.js';
-import { resolvePath, isBinaryFile, truncateOutput } from './workspace-deps.js';
+import type { ToolDeps } from './workspace-deps.js';
+import { isBinaryFile, truncateOutput } from './workspace-deps.js';
 
 const MAX_LINE_LENGTH = 2000;
 const MAX_OUTPUT_BYTES = 50 * 1024; // 50KB
@@ -17,13 +17,13 @@ const FileReadSchema = z.object({
   limit: z.number().min(1).optional().describe('Maximum number of lines to read'),
 });
 
-export function createFileReadTool(deps: WorkspaceToolDeps): Tool<ZodTypeAny> {
+export function createFileReadTool(deps: ToolDeps): Tool<ZodTypeAny> {
   return {
     name: 'file_read',
     description: 'Read file contents with line numbers. Supports offset/limit for pagination.',
     parameters: FileReadSchema,
     async execute(args: z.infer<typeof FileReadSchema>) {
-      const absolutePath = resolvePath(deps, args.filePath);
+      const absolutePath = deps.resolvePath(args.filePath);
 
       const fileStat = await stat(absolutePath).catch(() => null);
       if (!fileStat?.isFile()) {

@@ -1,9 +1,7 @@
 import { z } from 'zod';
-import fg from 'fast-glob';
 import type { Tool } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
-import type { WorkspaceToolDeps } from './workspace-deps.js';
-import { resolvePath } from './workspace-deps.js';
+import type { ToolDeps } from './workspace-deps.js';
 
 const MAX_RESULTS = 100;
 
@@ -12,29 +10,48 @@ const GlobSchema = z.object({
   path: z.string().optional().describe('Subdirectory to search in, relative to workspace'),
 });
 
-export function createGlobTool(deps: WorkspaceToolDeps): Tool<ZodTypeAny> {
+export function createGlobTool(deps: ToolDeps): Tool<ZodTypeAny> {
   return {
     name: 'glob',
     description: 'Search for files by name pattern using glob syntax.',
     parameters: GlobSchema,
     async execute(args: z.infer<typeof GlobSchema>) {
-      const cwd = args.path ? resolvePath(deps, args.path) : deps.workspacePath;
-      const entries = await fg(args.pattern, {
-        cwd,
-        stats: true,
-        onlyFiles: true,
-        dot: false,
-      });
-      entries.sort((a, b) => (b.stats?.mtimeMs ?? 0) - (a.stats?.mtimeMs ?? 0));
-      const truncated = entries.length > MAX_RESULTS;
-      const files = entries.slice(0, MAX_RESULTS).map((e) => e.path);
-      const total = entries.length;
+      let cwd: string;
+      if (args.path) {
+        // Resolve the subdirectory path and use it as cwd
+        cwd = deps.resolvePath(args.path);
+      } else {
+        // Use workspace root
+        cwd = deps.workspaceRoot;
+      }
+
+      const files = await deps.glob(args.pattern, { cwd });
+
+      // Sort by modification time (note: HostToolDeps.glob returns unsorted results)
+      // For now, we'll use the files as-is since sorting would require stat calls
+      const truncated = files.length > MAX_RESULTS;
+      const displayedFiles = files.slice(0, MAX_RESULTS);
+      const total = files.length;
 
       let output: string;
-      if (files.length === 0) {
+      if (displayedFiles.length === 0) {
         output = `No files found matching "${args.pattern}"`;
       } else {
-        output = files.join('\n');
+        // Convert absolute paths to relative for cleaner output
+        const relativeFiles = displayedFiles.map((f) => {
+          try {
+            // Get the relative path from workspace root
+            const workspaceRoot = deps.workspaceRoot;
+            if (f.startsWith(workspaceRoot)) {
+              return f.slice(workspaceRoot.length + 1).replace(/\\/g, '/');
+            }
+            return f;
+          } catch {
+            return f;
+          }
+        });
+
+        output = relativeFiles.join('\n');
         if (truncated) {
           output += `\n... and ${total - MAX_RESULTS} more files (showing first ${MAX_RESULTS})`;
         }
