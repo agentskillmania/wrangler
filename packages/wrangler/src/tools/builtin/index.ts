@@ -1,5 +1,8 @@
 import type { ZodTypeAny } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
+import type { SearchProvider } from './web-search.js';
+import { HostToolDeps } from './workspace-deps.js';
+import type { ToolDeps } from './workspace-deps.js';
 import { createFileReadTool } from './file-read.js';
 import { createFileWriteTool } from './file-write.js';
 import { createFileEditTool } from './file-edit.js';
@@ -8,9 +11,8 @@ import { createGrepTool } from './grep.js';
 import { createWebFetchTool } from './web-fetch.js';
 import { createWebSearchTool } from './web-search.js';
 import { createShellTool } from './shell.js';
-import type { SearchProvider } from './web-search.js';
-import type { WorkspaceToolDeps } from './workspace-deps.js';
-import { HostToolDeps } from './workspace-deps.js';
+import { createPythonTool } from './python.js';
+import { createGitTool } from './git.js';
 
 export interface BuiltinToolsOptions {
   workspacePath: string;
@@ -20,26 +22,23 @@ export interface BuiltinToolsOptions {
 }
 
 export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAny>[] {
-  const workspaceDeps: WorkspaceToolDeps = {
-    workspacePath: options.workspacePath,
-    timeout: options.timeout,
-    maxOutputSize: options.maxOutputSize,
-  };
+  const deps: ToolDeps = new HostToolDeps(
+    options.workspacePath,
+    options.maxOutputSize ?? 1024 * 1024
+  );
 
-  const hostDeps = new HostToolDeps(options.workspacePath, options.maxOutputSize ?? 1024 * 1024);
-
-  const tools: Tool<ZodTypeAny>[] = [
-    createFileReadTool(hostDeps),
-    createFileWriteTool(hostDeps),
-    createFileEditTool(hostDeps),
-    createGlobTool(hostDeps),
-    createGrepTool(hostDeps),
-    createWebFetchTool(workspaceDeps),
+  return [
+    createFileReadTool(deps),
+    createFileWriteTool(deps),
+    createFileEditTool(deps),
+    createGlobTool(deps),
+    createGrepTool(deps),
+    createShellTool(deps),
+    createPythonTool(deps),
+    createGitTool(deps),
+    createWebFetchTool(deps),
     createWebSearchTool(options.searchProvider),
-    createShellTool(hostDeps),
   ];
-
-  return tools;
 }
 
 // Re-export all tool factory functions for advanced usage
@@ -51,6 +50,9 @@ export { createGrepTool } from './grep.js';
 export { createWebFetchTool } from './web-fetch.js';
 export { createWebSearchTool } from './web-search.js';
 export { createShellTool } from './shell.js';
+export { createPythonTool } from './python.js';
+export { createGitTool } from './git.js';
 export type { SearchProvider, SearchResult } from './web-search.js';
-export { resolvePath, truncateOutput, isBinaryFile } from './workspace-deps.js';
-export type { WorkspaceToolDeps } from './workspace-deps.js';
+export { truncateOutput, isBinaryFile } from './workspace-deps.js';
+export type { ToolDeps, ExecResult } from './workspace-deps.js';
+export { HostToolDeps, resolvePath } from './workspace-deps.js';

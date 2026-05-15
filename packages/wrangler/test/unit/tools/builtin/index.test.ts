@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { createBuiltinTools } from '../../../../src/tools/builtin/index.js';
 
 describe('createBuiltinTools', () => {
-  it('returns 8 colts Tool instances', () => {
+  it('returns 10 colts Tool instances', () => {
     const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
-    expect(tools).toHaveLength(8);
+    expect(tools).toHaveLength(10);
     for (const tool of tools) {
       expect(tool).toHaveProperty('name');
       expect(tool).toHaveProperty('description');
@@ -25,6 +25,8 @@ describe('createBuiltinTools', () => {
     expect(names).toContain('web_fetch');
     expect(names).toContain('web_search');
     expect(names).toContain('shell');
+    expect(names).toContain('python');
+    expect(names).toContain('git');
   });
 
   it('passes workspace config to file tools', async () => {
@@ -47,5 +49,19 @@ describe('createBuiltinTools', () => {
     const shell = tools.find((t) => t.name === 'shell')!;
     const result = await shell.execute({ command: 'echo test' });
     expect(result).toContain('test');
+  });
+
+  it('python tool executes python code in host mode', async () => {
+    const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
+    const python = tools.find((t) => t.name === 'python')!;
+    const result = await python.execute({ code: 'print("hello from python")' });
+    expect(result).toContain('hello from python');
+  });
+
+  it('git tool executes git commands in host mode', async () => {
+    const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
+    const git = tools.find((t) => t.name === 'git')!;
+    const result = await git.execute({ command: '--version' });
+    expect(result).toContain('git version');
   });
 });

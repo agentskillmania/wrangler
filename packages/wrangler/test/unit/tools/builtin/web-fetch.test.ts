@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createWebFetchTool } from '../../../../src/tools/builtin/web-fetch.js';
+import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
 
 describe('web_fetch', () => {
-  const deps = () => ({ workspacePath: '/tmp' });
+  let deps: HostToolDeps;
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
+    deps = new HostToolDeps('/tmp');
     originalFetch = globalThis.fetch;
   });
 
@@ -30,7 +32,7 @@ describe('web_fetch', () => {
       contentType: 'text/html; charset=utf-8',
       body: '<h1>Hello</h1><p>World</p>',
     });
-    const tool = createWebFetchTool(deps());
+    const tool = createWebFetchTool(deps);
     const result = await tool.execute({ url: 'https://example.com' });
     expect(result).toContain('Hello');
     expect(result).toContain('World');
@@ -43,7 +45,7 @@ describe('web_fetch', () => {
       contentType: 'application/json',
       body: '{"name":"test","value":42}',
     });
-    const tool = createWebFetchTool(deps());
+    const tool = createWebFetchTool(deps);
     const result = await tool.execute({ url: 'https://api.example.com' });
     expect(result).toContain('"name": "test"');
   });
@@ -55,13 +57,13 @@ describe('web_fetch', () => {
       contentType: 'text/plain',
       body: 'Hello plain text',
     });
-    const tool = createWebFetchTool(deps());
+    const tool = createWebFetchTool(deps);
     const result = await tool.execute({ url: 'https://example.com/readme.txt' });
     expect(result).toBe('Hello plain text');
   });
 
   it('returns error for invalid URL', async () => {
-    const tool = createWebFetchTool(deps());
+    const tool = createWebFetchTool(deps);
     const result = await tool.execute({ url: 'not-a-url' });
     expect(result).toContain('Invalid URL');
   });
@@ -73,7 +75,7 @@ describe('web_fetch', () => {
       contentType: 'text/html',
       body: 'Not Found',
     });
-    const tool = createWebFetchTool(deps());
+    const tool = createWebFetchTool(deps);
     const result = await tool.execute({ url: 'https://example.com/missing' });
     expect(result).toContain('HTTP 404');
   });
@@ -85,7 +87,7 @@ describe('web_fetch', () => {
       contentType: 'application/pdf',
       body: '%PDF-1.4',
     });
-    const tool = createWebFetchTool(deps());
+    const tool = createWebFetchTool(deps);
     const result = await tool.execute({ url: 'https://example.com/doc.pdf' });
     expect(result).toContain('Unsupported content type');
   });
@@ -94,7 +96,7 @@ describe('web_fetch', () => {
     globalThis.fetch = vi
       .fn()
       .mockRejectedValue(new Error('ECONNREFUSED')) as unknown as typeof globalThis.fetch;
-    const tool = createWebFetchTool(deps());
+    const tool = createWebFetchTool(deps);
     const result = await tool.execute({ url: 'https://unreachable.example.com' });
     expect(result).toContain('Failed to fetch');
     expect(result).toContain('ECONNREFUSED');
@@ -107,13 +109,13 @@ describe('web_fetch', () => {
       headers: new Headers(),
       text: async () => 'some text',
     }) as unknown as typeof globalThis.fetch;
-    const tool = createWebFetchTool(deps());
+    const tool = createWebFetchTool(deps);
     const result = await tool.execute({ url: 'https://example.com/binary' });
     expect(result).toContain('Unsupported content type');
   });
 
   it('has correct tool metadata', () => {
-    const tool = createWebFetchTool(deps());
+    const tool = createWebFetchTool(deps);
     expect(tool.name).toBe('web_fetch');
     expect(tool.parameters).toBeDefined();
   });

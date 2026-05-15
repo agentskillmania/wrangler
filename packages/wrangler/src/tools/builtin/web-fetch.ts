@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import type { Tool } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
-import type { WorkspaceToolDeps } from './workspace-deps.js';
+import type { ToolDeps } from './workspace-deps.js';
 import { truncateOutput } from './workspace-deps.js';
 
 const WebFetchSchema = z.object({
@@ -22,7 +22,7 @@ function htmlToMarkdown(html: string, url: string): string {
   return new TurndownService().turndown(html);
 }
 
-export function createWebFetchTool(deps: WorkspaceToolDeps): Tool<ZodTypeAny> {
+export function createWebFetchTool(deps: ToolDeps): Tool<ZodTypeAny> {
   return {
     name: 'web_fetch',
     description: 'Fetch and convert web content. HTML pages are converted to Markdown.',
@@ -32,7 +32,7 @@ export function createWebFetchTool(deps: WorkspaceToolDeps): Tool<ZodTypeAny> {
         return `Error: Invalid URL: ${args.url}`;
       }
 
-      const timeout = deps.timeout ?? 30000;
+      const timeout = 30000; // Default timeout, since ToolDeps doesn't have timeout
       let response: Response;
       try {
         response = await fetch(args.url, { signal: AbortSignal.timeout(timeout) });
