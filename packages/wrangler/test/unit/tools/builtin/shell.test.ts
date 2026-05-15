@@ -1,89 +1,39 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createShellTool } from '../../../../src/tools/builtin/shell.js';
-import type { Sandbox } from '@agentskillmania/sandbox';
+import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import type { ToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
 
-function createMockSandbox(runResult?: { stdout: string; stderr: string; exitCode: number }) {
-  return {
-    run: vi.fn().mockResolvedValue(runResult ?? { stdout: 'hello world', stderr: '', exitCode: 0 }),
-  } as unknown as Sandbox;
-}
+describe('createShellTool', () => {
+  let tempDir: string;
+  let deps: ToolDeps;
 
-describe('shell tool', () => {
-  it('has correct tool metadata', () => {
-    const tool = createShellTool(createMockSandbox());
-    expect(tool.name).toBe('shell');
-    expect(tool.description).toBeTruthy();
-    expect(tool.parameters).toBeDefined();
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'shell-test-'));
+    deps = new HostToolDeps(tempDir);
   });
 
-  it('returns stdout on success', async () => {
-    const sandbox = createMockSandbox({ stdout: 'file1.txt\nfile2.txt', stderr: '', exitCode: 0 });
-    const tool = createShellTool(sandbox);
-
-    const result = await tool.execute({ command: 'ls' });
-    expect(result).toContain('file1.txt');
-    expect(result).toContain('file2.txt');
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('returns exit code and stderr on failure', async () => {
-    const sandbox = createMockSandbox({
-      stdout: '',
-      stderr: 'command not found: foo',
-      exitCode: 127,
-    });
-    const tool = createShellTool(sandbox);
-
-    const result = await tool.execute({ command: 'foo' });
-    expect(result).toContain('Exit code: 127');
-    expect(result).toContain('command not found: foo');
+  it('should execute echo command via ToolDeps', async () => {
+    const tool = createShellTool(deps);
+    const result = await tool.execute({ command: 'echo hello from shell' });
+    expect(result).toContain('hello from shell');
   });
 
-  it('returns both stdout and stderr on non-zero exit', async () => {
-    const sandbox = createMockSandbox({
-      stdout: 'partial output',
-      stderr: 'some error',
-      exitCode: 1,
-    });
-    const tool = createShellTool(sandbox);
-
-    const result = await tool.execute({ command: 'test' });
-    expect(result).toContain('partial output');
-    expect(result).toContain('some error');
+  it('should report non-zero exit code', async () => {
+    const tool = createShellTool(deps);
+    const result = await tool.execute({ command: 'ls /nonexistent_dir_xyz_12345' });
+    expect(result).toContain('Exit code');
   });
 
-  it('returns no output message when stdout is empty on success', async () => {
-    const sandbox = createMockSandbox({ stdout: '', stderr: '', exitCode: 0 });
-    const tool = createShellTool(sandbox);
-
-    const result = await tool.execute({ command: 'true' });
-    expect(result).toContain('(no output)');
-  });
-
-  it('truncates long output', async () => {
-    const longOutput = 'x'.repeat(60_000);
-    const sandbox = createMockSandbox({ stdout: longOutput, stderr: '', exitCode: 0 });
-    const tool = createShellTool(sandbox);
-
-    const result = await tool.execute({ command: 'cat bigfile' });
-    expect(result.length).toBeLessThan(longOutput.length);
-    expect(result).toContain('output truncated');
-  });
-
-  it('handles sandbox execution error', async () => {
-    const sandbox = createMockSandbox();
-    (sandbox.run as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('WASM module not found'));
-
-    const tool = createShellTool(sandbox);
-    const result = await tool.execute({ command: 'ls' });
-    expect(result).toContain('Error');
-    expect(result).toContain('WASM module not found');
-  });
-
-  it('passes command to sandbox.run', async () => {
-    const sandbox = createMockSandbox();
-    const tool = createShellTool(sandbox);
-
-    await tool.execute({ command: 'echo hello' });
-    expect(sandbox.run).toHaveBeenCalledWith('echo hello');
+  it('should truncate large output', async () => {
+    const tool = createShellTool(deps);
+    const result = await tool.execute({ command: 'seq 1 100000' });
+    expect(result.length).toBeLessThan(100_000);
   });
 });

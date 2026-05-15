@@ -68,7 +68,6 @@ export class EnhancedRunner {
     const builtinTools = createBuiltinTools({
       workspacePath,
       searchProvider: options.searchProvider,
-      sandbox: options.sandbox,
     });
 
     const mcpConfigPaths = options.mcpConfigPaths ?? discoverMCPPaths(workspacePath);

@@ -1,6 +1,5 @@
 import type { ZodTypeAny } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
-import type { Sandbox } from '@agentskillmania/sandbox';
 import { createFileReadTool } from './file-read.js';
 import { createFileWriteTool } from './file-write.js';
 import { createFileEditTool } from './file-edit.js';
@@ -11,35 +10,34 @@ import { createWebSearchTool } from './web-search.js';
 import { createShellTool } from './shell.js';
 import type { SearchProvider } from './web-search.js';
 import type { WorkspaceToolDeps } from './workspace-deps.js';
+import { HostToolDeps } from './workspace-deps.js';
 
 export interface BuiltinToolsOptions {
   workspacePath: string;
   timeout?: number;
   maxOutputSize?: number;
   searchProvider?: SearchProvider;
-  sandbox?: Sandbox;
 }
 
 export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAny>[] {
-  const deps: WorkspaceToolDeps = {
+  const workspaceDeps: WorkspaceToolDeps = {
     workspacePath: options.workspacePath,
     timeout: options.timeout,
     maxOutputSize: options.maxOutputSize,
   };
 
-  const tools: Tool<ZodTypeAny>[] = [
-    createFileReadTool(deps),
-    createFileWriteTool(deps),
-    createFileEditTool(deps),
-    createGlobTool(deps),
-    createGrepTool(deps),
-    createWebFetchTool(deps),
-    createWebSearchTool(options.searchProvider),
-  ];
+  const hostDeps = new HostToolDeps(options.workspacePath, options.maxOutputSize ?? 1024 * 1024);
 
-  if (options.sandbox) {
-    tools.push(createShellTool(options.sandbox));
-  }
+  const tools: Tool<ZodTypeAny>[] = [
+    createFileReadTool(workspaceDeps),
+    createFileWriteTool(workspaceDeps),
+    createFileEditTool(workspaceDeps),
+    createGlobTool(workspaceDeps),
+    createGrepTool(workspaceDeps),
+    createWebFetchTool(workspaceDeps),
+    createWebSearchTool(options.searchProvider),
+    createShellTool(hostDeps),
+  ];
 
   return tools;
 }

@@ -150,7 +150,6 @@ describe('EnhancedRunner', () => {
       expect.objectContaining({
         workspacePath: '/test/workspace',
         searchProvider: 'bing',
-        sandbox: expect.any(Object),
       })
     );
 

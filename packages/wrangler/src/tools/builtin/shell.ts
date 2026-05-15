@@ -1,27 +1,22 @@
 import { z } from 'zod';
-import type { Sandbox } from '@agentskillmania/sandbox';
 import type { Tool } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
+import type { ToolDeps } from './workspace-deps.js';
 
 const ShellSchema = z.object({
-  command: z.string().describe('Shell command to execute in the sandbox'),
+  command: z.string().describe('Shell command to execute'),
 });
 
 const MAX_OUTPUT = 50_000;
 
-/**
- * Shell tool — executes commands via WASM sandbox.
- *
- * Requires a Sandbox instance. The tool layer hides sandbox details from callers.
- */
-export function createShellTool(sandbox: Sandbox): Tool<ZodTypeAny> {
+export function createShellTool(deps: ToolDeps): Tool<ZodTypeAny> {
   return {
     name: 'shell',
-    description: 'Execute shell commands in a sandboxed environment.',
+    description: 'Execute shell commands in the workspace.',
     parameters: ShellSchema,
     async execute(args: z.infer<typeof ShellSchema>) {
       try {
-        const result = await sandbox.run(args.command);
+        const result = await deps.exec(args.command);
 
         let output: string;
         if (result.exitCode === 0) {
