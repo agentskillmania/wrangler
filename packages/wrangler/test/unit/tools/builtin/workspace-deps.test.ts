@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   resolvePath,
   truncateOutput,
   isBinaryFile,
+  HostToolDeps,
 } from '../../../../src/tools/builtin/workspace-deps.js';
 
 describe('workspace-deps', () => {
@@ -124,6 +126,129 @@ describe('workspace-deps', () => {
     it('returns false when file does not exist', async () => {
       const path = join(workspace, 'nope');
       expect(await isBinaryFile(path)).toBe(false);
+    });
+  });
+});
+
+describe('HostToolDeps', () => {
+  let tempDir: string;
+  let deps: HostToolDeps;
+
+  beforeEach(() => {
+    tempDir = join(tmpdir(), `host-deps-test-${Date.now()}`);
+    mkdirSync(tempDir, { recursive: true });
+    deps = new HostToolDeps(tempDir);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  describe('resolvePath', () => {
+    it('should resolve relative path within workspace', () => {
+      const result = deps.resolvePath('src/index.ts');
+      expect(result).toBe(join(tempDir, 'src', 'index.ts'));
+    });
+
+    it('should reject path traversal attempts', () => {
+      expect(() => deps.resolvePath('../etc/passwd')).toThrow('Path traversal');
+    });
+
+    it('should accept workspace root itself', () => {
+      const result = deps.resolvePath('.');
+      expect(result).toBe(tempDir);
+    });
+  });
+
+  describe('readFile', () => {
+    it('should read file content', async () => {
+      await writeFile(join(tempDir, 'test.txt'), 'hello world');
+      const content = await deps.readFile('test.txt');
+      expect(content).toBe('hello world');
+    });
+
+    it('should throw for non-existent file', async () => {
+      await expect(deps.readFile('missing.txt')).rejects.toThrow();
+    });
+  });
+
+  describe('writeFile', () => {
+    it('should write file content creating parent dirs', async () => {
+      await deps.writeFile('sub/dir/test.txt', 'hello');
+      const content = await deps.readFile('sub/dir/test.txt');
+      expect(content).toBe('hello');
+    });
+  });
+
+  describe('editFile', () => {
+    it('should replace single occurrence', async () => {
+      await writeFile(join(tempDir, 'test.txt'), 'foo bar baz');
+      const result = await deps.editFile('test.txt', 'bar', 'qux');
+      expect(result).toContain('replaced 1 occurrence');
+      const content = await deps.readFile('test.txt');
+      expect(content).toBe('foo qux baz');
+    });
+
+    it('should replace all occurrences', async () => {
+      await writeFile(join(tempDir, 'test.txt'), 'aaa bbb aaa');
+      const result = await deps.editFile('test.txt', 'aaa', 'ccc', true);
+      expect(result).toContain('replaced 2 occurrence');
+    });
+
+    it('should error when oldString not found', async () => {
+      await writeFile(join(tempDir, 'test.txt'), 'hello');
+      const result = await deps.editFile('test.txt', 'missing', 'new');
+      expect(result).toContain('not found');
+    });
+
+    it('should error when oldString === newString', async () => {
+      await writeFile(join(tempDir, 'test.txt'), 'hello');
+      const result = await deps.editFile('test.txt', 'hello', 'hello');
+      expect(result).toContain('identical');
+    });
+  });
+
+  describe('exec', () => {
+    it('should execute command and return stdout', async () => {
+      const result = await deps.exec('echo hello');
+      expect(result.stdout.trim()).toBe('hello');
+      expect(result.exitCode).toBe(0);
+    });
+
+    it('should capture stderr on failure', async () => {
+      const result = await deps.exec('ls /nonexistent_dir_xyz');
+      expect(result.exitCode).not.toBe(0);
+    });
+  });
+
+  describe('glob', () => {
+    it('should find files matching pattern', async () => {
+      mkdirSync(join(tempDir, 'src'), { recursive: true });
+      writeFileSync(join(tempDir, 'src', 'a.ts'), '');
+      writeFileSync(join(tempDir, 'src', 'b.ts'), '');
+      writeFileSync(join(tempDir, 'src', 'c.js'), '');
+
+      const files = await deps.glob('**/*.ts');
+      expect(files.length).toBe(2);
+      expect(files.some((f) => f.endsWith('a.ts'))).toBe(true);
+      expect(files.some((f) => f.endsWith('b.ts'))).toBe(true);
+    });
+  });
+
+  describe('grep', () => {
+    it('should find pattern in files', async () => {
+      mkdirSync(join(tempDir, 'src'), { recursive: true });
+      writeFileSync(join(tempDir, 'src', 'a.ts'), 'const foo = 1;\nconst bar = 2;');
+      writeFileSync(join(tempDir, 'src', 'b.ts'), 'const baz = 3;');
+
+      const output = await deps.grep('foo', '.');
+      expect(output).toContain('foo');
+    });
+
+    it('should report no matches', async () => {
+      await writeFile(join(tempDir, 'test.txt'), 'hello world');
+      const output = await deps.grep('nonexistent_pattern_xyz', '.');
+      expect(output).toContain('No matches');
     });
   });
 });
