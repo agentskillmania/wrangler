@@ -1,14 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { createWebSearchTool } from '../../../../src/tools/builtin/web-search.js';
 import type { SearchProvider } from '../../../../src/tools/builtin/web-search.js';
+import { BingScrapeSearchProvider } from '../../../../src/tools/builtin/bing-scrape-search.js';
 
 describe('web_search', () => {
-  it('returns error when no provider configured', async () => {
-    const tool = createWebSearchTool();
-    const result = await tool.execute({ query: 'test' });
-    expect(result).toContain('not configured');
-  });
-
   it('returns formatted results with provider', async () => {
     const provider: SearchProvider = {
       search: async () => [
@@ -41,8 +36,15 @@ describe('web_search', () => {
   });
 
   it('has correct tool metadata', () => {
-    const tool = createWebSearchTool();
+    const provider: SearchProvider = { search: async () => [] };
+    const tool = createWebSearchTool(provider);
     expect(tool.name).toBe('web_search');
     expect(tool.parameters).toBeDefined();
+  });
+
+  it('accepts BingScrapeSearchProvider', async () => {
+    const provider = new BingScrapeSearchProvider();
+    const tool = createWebSearchTool(provider);
+    expect(tool.name).toBe('web_search');
   });
 });

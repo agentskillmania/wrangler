@@ -144,12 +144,15 @@ describe('BingScrapeSearchProvider', () => {
     const html = `
       <html>
         <body>
-          ${Array.from({ length: 15 }, (_, i) => `
+          ${Array.from(
+            { length: 15 },
+            (_, i) => `
             <li class="b_algo">
               <h2><a href="https://example.com/${i}">Result ${i}</a></h2>
               <p>Snippet ${i}</p>
             </li>
-          `).join('')}
+          `
+          ).join('')}
         </body>
       </html>
     `;

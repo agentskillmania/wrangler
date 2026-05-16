@@ -37,11 +37,12 @@ describe('createBuiltinTools', () => {
     expect(result).toBeTypeOf('string');
   });
 
-  it('web_search returns stub when no provider configured', async () => {
+  it('web_search uses default BingScrapeSearchProvider when no provider configured', async () => {
     const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
     const webSearch = tools.find((t) => t.name === 'web_search')!;
-    const result = await webSearch.execute({ query: 'test' });
-    expect(result).toContain('not configured');
+    expect(webSearch).toHaveProperty('name', 'web_search');
+    expect(webSearch).toHaveProperty('parameters');
+    expect(webSearch).toHaveProperty('execute');
   });
 
   it('shell tool executes commands in host mode', async () => {

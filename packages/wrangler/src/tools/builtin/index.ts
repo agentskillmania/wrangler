@@ -14,6 +14,7 @@ import { createWebSearchTool } from './web-search.js';
 import { createShellTool } from './shell.js';
 import { createPythonTool } from './python.js';
 import { createGitTool } from './git.js';
+import { BingScrapeSearchProvider } from './bing-scrape-search.js';
 
 export interface BuiltinToolsOptions {
   workspacePath: string;
@@ -29,6 +30,8 @@ export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAn
     ? new SandboxToolDeps(options.sandbox, options.maxOutputSize ?? 1024 * 1024)
     : new HostToolDeps(options.workspacePath, options.maxOutputSize ?? 1024 * 1024);
 
+  const searchProvider = options.searchProvider ?? new BingScrapeSearchProvider();
+
   return [
     createFileReadTool(deps),
     createFileWriteTool(deps),
@@ -39,7 +42,7 @@ export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAn
     createPythonTool(deps),
     createGitTool(deps),
     createWebFetchTool(deps),
-    createWebSearchTool(options.searchProvider),
+    createWebSearchTool(searchProvider),
   ];
 }
 
@@ -59,3 +62,4 @@ export { truncateOutput, isBinaryFile } from './workspace-deps.js';
 export type { ToolDeps, ExecResult } from './workspace-deps.js';
 export { HostToolDeps, SandboxToolDeps, resolvePath, detectShell } from './workspace-deps.js';
 export type { ShellInfo } from './workspace-deps.js';
+export { BingScrapeSearchProvider } from './bing-scrape-search.js';

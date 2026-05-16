@@ -16,15 +16,12 @@ const WebSearchSchema = z.object({
   query: z.string().describe('Search query'),
 });
 
-export function createWebSearchTool(searchProvider?: SearchProvider): Tool<ZodTypeAny> {
+export function createWebSearchTool(searchProvider: SearchProvider): Tool<ZodTypeAny> {
   return {
     name: 'web_search',
-    description: 'Search the web. Requires a SearchProvider to be configured.',
+    description: 'Search the web.',
     parameters: WebSearchSchema,
     async execute(args: z.infer<typeof WebSearchSchema>) {
-      if (!searchProvider) {
-        return 'Web search is not configured. Provide a searchProvider to createBuiltinTools().';
-      }
       try {
         const results = await searchProvider.search(args.query);
         if (results.length === 0) {

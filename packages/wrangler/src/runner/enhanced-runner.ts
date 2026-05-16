@@ -12,6 +12,7 @@ import { buildTimeContext } from './system-prompt.js';
 // import { MarkdownMessageAssembler } from './markdown-assembler.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js';
 import type { EnhancedRunnerOptions } from './types.js';
 
 function discoverMCPPaths(workspacePath: string): string[] {
@@ -65,9 +66,10 @@ export class EnhancedRunner {
   static async create(options: EnhancedRunnerOptions): Promise<EnhancedRunner> {
     const workspacePath = options.workspacePath ?? process.cwd();
 
+    const searchProvider = options.searchProvider ?? new BingScrapeSearchProvider();
     const builtinTools = createBuiltinTools({
       workspacePath,
-      searchProvider: options.searchProvider,
+      searchProvider,
       sandbox: options.sandbox,
     });
 

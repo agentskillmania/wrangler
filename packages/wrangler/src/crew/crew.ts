@@ -31,6 +31,7 @@ import { EnhancedRunner } from '../runner/enhanced-runner.js';
 import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js';
 
 export class Crew {
   private config: CrewConfig;
@@ -327,10 +328,11 @@ export class Crew {
 
     if (this.options.runnerFactory) {
       // Legacy path for backward compatibility
+      const searchProvider = this.options.searchProvider ?? new BingScrapeSearchProvider();
       const commTools = this.createCommTools(agent);
       const builtinTools = createBuiltinTools({
         workspacePath: this.options.workspaceDeps?.workspacePath ?? process.cwd(),
-        searchProvider: this.options.searchProvider,
+        searchProvider,
         sandbox: this.options.sandbox,
       });
       runner = this.options.runnerFactory({
@@ -349,7 +351,7 @@ export class Crew {
         workspacePath: this.options.workspaceDeps?.workspacePath ?? process.cwd(),
         extraTools: [...commTools, ...todolistTools],
         mcpConfigPaths: this.buildMCPConfigPaths(),
-        searchProvider: this.options.searchProvider,
+        searchProvider: this.options.searchProvider ?? new BingScrapeSearchProvider(),
         skillDirectories: [...this.config.skillDirs],
         thinkingEnabled: agentDef?.thinking?.enabled,
         sandbox: this.options.sandbox,
