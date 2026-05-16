@@ -6,7 +6,7 @@
  * markdown system prompt.
  */
 
-const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /**
  * Build YAML frontmatter containing current date/time and timezone.
@@ -18,8 +18,8 @@ const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四
  *
  * ```
  * ---
- * 时间: 2026年05月13日 星期二 10:06
- * 时区: Asia/Shanghai
+ * Time: Tuesday, May 13, 2026, 10:06 AM
+ * Timezone: Asia/Shanghai
  * ---
  *
  * (agent instructions in markdown)
@@ -28,6 +28,6 @@ const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四
 export function buildTimeContext(): string {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = new Date();
-  const timestamp = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, '0')}月${String(now.getDate()).padStart(2, '0')}日 ${WEEKDAYS[now.getDay()]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  return `---\n时间: ${timestamp}\n时区: ${tz}\n---`;
+  const timestamp = `${WEEKDAYS[now.getDay()]}, ${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}/${now.getFullYear()}, ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  return `---\nTime: ${timestamp}\nTimezone: ${tz}\n---`;
 }

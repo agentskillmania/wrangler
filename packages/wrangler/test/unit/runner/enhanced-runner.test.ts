@@ -62,8 +62,8 @@ vi.mock('../../../src/todolist/support.js', () => ({
 
 vi.mock('../../../src/runner/system-prompt.js', () => ({
   buildTimeContext: vi.fn().mockReturnValue(`---
-时间: 2026年05月13日 星期二 10:06
-时区: Asia/Shanghai
+Time: Tuesday, 05/13/2026, 10:06
+Timezone: Asia/Shanghai
 ---`),
 }));
 
@@ -160,14 +160,14 @@ describe('EnhancedRunner', () => {
     expect(runnerArgs.tools).toContain(...mockExtraTools);
   });
 
-  it('should create() sets systemPrompt to YAML frontmatter with 时间: and 时区:', async () => {
+  it('should create() sets systemPrompt to YAML frontmatter with Time: and Timezone:', async () => {
     await EnhancedRunner.create(makeOptions());
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
 
-    expect(callArgs.systemPrompt).toContain('时间:');
-    expect(callArgs.systemPrompt).toContain('时区:');
+    expect(callArgs.systemPrompt).toContain('Time:');
+    expect(callArgs.systemPrompt).toContain('Timezone:');
     expect(callArgs.systemPrompt).toContain('---');
     expect(callArgs.systemPrompt).not.toMatch(/You are/);
   });
