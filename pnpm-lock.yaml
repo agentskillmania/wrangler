@@ -184,7 +184,13 @@ importers:
       '@agentskillmania/wrangler':
         specifier: workspace:*
         version: link:../wrangler
+      js-yaml:
+        specifier: ^4.1.0
+        version: 4.1.1
     devDependencies:
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.40

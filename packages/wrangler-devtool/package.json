@@ -5,7 +5,13 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist", "README.md"],
+  "bin": {
+    "wrangler-devtool": "dist/cli/main.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -30,9 +36,11 @@
     "directory": "packages/wrangler-devtool"
   },
   "dependencies": {
-    "@agentskillmania/wrangler": "workspace:*"
+    "@agentskillmania/wrangler": "workspace:*",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^2.0.0",
     "typescript": "^5.0.0",
