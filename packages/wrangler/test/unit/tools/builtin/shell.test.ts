@@ -85,4 +85,40 @@ describe('createShellTool', () => {
     const result = await tool.execute({ command: 'anything' });
     expect(result).toContain('Error: string error');
   });
+
+  it('should show (no output) when stdout is empty on success', async () => {
+    const depsNoOutput: ToolDeps = {
+      workspaceRoot: tempDir,
+      maxOutputSize: 1024,
+      resolvePath: (p: string) => join(tempDir, p),
+      exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      readFile: async () => '',
+      writeFile: async () => {},
+      editFile: async () => '',
+      glob: async () => [],
+      grep: async () => '',
+    };
+    const tool = createShellTool(depsNoOutput);
+    const result = await tool.execute({ command: 'true' });
+    expect(result).toBe('(no output)');
+  });
+
+  it('should include stdout in error output', async () => {
+    const depsWithStdout: ToolDeps = {
+      workspaceRoot: tempDir,
+      maxOutputSize: 1024,
+      resolvePath: (p: string) => join(tempDir, p),
+      exec: async () => ({ stdout: 'partial output', stderr: 'error msg', exitCode: 1 }),
+      readFile: async () => '',
+      writeFile: async () => {},
+      editFile: async () => '',
+      glob: async () => [],
+      grep: async () => '',
+    };
+    const tool = createShellTool(depsWithStdout);
+    const result = await tool.execute({ command: 'fail' });
+    expect(result).toContain('Exit code: 1');
+    expect(result).toContain('partial output');
+    expect(result).toContain('error msg');
+  });
 });

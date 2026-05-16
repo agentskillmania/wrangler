@@ -32,4 +32,23 @@ describe('createGitTool', () => {
     const result = await tool.execute({ command: 'log --oneline' });
     expect(result).toBeDefined();
   });
+
+  it('should handle exec throwing an error', async () => {
+    const throwingDeps: ToolDeps = {
+      workspaceRoot: tempDir,
+      maxOutputSize: 1024,
+      resolvePath: (p: string) => join(tempDir, p),
+      exec: async () => {
+        throw new Error('sandbox crashed');
+      },
+      readFile: async () => '',
+      writeFile: async () => {},
+      editFile: async () => '',
+      glob: async () => [],
+      grep: async () => '',
+    };
+    const tool = createGitTool(throwingDeps);
+    const result = await tool.execute({ command: 'status' });
+    expect(result).toContain('Error: sandbox crashed');
+  });
 });

@@ -119,4 +119,16 @@ describe('web_fetch', () => {
     expect(tool.name).toBe('web_fetch');
     expect(tool.parameters).toBeDefined();
   });
+
+  it('falls back to raw HTML when Readability finds no article', async () => {
+    mockFetch({
+      ok: true,
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: '<html><body><div>raw content without article structure</div></body></html>',
+    });
+    const tool = createWebFetchTool(deps);
+    const result = await tool.execute({ url: 'https://example.com' });
+    expect(result).toContain('raw content');
+  });
 });

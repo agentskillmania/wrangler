@@ -67,4 +67,23 @@ describe('file_write', () => {
     expect(tool.name).toBe('file_write');
     expect(tool.parameters).toBeDefined();
   });
+
+  it('returns error message for non-traversal write failure', async () => {
+    const failDeps: typeof deps = {
+      workspaceRoot: workspace,
+      maxOutputSize: 1024,
+      resolvePath: (p: string) => join(workspace, p),
+      exec: async (cmd: string) => ({ stdout: '', stderr: '', exitCode: 0 }),
+      readFile: async () => '',
+      writeFile: async () => {
+        throw new Error('Disk full');
+      },
+      editFile: async () => '',
+      glob: async () => [],
+      grep: async () => '',
+    };
+    const tool = createFileWriteTool(failDeps);
+    const result = await tool.execute({ filePath: 'test.txt', content: 'data' });
+    expect(result).toContain('Error: Failed to write file: Disk full');
+  });
 });

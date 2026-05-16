@@ -90,4 +90,31 @@ describe('grep', () => {
     const tool = createGrepTool(deps);
     const result = await tool.execute({ pattern: 'match_\\d+_\\d+' });
   });
+
+  it('returns error for non-traversal path error', async () => {
+    const errorDeps: HostToolDeps = {
+      workspaceRoot: workspace,
+      maxOutputSize: 1024,
+      resolvePath: () => {
+        throw new Error('Permission denied');
+      },
+      exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      readFile: async () => '',
+      writeFile: async () => {},
+      editFile: async () => '',
+      glob: async () => [],
+      grep: async () => '',
+    } as unknown as HostToolDeps;
+    const tool = createGrepTool(errorDeps);
+    const result = await tool.execute({ pattern: 'test', path: 'src' });
+    expect(result).toContain('Error: Invalid path');
+  });
+
+  it('handles grep output with unparseable lines', async () => {
+    await writeFile(join(workspace, 'grep_odd.txt'), 'some content here');
+    const tool = createGrepTool(deps);
+    // Pattern that matches but ToolDeps might return odd-format lines
+    const result = await tool.execute({ pattern: 'some content here' });
+    expect(result).toBeDefined();
+  });
 });

@@ -89,4 +89,22 @@ describe('glob', () => {
     expect(tool.name).toBe('glob');
     expect(tool.parameters).toBeDefined();
   });
+
+  it('handles files outside workspace root gracefully', async () => {
+    const outsideDeps: HostToolDeps = {
+      workspaceRoot: workspace,
+      maxOutputSize: 1024,
+      resolvePath: (p: string) => join(workspace, p),
+      exec: async (cmd: string) => ({ stdout: '', stderr: '', exitCode: 0 }),
+      readFile: async () => '',
+      writeFile: async () => {},
+      editFile: async () => '',
+      glob: async () => ['/other/path/file.ts', join(workspace, 'local.ts')],
+      grep: async () => '',
+    } as unknown as HostToolDeps;
+    const tool = createGlobTool(outsideDeps);
+    const result = await tool.execute({ pattern: '**/*.ts' });
+    expect(result).toContain('local.ts');
+    expect(result).toContain('/other/path/file.ts');
+  });
 });

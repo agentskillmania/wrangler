@@ -331,6 +331,7 @@ export class Crew {
       const builtinTools = createBuiltinTools({
         workspacePath: this.options.workspaceDeps?.workspacePath ?? process.cwd(),
         searchProvider: this.options.searchProvider,
+        sandbox: this.options.sandbox,
       });
       runner = this.options.runnerFactory({
         model,
@@ -351,6 +352,7 @@ export class Crew {
         searchProvider: this.options.searchProvider,
         skillDirectories: [...this.config.skillDirs],
         thinkingEnabled: agentDef?.thinking?.enabled,
+        sandbox: this.options.sandbox,
       });
     }
 

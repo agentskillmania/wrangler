@@ -43,4 +43,23 @@ describe('createPythonTool', () => {
     const result = await tool.execute({});
     expect(result).toContain('Provide either');
   });
+
+  it('should handle exec throwing an error', async () => {
+    const throwingDeps: ToolDeps = {
+      workspaceRoot: tempDir,
+      maxOutputSize: 1024,
+      resolvePath: (p: string) => join(tempDir, p),
+      exec: async () => {
+        throw new Error('sandbox crashed');
+      },
+      readFile: async () => '',
+      writeFile: async () => {},
+      editFile: async () => '',
+      glob: async () => [],
+      grep: async () => '',
+    };
+    const tool = createPythonTool(throwingDeps);
+    const result = await tool.execute({ code: 'print(1)' });
+    expect(result).toContain('Error: sandbox crashed');
+  });
 });

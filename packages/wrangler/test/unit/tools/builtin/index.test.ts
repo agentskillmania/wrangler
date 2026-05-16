@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createBuiltinTools } from '../../../../src/tools/builtin/index.js';
 
 describe('createBuiltinTools', () => {
@@ -63,5 +63,20 @@ describe('createBuiltinTools', () => {
     const git = tools.find((t) => t.name === 'git')!;
     const result = await git.execute({ command: '--version' });
     expect(result).toContain('git version');
+  });
+
+  it('uses SandboxToolDeps when sandbox option is provided', async () => {
+    const mockSandbox = {
+      run: vi.fn().mockResolvedValue({ stdout: 'sandbox output', stderr: '', exitCode: 0 }),
+    } as unknown as import('@agentskillmania/sandbox').Sandbox;
+    const tools = createBuiltinTools({
+      workspacePath: '/tmp/test-workspace',
+      sandbox: mockSandbox,
+    });
+    expect(tools).toHaveLength(10);
+    const shell = tools.find((t) => t.name === 'shell')!;
+    const result = await shell.execute({ command: 'echo hi' });
+    expect(result).toContain('sandbox output');
+    expect(mockSandbox.run).toHaveBeenCalledWith('echo hi');
   });
 });
