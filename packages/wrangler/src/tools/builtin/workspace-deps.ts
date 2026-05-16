@@ -1,4 +1,4 @@
-import { resolve, sep, join, basename } from 'node:path';
+import { resolve, sep, join, basename, dirname } from 'node:path';
 import { Buffer } from 'node:buffer';
 import * as fs from 'node:fs/promises';
 import { statSync } from 'node:fs';
@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { isBinaryFile as detectBinary } from 'isbinaryfile';
 import { glob as fglob } from 'fast-glob';
 import { rgPath } from 'ripgrep';
+import type { Sandbox } from '@agentskillmania/sandbox';
 
 const execAsync = promisify(exec);
 
@@ -286,6 +287,186 @@ export class HostToolDeps implements ToolDeps {
       return 'No matches found';
     }
   }
+}
+
+// ─── SandboxToolDeps ───
+
+/**
+ * Sandbox-based implementation of ToolDeps.
+ * ALL operations go through sandbox.run() with sandbox-internal paths (/workspace).
+ * No host-side filesystem access — this is the core sandbox isolation principle.
+ *
+ * writeFile uses stdin piping: content is piped to `cat > file` via sandbox stdin.
+ * editFile uses read-modify-write: read via cat, replace in JS, write back via stdin.
+ */
+export class SandboxToolDeps implements ToolDeps {
+  readonly workspaceRoot = '/workspace';
+  readonly maxOutputSize: number;
+
+  private readonly sandbox: Sandbox;
+  private readonly defaultTimeout: number;
+
+  constructor(sandbox: Sandbox, maxOutputSize: number = 1024 * 1024) {
+    this.sandbox = sandbox;
+    this.maxOutputSize = maxOutputSize;
+    this.defaultTimeout = 30000;
+  }
+
+  resolvePath(filePath: string): string {
+    const absolute = resolve('/workspace', filePath);
+    if (absolute !== '/workspace' && !absolute.startsWith('/workspace/')) {
+      throw new Error(`Path traversal detected: ${filePath}`);
+    }
+    return absolute;
+  }
+
+  async exec(command: string, _options?: { timeout?: number }): Promise<ExecResult> {
+    const result = await this.sandbox.run(command);
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+    };
+  }
+
+  async readFile(filePath: string): Promise<string> {
+    const absolute = this.resolvePath(filePath);
+    const result = await this.sandbox.run(`cat ${absolute}`);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to read ${filePath}: ${result.stdout}`);
+    }
+    return result.stdout;
+  }
+
+  async writeFile(filePath: string, content: string): Promise<void> {
+    const absolute = this.resolvePath(filePath);
+    // Ensure parent directory exists via sandbox (mkdir -p fixed for WASI)
+    const dir = dirname(absolute);
+    await this.sandbox.run(`mkdir -p ${dir}`);
+    // Write file by piping content through stdin to cat
+    const writeResult = await this.sandbox.run(`cat > ${absolute}`, { stdin: content });
+    if (writeResult.exitCode !== 0) {
+      throw new Error(`Failed to write ${filePath}: ${writeResult.stdout}`);
+    }
+  }
+
+  async editFile(
+    filePath: string,
+    oldString: string,
+    newString: string,
+    replaceAll: boolean = false
+  ): Promise<string> {
+    if (oldString === newString) {
+      return 'Error: oldString and newString are identical';
+    }
+
+    const content = await this.readFile(filePath);
+
+    if (!content.includes(oldString)) {
+      return `Error: "${oldString}" not found in file`;
+    }
+
+    const escaped = oldString.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+    const count = (content.match(new RegExp(escaped, 'g')) ?? []).length;
+
+    if (count > 1 && !replaceAll) {
+      return `Error: Found ${count} matches in ${filePath}. Set replaceAll to true to replace all.`;
+    }
+
+    const newContent = replaceAll
+      ? content.split(oldString).join(newString)
+      : content.replace(oldString, newString);
+
+    await this.writeFile(filePath, newContent);
+    return `Successfully replaced ${replaceAll ? count : 1} occurrence${count === 1 ? '' : 's'}`;
+  }
+
+  async glob(pattern: string, options?: { cwd?: string }): Promise<string[]> {
+    const cwd = options?.cwd
+      ? this.resolvePath(options.cwd.replace(/^\/workspace\/?/, ''))
+      : '/workspace';
+    // find is not available in busybox-wasi; use ls -R instead
+    const result = await this.sandbox.run(`ls -R ${cwd}`);
+    if (result.exitCode !== 0 || !result.stdout.trim()) {
+      return [];
+    }
+
+    // Parse ls -R output: directories end with ":", files are plain lines
+    const allFiles = parseLsRecursive(result.stdout, cwd);
+    const regex = globToRegex(pattern);
+    return allFiles.filter((f) => regex.test(f));
+  }
+
+  async grep(
+    pattern: string,
+    path: string,
+    options?: { cwd?: string; include?: string }
+  ): Promise<string> {
+    const searchPath = this.resolvePath(path);
+    let cmd = `grep -rn "${pattern}" ${searchPath}`;
+    if (options?.include) {
+      cmd += ` --include="${options.include}"`;
+    }
+    const result = await this.sandbox.run(cmd);
+    if (result.exitCode !== 0) {
+      return 'No matches found';
+    }
+    return result.stdout;
+  }
+}
+
+/** Parse `ls -R` output into a flat list of relative file paths */
+function parseLsRecursive(output: string, root: string): string[] {
+  const prefix = root.endsWith('/') ? root : root + '/';
+  const files: string[] = [];
+  let currentDir = '';
+
+  for (const line of output.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('total')) continue;
+
+    if (trimmed.endsWith(':')) {
+      // Directory header line: "/workspace/src:"
+      currentDir = trimmed.slice(0, -1);
+      continue;
+    }
+
+    // File entry — prepend current directory
+    const fullPath = currentDir ? `${currentDir}/${trimmed}` : trimmed;
+    const relative = fullPath.startsWith(prefix) ? fullPath.slice(prefix.length) : fullPath;
+    if (relative) files.push(relative);
+  }
+
+  return files;
+}
+
+/** Convert a simple glob pattern to a RegExp */
+function globToRegex(pattern: string): RegExp {
+  const chars = pattern.split('');
+  const parts: string[] = ['^'];
+  let i = 0;
+  while (i < chars.length) {
+    const c = chars[i];
+    if (c === '*' && chars[i + 1] === '*') {
+      parts.push('.*');
+      i += 2;
+      if (chars[i] === '/') i++; // skip trailing /
+    } else if (c === '*') {
+      parts.push('[^/]*');
+      i++;
+    } else if (c === '?') {
+      parts.push('[^/]');
+      i++;
+    } else if ('.+^${}()|[]\\'.includes(c)) {
+      parts.push('\\' + c);
+      i++;
+    } else {
+      parts.push(c);
+      i++;
+    }
+  }
+  parts.push('$');
+  return new RegExp(parts.join(''));
 }
 
 /** Resolve a file path and verify it stays within workspace boundary */

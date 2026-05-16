@@ -1,7 +1,8 @@
 import type { ZodTypeAny } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
+import type { Sandbox } from '@agentskillmania/sandbox';
 import type { SearchProvider } from './web-search.js';
-import { HostToolDeps } from './workspace-deps.js';
+import { HostToolDeps, SandboxToolDeps } from './workspace-deps.js';
 import type { ToolDeps } from './workspace-deps.js';
 import { createFileReadTool } from './file-read.js';
 import { createFileWriteTool } from './file-write.js';
@@ -19,13 +20,14 @@ export interface BuiltinToolsOptions {
   timeout?: number;
   maxOutputSize?: number;
   searchProvider?: SearchProvider;
+  /** When provided, all tools operate through sandbox.run() with /workspace paths */
+  sandbox?: Sandbox;
 }
 
 export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAny>[] {
-  const deps: ToolDeps = new HostToolDeps(
-    options.workspacePath,
-    options.maxOutputSize ?? 1024 * 1024
-  );
+  const deps: ToolDeps = options.sandbox
+    ? new SandboxToolDeps(options.sandbox, options.maxOutputSize ?? 1024 * 1024)
+    : new HostToolDeps(options.workspacePath, options.maxOutputSize ?? 1024 * 1024);
 
   return [
     createFileReadTool(deps),
@@ -55,5 +57,5 @@ export { createGitTool } from './git.js';
 export type { SearchProvider, SearchResult } from './web-search.js';
 export { truncateOutput, isBinaryFile } from './workspace-deps.js';
 export type { ToolDeps, ExecResult } from './workspace-deps.js';
-export { HostToolDeps, resolvePath, detectShell } from './workspace-deps.js';
+export { HostToolDeps, SandboxToolDeps, resolvePath, detectShell } from './workspace-deps.js';
 export type { ShellInfo } from './workspace-deps.js';
