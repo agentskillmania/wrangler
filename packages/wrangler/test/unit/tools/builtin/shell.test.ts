@@ -36,4 +36,53 @@ describe('createShellTool', () => {
     const result = await tool.execute({ command: 'seq 1 100000' });
     expect(result.length).toBeLessThan(100_000);
   });
+
+  describe('description', () => {
+    it('should include shell info in description when deps has shell', () => {
+      const tool = createShellTool(deps);
+      expect(tool.description).toContain('Current shell:');
+      expect(tool.description).toContain(deps.shell!.name);
+      expect(tool.description).toContain(deps.shell!.path);
+    });
+
+    it('should not include shell info when deps has no shell property', () => {
+      const minimalDeps: ToolDeps = {
+        workspaceRoot: tempDir,
+        maxOutputSize: 1024,
+        resolvePath: (p: string) => join(tempDir, p),
+        exec: async (_cmd: string) => ({
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+        }),
+        readFile: async (_p: string) => '',
+        writeFile: async () => {},
+        editFile: async () => '',
+        glob: async () => [],
+        grep: async () => '',
+      };
+      const tool = createShellTool(minimalDeps);
+      expect(tool.description).not.toContain('Current shell:');
+      expect(tool.description).toBe('Execute shell commands in the workspace.');
+    });
+  });
+
+  it('should handle non-Error thrown by exec', async () => {
+    const throwingDeps: ToolDeps = {
+      workspaceRoot: tempDir,
+      maxOutputSize: 1024,
+      resolvePath: (p: string) => join(tempDir, p),
+      exec: async () => {
+        throw 'string error';
+      },
+      readFile: async () => '',
+      writeFile: async () => {},
+      editFile: async () => '',
+      glob: async () => [],
+      grep: async () => '',
+    };
+    const tool = createShellTool(throwingDeps);
+    const result = await tool.execute({ command: 'anything' });
+    expect(result).toContain('Error: string error');
+  });
 });

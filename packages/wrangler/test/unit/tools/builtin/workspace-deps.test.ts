@@ -252,6 +252,15 @@ describe('HostToolDeps', () => {
       const output = await deps.grep('nonexistent_pattern_xyz', '.');
       expect(output).toContain('No matches');
     });
+
+    it('should filter by include pattern', async () => {
+      mkdirSync(join(tempDir, 'src'), { recursive: true });
+      writeFileSync(join(tempDir, 'src', 'a.ts'), 'const foo = 1;');
+      writeFileSync(join(tempDir, 'src', 'b.js'), 'const foo = 2;');
+
+      const output = await deps.grep('foo', '.', { include: '*.ts' });
+      expect(output).toContain('a.ts');
+    });
   });
 
   describe('shell property', () => {
