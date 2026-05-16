@@ -18,14 +18,17 @@ import type {
 } from './types.js';
 import { evaluateAssertion } from './assertions.js';
 import { loadTestCases } from './loader.js';
+import { evaluateSoft } from './soft-evaluator.js';
+import { loadConfig } from '../config.js';
 
 // wrangler imports
-import { AgentLoader } from '@agentskillmania/wrangler/loader/index.js';
-import { CrewLoader } from '@agentskillmania/wrangler/crew/index.js';
-import { EnhancedRunner } from '@agentskillmania/wrangler/runner/index.js';
-import { Crew } from '@agentskillmania/wrangler/crew/index.js';
-import type { EnhancedRunnerOptions } from '@agentskillmania/wrangler/runner/index.js';
-import type { CrewOptions } from '@agentskillmania/wrangler/crew/index.js';
+import {
+  AgentLoader,
+  CrewLoader,
+  EnhancedRunner,
+  Crew,
+} from '@agentskillmania/wrangler';
+import type { EnhancedRunnerOptions, CrewOptions } from '@agentskillmania/wrangler';
 import { createAgentState, addUserMessage, addAssistantMessage } from '@agentskillmania/colts';
 import type { AgentState, ILLMProvider } from '@agentskillmania/colts';
 
@@ -147,8 +150,31 @@ export class TestRunner {
       evaluateAssertion(assertion, output!, workspacePath)
     );
 
+    let softResults: unknown[] | undefined;
+    let allSoftPassed = true;
+
+    // Evaluate soft assertions (if not hard-only mode and no error)
+    if (!options.hardOnly && !error && testCase.expected?.soft && testCase.expected.soft.length > 0) {
+      try {
+        const llmConfig = await loadConfig();
+        if (llmConfig?.llm) {
+          softResults = [];
+          for (const softEval of testCase.expected.soft) {
+            const result = await evaluateSoft(softEval, output!, llmConfig.llm);
+            softResults.push(result);
+            if (!result.passed) {
+              allSoftPassed = false;
+            }
+          }
+        }
+      } catch {
+        // Soft evaluation failure is not fatal
+        allSoftPassed = false;
+      }
+    }
+
     const allHardPassed = hardResults.every((r) => r.passed);
-    const passed = allHardPassed && !error;
+    const passed = allHardPassed && allSoftPassed && !error;
 
     // Cleanup temp workspace
     try {
@@ -162,6 +188,7 @@ export class TestRunner {
       passed,
       duration: Date.now() - caseStart,
       hardResults,
+      softResults,
       error,
       output,
     };
@@ -291,16 +318,16 @@ export class TestRunner {
     let hadError = false;
     let errorMsg = '';
 
-    crew.on('user_response', (event) => {
+    crew.on('user_response', (event: unknown) => {
       userResponse = (event as { content: string }).content;
     });
 
-    crew.on('error', (event) => {
+    crew.on('error', (event: unknown) => {
       hadError = true;
       errorMsg = (event as { error: Error }).error.message;
     });
 
-    crew.on('tool_invoked', (event) => {
+    crew.on('tool_invoked', (event: unknown) => {
       const ev = event as { toolName: string; args: unknown };
       toolCalls.push({
         name: ev.toolName,
