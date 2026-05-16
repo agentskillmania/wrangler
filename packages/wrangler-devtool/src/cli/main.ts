@@ -9,6 +9,7 @@ import { skillCommand } from './commands/skill.js';
 import { crewCommand } from './commands/crew.js';
 import { sessionCommand } from './commands/session.js';
 import { testCommand } from './commands/test.js';
+import { reviewCommand } from './commands/review.js';
 
 const commands = {
   init: initCommand,
@@ -17,6 +18,7 @@ const commands = {
   crew: crewCommand,
   session: sessionCommand,
   test: testCommand,
+  review: reviewCommand,
 };
 
 async function main(): Promise<void> {

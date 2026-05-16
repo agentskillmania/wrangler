@@ -181,6 +181,9 @@ importers:
 
   packages/wrangler-devtool:
     dependencies:
+      '@agentskillmania/colts':
+        specifier: ^0.3.0
+        version: 0.3.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)
       '@agentskillmania/wrangler':
         specifier: workspace:*
         version: link:../wrangler

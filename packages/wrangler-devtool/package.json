@@ -13,7 +13,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('fs'),path=require('path');const src=path.join('src','agents','prompts');const dist=path.join('dist','agents','prompts');if(fs.existsSync(src)){fs.mkdirSync(dist,{recursive:true});for(const f of fs.readdirSync(src)){fs.copyFileSync(path.join(src,f),path.join(dist,f))}}\"",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:unit": "vitest run test/unit",
@@ -36,6 +36,8 @@
     "directory": "packages/wrangler-devtool"
   },
   "dependencies": {
+    "@agentskillmania/colts": "^0.3.0",
+    "@agentskillmania/llm-client": "workspace:*",
     "@agentskillmania/wrangler": "workspace:*",
     "js-yaml": "^4.1.0"
   },
