@@ -14,7 +14,7 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { LLMClient } from '@agentskillmania/llm-client';
-import { parseAgentMd } from '../../src/agent/agent-loader.js';
+import { parseAgentMd } from '../../src/agent/agent-parser.js';
 import { AgentLoader } from '../../src/loader/agent-loader.js';
 import { EnhancedRunner } from '../../src/runner/enhanced-runner.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';

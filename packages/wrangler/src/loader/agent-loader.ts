@@ -1,8 +1,8 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
-import { parseAgentMd } from '../agent/agent-loader.js';
-import type { ParsedAgent } from '../agent/agent-loader.js';
+import { parseAgentMd } from '../agent/agent-parser.js';
+import type { ParsedAgent } from '../agent/agent-parser.js';
 
 export interface AgentLoadResult extends ParsedAgent {
   skillDirs: string[];

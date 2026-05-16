@@ -1,4 +1,4 @@
-import type { ParsedAgent } from '../agent/agent-loader.js';
+import type { ParsedAgent } from '../agent/agent-parser.js';
 import type { ILLMProvider, AskHumanHandler, Tool } from '@agentskillmania/colts';
 import type { SearchProvider } from '../tools/builtin/web-search.js';
 import type { Sandbox } from '@agentskillmania/sandbox';

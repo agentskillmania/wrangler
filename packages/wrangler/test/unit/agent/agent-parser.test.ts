@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAgentMd } from '../../../src/agent/agent-loader.js';
+import { parseAgentMd } from '../../../src/agent/agent-parser.js';
 
 describe('parseAgentMd', () => {
   it('parses agent with frontmatter and body', () => {
