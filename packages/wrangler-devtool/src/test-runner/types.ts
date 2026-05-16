@@ -124,6 +124,8 @@ export interface TestCliOptions {
   case?: string;
   reporter?: 'console' | 'json';
   timeout?: number;
+  updateSnapshot?: boolean;
+  debug?: boolean;
 }
 
 export interface RunTestsDeps {

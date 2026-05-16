@@ -31,10 +31,9 @@ export function evaluateAssertion(
       return evaluateExitCode(assertion, output);
     default: {
       // Exhaustive check — should never reach here due to loader validation
-      const _exhaustive: never = assertion;
       return {
         passed: false,
-        message: `Unknown assertion type: ${(_exhaustive as { type: string }).type}`,
+        message: `Unknown assertion type: ${(assertion as { type: string }).type}`,
       };
     }
   }

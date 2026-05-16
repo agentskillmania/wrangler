@@ -5,6 +5,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import yaml from 'js-yaml';
 import type { TestCase, TestInput, TestContext, TestTools, HardAssertion, AssertionType } from './types.js';
+export type { TestCase };
 
 const VALID_ASSERTION_TYPES: AssertionType[] = [
   'output_contains',
@@ -102,7 +103,7 @@ function validateContext(context: unknown, file: string, caseName: string): Test
         caseName
       );
     }
-    result.files = obj.files.map((f: unknown, i: number) => {
+    result.files = (obj.files as unknown[]).map((f: unknown, i: number) => {
       if (f === null || typeof f !== 'object' || typeof (f as Record<string, unknown>).source !== 'string' || typeof (f as Record<string, unknown>).target !== 'string') {
         throw new TestLoaderError(
           `Test case "${caseName}" context.files[${i}] must have "source" and "target" strings`,
@@ -110,7 +111,7 @@ function validateContext(context: unknown, file: string, caseName: string): Test
           caseName
         );
       }
-      return { source: (f as Record<string, unknown>).source, target: (f as Record<string, unknown>).target };
+      return { source: String((f as Record<string, unknown>).source), target: String((f as Record<string, unknown>).target) };
     });
   }
 
@@ -404,7 +405,7 @@ export async function loadTestFile(filePath: string): Promise<TestCase[]> {
     throw new TestLoaderError(`YAML file is empty`, filePath);
   }
 
-  const docs = Array.isArray(parsed) ? parsed : [parsed];
+  const docs = Array.isArray(parsed) ? (parsed as unknown[]) : [parsed];
   return docs.map((doc) => validateTestCase(doc, filePath));
 }
 

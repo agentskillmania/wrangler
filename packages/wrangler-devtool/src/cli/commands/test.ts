@@ -5,6 +5,7 @@ import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
 import { runTests } from '../../test-runner/runner.js';
 import { printReport } from '../../test-runner/reporters/console.js';
+import { formatJsonReport } from '../../test-runner/reporters/json.js';
 
 export const testCommand = defineCommand({
   name: 'test',
@@ -30,6 +31,16 @@ export const testCommand = defineCommand({
       default: 120000,
       description: 'Test case timeout in milliseconds',
     },
+    updateSnapshot: {
+      type: 'boolean',
+      default: false,
+      description: 'Update expected outputs in test cases',
+    },
+    debug: {
+      type: 'boolean',
+      default: false,
+      description: 'Enable debug output for test execution',
+    },
   },
   handler: async (args, options) => {
     const targetPath = args[0];
@@ -50,10 +61,12 @@ export const testCommand = defineCommand({
       case: options.case as string | undefined,
       reporter: options.reporter as 'console' | 'json',
       timeout: options.timeout as number,
+      updateSnapshot: options.updateSnapshot as boolean,
+      debug: options.debug as boolean,
     });
 
     if (options.reporter === 'json') {
-      console.log(JSON.stringify(report));
+      console.log(formatJsonReport(report));
     } else {
       printReport(report);
     }
