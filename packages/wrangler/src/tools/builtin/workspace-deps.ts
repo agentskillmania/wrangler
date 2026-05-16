@@ -1,13 +1,111 @@
-import { resolve, sep } from 'node:path';
+import { resolve, sep, join, basename } from 'node:path';
 import { Buffer } from 'node:buffer';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { exec } from 'node:child_process';
+import * as fs from 'node:fs/promises';
+import { statSync } from 'node:fs';
+import { exec, execSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { isBinaryFile as detectBinary } from 'isbinaryfile';
 import { glob as fglob } from 'fast-glob';
 import { rgPath } from 'ripgrep';
 
 const execAsync = promisify(exec);
+
+/** Detected shell information */
+export interface ShellInfo {
+  /** Shell executable path */
+  path: string;
+  /** Human-readable shell name (e.g. 'bash', 'zsh', 'pwsh', 'cmd') */
+  name: string;
+}
+
+/**
+ * Find executable in PATH using platform-appropriate method.
+ * On Unix uses `which`, on Windows uses `where`.
+ */
+function which(command: string): string | undefined {
+  const finder = process.platform === 'win32' ? 'where' : 'which';
+  try {
+    const result = execSync(`${finder} ${command}`, {
+      encoding: 'utf-8',
+      timeout: 3000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const firstLine = result.split('\n')[0]?.trim();
+    return firstLine || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Locate Git Bash on Windows by finding git.exe and deriving bash.exe path.
+ * Git Bash's bash.exe may not be in PATH, but git.exe almost always is.
+ */
+function findGitBash(): string | undefined {
+  if (process.platform !== 'win32') return undefined;
+
+  const envOverride = process.env.WRANGLER_GIT_BASH_PATH;
+  if (envOverride) return envOverride;
+
+  const gitPath = which('git');
+  if (!gitPath) return undefined;
+
+  // git.exe lives in Git/cmd/ or Git/bin/ — go up two levels to Git root, then into bin/
+  const bashPath = join(gitPath, '..', '..', 'bin', 'bash.exe');
+  try {
+    if (statSync(bashPath).isFile()) return bashPath;
+  } catch {
+    // Fall through
+  }
+
+  return undefined;
+}
+
+/**
+ * Detect available shells on Windows in priority order.
+ * Priority: pwsh → powershell → git bash → cmd
+ */
+function detectWindowsShells(): ShellInfo[] {
+  const shells: ShellInfo[] = [];
+
+  const pwsh = which('pwsh');
+  if (pwsh) shells.push({ path: pwsh, name: 'pwsh' });
+
+  const powershell = which('powershell');
+  if (powershell) shells.push({ path: powershell, name: 'powershell' });
+
+  const gitBash = findGitBash();
+  if (gitBash) shells.push({ path: gitBash, name: 'bash' });
+
+  const comspec = process.env.COMSPEC || 'cmd.exe';
+  shells.push({ path: comspec, name: 'cmd' });
+
+  return shells;
+}
+
+/**
+ * Detect the best available shell for the current platform.
+ *
+ * Unix: uses $SHELL env var, falls back to /bin/zsh (macOS) or /bin/bash or /bin/sh.
+ * Windows: pwsh → powershell → git bash → cmd (via COMSPEC).
+ */
+export function detectShell(): ShellInfo {
+  if (process.platform !== 'win32') {
+    const envShell = process.env.SHELL;
+    if (envShell) {
+      return { path: envShell, name: basename(envShell) };
+    }
+    if (process.platform === 'darwin') {
+      return { path: '/bin/zsh', name: 'zsh' };
+    }
+    const bash = which('bash');
+    if (bash) return { path: bash, name: 'bash' };
+    return { path: '/bin/sh', name: 'sh' };
+  }
+
+  const windowsShells = detectWindowsShells();
+  return windowsShells[0] ?? { path: 'cmd.exe', name: 'cmd' };
+}
 
 /** Result of command execution */
 export interface ExecResult {
@@ -31,6 +129,9 @@ export interface WorkspaceToolDeps {
 export interface ToolDeps {
   /** Root directory of the workspace */
   readonly workspaceRoot: string;
+
+  /** Detected shell information (only available in host mode) */
+  readonly shell?: ShellInfo;
 
   /** Maximum output size in bytes */
   readonly maxOutputSize: number;
@@ -73,10 +174,12 @@ export interface ToolDeps {
 export class HostToolDeps implements ToolDeps {
   readonly workspaceRoot: string;
   readonly maxOutputSize: number;
+  readonly shell: ShellInfo;
 
-  constructor(workspaceRoot: string, maxOutputSize: number = 1024 * 1024) {
+  constructor(workspaceRoot: string, maxOutputSize: number = 1024 * 1024, shell?: ShellInfo) {
     this.workspaceRoot = workspaceRoot;
     this.maxOutputSize = maxOutputSize;
+    this.shell = shell ?? detectShell();
   }
 
   resolvePath(filePath: string): string {
@@ -94,6 +197,7 @@ export class HostToolDeps implements ToolDeps {
       const { stdout, stderr } = await execAsync(command, {
         timeout,
         maxBuffer: this.maxOutputSize,
+        shell: this.shell.path,
       });
       return { stdout, stderr, exitCode: 0 };
     } catch (error) {
@@ -108,14 +212,14 @@ export class HostToolDeps implements ToolDeps {
 
   async readFile(filePath: string): Promise<string> {
     const absolute = this.resolvePath(filePath);
-    return await readFile(absolute, 'utf-8');
+    return await fs.readFile(absolute, 'utf-8');
   }
 
   async writeFile(filePath: string, content: string): Promise<void> {
     const absolute = this.resolvePath(filePath);
     const directory = resolve(absolute, '..');
-    await mkdir(directory, { recursive: true });
-    await writeFile(absolute, content, 'utf-8');
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(absolute, content, 'utf-8');
   }
 
   async editFile(

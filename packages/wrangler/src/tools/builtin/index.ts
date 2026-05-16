@@ -55,4 +55,5 @@ export { createGitTool } from './git.js';
 export type { SearchProvider, SearchResult } from './web-search.js';
 export { truncateOutput, isBinaryFile } from './workspace-deps.js';
 export type { ToolDeps, ExecResult } from './workspace-deps.js';
-export { HostToolDeps, resolvePath } from './workspace-deps.js';
+export { HostToolDeps, resolvePath, detectShell } from './workspace-deps.js';
+export type { ShellInfo } from './workspace-deps.js';

@@ -10,9 +10,11 @@ const ShellSchema = z.object({
 const MAX_OUTPUT = 50_000;
 
 export function createShellTool(deps: ToolDeps): Tool<ZodTypeAny> {
+  const shellHint = deps.shell ? ` Current shell: ${deps.shell.name} (${deps.shell.path}).` : '';
+
   return {
     name: 'shell',
-    description: 'Execute shell commands in the workspace.',
+    description: `Execute shell commands in the workspace.${shellHint}`,
     parameters: ShellSchema,
     async execute(args: z.infer<typeof ShellSchema>) {
       try {

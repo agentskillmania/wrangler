@@ -8,7 +8,9 @@ import {
   truncateOutput,
   isBinaryFile,
   HostToolDeps,
+  detectShell,
 } from '../../../../src/tools/builtin/workspace-deps.js';
+import type { ShellInfo } from '../../../../src/tools/builtin/workspace-deps.js';
 
 describe('workspace-deps', () => {
   let workspace: string;
@@ -250,5 +252,50 @@ describe('HostToolDeps', () => {
       const output = await deps.grep('nonexistent_pattern_xyz', '.');
       expect(output).toContain('No matches');
     });
+  });
+
+  describe('shell property', () => {
+    it('should auto-detect shell', () => {
+      expect(deps.shell).toBeDefined();
+      expect(deps.shell.path).toBeTruthy();
+      expect(deps.shell.name).toBeTruthy();
+    });
+
+    it('should accept explicit shell override', () => {
+      const customShell: ShellInfo = { path: '/bin/custom', name: 'custom' };
+      const customDeps = new HostToolDeps(tempDir, 1024, customShell);
+      expect(customDeps.shell).toEqual(customShell);
+    });
+
+    it('should use detected shell for exec', async () => {
+      // Shell is auto-detected and used in exec — verify echo still works
+      const result = await deps.exec('echo test-shell');
+      expect(result.stdout.trim()).toBe('test-shell');
+    });
+  });
+});
+
+describe('detectShell', () => {
+  it('should return a shell with valid path and name', () => {
+    const shell = detectShell();
+    expect(shell).toBeDefined();
+    expect(typeof shell.path).toBe('string');
+    expect(typeof shell.name).toBe('string');
+    expect(shell.path.length).toBeGreaterThan(0);
+    expect(shell.name.length).toBeGreaterThan(0);
+  });
+
+  it('should return a known shell name on unix', () => {
+    if (process.platform === 'win32') return;
+    const knownShells = ['sh', 'bash', 'zsh', 'fish', 'dash', 'ksh'];
+    const shell = detectShell();
+    expect(knownShells).toContain(shell.name);
+  });
+
+  it('should return a known shell name on windows', () => {
+    if (process.platform !== 'win32') return;
+    const knownShells = ['pwsh', 'powershell', 'bash', 'cmd'];
+    const shell = detectShell();
+    expect(knownShells).toContain(shell.name);
   });
 });
