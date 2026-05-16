@@ -13,6 +13,7 @@ import { buildTimeContext } from './system-prompt.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js';
+import type { Sandbox } from '@agentskillmania/sandbox';
 import type { EnhancedRunnerOptions } from './types.js';
 
 function discoverMCPPaths(workspacePath: string): string[] {
@@ -67,10 +68,17 @@ export class EnhancedRunner {
     const workspacePath = options.workspacePath ?? process.cwd();
 
     const searchProvider = options.searchProvider ?? new BingScrapeSearchProvider();
+
+    let sandboxInstance: Sandbox | undefined;
+    if (options.sandbox) {
+      const { Sandbox } = await import('@agentskillmania/sandbox');
+      sandboxInstance = new Sandbox();
+    }
+
     const builtinTools = createBuiltinTools({
       workspacePath,
       searchProvider,
-      sandbox: options.sandbox,
+      sandbox: sandboxInstance,
     });
 
     const mcpConfigPaths = options.mcpConfigPaths ?? discoverMCPPaths(workspacePath);

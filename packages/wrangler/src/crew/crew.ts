@@ -13,6 +13,7 @@ import type {
 } from './types.js';
 import type { Tool, AgentState } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
+import type { Sandbox } from '@agentskillmania/sandbox';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { AgentInstance } from './agent-instance.js';
 import { MessageRouter } from './message-router.js';
@@ -303,6 +304,14 @@ export class Crew {
     const agentDef = this.config.agentDefs[agent.definitionName];
     const model = agentDef?.model ?? this.options.defaultModel ?? 'gpt-4';
 
+    // Resolve sandbox: agent-level > crew-level > false
+    const useSandbox = agentDef?.sandbox ?? this.config.meta.sandbox ?? false;
+    let sandboxInstance: Sandbox | undefined;
+    if (useSandbox) {
+      const { Sandbox } = await import('@agentskillmania/sandbox');
+      sandboxInstance = new Sandbox();
+    }
+
     // Custom instructions take priority for ad-hoc workers, then catalog definition
     const instructions =
       agent.customInstructions ??
@@ -333,7 +342,7 @@ export class Crew {
       const builtinTools = createBuiltinTools({
         workspacePath: this.options.workspaceDeps?.workspacePath ?? process.cwd(),
         searchProvider,
-        sandbox: this.options.sandbox,
+        sandbox: sandboxInstance,
       });
       runner = this.options.runnerFactory({
         model,
@@ -354,7 +363,7 @@ export class Crew {
         searchProvider: this.options.searchProvider ?? new BingScrapeSearchProvider(),
         skillDirectories: [...this.config.skillDirs],
         thinkingEnabled: agentDef?.thinking?.enabled,
-        sandbox: this.options.sandbox,
+        sandbox: useSandbox,
       });
     }
 

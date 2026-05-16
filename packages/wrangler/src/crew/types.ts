@@ -1,7 +1,6 @@
 import type { ParsedAgent } from '../agent/agent-parser.js';
 import type { ILLMProvider, AskHumanHandler, Tool } from '@agentskillmania/colts';
 import type { SearchProvider } from '../tools/builtin/web-search.js';
-import type { Sandbox } from '@agentskillmania/sandbox';
 import type { ZodTypeAny } from 'zod';
 
 // ─── Agent roles ───
@@ -173,6 +172,7 @@ export interface CrewConfig {
     readonly name: string;
     readonly description: string;
     readonly primaryAgent: string;
+    readonly sandbox?: boolean;
   };
   readonly memory: string;
   readonly agentDefs: Readonly<Record<string, ParsedAgent>>;
@@ -208,7 +208,7 @@ export interface CrewOptions {
   readonly askHumanHandler?: AskHumanHandler;
   readonly workspaceDeps?: { workspacePath: string };
   readonly searchProvider?: SearchProvider;
-  readonly sandbox?: Sandbox;
+  readonly sandbox?: boolean;
   readonly runnerFactory?: RunnerFactory;
   /** Explicit MCP config paths. Empty array = skip MCP loading entirely. Undefined = auto-discover. */
   readonly mcpConfigPaths?: string[];

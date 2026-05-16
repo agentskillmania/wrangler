@@ -9,6 +9,7 @@ interface CrewMeta {
   name: string;
   description?: string;
   'primary-agent': string;
+  sandbox?: boolean;
 }
 
 /**
@@ -54,6 +55,7 @@ export class CrewLoader {
         name: meta.name,
         description: meta.description ?? '',
         primaryAgent: meta['primary-agent'],
+        sandbox: meta.sandbox,
       },
       memory,
       agentDefs,

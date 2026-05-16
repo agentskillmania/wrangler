@@ -46,12 +46,14 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
       let name = 'wrangler-agent';
       let instr = 'You are a helpful assistant.';
       let dirs: string[] = [];
+      let sandbox: boolean | undefined;
 
       if (mode.mode === 'agent') {
         const loaded = await AgentLoader.loadFrom(mode.agentDir);
         name = loaded.name;
         instr = loaded.instructions || instr;
         dirs = loaded.skillDirs;
+        sandbox = loaded.sandbox;
       }
 
       const workspacePath =
@@ -63,6 +65,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
         workspacePath,
         skillDirectories: dirs,
         thinkingEnabled: true,
+        sandbox,
       });
 
       setRunner(r);
