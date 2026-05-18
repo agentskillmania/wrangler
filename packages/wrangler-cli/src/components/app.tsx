@@ -64,7 +64,10 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
         model: config.llm!.model,
         workspacePath,
         skillDirectories: dirs,
-        thinkingEnabled: true,
+        thinkingEnabled: config.llm?.thinkingEnabled ?? true,
+        enablePromptThinking: config.llm?.enablePromptThinking,
+        requestTimeout: config.requestTimeout,
+        maxSteps: config.maxSteps,
         sandbox,
       });
 

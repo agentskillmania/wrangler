@@ -16,14 +16,8 @@ import { createAgentState } from '@agentskillmania/colts';
 import type { AgentState } from '@agentskillmania/colts';
 import type { AppConfig } from './config.js';
 
-/** Default concurrency for provider-level scheduling */
-const DEFAULT_PROVIDER_CONCURRENCY = 5;
-
-/** Default concurrency for api-key-level scheduling */
-const DEFAULT_KEY_CONCURRENCY = 5;
-
-/** Default concurrency for individual model scheduling */
-const DEFAULT_MODEL_CONCURRENCY = 5;
+/** Default concurrency when not specified in config */
+const DEFAULT_CONCURRENCY = 5;
 
 /**
  * Create a configured LLMClient from AppConfig
@@ -37,20 +31,21 @@ const DEFAULT_MODEL_CONCURRENCY = 5;
 export function createLLMClientFromConfig(config: AppConfig): LLMClient | null {
   if (!config.hasValidConfig || !config.llm) return null;
 
-  const { provider, apiKey, model, baseUrl } = config.llm;
+  const { provider, apiKey, model, baseUrl, maxConcurrency } = config.llm;
+  const concurrency = maxConcurrency ?? DEFAULT_CONCURRENCY;
 
   const client = new LLMClient({ baseUrl });
 
   client.registerProvider({
     name: provider,
-    maxConcurrency: DEFAULT_PROVIDER_CONCURRENCY,
+    maxConcurrency: concurrency,
   });
 
   client.registerApiKey({
     key: apiKey,
     provider,
-    maxConcurrency: DEFAULT_KEY_CONCURRENCY,
-    models: [{ modelId: model, maxConcurrency: DEFAULT_MODEL_CONCURRENCY }],
+    maxConcurrency: concurrency,
+    models: [{ modelId: model, maxConcurrency: concurrency }],
   });
 
   return client;

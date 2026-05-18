@@ -27,7 +27,17 @@ export interface WranglerConfig extends Record<string, unknown> {
     model?: string;
     /** Custom base URL for the provider API */
     baseUrl?: string;
+    /** Enable extended thinking for supported models */
+    thinkingEnabled?: boolean;
+    /** Enable prompt-level thinking control */
+    enablePromptThinking?: boolean;
+    /** Maximum concurrent requests to the LLM provider */
+    maxConcurrency?: number;
   };
+  /** Maximum number of agent steps per run */
+  maxSteps?: number;
+  /** Request timeout in milliseconds */
+  requestTimeout?: number;
 }
 
 /**
@@ -44,7 +54,14 @@ export interface AppConfig {
     apiKey: string;
     model: string;
     baseUrl?: string;
+    thinkingEnabled?: boolean;
+    enablePromptThinking?: boolean;
+    maxConcurrency?: number;
   };
+  /** Maximum number of agent steps per run */
+  maxSteps?: number;
+  /** Request timeout in milliseconds */
+  requestTimeout?: number;
 }
 
 /** Default configuration YAML */
@@ -142,7 +159,12 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
         apiKey: config.llm!.apiKey!,
         model: config.llm!.model ?? 'gpt-4o',
         baseUrl: config.llm!.baseUrl,
+        thinkingEnabled: config.llm?.thinkingEnabled,
+        enablePromptThinking: config.llm?.enablePromptThinking,
+        maxConcurrency: config.llm?.maxConcurrency,
       },
+      maxSteps: config.maxSteps,
+      requestTimeout: config.requestTimeout,
     };
   } catch {
     return { hasValidConfig: false, configPath };

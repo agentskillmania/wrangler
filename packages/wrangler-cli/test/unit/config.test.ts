@@ -304,6 +304,147 @@ llm:
         process.chdir(originalCwd);
       }
     });
+
+    it('should read thinkingEnabled from YAML', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+  thinkingEnabled: true
+`;
+      const localConfig = path.join(testDir, 'wrangler.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.llm?.thinkingEnabled).toBe(true);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should read enablePromptThinking from YAML', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+  enablePromptThinking: true
+`;
+      const localConfig = path.join(testDir, 'wrangler.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.llm?.enablePromptThinking).toBe(true);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should read maxConcurrency from YAML', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+  maxConcurrency: 10
+`;
+      const localConfig = path.join(testDir, 'wrangler.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.llm?.maxConcurrency).toBe(10);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should read maxSteps from YAML', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+maxSteps: 50
+`;
+      const localConfig = path.join(testDir, 'wrangler.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.maxSteps).toBe(50);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should read requestTimeout from YAML', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+requestTimeout: 30000
+`;
+      const localConfig = path.join(testDir, 'wrangler.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.requestTimeout).toBe(30000);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should return undefined for new fields when not specified', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: gpt-4
+`;
+      const localConfig = path.join(testDir, 'wrangler.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.llm?.thinkingEnabled).toBeUndefined();
+        expect(config.llm?.enablePromptThinking).toBeUndefined();
+        expect(config.llm?.maxConcurrency).toBeUndefined();
+        expect(config.maxSteps).toBeUndefined();
+        expect(config.requestTimeout).toBeUndefined();
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
   });
 
   // ---------------------------------------------------------------------------

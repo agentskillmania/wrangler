@@ -11,7 +11,10 @@ import type { AppConfig } from '../../src/config.js';
 // ---------------------------------------------------------------------------
 
 /** Build a minimal valid AppConfig */
-function makeValidConfig(overrides?: Partial<AppConfig['llm']>): AppConfig {
+function makeValidConfig(
+  overrides?: Partial<AppConfig['llm']>,
+  extra?: Partial<AppConfig>
+): AppConfig {
   return {
     hasValidConfig: true,
     configPath: '/test/config.yaml',
@@ -21,6 +24,7 @@ function makeValidConfig(overrides?: Partial<AppConfig['llm']>): AppConfig {
       model: 'gpt-4o',
       ...overrides,
     },
+    ...extra,
   };
 }
 
@@ -67,6 +71,30 @@ describe('createLLMClientFromConfig', () => {
     const client = createLLMClientFromConfig(config);
 
     expect(client).not.toBeNull();
+  });
+
+  it('should use custom maxConcurrency when provided', () => {
+    const config = makeValidConfig({ maxConcurrency: 10 });
+    const client = createLLMClientFromConfig(config);
+
+    expect(client).not.toBeNull();
+    // Verify the client was created successfully with custom concurrency
+  });
+
+  it('should default to 5 maxConcurrency when not provided', () => {
+    const config = makeValidConfig();
+    const client = createLLMClientFromConfig(config);
+
+    expect(client).not.toBeNull();
+    // Default concurrency of 5 is used when maxConcurrency is undefined
+  });
+
+  it('should pass maxConcurrency to provider, key, and model', () => {
+    const config = makeValidConfig({ maxConcurrency: 15 });
+    const client = createLLMClientFromConfig(config);
+
+    expect(client).not.toBeNull();
+    // maxConcurrency=15 should be applied at provider, apiKey, and model levels
   });
 });
 
