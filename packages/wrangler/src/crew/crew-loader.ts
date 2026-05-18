@@ -59,7 +59,7 @@ export class CrewLoader {
       },
       memory,
       agentDefs,
-      skillDirs,
+      skillDirectories: skillDirs,
     };
   }
 

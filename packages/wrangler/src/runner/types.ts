@@ -14,4 +14,7 @@ export interface EnhancedRunnerOptions {
   skillDirectories?: string[];
   askHumanHandler?: AskHumanHandler;
   thinkingEnabled?: boolean;
+  enablePromptThinking?: boolean;
+  requestTimeout?: number;
+  maxSteps?: number;
 }

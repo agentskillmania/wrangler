@@ -47,11 +47,7 @@ export async function initWorkspace(cwd: string, options: InitOptions): Promise<
     const entries = await readdir(dir);
     const nonDot = entries.filter((e) => !e.startsWith('.'));
     if (nonDot.length > 0) {
-      throw new CliError(
-        `Directory ${dir} is not empty`,
-        'DIR_NOT_EMPTY',
-        ExitCode.GeneralError
-      );
+      throw new CliError(`Directory ${dir} is not empty`, 'DIR_NOT_EMPTY', ExitCode.GeneralError);
     }
   } catch (error) {
     if (error instanceof CliError) throw error;

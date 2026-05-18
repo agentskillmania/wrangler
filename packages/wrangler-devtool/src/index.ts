@@ -18,7 +18,13 @@ export { applyChanges } from './utils/file-change.js';
 export type { FileChange, ApplyOptions, ApplyResult } from './utils/file-change.js';
 
 export { runTests, TestRunner } from './test-runner/runner.js';
-export type { TestReport, TestSuite, TestCaseResult, TestSummary, TestCliOptions } from './test-runner/types.js';
+export type {
+  TestReport,
+  TestSuite,
+  TestCaseResult,
+  TestSummary,
+  TestCliOptions,
+} from './test-runner/types.js';
 
 export { loadTestCases, loadTestFile, discoverTestFiles } from './test-runner/loader.js';
 export type { TestCase, TestLoaderError } from './test-runner/loader.js';
@@ -54,4 +60,10 @@ export {
   runReviewAgent,
 } from './agents/orchestrator.js';
 
-export type { AgentOutput, ReviewReport, ReviewDimension, ReviewIssue, AgentOptions } from './agents/types.js';
+export type {
+  AgentOutput,
+  ReviewReport,
+  ReviewDimension,
+  ReviewIssue,
+  AgentOptions,
+} from './agents/types.js';

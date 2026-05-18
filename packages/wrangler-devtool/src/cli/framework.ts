@@ -81,7 +81,7 @@ function parseRawArgs(argv: string[]): ParseResult {
 function validateOptions(
   options: Record<string, unknown>,
   defs: Record<string, CliOptionDef> = {},
-  commandPath: string[]
+  _commandPath: string[]
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   const errors: string[] = [];
@@ -177,10 +177,7 @@ interface RouteResult {
   commandDef: CliCommandDef;
 }
 
-function routeCommand(
-  commands: Record<string, CliCommandDef>,
-  args: string[]
-): RouteResult | null {
+function routeCommand(commands: Record<string, CliCommandDef>, args: string[]): RouteResult | null {
   if (args.length === 0) return null;
 
   const rootName = args[0];
@@ -266,7 +263,11 @@ export async function runCli(
         console.log(getHelp(root, [rootName]));
         return ExitCode.Success;
       }
-      throw new CliError(`Unknown command: ${rawArgs.join(' ')}`, 'UNKNOWN_COMMAND', ExitCode.GeneralError);
+      throw new CliError(
+        `Unknown command: ${rawArgs.join(' ')}`,
+        'UNKNOWN_COMMAND',
+        ExitCode.GeneralError
+      );
     }
 
     commandPath = route.commandPath;

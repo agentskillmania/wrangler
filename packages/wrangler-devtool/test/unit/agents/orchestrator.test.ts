@@ -77,19 +77,25 @@ describe('parseAgentOutput', () => {
   });
 
   it('should parse JSON inside markdown code block', () => {
-    const raw = '```json\n' + JSON.stringify({
-      changes: [{ file: 'AGENT.md', type: 'create', new: 'content' }],
-      summary: 'Created agent',
-    }) + '\n```';
+    const raw =
+      '```json\n' +
+      JSON.stringify({
+        changes: [{ file: 'AGENT.md', type: 'create', new: 'content' }],
+        summary: 'Created agent',
+      }) +
+      '\n```';
     const output = parseAgentOutput(raw);
     expect(output.changes).toHaveLength(1);
   });
 
   it('should parse JSON without language specifier', () => {
-    const raw = '```\n' + JSON.stringify({
-      changes: [{ file: 'AGENT.md', type: 'create', new: 'content' }],
-      summary: 'Created agent',
-    }) + '\n```';
+    const raw =
+      '```\n' +
+      JSON.stringify({
+        changes: [{ file: 'AGENT.md', type: 'create', new: 'content' }],
+        summary: 'Created agent',
+      }) +
+      '\n```';
     const output = parseAgentOutput(raw);
     expect(output.changes).toHaveLength(1);
   });
@@ -107,7 +113,9 @@ describe('parseAgentOutput', () => {
   });
 
   it('should throw when changes is not an array', () => {
-    expect(() => parseAgentOutput('{"changes": "bad", "summary": "test"}')).toThrow('Missing or invalid "changes"');
+    expect(() => parseAgentOutput('{"changes": "bad", "summary": "test"}')).toThrow(
+      'Missing or invalid "changes"'
+    );
   });
 });
 
@@ -131,31 +139,44 @@ describe('parseReviewReport', () => {
   });
 
   it('should parse review report in code block', () => {
-    const raw = '```json\n' + JSON.stringify({
-      overallScore: 3,
-      dimensions: { clarity: { score: 3, reasoning: 'OK' } },
-      issues: [{ severity: 'minor', location: 'line 1', description: 'typo', suggestion: 'fix it' }],
-      summary: 'OK',
-    }) + '\n```';
+    const raw =
+      '```json\n' +
+      JSON.stringify({
+        overallScore: 3,
+        dimensions: { clarity: { score: 3, reasoning: 'OK' } },
+        issues: [
+          { severity: 'minor', location: 'line 1', description: 'typo', suggestion: 'fix it' },
+        ],
+        summary: 'OK',
+      }) +
+      '\n```';
     const report = parseReviewReport(raw);
     expect(report.overallScore).toBe(3);
     expect(report.issues).toHaveLength(1);
   });
 
   it('should throw when overallScore is missing', () => {
-    expect(() => parseReviewReport('{"dimensions": {}, "issues": [], "summary": ""}')).toThrow('overallScore');
+    expect(() => parseReviewReport('{"dimensions": {}, "issues": [], "summary": ""}')).toThrow(
+      'overallScore'
+    );
   });
 
   it('should throw when dimensions is missing', () => {
-    expect(() => parseReviewReport('{"overallScore": 1, "issues": [], "summary": ""}')).toThrow('dimensions');
+    expect(() => parseReviewReport('{"overallScore": 1, "issues": [], "summary": ""}')).toThrow(
+      'dimensions'
+    );
   });
 
   it('should throw when issues is missing', () => {
-    expect(() => parseReviewReport('{"overallScore": 1, "dimensions": {}, "summary": ""}')).toThrow('issues');
+    expect(() => parseReviewReport('{"overallScore": 1, "dimensions": {}, "summary": ""}')).toThrow(
+      'issues'
+    );
   });
 
   it('should throw when summary is missing', () => {
-    expect(() => parseReviewReport('{"overallScore": 1, "dimensions": {}, "issues": []}')).toThrow('summary');
+    expect(() => parseReviewReport('{"overallScore": 1, "dimensions": {}, "issues": []}')).toThrow(
+      'summary'
+    );
   });
 
   it('should throw when no JSON braces in review report', () => {
@@ -188,9 +209,7 @@ describe('callAgentLLM', () => {
     expect(mockCall).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'gpt-4o',
-        messages: expect.arrayContaining([
-          expect.objectContaining({ role: 'user' }),
-        ]),
+        messages: expect.arrayContaining([expect.objectContaining({ role: 'user' })]),
       })
     );
   });

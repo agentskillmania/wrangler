@@ -3,7 +3,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, basename } from 'node:path';
+import { dirname, join } from 'node:path';
 import { LLMClient } from '@agentskillmania/llm-client';
 import type { AgentOutput, ReviewReport, AgentOptions } from './types.js';
 

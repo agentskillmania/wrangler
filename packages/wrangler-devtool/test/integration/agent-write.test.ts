@@ -24,11 +24,9 @@ describe('US2: Generate an agent with AI', () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
 
     // First create an agent
-    const firstResult = await runAgentArchitect(
-      '你是一个简单的echo agent',
-      undefined,
-      { cwd: tempDir }
-    );
+    const firstResult = await runAgentArchitect('你是一个简单的echo agent', undefined, {
+      cwd: tempDir,
+    });
 
     // Apply the change
     const { applyChanges } = await import('../../src/utils/file-change.js');
@@ -36,11 +34,9 @@ describe('US2: Generate an agent with AI', () => {
 
     // Then update it
     const existing = await readFile(join(tempDir, 'AGENT.md'), 'utf-8');
-    const secondResult = await runAgentArchitect(
-      '增加一个要求：回答要加上emoji',
-      existing,
-      { cwd: tempDir }
-    );
+    const secondResult = await runAgentArchitect('增加一个要求：回答要加上emoji', existing, {
+      cwd: tempDir,
+    });
 
     expect(secondResult.changes[0].type).toBe('edit');
     expect(secondResult.changes[0].old).toBeTruthy();

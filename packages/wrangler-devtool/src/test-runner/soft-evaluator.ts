@@ -20,7 +20,9 @@ interface EvalResponse {
 function buildPrompt(evaluation: SoftEvaluation, output: AgentRunOutput): string {
   let rubricText = '';
   if (evaluation.rubric && evaluation.rubric.length > 0) {
-    rubricText = '\nScoring rubric:\n' + evaluation.rubric.map((r) => `  ${r.score}: ${r.description}`).join('\n');
+    rubricText =
+      '\nScoring rubric:\n' +
+      evaluation.rubric.map((r) => `  ${r.score}: ${r.description}`).join('\n');
   }
 
   return `You are a test evaluation judge. Evaluate the following agent output against the given criteria.

@@ -27,9 +27,7 @@ describe('crew write', () => {
   it('should create CREW.md with --apply (mocked LLM)', async () => {
     process.chdir(tempDir);
     vi.spyOn(crewComposerModule, 'runCrewComposer').mockResolvedValue({
-      changes: [
-        { file: 'CREW.md', type: 'create', new: '---\nname: dev-team\n---\n\n# Dev Team' },
-      ],
+      changes: [{ file: 'CREW.md', type: 'create', new: '---\nname: dev-team\n---\n\n# Dev Team' }],
       summary: 'Created dev team crew',
     });
 
@@ -91,9 +89,6 @@ describe('crew write', () => {
       apply: true,
     });
 
-    expect(mock).toHaveBeenCalledWith(
-      expect.stringContaining('Crew name: my-crew'),
-      undefined
-    );
+    expect(mock).toHaveBeenCalledWith(expect.stringContaining('Crew name: my-crew'), undefined);
   });
 });

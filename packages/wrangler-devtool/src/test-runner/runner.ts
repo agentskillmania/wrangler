@@ -22,15 +22,10 @@ import { evaluateSoft } from './soft-evaluator.js';
 import { loadConfig } from '../config.js';
 
 // wrangler imports
-import {
-  AgentLoader,
-  CrewLoader,
-  EnhancedRunner,
-  Crew,
-} from '@agentskillmania/wrangler';
+import { AgentLoader, CrewLoader, EnhancedRunner, Crew } from '@agentskillmania/wrangler';
 import type { EnhancedRunnerOptions, CrewOptions } from '@agentskillmania/wrangler';
 import { createAgentState, addUserMessage, addAssistantMessage } from '@agentskillmania/colts';
-import type { AgentState, ILLMProvider } from '@agentskillmania/colts';
+import type { ILLMProvider } from '@agentskillmania/colts';
 
 export interface TestRunnerDeps {
   llmClient?: ILLMProvider;
@@ -42,7 +37,10 @@ function defaultRunnerFactory(options: EnhancedRunnerOptions): Promise<EnhancedR
   return EnhancedRunner.create(options);
 }
 
-function defaultCrewFactory(config: Awaited<ReturnType<CrewLoader['load']>>, options: CrewOptions): Crew {
+function defaultCrewFactory(
+  config: Awaited<ReturnType<CrewLoader['load']>>,
+  options: CrewOptions
+): Crew {
   return new Crew(config, options);
 }
 
@@ -154,7 +152,12 @@ export class TestRunner {
     let allSoftPassed = true;
 
     // Evaluate soft assertions (if not hard-only mode and no error)
-    if (!options.hardOnly && !error && testCase.expected?.soft && testCase.expected.soft.length > 0) {
+    if (
+      !options.hardOnly &&
+      !error &&
+      testCase.expected?.soft &&
+      testCase.expected.soft.length > 0
+    ) {
       try {
         const llmConfig = await loadConfig();
         if (llmConfig?.llm) {
@@ -194,12 +197,16 @@ export class TestRunner {
     };
   }
 
-  private prepareWorkspace(targetPath: string): string {
+  private prepareWorkspace(_targetPath: string): string {
     const tempDir = mkdtempSync(join(tmpdir(), 'wrangler-test-'));
     return tempDir;
   }
 
-  private async applyFixtures(testCase: TestCase, targetPath: string, workspacePath: string): Promise<void> {
+  private async applyFixtures(
+    testCase: TestCase,
+    targetPath: string,
+    workspacePath: string
+  ): Promise<void> {
     if (!testCase.context?.files) return;
 
     for (const fixture of testCase.context.files) {
@@ -237,7 +244,7 @@ export class TestRunner {
       llmClient: this.deps.llmClient as ILLMProvider,
       model: agentDef.model ?? 'gpt-4',
       workspacePath,
-      skillDirectories: agentDef.skillDirs,
+      skillDirectories: agentDef.skillDirectories,
       mcpConfigPaths: agentDef.mcpPaths,
     });
 
@@ -266,7 +273,9 @@ export class TestRunner {
     const toolCalls: ToolCallRecord[] = [];
 
     runner.on('tool:start', (e: unknown) => {
-      const event = e as { action: { id: string; tool: string; arguments: Record<string, unknown> } };
+      const event = e as {
+        action: { id: string; tool: string; arguments: Record<string, unknown> };
+      };
       toolCalls.push({
         name: event.action.tool,
         args: event.action.arguments,
@@ -282,11 +291,17 @@ export class TestRunner {
       clearTimeout(timeoutId);
 
       return {
-        answer: runResult.result.type === 'success' ? (runResult.result as { answer: string }).answer : '',
+        answer:
+          runResult.result.type === 'success'
+            ? (runResult.result as { answer: string }).answer
+            : '',
         toolCalls,
         resultType: runResult.result.type as 'success' | 'max_steps' | 'error',
         totalSteps: runResult.result.totalSteps,
-        error: runResult.result.type === 'error' ? (runResult.result as { error: Error }).error : undefined,
+        error:
+          runResult.result.type === 'error'
+            ? (runResult.result as { error: Error }).error
+            : undefined,
       };
     } catch (err) {
       clearTimeout(timeoutId);
@@ -345,7 +360,7 @@ export class TestRunner {
       crew.pushInput({ type: 'stop' });
     }, timeoutMs);
 
-    return new Promise<AgentRunOutput>((resolve, reject) => {
+    return new Promise<AgentRunOutput>((resolve, _reject) => {
       crew.on('user_response', () => {
         clearTimeout(timeoutId);
         resolve({

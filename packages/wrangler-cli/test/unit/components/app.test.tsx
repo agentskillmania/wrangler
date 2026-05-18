@@ -32,7 +32,7 @@ vi.mock('@agentskillmania/wrangler', () => ({
     loadFrom: vi.fn().mockResolvedValue({
       name: 'loaded-agent',
       instructions: 'loaded instructions',
-      skillDirs: [],
+      skillDirectories: [],
     }),
   },
   EnhancedRunner: {
@@ -248,7 +248,7 @@ describe('App', () => {
 
     const { AgentLoader } = await import('@agentskillmania/wrangler');
     expect(AgentLoader.loadFrom).toHaveBeenCalledWith('/tmp/agent-dir');
-    // EnhancedRunner.create called with loaded agent's skillDirs
+    // EnhancedRunner.create called with loaded agent's skillDirectories
     expect(EnhancedRunner.create).toHaveBeenCalledWith(
       expect.objectContaining({ workspacePath: '/tmp/agent-dir' }),
     );

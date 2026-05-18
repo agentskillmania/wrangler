@@ -78,7 +78,11 @@ export async function createTemplate(
       await mkdir(join(dir, '.vibe'), { recursive: true });
       break;
     default:
-      throw new CliError(`Unknown template type: ${type}`, 'INVALID_TYPE', ExitCode.ValidationFailure);
+      throw new CliError(
+        `Unknown template type: ${type}`,
+        'INVALID_TYPE',
+        ExitCode.ValidationFailure
+      );
   }
 
   try {

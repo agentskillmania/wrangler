@@ -28,9 +28,9 @@ describe('testCommand', () => {
   });
 
   it('should reject invalid reporter', async () => {
-    await expect(
-      testCommand.handler!(['./my-agent'], { reporter: 'xml' })
-    ).rejects.toThrow('Invalid reporter');
+    await expect(testCommand.handler!(['./my-agent'], { reporter: 'xml' })).rejects.toThrow(
+      'Invalid reporter'
+    );
   });
 
   it('should accept console reporter and pass options', async () => {

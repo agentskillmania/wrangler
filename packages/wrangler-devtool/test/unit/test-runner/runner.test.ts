@@ -62,7 +62,11 @@ expected:
     });
 
     const runner = new TestRunner({
-      runnerFactory: vi.fn().mockResolvedValue(mockRunner as unknown as ReturnType<typeof createMockRunner> & { run: () => Promise<unknown> }),
+      runnerFactory: vi.fn().mockResolvedValue(
+        mockRunner as unknown as ReturnType<typeof createMockRunner> & {
+          run: () => Promise<unknown>;
+        }
+      ),
     });
 
     const report = await runner.run(join(tempDir, 'agent-workspace'));
@@ -103,7 +107,11 @@ expected:
     });
 
     const runner = new TestRunner({
-      runnerFactory: vi.fn().mockResolvedValue(mockRunner as unknown as ReturnType<typeof createMockRunner> & { run: () => Promise<unknown> }),
+      runnerFactory: vi.fn().mockResolvedValue(
+        mockRunner as unknown as ReturnType<typeof createMockRunner> & {
+          run: () => Promise<unknown>;
+        }
+      ),
     });
 
     const report = await runner.run(join(tempDir, 'agent-workspace'));
@@ -151,7 +159,11 @@ expected:
     });
 
     const runner = new TestRunner({
-      runnerFactory: vi.fn().mockResolvedValue(mockRunner as unknown as ReturnType<typeof createMockRunner> & { run: () => Promise<unknown> }),
+      runnerFactory: vi.fn().mockResolvedValue(
+        mockRunner as unknown as ReturnType<typeof createMockRunner> & {
+          run: () => Promise<unknown>;
+        }
+      ),
     });
 
     const report = await runner.run(join(tempDir, 'agent-workspace'), { case: 'Case B' });
@@ -200,7 +212,11 @@ expected:
     });
 
     const runner = new TestRunner({
-      runnerFactory: vi.fn().mockResolvedValue(mockRunner as unknown as ReturnType<typeof createMockRunner> & { run: () => Promise<unknown> }),
+      runnerFactory: vi.fn().mockResolvedValue(
+        mockRunner as unknown as ReturnType<typeof createMockRunner> & {
+          run: () => Promise<unknown>;
+        }
+      ),
     });
 
     const report = await runner.run(join(tempDir, 'agent-workspace'));
@@ -243,7 +259,11 @@ expected:
     });
 
     const runner = new TestRunner({
-      runnerFactory: vi.fn().mockResolvedValue(mockRunner as unknown as ReturnType<typeof createMockRunner> & { run: () => Promise<unknown> }),
+      runnerFactory: vi.fn().mockResolvedValue(
+        mockRunner as unknown as ReturnType<typeof createMockRunner> & {
+          run: () => Promise<unknown>;
+        }
+      ),
     });
 
     expect(process.env.TEST_VAR).toBeUndefined();
@@ -288,7 +308,11 @@ expected:
     };
 
     const runner = new TestRunner({
-      runnerFactory: vi.fn().mockResolvedValue(mockRunner as unknown as ReturnType<typeof createMockRunner> & { run: () => Promise<unknown> }),
+      runnerFactory: vi.fn().mockResolvedValue(
+        mockRunner as unknown as ReturnType<typeof createMockRunner> & {
+          run: () => Promise<unknown>;
+        }
+      ),
     });
 
     const report = await runner.run(join(tempDir, 'agent-workspace'));
@@ -321,7 +345,11 @@ expected:
     );
 
     const runner = new TestRunner({
-      runnerFactory: vi.fn().mockResolvedValue(createMockRunner({ answer: 'Hello', toolCalls: [], resultType: 'success', totalSteps: 1 })),
+      runnerFactory: vi
+        .fn()
+        .mockResolvedValue(
+          createMockRunner({ answer: 'Hello', toolCalls: [], resultType: 'success', totalSteps: 1 })
+        ),
     });
 
     const report = await runner.run(join(tempDir, 'agent-workspace'), { case: 'NonExistent' });

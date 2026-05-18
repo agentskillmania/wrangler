@@ -30,7 +30,10 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-function parseFrontmatter(content: string): { frontmatter: Record<string, unknown> | null; body: string } {
+function parseFrontmatter(content: string): {
+  frontmatter: Record<string, unknown> | null;
+  body: string;
+} {
   const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/);
   if (!match) {
     return { frontmatter: null, body: content };
@@ -49,8 +52,8 @@ async function runStaticChecks(targetPath: string): Promise<StaticReviewResult> 
   const stats = await stat(resolved);
 
   if (stats.isDirectory()) {
-    // Directory review
-    const entries = await readdir(resolved);
+    // Directory review — verify the directory is readable
+    await readdir(resolved);
 
     const hasAgentMd = await fileExists(join(resolved, 'AGENT.md'));
     const hasCrewMd = await fileExists(join(resolved, 'CREW.md'));
@@ -227,7 +230,11 @@ export const reviewCommand = defineCommand({
   handler: async (args, options) => {
     const targetPath = args[0];
     if (!targetPath) {
-      throw new CliError('Review target path is required', 'MISSING_PATH', ExitCode.ValidationFailure);
+      throw new CliError(
+        'Review target path is required',
+        'MISSING_PATH',
+        ExitCode.ValidationFailure
+      );
     }
 
     if (!(await fileExists(targetPath))) {

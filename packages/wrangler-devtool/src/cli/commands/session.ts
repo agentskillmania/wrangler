@@ -42,7 +42,11 @@ export const sessionCommand = defineCommand({
       handler: async (args, options) => {
         const sessionId = args[0];
         if (!sessionId) {
-          throw new CliError('Session ID is required', 'MISSING_SESSION_ID', ExitCode.ValidationFailure);
+          throw new CliError(
+            'Session ID is required',
+            'MISSING_SESSION_ID',
+            ExitCode.ValidationFailure
+          );
         }
         const newId = await forkSession(sessionId, {
           msg: options.msg as number,

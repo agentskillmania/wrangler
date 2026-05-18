@@ -146,7 +146,9 @@ expected:
 
     expect(report.summary.total).toBe(1);
     expect(report.summary.passed).toBe(1);
-    expect(mockCrew.pushInput).toHaveBeenCalledWith(expect.objectContaining({ type: 'user_message' }));
+    expect(mockCrew.pushInput).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'user_message' })
+    );
   });
 
   it('should handle crew error event', async () => {
@@ -199,7 +201,11 @@ expected:
           userResponseHandlers.forEach((h) => h({ content: 'Error: something broke' }));
         }, 10);
       }),
-      state: { get status() { return crewStatus; } },
+      state: {
+        get status() {
+          return crewStatus;
+        },
+      },
     };
 
     const runner = new TestRunner({
@@ -248,9 +254,15 @@ expected:
         }
       }),
       pushInput: vi.fn().mockImplementation(() => {
-        setTimeout(() => { status = 'idle'; }, 50);
+        setTimeout(() => {
+          status = 'idle';
+        }, 50);
       }),
-      state: { get status() { return status; } },
+      state: {
+        get status() {
+          return status;
+        },
+      },
     };
 
     const runner = new TestRunner({

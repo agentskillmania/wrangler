@@ -61,7 +61,7 @@ async function main() {
     model,
     workspacePath: process.cwd(),
     searchProvider,
-    skillDirectories: loaded.skillDirs,
+    skillDirectories: loaded.skillDirectories,
     thinkingEnabled: loaded.thinking?.enabled,
   });
 

@@ -50,7 +50,10 @@ function evaluateOutputContains(assertion: HardAssertion, output: AgentRunOutput
   };
 }
 
-function evaluateOutputNotContains(assertion: HardAssertion, output: AgentRunOutput): AssertionResult {
+function evaluateOutputNotContains(
+  assertion: HardAssertion,
+  output: AgentRunOutput
+): AssertionResult {
   const value = assertion.value ?? '';
   const passed = !output.answer.includes(value);
   return {

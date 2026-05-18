@@ -14,7 +14,7 @@ const mockConfig: CrewConfig = {
       instructions: 'You search',
     },
   },
-  skillDirs: [],
+  skillDirectories: [],
 };
 
 describe('Crew', () => {

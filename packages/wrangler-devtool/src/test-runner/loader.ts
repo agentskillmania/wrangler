@@ -4,7 +4,14 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import yaml from 'js-yaml';
-import type { TestCase, TestInput, TestContext, TestTools, HardAssertion, AssertionType } from './types.js';
+import type {
+  TestCase,
+  TestInput,
+  TestContext,
+  TestTools,
+  HardAssertion,
+  AssertionType,
+} from './types.js';
 export type { TestCase };
 
 const VALID_ASSERTION_TYPES: AssertionType[] = [
@@ -82,14 +89,14 @@ function validateInput(input: unknown, file: string, caseName: string): TestInpu
   return obj as TestInput;
 }
 
-function validateContext(context: unknown, file: string, caseName: string): TestContext | undefined {
+function validateContext(
+  context: unknown,
+  file: string,
+  caseName: string
+): TestContext | undefined {
   if (context === undefined) return undefined;
   if (context === null || typeof context !== 'object') {
-    throw new TestLoaderError(
-      `Test case "${caseName}" context must be an object`,
-      file,
-      caseName
-    );
+    throw new TestLoaderError(`Test case "${caseName}" context must be an object`, file, caseName);
   }
 
   const obj = context as Record<string, unknown>;
@@ -104,14 +111,22 @@ function validateContext(context: unknown, file: string, caseName: string): Test
       );
     }
     result.files = (obj.files as unknown[]).map((f: unknown, i: number) => {
-      if (f === null || typeof f !== 'object' || typeof (f as Record<string, unknown>).source !== 'string' || typeof (f as Record<string, unknown>).target !== 'string') {
+      if (
+        f === null ||
+        typeof f !== 'object' ||
+        typeof (f as Record<string, unknown>).source !== 'string' ||
+        typeof (f as Record<string, unknown>).target !== 'string'
+      ) {
         throw new TestLoaderError(
           `Test case "${caseName}" context.files[${i}] must have "source" and "target" strings`,
           file,
           caseName
         );
       }
-      return { source: String((f as Record<string, unknown>).source), target: String((f as Record<string, unknown>).target) };
+      return {
+        source: String((f as Record<string, unknown>).source),
+        target: String((f as Record<string, unknown>).target),
+      };
     });
   }
 
@@ -143,11 +158,7 @@ function validateContext(context: unknown, file: string, caseName: string): Test
 function validateTools(tools: unknown, file: string, caseName: string): TestTools | undefined {
   if (tools === undefined) return undefined;
   if (tools === null || typeof tools !== 'object') {
-    throw new TestLoaderError(
-      `Test case "${caseName}" tools must be an object`,
-      file,
-      caseName
-    );
+    throw new TestLoaderError(`Test case "${caseName}" tools must be an object`, file, caseName);
   }
 
   const obj = tools as Record<string, unknown>;
@@ -198,7 +209,12 @@ function validateTools(tools: unknown, file: string, caseName: string): TestTool
   return result;
 }
 
-function validateAssertion(assertion: unknown, file: string, caseName: string, index: number): HardAssertion {
+function validateAssertion(
+  assertion: unknown,
+  file: string,
+  caseName: string,
+  index: number
+): HardAssertion {
   if (assertion === null || typeof assertion !== 'object') {
     throw new TestLoaderError(
       `Test case "${caseName}" expected.hard[${index}] must be an object`,
@@ -262,7 +278,11 @@ function validateAssertion(assertion: unknown, file: string, caseName: string, i
       );
     }
     result.tool = obj.tool;
-    if (obj.with_args === undefined || obj.with_args === null || typeof obj.with_args !== 'object') {
+    if (
+      obj.with_args === undefined ||
+      obj.with_args === null ||
+      typeof obj.with_args !== 'object'
+    ) {
       throw new TestLoaderError(
         `Test case "${caseName}" expected.hard[${index}].with_args must be an object`,
         file,
@@ -323,11 +343,7 @@ function validateExpected(expected: unknown, file: string, caseName: string): Te
     return {};
   }
   if (expected === null || typeof expected !== 'object') {
-    throw new TestLoaderError(
-      `Test case "${caseName}" expected must be an object`,
-      file,
-      caseName
-    );
+    throw new TestLoaderError(`Test case "${caseName}" expected must be an object`, file, caseName);
   }
 
   const obj = expected as Record<string, unknown>;
@@ -361,7 +377,11 @@ function validateTestCase(data: unknown, file: string): TestCase {
   const caseName = obj.name;
 
   if (obj.input === undefined) {
-    throw new TestLoaderError(`Test case "${caseName}" missing required field: "input"`, file, caseName);
+    throw new TestLoaderError(
+      `Test case "${caseName}" missing required field: "input"`,
+      file,
+      caseName
+    );
   }
 
   const input = validateInput(obj.input, file, caseName);

@@ -17,10 +17,9 @@ describe('applyChanges', () => {
   });
 
   it('should create a file', async () => {
-    const result = await applyChanges(
-      [{ file: 'test.txt', type: 'create', new: 'hello' }],
-      { cwd: tempDir }
-    );
+    const result = await applyChanges([{ file: 'test.txt', type: 'create', new: 'hello' }], {
+      cwd: tempDir,
+    });
     expect(result.applied).toBe(true);
     expect(readFileSync(join(tempDir, 'test.txt'), 'utf-8')).toBe('hello');
   });
@@ -37,20 +36,16 @@ describe('applyChanges', () => {
 
   it('should delete a file', async () => {
     writeFileSync(join(tempDir, 'test.txt'), 'content', 'utf-8');
-    const result = await applyChanges(
-      [{ file: 'test.txt', type: 'delete' }],
-      { cwd: tempDir }
-    );
+    const result = await applyChanges([{ file: 'test.txt', type: 'delete' }], { cwd: tempDir });
     expect(result.applied).toBe(true);
     expect(existsSync(join(tempDir, 'test.txt'))).toBe(false);
   });
 
   it('should reject create if file exists', async () => {
     writeFileSync(join(tempDir, 'test.txt'), 'content', 'utf-8');
-    const result = await applyChanges(
-      [{ file: 'test.txt', type: 'create', new: 'hello' }],
-      { cwd: tempDir }
-    );
+    const result = await applyChanges([{ file: 'test.txt', type: 'create', new: 'hello' }], {
+      cwd: tempDir,
+    });
     expect(result.applied).toBe(false);
     expect(result.error).toContain('already exists');
   });
@@ -75,37 +70,32 @@ describe('applyChanges', () => {
   });
 
   it('should reject delete if file does not exist', async () => {
-    const result = await applyChanges(
-      [{ file: 'missing.txt', type: 'delete' }],
-      { cwd: tempDir }
-    );
+    const result = await applyChanges([{ file: 'missing.txt', type: 'delete' }], { cwd: tempDir });
     expect(result.applied).toBe(false);
     expect(result.error).toContain('does not exist');
   });
 
   it('should support dry-run mode', async () => {
-    const result = await applyChanges(
-      [{ file: 'test.txt', type: 'create', new: 'hello' }],
-      { cwd: tempDir, dryRun: true }
-    );
+    const result = await applyChanges([{ file: 'test.txt', type: 'create', new: 'hello' }], {
+      cwd: tempDir,
+      dryRun: true,
+    });
     expect(result.applied).toBe(false);
     expect(existsSync(join(tempDir, 'test.txt'))).toBe(false);
   });
 
   it('should reject path escape attempts', async () => {
-    const result = await applyChanges(
-      [{ file: '../escape.txt', type: 'create', new: 'hello' }],
-      { cwd: tempDir }
-    );
+    const result = await applyChanges([{ file: '../escape.txt', type: 'create', new: 'hello' }], {
+      cwd: tempDir,
+    });
     expect(result.applied).toBe(false);
     expect(result.error).toContain('escapes workspace');
   });
 
   it('should reject hidden files', async () => {
-    const result = await applyChanges(
-      [{ file: '.env', type: 'create', new: 'secret' }],
-      { cwd: tempDir }
-    );
+    const result = await applyChanges([{ file: '.env', type: 'create', new: 'secret' }], {
+      cwd: tempDir,
+    });
     expect(result.applied).toBe(false);
     expect(result.error).toContain('Hidden files');
   });
@@ -148,39 +138,33 @@ describe('applyChanges', () => {
   });
 
   it('should reject create without new content', async () => {
-    const result = await applyChanges(
-      [{ file: 'test.txt', type: 'create' }],
-      { cwd: tempDir }
-    );
+    const result = await applyChanges([{ file: 'test.txt', type: 'create' }], { cwd: tempDir });
     expect(result.applied).toBe(false);
     expect(result.error).toContain("Create requires 'new' content");
   });
 
   it('should reject edit without old content', async () => {
     writeFileSync(join(tempDir, 'test.txt'), 'content', 'utf-8');
-    const result = await applyChanges(
-      [{ file: 'test.txt', type: 'edit', new: 'new' }],
-      { cwd: tempDir }
-    );
+    const result = await applyChanges([{ file: 'test.txt', type: 'edit', new: 'new' }], {
+      cwd: tempDir,
+    });
     expect(result.applied).toBe(false);
     expect(result.error).toContain("Edit requires both 'old' and 'new'");
   });
 
   it('should reject edit without new content', async () => {
     writeFileSync(join(tempDir, 'test.txt'), 'content', 'utf-8');
-    const result = await applyChanges(
-      [{ file: 'test.txt', type: 'edit', old: 'content' }],
-      { cwd: tempDir }
-    );
+    const result = await applyChanges([{ file: 'test.txt', type: 'edit', old: 'content' }], {
+      cwd: tempDir,
+    });
     expect(result.applied).toBe(false);
     expect(result.error).toContain("Edit requires both 'old' and 'new'");
   });
 
   it('should reject unknown change type', async () => {
-    const result = await applyChanges(
-      [{ file: 'test.txt', type: 'unknown' as any }],
-      { cwd: tempDir }
-    );
+    const result = await applyChanges([{ file: 'test.txt', type: 'unknown' as any }], {
+      cwd: tempDir,
+    });
     expect(result.applied).toBe(false);
     expect(result.error).toContain('Unknown change type');
   });

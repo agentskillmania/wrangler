@@ -38,13 +38,19 @@ describe('US5 & US6: Session management', () => {
     );
 
     // Fork from msg 2
-    const newId = await forkSession(originalId, { msg: 2, workspace: tempDir, sessionBaseDir: baseDir });
+    const newId = await forkSession(originalId, {
+      msg: 2,
+      workspace: tempDir,
+      sessionBaseDir: baseDir,
+    });
 
     expect(newId).not.toBe(originalId);
 
     // Verify original is untouched
     const originalDir = store.getSessionDir(originalId);
-    const originalChat = await (await import('node:fs/promises')).readFile(join(originalDir, 'user-chat.jsonl'), 'utf-8');
+    const originalChat = await (
+      await import('node:fs/promises')
+    ).readFile(join(originalDir, 'user-chat.jsonl'), 'utf-8');
     expect(originalChat.trim().split('\n').length).toBe(3);
 
     // Verify new session exists

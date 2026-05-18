@@ -361,7 +361,7 @@ export class Crew {
         extraTools: [...commTools, ...todolistTools],
         mcpConfigPaths: this.buildMCPConfigPaths(),
         searchProvider: this.options.searchProvider ?? new BingScrapeSearchProvider(),
-        skillDirectories: [...this.config.skillDirs],
+        skillDirectories: [...this.config.skillDirectories],
         thinkingEnabled: agentDef?.thinking?.enabled,
         sandbox: useSandbox,
       });

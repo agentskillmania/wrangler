@@ -65,7 +65,10 @@ function isValidLLMConfig(obj: unknown): obj is LLMConfig {
  * @param cwd - Optional working directory to search first
  * @param extraPaths - Additional paths to search (used for testing)
  */
-export async function loadConfig(cwd?: string, extraPaths?: string[]): Promise<DevToolConfig | null> {
+export async function loadConfig(
+  cwd?: string,
+  extraPaths?: string[]
+): Promise<DevToolConfig | null> {
   const searchPaths: string[] = [];
 
   if (cwd) {

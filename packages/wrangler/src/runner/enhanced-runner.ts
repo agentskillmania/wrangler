@@ -108,6 +108,9 @@ export class EnhancedRunner {
       systemPrompt: buildTimeContext(),
       skillDirectories: options.skillDirectories,
       thinkingEnabled: options.thinkingEnabled,
+      enablePromptThinking: options.enablePromptThinking,
+      requestTimeout: options.requestTimeout,
+      maxSteps: options.maxSteps,
     });
 
     return new EnhancedRunner(runner);

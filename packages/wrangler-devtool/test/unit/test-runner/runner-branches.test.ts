@@ -51,7 +51,11 @@ expected:
           crewStatus = 'idle';
         }
       }),
-      state: { get status() { return crewStatus; } },
+      state: {
+        get status() {
+          return crewStatus;
+        },
+      },
     };
 
     const runner = new TestRunner({

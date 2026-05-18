@@ -2,7 +2,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { access, mkdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
 import { createTemplate } from '../../tools/create-template.js';

@@ -28,16 +28,12 @@ function formatDuration(ms: number): string {
 
 function formatAssertion(result: AssertionResult, index: number): string {
   const icon = result.passed ? color(colors.green, '✓') : color(colors.red, '✗');
-  const msg = result.passed
-    ? color(colors.dim, result.message)
-    : color(colors.red, result.message);
+  const msg = result.passed ? color(colors.dim, result.message) : color(colors.red, result.message);
   return `    ${icon} Assertion ${index + 1}: ${msg}`;
 }
 
-function formatCaseResult(result: TestCaseResult, index: number): string {
-  const icon = result.passed
-    ? color(colors.green, '✓ PASS')
-    : color(colors.red, '✗ FAIL');
+function formatCaseResult(result: TestCaseResult, _index: number): string {
+  const icon = result.passed ? color(colors.green, '✓ PASS') : color(colors.red, '✗ FAIL');
 
   const lines: string[] = [];
   lines.push(`  ${icon} ${result.case.name} (${formatDuration(result.duration)})`);
@@ -82,7 +78,6 @@ export function formatReport(report: TestReport): string {
   const hardTotal = summary.hardPassed + summary.hardFailed;
   const hardPassRate = hardTotal > 0 ? Math.round((summary.hardPassed / hardTotal) * 100) : 0;
 
-  const summaryColor = summary.failed === 0 ? colors.green : colors.red;
   lines.push(color(colors.bold, 'Summary:'));
   lines.push(`  Cases:     ${summary.passed}/${summary.total} passed (${passRate}%)`);
   lines.push(`  Hard:      ${summary.hardPassed}/${hardTotal} passed (${hardPassRate}%)`);

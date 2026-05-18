@@ -339,11 +339,7 @@ describe('loadTestCases', () => {
 
   it('should load all test cases from all files', async () => {
     mkdirSync(join(tempDir, 'test'));
-    writeFileSync(
-      join(tempDir, 'test', 'a.yaml'),
-      'name: A\ninput:\n  message: hi',
-      'utf-8'
-    );
+    writeFileSync(join(tempDir, 'test', 'a.yaml'), 'name: A\ninput:\n  message: hi', 'utf-8');
     writeFileSync(
       join(tempDir, 'test', 'b.yaml'),
       '- name: B1\n  input:\n    message: hi\n- name: B2\n  input:\n    message: hi',

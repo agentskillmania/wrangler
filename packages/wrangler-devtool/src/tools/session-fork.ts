@@ -66,10 +66,7 @@ async function findSessionDir(
 async function readUserChat(sessionDir: string): Promise<string[]> {
   try {
     const content = await readFile(join(sessionDir, 'user-chat.jsonl'), 'utf-8');
-    return content
-      .trim()
-      .split('\n')
-      .filter(Boolean);
+    return content.trim().split('\n').filter(Boolean);
   } catch {
     return [];
   }

@@ -104,7 +104,7 @@ You are a code reviewer.`
       expect(result.description).toBe('Reviews code');
       expect(result.model).toBe('gpt-4o');
       expect(result.instructions).toContain('You are a code reviewer.');
-      expect(result.skillDirs).toEqual([]);
+      expect(result.skillDirectories).toEqual([]);
       expect(result.mcpPaths).toEqual([]);
     });
 
@@ -117,7 +117,7 @@ You are a code reviewer.`
 
       const result = await AgentLoader.loadFrom(agentDir);
       expect(result.name).toBe('search-agent');
-      expect(result.skillDirs).toHaveLength(1);
+      expect(result.skillDirectories).toHaveLength(1);
       expect(result.mcpPaths).toHaveLength(1);
     });
 
@@ -161,7 +161,7 @@ You are a helpful assistant. Answer in one short sentence.`
         model: testConfig.testModel,
         workspacePath: testBaseDir,
         mcpConfigPaths: [],
-        skillDirectories: loaded.skillDirs,
+        skillDirectories: loaded.skillDirectories,
       });
 
       let state = createAgentState({

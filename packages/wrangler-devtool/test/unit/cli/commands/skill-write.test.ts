@@ -29,7 +29,11 @@ describe('skill write', () => {
     mkdirSync(join(tempDir, 'skills'), { recursive: true });
     vi.spyOn(skillDesignerModule, 'runSkillDesigner').mockResolvedValue({
       changes: [
-        { file: 'skills/refund-handler.md', type: 'create', new: '---\nname: refund-handler\n---\n\n# Refund Handler' },
+        {
+          file: 'skills/refund-handler.md',
+          type: 'create',
+          new: '---\nname: refund-handler\n---\n\n# Refund Handler',
+        },
       ],
       summary: 'Created refund handler skill',
     });
@@ -64,9 +68,7 @@ describe('skill write', () => {
     writeFileSync(join(tempDir, 'skills', 'test.md'), 'old content', 'utf-8');
 
     vi.spyOn(skillDesignerModule, 'runSkillDesigner').mockResolvedValue({
-      changes: [
-        { file: 'skills/test.md', type: 'edit', old: 'old content', new: 'new content' },
-      ],
+      changes: [{ file: 'skills/test.md', type: 'edit', old: 'old content', new: 'new content' }],
       summary: 'Updated',
     });
 
@@ -92,10 +94,7 @@ describe('skill write', () => {
       apply: true,
     });
 
-    expect(mock).toHaveBeenCalledWith(
-      expect.stringContaining('Infer a skill name'),
-      undefined
-    );
+    expect(mock).toHaveBeenCalledWith(expect.stringContaining('Infer a skill name'), undefined);
     expect(existsSync(join(tempDir, 'skills', 'inferred.md'))).toBe(true);
   });
 });

@@ -5,7 +5,7 @@ import { parseAgentMd } from '../agent/agent-parser.js';
 import type { ParsedAgent } from '../agent/agent-parser.js';
 
 export interface AgentLoadResult extends ParsedAgent {
-  skillDirs: string[];
+  skillDirectories: string[];
   mcpPaths: string[];
 }
 
@@ -21,13 +21,13 @@ export class AgentLoader {
     }
 
     const parsed = parseAgentMd(content);
-    const skillDirs = await AgentLoader.scanSkillsDir(absDir);
+    const skillDirectories = await AgentLoader.scanSkillsDir(absDir);
 
     const mcpPaths: string[] = [];
     const localMcp = join(absDir, 'mcp.json');
     if (existsSync(localMcp)) mcpPaths.push(localMcp);
 
-    return { ...parsed, skillDirs, mcpPaths };
+    return { ...parsed, skillDirectories, mcpPaths };
   }
 
   private static async scanSkillsDir(absDir: string): Promise<string[]> {

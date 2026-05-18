@@ -1,12 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-  mkdirSync,
-  readFileSync,
-  existsSync,
-} from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -73,10 +66,7 @@ describe('forkSession', () => {
     expect(existsSync(newDir)).toBe(true);
 
     const chatContent = readFileSync(join(newDir, 'user-chat.jsonl'), 'utf-8');
-    const lines = chatContent
-      .trim()
-      .split('\n')
-      .filter(Boolean);
+    const lines = chatContent.trim().split('\n').filter(Boolean);
     expect(lines).toHaveLength(3);
 
     expect(existsSync(join(newDir, 'state.json'))).toBe(true);

@@ -45,7 +45,11 @@ export const testCommand = defineCommand({
   handler: async (args, options) => {
     const targetPath = args[0];
     if (!targetPath) {
-      throw new CliError('Test target path is required', 'MISSING_PATH', ExitCode.ValidationFailure);
+      throw new CliError(
+        'Test target path is required',
+        'MISSING_PATH',
+        ExitCode.ValidationFailure
+      );
     }
 
     if (options.reporter !== 'console' && options.reporter !== 'json') {

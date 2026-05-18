@@ -192,6 +192,42 @@ describe('EnhancedRunner', () => {
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ thinkingEnabled: true }));
   });
 
+  it('should pass requestTimeout to AgentRunner', async () => {
+    await EnhancedRunner.create(makeOptions({ requestTimeout: 60000 }));
+    const calls = await getAgentRunnerCalls();
+    expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ requestTimeout: 60000 }));
+  });
+
+  it('should pass maxSteps to AgentRunner', async () => {
+    await EnhancedRunner.create(makeOptions({ maxSteps: 30 }));
+    const calls = await getAgentRunnerCalls();
+    expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ maxSteps: 30 }));
+  });
+
+  it('should pass enablePromptThinking to AgentRunner', async () => {
+    await EnhancedRunner.create(makeOptions({ enablePromptThinking: true }));
+    const calls = await getAgentRunnerCalls();
+    expect(calls[calls.length - 1][0]).toEqual(
+      expect.objectContaining({ enablePromptThinking: true })
+    );
+  });
+
+  it('should not hardcode thinkingEnabled to true', async () => {
+    await EnhancedRunner.create(makeOptions({ thinkingEnabled: false }));
+    const calls = await getAgentRunnerCalls();
+    expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ thinkingEnabled: false }));
+  });
+
+  it('should pass undefined thinkingEnabled when not set', async () => {
+    const opts = makeOptions();
+    delete opts.thinkingEnabled;
+    await EnhancedRunner.create(opts);
+    const calls = await getAgentRunnerCalls();
+    expect(calls[calls.length - 1][0]).toEqual(
+      expect.objectContaining({ thinkingEnabled: undefined })
+    );
+  });
+
   it('should create() passes middleware array (length 2: session + todolist) to AgentRunner', async () => {
     await EnhancedRunner.create(makeOptions());
 

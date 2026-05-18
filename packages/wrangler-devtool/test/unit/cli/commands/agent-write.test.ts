@@ -27,7 +27,9 @@ describe('agent write', () => {
   it('should create AGENT.md with --apply (mocked LLM)', async () => {
     process.chdir(tempDir);
     vi.spyOn(architectModule, 'runAgentArchitect').mockResolvedValue({
-      changes: [{ file: 'AGENT.md', type: 'create', new: '---\nname: react-agent\n---\n\n# React Agent' }],
+      changes: [
+        { file: 'AGENT.md', type: 'create', new: '---\nname: react-agent\n---\n\n# React Agent' },
+      ],
       summary: 'Created React agent',
     });
 
@@ -63,7 +65,12 @@ describe('agent write', () => {
 
     vi.spyOn(architectModule, 'runAgentArchitect').mockResolvedValue({
       changes: [
-        { file: 'AGENT.md', type: 'edit', old: '---\nname: old\n---\n\n# Old', new: '---\nname: new\n---\n\n# New' },
+        {
+          file: 'AGENT.md',
+          type: 'edit',
+          old: '---\nname: old\n---\n\n# Old',
+          new: '---\nname: new\n---\n\n# New',
+        },
       ],
       summary: 'Updated agent',
     });
@@ -90,10 +97,7 @@ describe('agent write', () => {
       apply: true,
     });
 
-    expect(mock).toHaveBeenCalledWith(
-      expect.stringContaining('Agent name: my-agent'),
-      undefined
-    );
+    expect(mock).toHaveBeenCalledWith(expect.stringContaining('Agent name: my-agent'), undefined);
   });
 
   it('should return validation failure if edit old content does not match', async () => {
@@ -101,9 +105,7 @@ describe('agent write', () => {
     writeFileSync(join(tempDir, 'AGENT.md'), 'actual content', 'utf-8');
 
     vi.spyOn(architectModule, 'runAgentArchitect').mockResolvedValue({
-      changes: [
-        { file: 'AGENT.md', type: 'edit', old: 'wrong content', new: 'new content' },
-      ],
+      changes: [{ file: 'AGENT.md', type: 'edit', old: 'wrong content', new: 'new content' }],
       summary: 'Updated',
     });
 

@@ -44,7 +44,7 @@ const crewConfig: CrewConfig = {
 你的回答会自动传给liaison。结果要简洁。`,
     },
   },
-  skillDirs: [],
+  skillDirectories: [],
 };
 
 describe('Crew peer collaboration', () => {

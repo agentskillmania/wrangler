@@ -2,7 +2,7 @@
 // 结构化文件变更应用器（create / edit / delete）
 
 import { readFile, writeFile, unlink, access } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { CliError, ExitCode } from '../cli/options.js';
 
 export interface FileChange {

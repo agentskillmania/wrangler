@@ -52,7 +52,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
         const loaded = await AgentLoader.loadFrom(mode.agentDir);
         name = loaded.name;
         instr = loaded.instructions || instr;
-        dirs = loaded.skillDirs;
+        dirs = loaded.skillDirectories;
         sandbox = loaded.sandbox;
       }
 

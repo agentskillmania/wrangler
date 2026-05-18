@@ -30,7 +30,9 @@ describe('review command', () => {
   });
 
   it('should reject non-existent path', async () => {
-    await expect(reviewCommand.handler!(['nonexistent'], {})).rejects.toThrow('Path does not exist');
+    await expect(reviewCommand.handler!(['nonexistent'], {})).rejects.toThrow(
+      'Path does not exist'
+    );
   });
 
   it('should run static checks on valid agent workspace', async () => {
@@ -62,7 +64,9 @@ describe('review command', () => {
 
     const output = JSON.parse(logSpy.mock.calls[0][0]);
     expect(output.static.passed).toBe(false);
-    expect(output.static.issues.some((i: any) => i.description.includes('missing YAML frontmatter'))).toBe(true);
+    expect(
+      output.static.issues.some((i: any) => i.description.includes('missing YAML frontmatter'))
+    ).toBe(true);
   });
 
   it('should report missing name field in static check', async () => {
@@ -79,7 +83,9 @@ describe('review command', () => {
     expect(code).toBe(ExitCode.GeneralError);
 
     const output = JSON.parse(logSpy.mock.calls[0][0]);
-    expect(output.static.issues.some((i: any) => i.description.includes('missing "name"'))).toBe(true);
+    expect(output.static.issues.some((i: any) => i.description.includes('missing "name"'))).toBe(
+      true
+    );
   });
 
   it('should report missing skills and test dirs', async () => {
@@ -117,11 +123,7 @@ describe('review command', () => {
   it('should report short file content', async () => {
     process.chdir(tempDir);
     const filePath = join(tempDir, 'skill.md');
-    writeFileSync(
-      filePath,
-      '---\nname: test\ndescription: x\n---\n\nshort\n',
-      'utf-8'
-    );
+    writeFileSync(filePath, '---\nname: test\ndescription: x\n---\n\nshort\n', 'utf-8');
 
     const code = await reviewCommand.handler!([filePath], {});
     expect(code).toBe(ExitCode.Success);
@@ -139,7 +141,9 @@ describe('review command', () => {
     expect(code).toBe(ExitCode.Success);
 
     const output = JSON.parse(logSpy.mock.calls[0][0]);
-    expect(output.static.issues.some((i: any) => i.description.includes('non-Markdown'))).toBe(true);
+    expect(output.static.issues.some((i: any) => i.description.includes('non-Markdown'))).toBe(
+      true
+    );
   });
 
   it('should run deep review with mocked LLM', async () => {
