@@ -99,7 +99,7 @@ describe('EnhancedRunner', () => {
       searchProvider: 'bing' as never,
       sandbox: false,
       sessionBaseDir: testBaseDir,
-      skillDirectories: ['/skills/dir1', '/skills/dir2'],
+      skillDirs: ['/skills/dir1', '/skills/dir2'],
       askHumanHandler: vi.fn(),
       thinkingEnabled: true,
       ...overrides,
@@ -172,15 +172,15 @@ describe('EnhancedRunner', () => {
     expect(callArgs.systemPrompt).not.toMatch(/You are/);
   });
 
-  it('should create() passes skillDirectories to AgentRunner', async () => {
+  it('should create() passes skillDirs to AgentRunner', async () => {
     await EnhancedRunner.create(
-      makeOptions({ skillDirectories: ['/skills/dir1', '/skills/dir2'] })
+      makeOptions({ skillDirs: ['/skills/dir1', '/skills/dir2'] })
     );
 
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(
       expect.objectContaining({
-        skillDirectories: ['/skills/dir1', '/skills/dir2'],
+        skillDirs: ['/skills/dir1', '/skills/dir2'],
       })
     );
   });

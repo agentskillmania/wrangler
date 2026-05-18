@@ -244,7 +244,7 @@ export class TestRunner {
       llmClient: this.deps.llmClient as ILLMProvider,
       model: agentDef.model ?? 'gpt-4',
       workspacePath,
-      skillDirectories: agentDef.skillDirectories,
+      skillDirs: agentDef.skillDirs,
       mcpConfigPaths: agentDef.mcpPaths,
     });
 

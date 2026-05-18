@@ -19,7 +19,7 @@ describe('CrewLoader', () => {
     expect(config.agentDefs.primary.model).toBe('gpt-4o');
     expect(config.agentDefs.searcher.description).toBe('Searches the web');
     expect(config.agentDefs.searcher.instructions).toContain('search agent');
-    expect(config.skillDirectories).toEqual([]);
+    expect(config.skillDirs).toEqual([]);
   });
 
   it('uses meta.name as agentDefs key', async () => {
@@ -104,7 +104,7 @@ describe('CrewLoader', () => {
     }
   });
 
-  it('returns empty skillDirectories when skills/ directory missing', async () => {
+  it('returns empty skillDirs when skills/ directory missing', async () => {
     const tmpDir = join(__dirname, '../../fixtures/crew-no-skills');
     try {
       await mkdir(tmpDir, { recursive: true });
@@ -115,7 +115,7 @@ describe('CrewLoader', () => {
       );
       const loader = new CrewLoader(tmpDir);
       const config = await loader.load();
-      expect(config.skillDirectories).toEqual([]);
+      expect(config.skillDirs).toEqual([]);
     } finally {
       await rm(tmpDir, { recursive: true });
     }

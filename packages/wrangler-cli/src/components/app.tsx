@@ -52,7 +52,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
         const loaded = await AgentLoader.loadFrom(mode.agentDir);
         name = loaded.name;
         instr = loaded.instructions || instr;
-        dirs = loaded.skillDirectories;
+        dirs = loaded.skillDirs;
         sandbox = loaded.sandbox;
       }
 
@@ -63,7 +63,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
         llmClient,
         model: config.llm!.model,
         workspacePath,
-        skillDirectories: dirs,
+        skillDirs: dirs,
         thinkingEnabled: config.llm?.thinkingEnabled ?? true,
         enablePromptThinking: config.llm?.enablePromptThinking,
         requestTimeout: config.requestTimeout,

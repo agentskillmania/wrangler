@@ -81,7 +81,7 @@ async function main() {
       .filter((n) => n !== config.meta.primaryAgent)
       .join(', ')}`
   );
-  console.log(`技能目录:      ${config.skillDirectories.length > 0 ? '已配置' : '(无)'}`);
+  console.log(`技能目录:      ${config.skillDirs.length > 0 ? '已配置' : '(无)'}`);
   console.log(`模型:         ${model}\n`);
 
   const crew = new Crew(config, {

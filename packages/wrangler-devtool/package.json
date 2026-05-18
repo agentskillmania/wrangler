@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@agentskillmania/colts": "^0.3.0",
-    "@agentskillmania/llm-client": "workspace:*",
+    "@agentskillmania/llm-client": "^0.3.0",
     "@agentskillmania/wrangler": "workspace:*",
     "js-yaml": "^4.1.0"
   },

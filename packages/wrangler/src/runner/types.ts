@@ -11,7 +11,7 @@ export interface EnhancedRunnerOptions {
   sandbox?: boolean;
   mcpConfigPaths?: string[];
   sessionBaseDir?: string;
-  skillDirectories?: string[];
+  skillDirs?: string[];
   askHumanHandler?: AskHumanHandler;
   thinkingEnabled?: boolean;
   enablePromptThinking?: boolean;

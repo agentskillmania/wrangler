@@ -106,7 +106,7 @@ export class EnhancedRunner {
       tools: allTools,
       middleware: [sessionSupport.middleware, todolistSupport.middleware],
       systemPrompt: buildTimeContext(),
-      skillDirectories: options.skillDirectories,
+      skillDirs: options.skillDirs,
       thinkingEnabled: options.thinkingEnabled,
       enablePromptThinking: options.enablePromptThinking,
       requestTimeout: options.requestTimeout,

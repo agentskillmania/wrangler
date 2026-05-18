@@ -40,7 +40,7 @@ async function main() {
     llmClient: llmProvider,
     model,
     workspacePath,
-    skillDirectories: loaded.skillDirectories,
+    skillDirs: loaded.skillDirs,
     thinkingEnabled: loaded.thinking?.enabled,
   });
 

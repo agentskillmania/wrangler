@@ -176,7 +176,7 @@ export interface CrewConfig {
   };
   readonly memory: string;
   readonly agentDefs: Readonly<Record<string, ParsedAgent>>;
-  readonly skillDirectories: readonly string[];
+  readonly skillDirs: readonly string[];
 }
 
 // ─── Runner factory (testability) ───

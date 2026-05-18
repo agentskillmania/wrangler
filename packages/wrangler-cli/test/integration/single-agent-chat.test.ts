@@ -76,7 +76,7 @@ You are a helpful assistant. Answer in one short sentence.`
         model: testConfig.testModel,
         workspacePath: testBaseDir,
         mcpConfigPaths: [],
-        skillDirectories: loaded.skillDirectories,
+        skillDirs: loaded.skillDirs,
       });
 
       // Step 4: createAgentState()
@@ -169,7 +169,7 @@ You are a file reading assistant. When asked about file contents, use the file_r
         model: testConfig.testModel,
         workspacePath: testBaseDir,
         mcpConfigPaths: [],
-        skillDirectories: loaded.skillDirectories,
+        skillDirs: loaded.skillDirs,
       });
 
       let state = createAgentState({

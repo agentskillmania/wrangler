@@ -30,7 +30,7 @@ You are a senior developer.`;
     }
   });
 
-  it('scans skills/ directory and returns skillDirectories', async () => {
+  it('scans skills/ directory and returns skillDirs', async () => {
     const tempDir = await mkdtemp('agent-loader-test-');
     try {
       await writeFile(join(tempDir, 'AGENT.md'), 'name: test\n---\nInstructions', 'utf-8');
@@ -40,9 +40,9 @@ You are a senior developer.`;
 
       const result = await AgentLoader.loadFrom(tempDir);
 
-      expect(result.skillDirectories).toHaveLength(2);
-      expect(result.skillDirectories).toContain(resolve(tempDir, 'skills', 'skill1.md'));
-      expect(result.skillDirectories).toContain(resolve(tempDir, 'skills', 'skill2.md'));
+      expect(result.skillDirs).toHaveLength(2);
+      expect(result.skillDirs).toContain(resolve(tempDir, 'skills', 'skill1.md'));
+      expect(result.skillDirs).toContain(resolve(tempDir, 'skills', 'skill2.md'));
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -70,7 +70,7 @@ You are a senior developer.`;
 
       const result = await AgentLoader.loadFrom(tempDir);
 
-      expect(result.skillDirectories).toEqual([]);
+      expect(result.skillDirs).toEqual([]);
       expect(result.mcpPaths).toEqual([]);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -116,9 +116,9 @@ You are a senior developer.`;
 
       const result = await AgentLoader.loadFrom(tempDir);
 
-      expect(result.skillDirectories).toHaveLength(2);
-      expect(result.skillDirectories).toContain(resolve(tempDir, 'skills', 'skill.md'));
-      expect(result.skillDirectories).toContain(resolve(tempDir, 'skills', 'subdir'));
+      expect(result.skillDirs).toHaveLength(2);
+      expect(result.skillDirs).toContain(resolve(tempDir, 'skills', 'skill.md'));
+      expect(result.skillDirs).toContain(resolve(tempDir, 'skills', 'subdir'));
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
