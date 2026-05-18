@@ -10,9 +10,9 @@
     "forceConsistentCasingInFileNames": true
   },
   "references": [
-    { "path": "./packages/core" },
-    { "path": "./packages/cli" },
-    { "path": "./packages/devtool" }
+    { "path": "./packages/wrangler" },
+    { "path": "./packages/wrangler-cli" },
+    { "path": "./packages/wrangler-devtool" }
   ],
   "files": []
 }

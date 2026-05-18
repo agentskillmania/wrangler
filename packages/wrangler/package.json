@@ -10,7 +10,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('fs'),path=require('path');const src=path.join('src','spec-plan','skills');const dist=path.join('dist','spec-plan','skills');if(fs.existsSync(src)){fs.mkdirSync(dist,{recursive:true});for(const f of fs.readdirSync(src)){if(f.endsWith('.md')){fs.copyFileSync(path.join(src,f),path.join(dist,f))}}}\"",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:unit": "vitest run test/unit",
