@@ -63,7 +63,7 @@ importers:
   packages/wrangler:
     dependencies:
       '@agentskillmania/colts':
-        specifier: link:../../../colts/packages/colts
+        specifier: ^0.3.0
         version: link:../../../colts/packages/colts
       '@agentskillmania/sandbox':
         specifier: ^1.1.3
