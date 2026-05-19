@@ -51,6 +51,23 @@ export {
   formatTodoForContext,
 } from './todolist/index.js';
 
+// Command system
+export {
+  parseCommand,
+  CommandRegistry,
+  createCommandMiddleware,
+  createClearHandler,
+  createCompactHandler,
+  createSkillsHandler,
+  createSkillHandler,
+} from './command/index.js';
+export type {
+  ParsedCommand,
+  CommandContext,
+  CommandResult,
+  CommandHandler,
+} from './command/index.js';
+
 // Spec/Plan (Layer 4)
 export { SpecStore, PlanStore } from './spec-plan/index.js';
 export type {

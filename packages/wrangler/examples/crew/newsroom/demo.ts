@@ -95,9 +95,7 @@ async function main() {
       .filter((n) => n !== config.meta.primaryAgent)
       .join(', ')}`
   );
-  console.log(
-    `风格指南:      ${config.skillDirs.length > 0 ? '特稿写作技能已加载' : '(无)'}`
-  );
+  console.log(`风格指南:      ${config.skillDirs.length > 0 ? '特稿写作技能已加载' : '(无)'}`);
   console.log(`搜索:         ${searchProvider ? '智谱 MCP (真实)' : '(无)'}`);
   console.log(`模型:         ${model}\n`);
 

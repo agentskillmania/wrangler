@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { initWorkspace } from '../../../src/tools/init-workspace.js';
@@ -22,12 +22,22 @@ describe('initWorkspace', () => {
 
     const entries = readdirSync(dir);
     expect(entries).toContain('AGENT.md');
+    expect(entries).not.toContain('agents');
     expect(entries).toContain('skills');
     expect(entries).toContain('test');
+    expect(entries).toContain('mcp.json');
+    expect(entries).toContain('mcp.json.example');
 
     const agentMd = readFileSync(join(dir, 'AGENT.md'), 'utf-8');
     expect(agentMd).toContain('name:');
     expect(agentMd).toContain('description:');
+    expect(agentMd).not.toContain('Attach skills from');
+    expect(agentMd).not.toContain('MCP Configuration');
+
+    const mcpJson = readFileSync(join(dir, 'mcp.json'), 'utf-8');
+    expect(JSON.parse(mcpJson)).toEqual({ mcpServers: {} });
+
+    expect(existsSync(join(dir, '.git'))).toBe(true);
   });
 
   it('should create crew workspace', async () => {
@@ -39,6 +49,10 @@ describe('initWorkspace', () => {
     expect(entries).toContain('agents');
     expect(entries).toContain('skills');
     expect(entries).toContain('test');
+    expect(entries).toContain('mcp.json');
+    expect(entries).toContain('mcp.json.example');
+
+    expect(existsSync(join(dir, '.git'))).toBe(true);
   });
 
   it('should create bare workspace', async () => {
@@ -50,6 +64,9 @@ describe('initWorkspace', () => {
     expect(entries).not.toContain('CREW.md');
     expect(entries).toContain('skills');
     expect(entries).toContain('test');
+    expect(entries).toContain('mcp.json');
+
+    expect(existsSync(join(dir, '.git'))).toBe(true);
   });
 
   it('should reject non-empty directory', async () => {
@@ -74,5 +91,44 @@ describe('initWorkspace', () => {
     await initWorkspace(dir, { mode: 'bare' });
 
     expect(readdirSync(dir)).toContain('skills');
+  });
+
+  it('should skip git init with --no-git', async () => {
+    const dir = join(tempDir, 'no-git');
+    await initWorkspace(dir, { mode: 'agent', noGit: true });
+
+    expect(existsSync(join(dir, '.git'))).toBe(false);
+  });
+
+  it('should skip git init when already in a git repo', async () => {
+    const parentDir = join(tempDir, 'parent-repo');
+    const childDir = join(parentDir, 'child-agent');
+
+    const fs = await import('node:fs/promises');
+    await fs.mkdir(parentDir, { recursive: true });
+
+    // Initialize parent as git repo
+    const { execSync } = await import('node:child_process');
+    execSync('git init', { cwd: parentDir });
+
+    await initWorkspace(childDir, { mode: 'agent' });
+
+    // child should not have its own .git
+    expect(existsSync(join(childDir, '.git'))).toBe(false);
+    // but workspace files should still be created
+    expect(existsSync(join(childDir, 'AGENT.md'))).toBe(true);
+  });
+
+  it('should create example skill and test files', async () => {
+    const dir = join(tempDir, 'with-examples');
+    await initWorkspace(dir, { mode: 'bare' });
+
+    const skillMd = readFileSync(join(dir, 'skills', 'example.md'), 'utf-8');
+    expect(skillMd).toContain('name: example');
+    expect(skillMd).toContain('description:');
+
+    const testYaml = readFileSync(join(dir, 'test', 'example.yaml'), 'utf-8');
+    expect(testYaml).toContain('name: example-test');
+    expect(testYaml).toContain('expected:');
   });
 });

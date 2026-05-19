@@ -123,11 +123,11 @@ describe('EnhancedRunner', () => {
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ model: 'claude-3' }));
   });
 
-  it('should create() defaults model to gpt-4', async () => {
+  it('should create() defaults model to glm-5.1', async () => {
     await EnhancedRunner.create(makeOptions({ model: undefined }));
 
     const calls = await getAgentRunnerCalls();
-    expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ model: 'gpt-4' }));
+    expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ model: 'glm-5.1' }));
   });
 
   it('should create() loads MCP tools via loadMCPTools', async () => {
@@ -173,9 +173,7 @@ describe('EnhancedRunner', () => {
   });
 
   it('should create() passes skillDirs to AgentRunner', async () => {
-    await EnhancedRunner.create(
-      makeOptions({ skillDirs: ['/skills/dir1', '/skills/dir2'] })
-    );
+    await EnhancedRunner.create(makeOptions({ skillDirs: ['/skills/dir1', '/skills/dir2'] }));
 
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(
@@ -234,9 +232,10 @@ describe('EnhancedRunner', () => {
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
 
-    expect(callArgs.middleware).toHaveLength(2);
-    expect(callArgs.middleware[0].name).toBe('session');
-    expect(callArgs.middleware[1].name).toBe('todolist');
+    expect(callArgs.middleware).toHaveLength(3);
+    expect(callArgs.middleware[0].name).toBe('command');
+    expect(callArgs.middleware[1].name).toBe('session');
+    expect(callArgs.middleware[2].name).toBe('todolist');
   });
 
   it('should run() delegate to inner runner with correct args', async () => {

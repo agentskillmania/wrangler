@@ -42,9 +42,17 @@ export function assemblePrompt(
 export function parseAgentOutput(raw: string): AgentOutput {
   const trimmed = raw.trim();
 
-  // Try to extract JSON from markdown code block
-  const codeBlockMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-  const jsonText = codeBlockMatch ? codeBlockMatch[1].trim() : trimmed;
+  // Try to extract JSON from markdown code block.
+  // Use first ``` to last ``` to handle nested code blocks inside JSON values.
+  const firstBacktick = trimmed.indexOf('```');
+  const lastBacktick = trimmed.lastIndexOf('```');
+  let jsonText = trimmed;
+
+  if (firstBacktick !== -1 && lastBacktick !== -1 && lastBacktick > firstBacktick) {
+    let content = trimmed.slice(firstBacktick + 3, lastBacktick);
+    content = content.replace(/^json\s*\n?/, '').trim();
+    jsonText = content;
+  }
 
   const startIdx = jsonText.indexOf('{');
   const endIdx = jsonText.lastIndexOf('}');
@@ -73,8 +81,15 @@ export function parseAgentOutput(raw: string): AgentOutput {
 export function parseReviewReport(raw: string): ReviewReport {
   const trimmed = raw.trim();
 
-  const codeBlockMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-  const jsonText = codeBlockMatch ? codeBlockMatch[1].trim() : trimmed;
+  const firstBacktick = trimmed.indexOf('```');
+  const lastBacktick = trimmed.lastIndexOf('```');
+  let jsonText = trimmed;
+
+  if (firstBacktick !== -1 && lastBacktick !== -1 && lastBacktick > firstBacktick) {
+    let content = trimmed.slice(firstBacktick + 3, lastBacktick);
+    content = content.replace(/^json\s*\n?/, '').trim();
+    jsonText = content;
+  }
 
   const startIdx = jsonText.indexOf('{');
   const endIdx = jsonText.lastIndexOf('}');
@@ -119,7 +134,7 @@ export async function callAgentLLM(
         timestamp: Date.now(),
       },
     ],
-    requestTimeout: options?.timeout ?? 60000,
+    requestTimeout: options?.timeout ?? 1800000,
   });
 
   return response.content;

@@ -14,10 +14,16 @@ export const initCommand = defineCommand({
       required: true,
       description: 'Workspace mode: agent, crew, or bare',
     },
+    'no-git': {
+      type: 'boolean',
+      default: false,
+      description: 'Skip git repository initialization',
+    },
   },
   handler: async (args, options) => {
     const directory = (args[0] as string | undefined) ?? process.cwd();
     const mode = options.mode as string;
+    const noGit = options['noGit'] as boolean;
 
     if (!['agent', 'crew', 'bare'].includes(mode)) {
       throw new CliError(
@@ -27,7 +33,7 @@ export const initCommand = defineCommand({
       );
     }
 
-    await initWorkspace(directory, { mode: mode as 'agent' | 'crew' | 'bare' });
+    await initWorkspace(directory, { mode: mode as 'agent' | 'crew' | 'bare', noGit });
     console.log(JSON.stringify({ success: true, directory, mode }));
     return ExitCode.Success;
   },

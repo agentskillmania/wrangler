@@ -282,7 +282,7 @@ export class TestRunner {
       });
     });
 
-    const timeoutMs = options.timeout ?? 120000;
+    const timeoutMs = options.timeout ?? 2100000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -353,7 +353,7 @@ export class TestRunner {
     // Apply multi-turn history if present (crew only supports final message for now)
     const message = this.buildCrewMessage(testCase);
 
-    const timeoutMs = options.timeout ?? 120000;
+    const timeoutMs = options.timeout ?? 2100000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();

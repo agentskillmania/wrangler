@@ -440,7 +440,7 @@ llm:
         expect(config.llm?.enablePromptThinking).toBeUndefined();
         expect(config.llm?.maxConcurrency).toBeUndefined();
         expect(config.maxSteps).toBeUndefined();
-        expect(config.requestTimeout).toBeUndefined();
+        expect(config.requestTimeout).toBe(1800000);
       } finally {
         process.chdir(originalCwd);
       }

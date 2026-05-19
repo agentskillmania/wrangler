@@ -1,5 +1,15 @@
-import { AgentRunner } from '@agentskillmania/colts';
-import type { AgentState, RunnerEventMap, RunResult } from '@agentskillmania/colts';
+import {
+  AgentRunner,
+  FilesystemSkillProvider,
+  DefaultContextCompressor,
+} from '@agentskillmania/colts';
+import type {
+  AgentState,
+  RunnerEventMap,
+  RunResult,
+  IContextCompressor,
+  CompressionConfig,
+} from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
 import { createBuiltinTools } from '../tools/builtin/index.js';
@@ -15,6 +25,12 @@ import { join } from 'node:path';
 import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js';
 import type { Sandbox } from '@agentskillmania/sandbox';
 import type { EnhancedRunnerOptions } from './types.js';
+import { CommandRegistry } from '../command/registry.js';
+import { createCommandMiddleware } from '../command/command-middleware.js';
+import { createClearHandler } from '../command/handlers/clear.js';
+import { createCompactHandler } from '../command/handlers/compact.js';
+import { createSkillsHandler } from '../command/handlers/skills.js';
+import { createSkillHandler } from '../command/handlers/skill.js';
 
 function discoverMCPPaths(workspacePath: string): string[] {
   const paths: string[] = [];
@@ -100,17 +116,64 @@ export class EnhancedRunner {
       ...(options.extraTools ?? []),
     ];
 
+    // Build command registry with built-in + custom handlers
+    const commandRegistry = new CommandRegistry();
+    commandRegistry.register(createClearHandler());
+    commandRegistry.register(createCompactHandler());
+    if (options.skillDirs && options.skillDirs.length > 0) {
+      const skillProvider = new FilesystemSkillProvider(options.skillDirs);
+      commandRegistry.register(createSkillsHandler(skillProvider));
+      commandRegistry.register(createSkillHandler(skillProvider));
+    }
+    for (const cmd of options.commands ?? []) {
+      commandRegistry.register(cmd);
+    }
+    // Create compressor instance for both AgentRunner auto-compression and /compact command
+    let compressorInstance: IContextCompressor | undefined;
+    if (options.compression) {
+      if (typeof options.compression === 'object' && 'shouldCompress' in options.compression) {
+        compressorInstance = options.compression as IContextCompressor;
+      } else {
+        const compressionConfig = { ...(options.compression as CompressionConfig) };
+        // Auto-detect context window size from llm-client if not explicitly set
+        if (!compressionConfig.contextWindowSize) {
+          try {
+            const meta = (
+              options.llmClient as unknown as {
+                getModelMeta?: (model: string) => { contextWindow: number; maxTokens: number };
+              }
+            ).getModelMeta?.(options.model ?? 'glm-5.1');
+            if (meta) {
+              compressionConfig.contextWindowSize = meta.contextWindow;
+            }
+          } catch {
+            // Model not found in registry, use message-count fallback
+          }
+        }
+        compressorInstance = new DefaultContextCompressor(
+          compressionConfig,
+          options.llmClient,
+          options.model
+        );
+      }
+    }
+
+    const commandMiddleware = createCommandMiddleware(commandRegistry, {
+      compressor: compressorInstance,
+    });
+
     const runner = new AgentRunner({
-      model: options.model ?? 'gpt-4',
+      model: options.model ?? 'glm-5.1',
       llmClient: options.llmClient,
       tools: allTools,
-      middleware: [sessionSupport.middleware, todolistSupport.middleware],
+      middleware: [commandMiddleware, sessionSupport.middleware, todolistSupport.middleware],
       systemPrompt: buildTimeContext(),
       skillDirs: options.skillDirs,
       thinkingEnabled: options.thinkingEnabled,
       enablePromptThinking: options.enablePromptThinking,
       requestTimeout: options.requestTimeout,
       maxSteps: options.maxSteps,
+      compressor: compressorInstance,
     });
 
     return new EnhancedRunner(runner);
