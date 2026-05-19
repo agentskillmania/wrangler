@@ -13,7 +13,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc && node -e \"const fs=require('fs'),path=require('path');const src=path.join('src','agents','prompts');const dist=path.join('dist','agents','prompts');if(fs.existsSync(src)){fs.mkdirSync(dist,{recursive:true});for(const f of fs.readdirSync(src)){fs.copyFileSync(path.join(src,f),path.join(dist,f))}}\"",
+    "build": "tsc && node -e \"const fs=require('fs'),path=require('path');function copyDir(s,d){if(!fs.existsSync(s))return;fs.mkdirSync(d,{recursive:true});for(const f of fs.readdirSync(s)){const sp=path.join(s,f),dp=path.join(d,f);if(fs.statSync(sp).isDirectory())copyDir(sp,dp);else fs.copyFileSync(sp,dp);}};copyDir(path.join('src','agents','prompts'),path.join('dist','agents','prompts'));copyDir(path.join('src','templates'),path.join('dist','templates'));\"",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:unit": "vitest run test/unit",
@@ -39,6 +39,7 @@
     "@agentskillmania/colts": "^0.3.0",
     "@agentskillmania/llm-client": "^0.3.0",
     "@agentskillmania/wrangler": "workspace:*",
+    "isomorphic-git": "^1.38.1",
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {
