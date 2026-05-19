@@ -31,24 +31,38 @@ export function createSkillHandler(skillProvider: FilesystemSkillProvider): Comm
         return { handled: true, response: 'Usage: /skill:<name> [message]' };
       }
 
-      const manifest = skillProvider.getManifest(skillName);
-      if (!manifest) {
-        return { handled: true, response: `Skill '${skillName}' not found.` };
+      if (!/^[\w-]+$/.test(skillName)) {
+        return {
+          handled: true,
+          response: 'Invalid skill name. Use alphanumeric, dash, underscore only.',
+        };
       }
 
-      const instructions = await skillProvider.loadInstructions(skillName);
-      const newState = loadSkill(ctx.state, skillName, instructions);
+      try {
+        const manifest = skillProvider.getManifest(skillName);
+        if (!manifest) {
+          return { handled: true, response: `Skill '${skillName}' not found.` };
+        }
 
-      // If body is present, continue run so LLM processes the message with skill loaded
-      if (ctx.command.body) {
-        return { handled: false, state: newState };
+        const instructions = await skillProvider.loadInstructions(skillName);
+        const newState = loadSkill(ctx.state, skillName, instructions);
+
+        // If body is present, continue run so LLM processes the message with skill loaded
+        if (ctx.command.body) {
+          return { handled: false, state: newState };
+        }
+
+        return {
+          handled: true,
+          state: newState,
+          response: `Skill '${skillName}' loaded.`,
+        };
+      } catch (err) {
+        return {
+          handled: true,
+          response: `Failed to load skill '${skillName}': ${err instanceof Error ? err.message : String(err)}`,
+        };
       }
-
-      return {
-        handled: true,
-        state: newState,
-        response: `Skill '${skillName}' loaded.`,
-      };
     },
   };
 }

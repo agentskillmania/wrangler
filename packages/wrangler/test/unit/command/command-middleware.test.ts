@@ -132,6 +132,7 @@ describe('CommandMiddleware', () => {
       });
 
       expect(result).toEqual({
+        state,
         stop: true,
         result: {
           done: true,

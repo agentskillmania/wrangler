@@ -145,6 +145,57 @@ describe('createSkillHandler', () => {
       expect(result.state).toBeUndefined();
     });
 
+    it('should reject skill names with path traversal characters', async () => {
+      const handler = createSkillHandler(createMockSkillProvider({}));
+      const state = createAgentState({
+        name: 'test',
+        instructions: 'test instructions',
+        tools: [],
+      });
+      const ctx = {
+        command: {
+          name: 'skill',
+          target: '../../etc/passwd',
+          body: '',
+        },
+        state,
+        runnerOptions: mockRunnerOptions,
+      };
+      const result = await handler.handle(ctx);
+
+      expect(result.handled).toBe(true);
+      expect(result.response).toBe('Invalid skill name. Use alphanumeric, dash, underscore only.');
+    });
+
+    it('should handle loadInstructions failure gracefully', async () => {
+      const provider = {
+        getManifest: () => ({ name: 'broken', description: 'test', source: '/test' }),
+        loadInstructions: async () => {
+          throw new Error('I/O error reading skill file');
+        },
+      } as unknown as FilesystemSkillProvider;
+      const handler = createSkillHandler(provider);
+      const state = createAgentState({
+        name: 'test',
+        instructions: 'test instructions',
+        tools: [],
+      });
+      const ctx = {
+        command: {
+          name: 'skill',
+          target: 'broken',
+          body: '',
+        },
+        state,
+        runnerOptions: mockRunnerOptions,
+      };
+      const result = await handler.handle(ctx);
+
+      expect(result.handled).toBe(true);
+      expect(result.response).toContain('Failed to load skill');
+      expect(result.response).toContain('I/O error reading skill file');
+    });
+
     it('should verify skill state is actually modified', async () => {
       const skills = {
         debugger: {

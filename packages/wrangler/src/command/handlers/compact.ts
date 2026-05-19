@@ -2,34 +2,46 @@ import type { CommandHandler } from '../types.js';
 import { updateState } from '@agentskillmania/colts';
 
 /**
- * Maximum number of messages to keep after compression
- */
-const MAX_KEEP_MESSAGES = 4;
-
-/**
  * Create a /compact command handler that compresses conversation context
  *
- * Keeps only the most recent MAX_KEEP_MESSAGES (4) messages in the
- * conversation history to reduce context size while maintaining
- * recent context for continuity.
+ * Uses the colts IContextCompressor when available (produces summaries,
+ * preserves key context). Falls back to truncation when no compressor
+ * is provided.
  */
 export function createCompactHandler(): CommandHandler {
   return {
     name: 'compact',
     description: 'Compress conversation context',
     async handle(ctx) {
-      const messages = ctx.state.context.messages;
-      if (messages.length <= MAX_KEEP_MESSAGES) {
+      if (!ctx.compressor) {
+        return { handled: true, response: 'No compressor available.' };
+      }
+
+      const result = await ctx.compressor.compress(ctx.state);
+
+      // Nothing to compress (anchor didn't move)
+      const existingAnchor = ctx.state.context.compression?.anchor ?? 0;
+      if (result.anchor <= existingAnchor) {
         return { handled: true, response: 'Context is already compact.' };
       }
-      const removedCount = messages.length - MAX_KEEP_MESSAGES;
+
       const newState = updateState(ctx.state, (draft) => {
-        draft.context.messages = draft.context.messages.slice(-MAX_KEEP_MESSAGES);
+        draft.context.compression = {
+          summary: result.summary,
+          anchor: result.anchor,
+          summaryTokenCount: result.summaryTokenCount,
+          removedTokenCount: result.removedTokenCount,
+          compressedAt: result.compressedAt,
+        };
       });
+
+      const removedCount = result.anchor - existingAnchor;
       return {
         handled: true,
         state: newState,
-        response: `Context compressed: ${messages.length} messages → ${MAX_KEEP_MESSAGES} (removed ${removedCount}).`,
+        response: `Context compressed: ${removedCount} messages compressed.${
+          result.summary ? ' Summary generated.' : ''
+        }`,
       };
     },
   };

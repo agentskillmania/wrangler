@@ -1,12 +1,30 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createCompactHandler } from '../../../../src/command/handlers/compact.js';
-import { createAgentState, addUserMessage, addAssistantMessage } from '@agentskillmania/colts';
-import type { RunnerOptions } from '@agentskillmania/colts';
+import { createAgentState } from '@agentskillmania/colts';
+import type { RunnerOptions, IContextCompressor, CompressResult } from '@agentskillmania/colts';
 
 const mockRunnerOptions: Readonly<RunnerOptions> = {
   model: 'GLM-4.7',
   maxSteps: 10,
 };
+
+/**
+ * Create a mock compressor for testing.
+ *
+ * @param overrides - Override the default compress behavior
+ */
+function createMockCompressor(overrides?: Partial<IContextCompressor>): IContextCompressor {
+  return {
+    shouldCompress: vi.fn().mockReturnValue(true),
+    compress: vi.fn().mockResolvedValue({
+      summary: 'Mock summary',
+      anchor: 5,
+      removedTokenCount: 100,
+      compressedAt: 1234567890,
+    } as CompressResult),
+    ...overrides,
+  };
+}
 
 describe('createCompactHandler', () => {
   it('should have name "compact"', () => {
@@ -20,167 +38,170 @@ describe('createCompactHandler', () => {
   });
 
   describe('handle', () => {
-    it('should return handled: true with response containing "compressed"', async () => {
+    it('should return error when no compressor available', async () => {
       const handler = createCompactHandler();
       const state = createAgentState({
         name: 'test',
         instructions: 'test instructions',
         tools: [],
       });
-      // Add 6 messages to exceed MAX_KEEP_MESSAGES (4)
-      let stateWithMessages = state;
-      for (let i = 0; i < 6; i++) {
-        stateWithMessages = addUserMessage(stateWithMessages, `Message ${i}`);
-      }
       const ctx = {
-        command: {
-          name: 'compact',
-          body: '',
-        },
-        state: stateWithMessages,
+        command: { name: 'compact', body: '' },
+        state,
         runnerOptions: mockRunnerOptions,
       };
       const result = await handler.handle(ctx);
+
       expect(result.handled).toBe(true);
-      expect(result.response).toContain('compressed');
+      expect(result.response).toBe('No compressor available.');
+      expect(result.state).toBeUndefined();
     });
 
-    it('should reduce message count when messages exceed MAX_KEEP_MESSAGES', async () => {
+    it('should call compressor.compress() and return state with compression metadata', async () => {
+      const compressor = createMockCompressor();
       const handler = createCompactHandler();
       const state = createAgentState({
         name: 'test',
         instructions: 'test instructions',
         tools: [],
       });
-      // Add 6 messages
-      let stateWithMessages = state;
-      for (let i = 0; i < 6; i++) {
-        stateWithMessages = addUserMessage(stateWithMessages, `Message ${i}`);
-      }
-      const originalCount = stateWithMessages.context.messages.length;
       const ctx = {
-        command: {
-          name: 'compact',
-          body: '',
-        },
-        state: stateWithMessages,
+        command: { name: 'compact', body: '' },
+        state,
         runnerOptions: mockRunnerOptions,
+        compressor,
       };
       const result = await handler.handle(ctx);
+
+      expect(compressor.compress).toHaveBeenCalledWith(state);
+      expect(result.handled).toBe(true);
       expect(result.state).toBeDefined();
-      expect(result.state!.context.messages.length).toBeLessThan(originalCount);
-      expect(result.state!.context.messages.length).toBe(4);
+      expect(result.state!.context.compression).toEqual({
+        summary: 'Mock summary',
+        anchor: 5,
+        removedTokenCount: 100,
+        compressedAt: 1234567890,
+      });
+      expect(result.response).toContain('compressed');
+      expect(result.response).toContain('Summary generated');
     });
 
-    it('should return "already compact" when messages <= MAX_KEEP_MESSAGES', async () => {
-      const handler = createCompactHandler();
+    it('should return "already compact" when anchor does not advance', async () => {
+      // State already has anchor at 5, compressor returns anchor 5 → no progress
       const state = createAgentState({
         name: 'test',
         instructions: 'test instructions',
         tools: [],
       });
-      // Add only 2 messages (less than MAX_KEEP_MESSAGES which is 4)
-      let stateWithMessages = state;
-      stateWithMessages = addUserMessage(stateWithMessages, 'Message 1');
-      stateWithMessages = addUserMessage(stateWithMessages, 'Message 2');
-      const ctx = {
-        command: {
-          name: 'compact',
-          body: '',
+      const stateWithCompression = {
+        ...state,
+        context: {
+          ...state.context,
+          compression: { summary: 'existing', anchor: 5 },
         },
-        state: stateWithMessages,
+      };
+      const compressor = createMockCompressor({
+        compress: vi.fn().mockResolvedValue({
+          summary: 'existing',
+          anchor: 5,
+        } as CompressResult),
+      });
+      const handler = createCompactHandler();
+      const ctx = {
+        command: { name: 'compact', body: '' },
+        state: stateWithCompression,
         runnerOptions: mockRunnerOptions,
+        compressor,
       };
       const result = await handler.handle(ctx);
+
       expect(result.handled).toBe(true);
       expect(result.response).toBe('Context is already compact.');
       expect(result.state).toBeUndefined();
     });
 
-    it('should preserve the last MAX_KEEP_MESSAGES messages', async () => {
+    it('should not mention summary when compressor returns empty summary', async () => {
+      const compressor = createMockCompressor({
+        compress: vi.fn().mockResolvedValue({
+          summary: '',
+          anchor: 3,
+          removedTokenCount: 50,
+          compressedAt: 1234567890,
+        } as CompressResult),
+      });
       const handler = createCompactHandler();
       const state = createAgentState({
         name: 'test',
         instructions: 'test instructions',
         tools: [],
       });
-      // Add 6 messages with specific content
-      let stateWithMessages = state;
-      for (let i = 0; i < 6; i++) {
-        stateWithMessages = addUserMessage(stateWithMessages, `Message ${i}`);
-      }
       const ctx = {
-        command: {
-          name: 'compact',
-          body: '',
-        },
-        state: stateWithMessages,
+        command: { name: 'compact', body: '' },
+        state,
         runnerOptions: mockRunnerOptions,
+        compressor,
       };
       const result = await handler.handle(ctx);
-      const messages = result.state!.context.messages;
-      expect(messages).toHaveLength(4);
-      expect(messages[0].content).toBe('Message 2');
-      expect(messages[1].content).toBe('Message 3');
-      expect(messages[2].content).toBe('Message 4');
-      expect(messages[3].content).toBe('Message 5');
+
+      expect(result.response).not.toContain('Summary generated');
     });
 
-    it('should include removal count in response', async () => {
-      const handler = createCompactHandler();
+    it('should report correct removed count based on anchor diff', async () => {
       const state = createAgentState({
         name: 'test',
         instructions: 'test instructions',
         tools: [],
       });
-      // Add 7 messages
-      let stateWithMessages = state;
-      for (let i = 0; i < 7; i++) {
-        stateWithMessages = addUserMessage(stateWithMessages, `Message ${i}`);
-      }
-      const ctx = {
-        command: {
-          name: 'compact',
-          body: '',
+      // State has existing anchor at 2
+      const stateWithCompression = {
+        ...state,
+        context: {
+          ...state.context,
+          compression: { summary: 'old', anchor: 2 },
         },
-        state: stateWithMessages,
+      };
+      const compressor = createMockCompressor({
+        compress: vi.fn().mockResolvedValue({
+          summary: 'new summary',
+          anchor: 8,
+          summaryTokenCount: 20,
+          removedTokenCount: 200,
+          compressedAt: 1234567890,
+        } as CompressResult),
+      });
+      const handler = createCompactHandler();
+      const ctx = {
+        command: { name: 'compact', body: '' },
+        state: stateWithCompression,
         runnerOptions: mockRunnerOptions,
+        compressor,
       };
       const result = await handler.handle(ctx);
-      expect(result.response).toContain('7 messages → 4');
-      expect(result.response).toContain('removed 3');
+
+      // 8 - 2 = 6 messages compressed
+      expect(result.response).toContain('6 messages compressed');
     });
 
-    it('should handle mixed user and assistant messages', async () => {
+    it('should preserve state ID and other state fields', async () => {
+      const compressor = createMockCompressor();
       const handler = createCompactHandler();
       const state = createAgentState({
-        name: 'test',
-        instructions: 'test instructions',
+        name: 'test-agent',
+        instructions: 'original instructions',
         tools: [],
       });
-      // Add 6 messages alternating between user and assistant
-      let stateWithMessages = state;
-      stateWithMessages = addUserMessage(stateWithMessages, 'User 1');
-      stateWithMessages = addAssistantMessage(stateWithMessages, 'Assistant 1');
-      stateWithMessages = addUserMessage(stateWithMessages, 'User 2');
-      stateWithMessages = addAssistantMessage(stateWithMessages, 'Assistant 2');
-      stateWithMessages = addUserMessage(stateWithMessages, 'User 3');
-      stateWithMessages = addAssistantMessage(stateWithMessages, 'Assistant 3');
+      const originalId = state.id;
       const ctx = {
-        command: {
-          name: 'compact',
-          body: '',
-        },
-        state: stateWithMessages,
+        command: { name: 'compact', body: '' },
+        state,
         runnerOptions: mockRunnerOptions,
+        compressor,
       };
       const result = await handler.handle(ctx);
-      const messages = result.state!.context.messages;
-      expect(messages).toHaveLength(4);
-      expect(messages[0].content).toBe('User 2');
-      expect(messages[1].content).toBe('Assistant 2');
-      expect(messages[2].content).toBe('User 3');
-      expect(messages[3].content).toBe('Assistant 3');
+
+      expect(result.state!.id).toBe(originalId);
+      expect(result.state!.config.name).toBe('test-agent');
+      expect(result.state!.config.instructions).toBe('original instructions');
     });
   });
 });

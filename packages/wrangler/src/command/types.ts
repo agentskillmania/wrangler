@@ -1,4 +1,4 @@
-import type { AgentState, RunnerOptions } from '@agentskillmania/colts';
+import type { AgentState, RunnerOptions, IContextCompressor } from '@agentskillmania/colts';
 
 /** Parsed command structure */
 export interface ParsedCommand {
@@ -15,6 +15,8 @@ export interface CommandContext {
   command: ParsedCommand;
   state: AgentState;
   runnerOptions: RunnerOptions;
+  /** Context compressor for /compact and similar commands */
+  compressor?: IContextCompressor;
 }
 
 /** Result returned by command handlers */

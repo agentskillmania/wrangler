@@ -1,12 +1,19 @@
-import type { AgentMiddleware } from '@agentskillmania/colts';
+import type { AgentMiddleware, IContextCompressor } from '@agentskillmania/colts';
 import type { CommandRegistry } from './registry.js';
 import { parseCommand } from './parser.js';
+
+export interface CommandMiddlewareDeps {
+  compressor?: IContextCompressor;
+}
 
 /**
  * Create command middleware.
  * Hooks into beforeAdvance at idle phase to detect slash commands.
  */
-export function createCommandMiddleware(registry: CommandRegistry): AgentMiddleware {
+export function createCommandMiddleware(
+  registry: CommandRegistry,
+  deps?: CommandMiddlewareDeps
+): AgentMiddleware {
   return {
     name: 'command',
 
@@ -30,6 +37,7 @@ export function createCommandMiddleware(registry: CommandRegistry): AgentMiddlew
         command: parsed,
         state: ctx.state,
         runnerOptions: ctx.runnerOptions,
+        compressor: deps?.compressor,
       });
 
       if (!result.handled) {
@@ -38,10 +46,12 @@ export function createCommandMiddleware(registry: CommandRegistry): AgentMiddlew
       }
 
       // Command fully handled — stop execution with completed phase
+      const finalState = result.state ?? ctx.state;
       return {
+        state: finalState,
         stop: true,
         result: {
-          state: result.state ?? ctx.state,
+          state: finalState,
           execState: ctx.execState,
           phase: { type: 'completed' as const, answer: result.response ?? '' },
           done: true,
