@@ -187,7 +187,7 @@ describe('MarkdownMessageAssembler', () => {
     const content = typeof messages[0].content === 'string' ? messages[0].content : '';
 
     expect(content).toContain('## Thinking');
-    expect(content).toContain('<thinkki>');
+    expect(content).toContain('<think>');
   });
 
   it('does not produce ## Thinking when enablePromptThinking is false', () => {

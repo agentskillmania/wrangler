@@ -291,7 +291,7 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
     // Thinking section
     if (opts.enablePromptThinking) {
       sections.push(
-        `## Thinking\n\nBefore answering or using tools, please think step by step inside <thinkki>...</thinkki> tags. After the closing </thinkki> tag, provide your final response or tool calls.`
+        `## Thinking\n\nBefore answering or using tools, please think step by step inside <think>...</think> tags. After the closing </think> tag, provide your final response or tool calls.`
       );
     }
 
