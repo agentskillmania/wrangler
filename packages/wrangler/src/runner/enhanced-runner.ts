@@ -18,8 +18,7 @@ import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
 import { createSessionSupport } from '../session/support.js';
 import { createTodolistSupport } from '../todolist/support.js';
 import { buildTimeContext } from './system-prompt.js';
-// TODO: Wire MarkdownMessageAssembler when colts publishes 0.3.x with RunnerOptions.messageAssembler support
-// import { MarkdownMessageAssembler } from './markdown-assembler.js';
+import { MarkdownMessageAssembler } from './markdown-assembler.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js';
@@ -174,6 +173,7 @@ export class EnhancedRunner {
       requestTimeout: options.requestTimeout,
       maxSteps: options.maxSteps,
       compressor: compressorInstance,
+      messageAssembler: new MarkdownMessageAssembler(),
     });
 
     return new EnhancedRunner(runner);
