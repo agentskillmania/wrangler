@@ -5,7 +5,7 @@ import { statSync } from 'node:fs';
 import { exec, execSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { isBinaryFile as detectBinary } from 'isbinaryfile';
-import { glob as fglob } from 'fast-glob';
+import fglob from 'fast-glob';
 import { rgPath } from 'ripgrep';
 import type { Sandbox } from '@agentskillmania/sandbox';
 
