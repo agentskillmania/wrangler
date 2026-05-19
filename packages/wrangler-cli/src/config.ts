@@ -164,7 +164,7 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
         maxConcurrency: config.llm?.maxConcurrency,
       },
       maxSteps: config.maxSteps,
-      requestTimeout: config.requestTimeout,
+      requestTimeout: config.requestTimeout ?? 1800000,
     };
   } catch {
     return { hasValidConfig: false, configPath };

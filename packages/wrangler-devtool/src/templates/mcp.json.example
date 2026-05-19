@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "description": "Read and write files in the workspace",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "env": {},
+      "lifecycle": "keep-alive"
+    }
+  }
+}
