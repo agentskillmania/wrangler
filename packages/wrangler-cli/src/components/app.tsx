@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useApp, Text } from 'ink';
-import { AgentLoader, EnhancedRunner } from '@agentskillmania/wrangler';
+import { AgentLoader, EnhancedRunner, discoverGlobalConfigPath } from '@agentskillmania/wrangler';
+import { existsSync } from 'node:fs';
 import { MainTUI } from './main-tui.js';
 import { SetupWizard } from './setup/setup-wizard.js';
 import { useAgent } from '../hooks/use-agent.js';
@@ -47,6 +48,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
       let instr = 'You are a helpful assistant.';
       let dirs: string[] = [];
       let sandbox: boolean | undefined;
+      let mcpConfigPaths: string[] | undefined;
 
       if (mode.mode === 'agent') {
         const loaded = await AgentLoader.loadFrom(mode.agentDir);
@@ -54,6 +56,10 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
         instr = loaded.instructions || instr;
         dirs = loaded.skillDirs;
         sandbox = loaded.sandbox;
+
+        const globalPath = discoverGlobalConfigPath();
+        mcpConfigPaths = [globalPath, ...loaded.mcpPaths].filter((p) => existsSync(p));
+        if (mcpConfigPaths.length === 0) mcpConfigPaths = undefined;
       }
 
       const workspacePath =
@@ -64,6 +70,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
         model: config.llm!.model,
         workspacePath,
         skillDirs: dirs,
+        mcpConfigPaths,
         thinkingEnabled: config.llm?.thinkingEnabled ?? true,
         enablePromptThinking: config.llm?.enablePromptThinking,
         requestTimeout: config.requestTimeout,
@@ -88,7 +95,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
       const newConfig = await loadConfig();
       setConfig(newConfig);
     },
-    [],
+    []
   );
 
   // Hooks must be called unconditionally — useAgent handles null runner gracefully

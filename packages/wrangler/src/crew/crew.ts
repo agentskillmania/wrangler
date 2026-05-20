@@ -617,9 +617,12 @@ export class Crew {
     if (existsSync(globalPath)) {
       paths.push(globalPath);
     }
-    const localPath = join(this.options.workspaceDeps?.workspacePath ?? process.cwd(), 'mcp.json');
-    if (existsSync(localPath)) {
-      paths.push(localPath);
+    const crewDir = this.options.workspaceDeps?.workspacePath;
+    if (crewDir) {
+      const crewMcp = join(crewDir, 'mcp.json');
+      if (existsSync(crewMcp)) {
+        paths.push(crewMcp);
+      }
     }
     return paths;
   }

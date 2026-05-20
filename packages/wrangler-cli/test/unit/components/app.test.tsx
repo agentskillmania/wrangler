@@ -33,6 +33,7 @@ vi.mock('@agentskillmania/wrangler', () => ({
       name: 'loaded-agent',
       instructions: 'loaded instructions',
       skillDirs: [],
+      mcpPaths: [],
     }),
   },
   EnhancedRunner: {
@@ -40,7 +41,16 @@ vi.mock('@agentskillmania/wrangler', () => ({
       runStream: vi.fn(),
     }),
   },
+  discoverGlobalConfigPath: vi.fn().mockReturnValue('/mock/global-mcp.json'),
 }));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    existsSync: vi.fn().mockReturnValue(false),
+  };
+});
 
 vi.mock('../../../src/runner-setup.js', () => ({
   createLLMClientFromConfig: vi.fn().mockReturnValue({
@@ -85,14 +95,22 @@ vi.mock('../../../src/context/interaction-context.js', () => ({
 }));
 
 const { setupWizardCapture } = vi.hoisted(() => ({
-  setupWizardCapture: { onComplete: null as ((setup: { provider: string; apiKey: string; model: string }) => void) | null },
+  setupWizardCapture: {
+    onComplete: null as
+      | ((setup: { provider: string; apiKey: string; model: string }) => void)
+      | null,
+  },
 }));
 
 // Use async factory to import ink's Text component for proper reconciler compatibility
 vi.mock('../../../src/components/setup/setup-wizard.js', async () => {
   const { Text } = await import('ink');
   return {
-    SetupWizard: ({ onComplete }: { onComplete: (config: { provider: string; apiKey: string; model: string }) => void }) => {
+    SetupWizard: ({
+      onComplete,
+    }: {
+      onComplete: (config: { provider: string; apiKey: string; model: string }) => void;
+    }) => {
       setupWizardCapture.onComplete = onComplete;
       return React.createElement(Text, null, 'Setup Wizard Mock');
     },
@@ -141,7 +159,7 @@ describe('App', () => {
         config: invalidConfig,
         mode: bareMode,
         dir: '/tmp/workspace',
-      }),
+      })
     );
 
     const output = lastFrame();
@@ -154,7 +172,7 @@ describe('App', () => {
         config: validConfig,
         mode: bareMode,
         dir: '/tmp/workspace',
-      }),
+      })
     );
 
     const output = lastFrame();
@@ -172,7 +190,7 @@ describe('App', () => {
         config: validConfig,
         mode: bareMode,
         dir: '/tmp/workspace',
-      }),
+      })
     );
 
     // Wait for useEffect to complete (runner creation is async)
@@ -188,7 +206,7 @@ describe('App', () => {
         config: invalidConfig,
         mode: bareMode,
         dir: '/tmp/workspace',
-      }),
+      })
     );
 
     // Initial state: SetupWizard rendered
@@ -210,14 +228,18 @@ describe('App', () => {
         config: invalidConfig,
         mode: bareMode,
         dir: '/tmp/workspace',
-      }),
+      })
     );
 
     // The SetupWizard mock captures its onComplete prop
     expect(setupWizardCapture.onComplete).toBeTruthy();
 
     // Trigger the callback (simulating user completing setup)
-    await setupWizardCapture.onComplete!({ provider: 'anthropic', apiKey: 'sk-ant-new', model: 'claude-3' });
+    await setupWizardCapture.onComplete!({
+      provider: 'anthropic',
+      apiKey: 'sk-ant-new',
+      model: 'claude-3',
+    });
 
     expect(mockSaveSetup).toHaveBeenCalledWith({
       provider: 'anthropic',
@@ -239,7 +261,7 @@ describe('App', () => {
         config: validConfig,
         mode: agentMode,
         dir: '/tmp/agent-dir',
-      }),
+      })
     );
 
     await vi.waitFor(() => {
@@ -250,7 +272,7 @@ describe('App', () => {
     expect(AgentLoader.loadFrom).toHaveBeenCalledWith('/tmp/agent-dir');
     // EnhancedRunner.create called with loaded agent's skillDirs
     expect(EnhancedRunner.create).toHaveBeenCalledWith(
-      expect.objectContaining({ workspacePath: '/tmp/agent-dir' }),
+      expect.objectContaining({ workspacePath: '/tmp/agent-dir' })
     );
   });
 
@@ -273,7 +295,7 @@ describe('App', () => {
         config: validConfig,
         mode: bareMode,
         dir: '/tmp/workspace',
-      }),
+      })
     );
 
     // Wait for the async setup to complete (it will fail)
