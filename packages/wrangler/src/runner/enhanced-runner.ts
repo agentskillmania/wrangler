@@ -14,13 +14,10 @@ import type { ZodTypeAny } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
 import { createBuiltinTools } from '../tools/builtin/index.js';
 import { loadMCPTools } from '../tools/mcp/index.js';
-import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
 import { createSessionSupport } from '../session/support.js';
 import { createTodolistSupport } from '../todolist/support.js';
 import { buildTimeContext } from './system-prompt.js';
 import { MarkdownMessageAssembler } from './markdown-assembler.js';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js';
 import type { Sandbox } from '@agentskillmania/sandbox';
 import type { EnhancedRunnerOptions } from './types.js';
@@ -31,21 +28,12 @@ import { createCompactHandler } from '../command/handlers/compact.js';
 import { createSkillsHandler } from '../command/handlers/skills.js';
 import { createSkillHandler } from '../command/handlers/skill.js';
 
-function discoverMCPPaths(workspacePath: string): string[] {
-  const paths: string[] = [];
-  const globalPath = discoverGlobalConfigPath();
-  if (existsSync(globalPath)) paths.push(globalPath);
-  const localPath = join(workspacePath, 'mcp.json');
-  if (existsSync(localPath)) paths.push(localPath);
-  return paths;
-}
-
 /**
  * EnhancedRunner — Pre-wired AgentRunner with all wrangler runtime mechanisms
  *
  * Wraps colts AgentRunner and pre-configures:
  * - Builtin tools (file operations, shell, web search/fetch)
- * - MCP tools (discovered from global + local mcp.json configs)
+ * - MCP tools (loaded from explicitly provided config paths)
  * - Session support (persistence, calculator, ask_human)
  * - Todolist support (task management)
  * - Time context in system prompt
@@ -96,7 +84,7 @@ export class EnhancedRunner {
       sandbox: sandboxInstance,
     });
 
-    const mcpConfigPaths = options.mcpConfigPaths ?? discoverMCPPaths(workspacePath);
+    const mcpConfigPaths = options.mcpConfigPaths ?? [];
     const mcpTools = await loadMCPTools({ configPaths: mcpConfigPaths });
 
     const sessionSupport = createSessionSupport({

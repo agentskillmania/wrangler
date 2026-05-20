@@ -30,18 +30,6 @@ vi.mock('../../../src/tools/mcp/index.js', () => ({
   loadMCPTools: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...actual,
-    existsSync: vi.fn().mockReturnValue(true),
-  };
-});
-
-vi.mock('../../../src/tools/mcp/config-merger.js', () => ({
-  discoverGlobalConfigPath: vi.fn().mockReturnValue('/fake/global/mcporter.json'),
-}));
-
 vi.mock('../../../src/tools/builtin/index.js', () => ({
   createBuiltinTools: vi.fn().mockReturnValue([]),
 }));
@@ -130,13 +118,23 @@ describe('EnhancedRunner', () => {
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ model: 'glm-5.1' }));
   });
 
-  it('should create() loads MCP tools via loadMCPTools', async () => {
+  it('should create() pass mcpConfigPaths to loadMCPTools', async () => {
+    const { loadMCPTools } = await import('../../../src/tools/mcp/index.js');
+
+    await EnhancedRunner.create(makeOptions({ mcpConfigPaths: ['/custom/mcp.json'] }));
+
+    expect(loadMCPTools).toHaveBeenCalledWith({
+      configPaths: ['/custom/mcp.json'],
+    });
+  });
+
+  it('should create() default mcpConfigPaths to empty array', async () => {
     const { loadMCPTools } = await import('../../../src/tools/mcp/index.js');
 
     await EnhancedRunner.create(makeOptions());
 
     expect(loadMCPTools).toHaveBeenCalledWith({
-      configPaths: ['/fake/global/mcporter.json', '/test/workspace/mcp.json'],
+      configPaths: [],
     });
   });
 
