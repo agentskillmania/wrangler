@@ -2,6 +2,7 @@ import type { ZodTypeAny } from 'zod';
 import type {
   ILLMProvider,
   AskHumanHandler,
+  ConfirmHandler,
   Tool,
   CompressionConfig,
   IContextCompressor,
@@ -20,6 +21,8 @@ export interface EnhancedRunnerOptions {
   sessionBaseDir?: string;
   skillDirs?: string[];
   askHumanHandler?: AskHumanHandler;
+  confirmHandler?: ConfirmHandler;
+  confirmTools?: string[];
   thinkingEnabled?: boolean;
   enablePromptThinking?: boolean;
   requestTimeout?: number;

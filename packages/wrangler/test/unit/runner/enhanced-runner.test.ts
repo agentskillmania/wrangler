@@ -7,9 +7,11 @@ import type { EnhancedRunnerOptions } from '../../../src/runner/types.js';
 import type { ILLMProvider, Tool } from '@agentskillmania/colts';
 
 // Use a stable reference so each test can configure mockRun
-const mockRun = vi.fn();
-const mockRunStream = vi.fn();
-const mockOn = vi.fn();
+const { mockRun, mockRunStream, mockOn } = vi.hoisted(() => ({
+  mockRun: vi.fn(),
+  mockRunStream: vi.fn(),
+  mockOn: vi.fn(),
+}));
 
 vi.mock('@agentskillmania/colts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agentskillmania/colts')>();
@@ -21,8 +23,16 @@ vi.mock('@agentskillmania/colts', async (importOriginal) => {
       on: mockOn,
       ...options,
     })),
-    createAgentState: actual.createAgentState,
-    addUserMessage: actual.addUserMessage,
+    ToolRegistry: vi.fn().mockImplementation(() => ({
+      register: vi.fn(),
+      execute: vi.fn().mockResolvedValue({}),
+      toToolSchemas: vi.fn().mockReturnValue([]),
+      has: vi.fn().mockReturnValue(false),
+      getToolNames: vi.fn().mockReturnValue([]),
+      get: vi.fn(),
+      getAll: vi.fn().mockReturnValue([]),
+    })),
+    ConfirmableRegistry: vi.fn().mockImplementation((inner) => inner),
   };
 });
 

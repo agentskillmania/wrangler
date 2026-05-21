@@ -2,6 +2,8 @@ import {
   AgentRunner,
   FilesystemSkillProvider,
   DefaultContextCompressor,
+  ToolRegistry,
+  ConfirmableRegistry,
 } from '@agentskillmania/colts';
 import type {
   AgentState,
@@ -149,10 +151,24 @@ export class EnhancedRunner {
       compressor: compressorInstance,
     });
 
+    // Build tool registry and optionally wrap with confirmation
+    let finalToolRegistry: import('@agentskillmania/colts').IToolRegistry | undefined;
+    if (options.confirmHandler) {
+      const toolRegistry = new ToolRegistry();
+      for (const tool of allTools) {
+        toolRegistry.register(tool);
+      }
+      finalToolRegistry = new ConfirmableRegistry(toolRegistry, {
+        confirm: options.confirmHandler,
+        confirmTools: options.confirmTools ?? [],
+      });
+    }
+
     const runner = new AgentRunner({
       model: options.model ?? 'glm-5.1',
       llmClient: options.llmClient,
-      tools: allTools,
+      tools: finalToolRegistry ? undefined : allTools,
+      toolRegistry: finalToolRegistry,
       middleware: [commandMiddleware, sessionSupport.middleware, todolistSupport.middleware],
       systemPrompt: buildTimeContext(),
       skillDirs: options.skillDirs,

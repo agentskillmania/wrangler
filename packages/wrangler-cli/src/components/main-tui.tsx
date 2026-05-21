@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { Box, useInput, useApp } from 'ink';
 import { TimelinePanel } from './timeline-panel.js';
 import { InputBar } from './input-bar.js';
@@ -8,18 +8,21 @@ import { AskDialog } from './ask-dialog.js';
 import type { ParsedCommand } from '../types.js';
 import type { UseAgentReturn } from '../hooks/use-agent.js';
 
+export type DialogState =
+  | { type: 'none' }
+  | { type: 'confirm'; toolName: string; summary: string }
+  | { type: 'ask'; question: string };
+
 interface MainTUIProps {
   agentHook: UseAgentReturn;
   agentName: string;
   model: string;
   isCrewMode: boolean;
   currentSession: string;
+  dialog: DialogState;
+  onConfirmResult: (result: 'yes' | 'no' | 'always') => void;
+  onAskAnswer: (answer: string) => void;
 }
-
-type DialogState =
-  | { type: 'none' }
-  | { type: 'confirm'; toolName: string; summary: string }
-  | { type: 'ask'; question: string };
 
 /**
  * Top-level TUI layout: TimelinePanel + InputBar/Dialog + StatusBar.
@@ -29,10 +32,18 @@ type DialogState =
  *   2. InputBar / ConfirmDialog / AskDialog (conditional)
  *   3. StatusBar (fixed at bottom)
  */
-export function MainTUI({ agentHook, agentName, model, isCrewMode, currentSession }: MainTUIProps) {
+export function MainTUI({
+  agentHook,
+  agentName,
+  model,
+  isCrewMode,
+  currentSession,
+  dialog,
+  onConfirmResult,
+  onAskAnswer,
+}: MainTUIProps) {
   const { entries, status, sendMessage, abort } = agentHook;
   const { exit } = useApp();
-  const [dialog, setDialog] = useState<DialogState>({ type: 'none' });
 
   // Global Ctrl+C handler: abort a running agent or exit the app
   useInput((input, key) => {
@@ -82,17 +93,10 @@ export function MainTUI({ agentHook, agentName, model, isCrewMode, currentSessio
         <ConfirmDialog
           toolName={dialog.toolName}
           summary={dialog.summary}
-          onResult={() => {
-            setDialog({ type: 'none' });
-          }}
+          onResult={onConfirmResult}
         />
       ) : dialog.type === 'ask' ? (
-        <AskDialog
-          question={dialog.question}
-          onAnswer={() => {
-            setDialog({ type: 'none' });
-          }}
-        />
+        <AskDialog question={dialog.question} onAnswer={onAskAnswer} />
       ) : (
         <InputBar status={status} isReadOnly={isReadOnly} onSubmit={handleCommand} />
       )}
