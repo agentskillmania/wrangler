@@ -104,7 +104,7 @@ describe('US5: SessionManager tracks sessions', () => {
     expect(mgr.isCrewMode).toBe(true);
 
     const added = mgr.sessions.find((s) => s.name === 'subagent-1');
-    expect(added).toBeDefined();
+    expect(added).toHaveProperty('name', 'subagent-1');
     expect(added!.status).toBe('running');
     expect(added!.isCurrent).toBe(false);
   });

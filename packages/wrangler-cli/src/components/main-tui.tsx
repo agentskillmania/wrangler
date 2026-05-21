@@ -52,15 +52,20 @@ export function MainTUI({ agentHook, agentName, model, isCrewMode, currentSessio
           sendMessage(cmd.content);
           break;
         case 'clear':
+          agentHook.clearEntries();
           break;
         case 'help':
+          agentHook.addSystemEntry(
+            'Commands: /clear — clear chat history, /help — show this message, /sessions — list sessions, /session <name> — switch session'
+          );
           break;
         case 'sessions':
         case 'switch-session':
+          agentHook.addSystemEntry('Session management is not yet implemented.');
           break;
       }
     },
-    [sendMessage],
+    [sendMessage, agentHook],
   );
 
   const isReadOnly =

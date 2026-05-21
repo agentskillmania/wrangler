@@ -92,6 +92,10 @@ vi.mock('../../../src/context/interaction-context.js', () => ({
     Provider: ({ children }: { children: React.ReactNode }) => children,
     $$typeof: Symbol.for('react.context'),
   },
+  createInteractionCallbacks: vi.fn(() => ({
+    askHuman: vi.fn(),
+    confirm: vi.fn(),
+  })),
 }));
 
 const { setupWizardCapture } = vi.hoisted(() => ({

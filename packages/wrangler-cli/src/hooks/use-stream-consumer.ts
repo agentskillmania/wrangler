@@ -48,6 +48,9 @@ export class StreamConsumer {
    * colts RunStreamEvent types (token, tool:start, tool:end, complete, etc.).
    */
   consume(event: Record<string, unknown>): TimelineEntry[] {
+    // Defensive: ignore null/undefined events to prevent stream interruption
+    if (!event || typeof event !== 'object') return [];
+
     const entries: TimelineEntry[] = [];
     const type = event.type as string;
     const timestamp = (event.timestamp as number) ?? Date.now();
@@ -87,7 +90,7 @@ export class StreamConsumer {
       case 'text-delta':
       case 'token': {
         // 'token' is the colts stream event, 'text-delta' is the TUI-level event
-        const text = (event.text ?? event.token) as string;
+        const text = (event.text ?? event.token ?? '') as string;
         if (!this.bufferedAssistant) {
           this.bufferedAssistant = {
             id: this.nextId(),
@@ -234,6 +237,7 @@ export class StreamConsumer {
       results.push({
         type: 'thought',
         ...this.bufferedThought,
+        isStreaming: false,
       });
       this.bufferedThought = null;
     }

@@ -41,10 +41,10 @@ describe('StreamConsumer', () => {
       type: 'stream-end',
       timestamp: Date.now(),
     });
+    expect(entries).toHaveLength(1);
     const assistant = entries.find((e) => e.type === 'assistant');
-    expect(assistant).toBeDefined();
+    expect(assistant).toEqual(expect.objectContaining({ type: 'assistant', content: 'Hi' }));
     if (assistant && assistant.type === 'assistant') {
-      expect(assistant.content).toBe('Hi');
       expect(assistant.isStreaming).toBeUndefined();
     }
   });
@@ -64,11 +64,9 @@ describe('StreamConsumer', () => {
       timestamp: Date.now(),
     });
     const tool = entries.find((e) => e.type === 'tool');
-    expect(tool).toBeDefined();
-    if (tool && tool.type === 'tool') {
-      expect(tool.tool).toBe('file_read');
-      expect(tool.isRunning).toBe(false);
-    }
+    expect(tool).toEqual(
+      expect.objectContaining({ type: 'tool', tool: 'file_read', isRunning: false })
+    );
   });
 
   it('creates error entry from error event', () => {
@@ -113,6 +111,26 @@ describe('StreamConsumer', () => {
     expect(flushed).toEqual([]);
   });
 
+  it('does not append "undefined" when text-delta event lacks text field', () => {
+    consumer.consume({ type: 'text-delta', text: 'Hello', timestamp: Date.now() });
+    const entries = consumer.consume({ type: 'text-delta', timestamp: Date.now() });
+    expect(entries).toHaveLength(1);
+    if (entries[0].type === 'assistant') {
+      expect(entries[0].content).toBe('Hello'); // not "Heloundefined"
+    }
+  });
+
+  it('flushes thought with isStreaming false', () => {
+    consumer.consume({ type: 'thinking', content: 'Hmm', timestamp: Date.now() });
+    const flushed = consumer.flush();
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0].type).toBe('thought');
+    if (flushed[0].type === 'thought') {
+      expect(flushed[0].content).toBe('Hmm');
+      expect(flushed[0].isStreaming).toBe(false);
+    }
+  });
+
   it('tool-end with object result serializes to JSON', () => {
     const entries = consumer.consume({
       type: 'tool-end',
@@ -122,11 +140,13 @@ describe('StreamConsumer', () => {
       timestamp: Date.now(),
     });
     const tool = entries.find((e) => e.type === 'tool');
-    expect(tool).toBeDefined();
-    if (tool && tool.type === 'tool') {
-      expect(tool.summary).toBe(JSON.stringify({ key: 'value' }));
-      expect(tool.isRunning).toBe(false);
-    }
+    expect(tool).toEqual(
+      expect.objectContaining({
+        type: 'tool',
+        summary: JSON.stringify({ key: 'value' }),
+        isRunning: false,
+      })
+    );
   });
 
   it('tool-end truncates result longer than 100 chars', () => {
@@ -139,10 +159,11 @@ describe('StreamConsumer', () => {
       timestamp: Date.now(),
     });
     const tool = entries.find((e) => e.type === 'tool');
-    expect(tool).toBeDefined();
+    expect(tool).toEqual(
+      expect.objectContaining({ type: 'tool', summary: 'a'.repeat(100) + '...' })
+    );
     if (tool && tool.type === 'tool') {
-      expect(tool.summary).toBe('a'.repeat(100) + '...');
-      expect(tool.summary.length).toBe(103);
+      expect(tool.summary).toHaveLength(103);
     }
   });
 
@@ -197,11 +218,9 @@ describe('StreamConsumer', () => {
       to: { type: 'completed' },
       timestamp: Date.now(),
     });
+    expect(entries).toHaveLength(1);
     const assistant = entries.find((e) => e.type === 'assistant');
-    expect(assistant).toBeDefined();
-    if (assistant && assistant.type === 'assistant') {
-      expect(assistant.content).toBe('Hi');
-    }
+    expect(assistant).toEqual(expect.objectContaining({ type: 'assistant', content: 'Hi' }));
   });
 
   it('creates tool entry from tool:start with action (colts format)', () => {
@@ -232,12 +251,14 @@ describe('StreamConsumer', () => {
       timestamp: Date.now(),
     });
     const tool = entries.find((e) => e.type === 'tool');
-    expect(tool).toBeDefined();
-    if (tool && tool.type === 'tool') {
-      expect(tool.tool).toBe('shell');
-      expect(tool.isRunning).toBe(false);
-      expect(tool.summary).toBe('file1.txt\nfile2.txt');
-    }
+    expect(tool).toEqual(
+      expect.objectContaining({
+        type: 'tool',
+        tool: 'shell',
+        isRunning: false,
+        summary: 'file1.txt\nfile2.txt',
+      })
+    );
   });
 
   it('tool:end without callId uses unknown toolName', () => {
@@ -247,10 +268,7 @@ describe('StreamConsumer', () => {
       timestamp: Date.now(),
     });
     const tool = entries.find((e) => e.type === 'tool');
-    expect(tool).toBeDefined();
-    if (tool && tool.type === 'tool') {
-      expect(tool.tool).toBe('unknown');
-    }
+    expect(tool).toEqual(expect.objectContaining({ type: 'tool', tool: 'unknown' }));
   });
 
   it('creates run-complete entry from complete event (colts format)', () => {
@@ -275,10 +293,9 @@ describe('StreamConsumer', () => {
       timestamp: Date.now(),
     });
     const tool = entries.find((e) => e.type === 'tool');
-    expect(tool).toBeDefined();
-    if (tool && tool.type === 'tool') {
-      expect(tool.summary).toBe('b'.repeat(100) + '...');
-    }
+    expect(tool).toEqual(
+      expect.objectContaining({ type: 'tool', summary: 'b'.repeat(100) + '...' })
+    );
   });
 
   it('tool:end with object result serializes to JSON (colts format)', () => {
@@ -289,10 +306,12 @@ describe('StreamConsumer', () => {
       timestamp: Date.now(),
     });
     const tool = entries.find((e) => e.type === 'tool');
-    expect(tool).toBeDefined();
-    if (tool && tool.type === 'tool') {
-      expect(tool.summary).toBe(JSON.stringify({ files: ['a.ts', 'b.ts'] }));
-    }
+    expect(tool).toEqual(
+      expect.objectContaining({
+        type: 'tool',
+        summary: JSON.stringify({ files: ['a.ts', 'b.ts'] }),
+      })
+    );
   });
 
   it('tool:start without action uses unknown toolName', () => {

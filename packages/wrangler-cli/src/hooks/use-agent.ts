@@ -28,6 +28,8 @@ export interface UseAgentReturn {
   status: RunStatus;
   sendMessage: (input: string) => Promise<void>;
   abort: () => void;
+  clearEntries: () => void;
+  addSystemEntry: (content: string) => void;
 }
 
 /**
@@ -46,6 +48,7 @@ export function useAgent(
   const runnerRef = useRef(runner);
   const consumerRef = useRef(new StreamConsumer());
   const abortRef = useRef<AbortController | null>(null);
+  const isRunningRef = useRef(false);
 
   // Sync refs when props change
   runnerRef.current = runner;
@@ -61,9 +64,15 @@ export function useAgent(
 
   const sendMessage = useCallback(
     async (input: string) => {
+      if (isRunningRef.current) return;
+      isRunningRef.current = true;
+
       const runner = runnerRef.current;
       let state = stateRef.current;
-      if (!runner || !state) return;
+      if (!runner || !state) {
+        isRunningRef.current = false;
+        return;
+      }
 
       // Add user message to entries
       const userEntry: TimelineEntry = {
@@ -126,6 +135,7 @@ export function useAgent(
           ]);
         }
       } finally {
+        isRunningRef.current = false;
         setStatus('ready');
         abortRef.current = null;
       }
@@ -133,5 +143,28 @@ export function useAgent(
     [entries.length]
   );
 
-  return { entries, state: stateRef.current, status, sendMessage, abort };
+  const clearEntries = useCallback(() => setEntries([]), []);
+
+  const addSystemEntry = useCallback((content: string) => {
+    setEntries((prev) => [
+      ...prev,
+      {
+        type: 'system',
+        id: `sys-${Date.now()}`,
+        seq: prev.length + 1,
+        content,
+        timestamp: Date.now(),
+      },
+    ]);
+  }, []);
+
+  return {
+    entries,
+    state: stateRef.current,
+    status,
+    sendMessage,
+    abort,
+    clearEntries,
+    addSystemEntry,
+  };
 }

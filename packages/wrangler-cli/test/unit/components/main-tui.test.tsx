@@ -73,6 +73,8 @@ function makeAgentHook(overrides?: Partial<UseAgentReturn>): UseAgentReturn {
     status: 'ready',
     sendMessage: vi.fn(),
     abort: vi.fn(),
+    clearEntries: vi.fn(),
+    addSystemEntry: vi.fn(),
     ...overrides,
   };
 }
@@ -270,5 +272,37 @@ describe('MainTUI', () => {
 
     capturedInputSubmit!({ type: 'sessions' });
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('calls clearEntries on /clear command', () => {
+    const clearEntries = vi.fn();
+    render(
+      React.createElement(MainTUI, {
+        agentHook: makeAgentHook({ clearEntries }),
+        agentName: 'agent',
+        model: 'gpt-4',
+        isCrewMode: false,
+        currentSession: 'primary',
+      })
+    );
+
+    capturedInputSubmit!({ type: 'clear' });
+    expect(clearEntries).toHaveBeenCalled();
+  });
+
+  it('calls addSystemEntry on /help command', () => {
+    const addSystemEntry = vi.fn();
+    render(
+      React.createElement(MainTUI, {
+        agentHook: makeAgentHook({ addSystemEntry }),
+        agentName: 'agent',
+        model: 'gpt-4',
+        isCrewMode: false,
+        currentSession: 'primary',
+      })
+    );
+
+    capturedInputSubmit!({ type: 'help' });
+    expect(addSystemEntry).toHaveBeenCalledWith(expect.stringContaining('Commands:'));
   });
 });

@@ -94,7 +94,8 @@ describe('US3: StreamConsumer produces correct timeline from real stream', () =>
 
       // Verify final flushed entry has isStreaming=false or undefined
       const finalAssistant = assistantEntries.find((e) => !('isStreaming' in e && e.isStreaming));
-      expect(finalAssistant).toBeDefined();
+      expect(finalAssistant).toHaveProperty('type', 'assistant');
+      expect(finalAssistant).toHaveProperty('content');
       expect(finalAssistant!.content).toBeTruthy();
 
       // Verify seq numbers are non-decreasing (streaming entries may share seq)

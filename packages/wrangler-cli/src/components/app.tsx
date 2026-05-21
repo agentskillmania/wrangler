@@ -6,7 +6,7 @@ import { MainTUI } from './main-tui.js';
 import { SetupWizard } from './setup/setup-wizard.js';
 import { useAgent } from '../hooks/use-agent.js';
 import { SessionManager } from '../hooks/use-session-manager.js';
-import { InteractionContext } from '../context/interaction-context.js';
+import { InteractionContext, createInteractionCallbacks } from '../context/interaction-context.js';
 import { createLLMClientFromConfig, createInitialState } from '../runner-setup.js';
 import type { AppConfig } from '../config.js';
 import { loadConfig, saveSetup } from '../config.js';
@@ -114,7 +114,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
 
   // State 3: config valid, runner ready
   return (
-    <InteractionContext.Provider value={null}>
+    <InteractionContext.Provider value={createInteractionCallbacks()}>
       <MainTUI
         agentHook={agentHook}
         agentName={agentName}

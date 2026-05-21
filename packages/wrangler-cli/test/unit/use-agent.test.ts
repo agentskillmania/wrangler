@@ -131,6 +131,33 @@ describe('useAgent', () => {
     expect(runner.runStream).not.toHaveBeenCalled();
   });
 
+  it('sendMessage ignores concurrent calls while running', async () => {
+    const runner = createMockRunner();
+    // Slow stream so second sendMessage overlaps with first
+    runner.runStream = vi.fn().mockImplementation(() => {
+      return (async function* () {
+        yield { type: 'text-delta', text: 'H' };
+        await new Promise((r) => setTimeout(r, 50));
+        yield { type: 'text-delta', text: 'i' };
+      })();
+    });
+
+    const state = createMockState();
+    const { result } = renderHook(() => useAgent(runner as unknown, state));
+
+    await act(async () => {
+      const p1 = result.current.sendMessage('first');
+      const p2 = result.current.sendMessage('second');
+      await Promise.all([p1, p2]);
+    });
+
+    // Only one runStream call — second was ignored
+    expect(runner.runStream).toHaveBeenCalledTimes(1);
+    // Only one user entry
+    const userEntries = result.current.entries.filter((e) => e.type === 'user');
+    expect(userEntries).toHaveLength(1);
+  });
+
   // -------------------------------------------------------------------------​
   // sendMessage — happy path
   // -------------------------------------------------------------------------​
@@ -145,14 +172,16 @@ describe('useAgent', () => {
     });
 
     expect(mockAddUserMessage).toHaveBeenCalledWith(state, 'hello agent');
-    expect(runner.runStream).toHaveBeenCalled();
+    expect(runner.runStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: { messages: [{ role: 'user', content: 'hello agent' }] },
+      }),
+      { signal: expect.any(AbortSignal) }
+    );
 
-    expect(result.current.entries.length).toBeGreaterThanOrEqual(1);
+    expect(result.current.entries).toHaveLength(1);
     const userEntry = result.current.entries.find((e) => e.type === 'user');
-    expect(userEntry).toBeDefined();
-    if (userEntry && userEntry.type === 'user') {
-      expect(userEntry.content).toBe('hello agent');
-    }
+    expect(userEntry).toEqual(expect.objectContaining({ type: 'user', content: 'hello agent' }));
   });
 
   it('sendMessage processes stream events and adds entries from consumer', async () => {
@@ -177,8 +206,9 @@ describe('useAgent', () => {
       await result.current.sendMessage('hi');
     });
 
+    expect(result.current.entries).toHaveLength(2);
     const assistant = result.current.entries.find((e) => e.type === 'assistant');
-    expect(assistant).toBeDefined();
+    expect(assistant).toEqual(expect.objectContaining({ type: 'assistant', content: 'Hello!' }));
   });
 
   it('sendMessage flushes remaining consumer content after stream ends', async () => {
@@ -203,8 +233,16 @@ describe('useAgent', () => {
       await result.current.sendMessage('hi');
     });
 
+    expect(result.current.entries).toHaveLength(2);
     const flushed = result.current.entries.find((e) => e.id === 'entry-flush');
-    expect(flushed).toBeDefined();
+    expect(flushed).toEqual(
+      expect.objectContaining({
+        id: 'entry-flush',
+        type: 'assistant',
+        content: 'flushed content',
+        isStreaming: false,
+      })
+    );
   });
 
   it('sendMessage skips adding entries when flush returns empty', async () => {
@@ -262,11 +300,11 @@ describe('useAgent', () => {
       await result.current.sendMessage('hello');
     });
 
+    expect(result.current.entries).toHaveLength(2);
     const systemEntry = result.current.entries.find((e) => e.type === 'system');
-    expect(systemEntry).toBeDefined();
-    if (systemEntry && systemEntry.type === 'system') {
-      expect(systemEntry.content).toBe('Run interrupted');
-    }
+    expect(systemEntry).toEqual(
+      expect.objectContaining({ type: 'system', content: 'Run interrupted' })
+    );
     expect(result.current.status).toBe('ready');
   });
 
@@ -286,11 +324,11 @@ describe('useAgent', () => {
       await result.current.sendMessage('hello');
     });
 
+    expect(result.current.entries).toHaveLength(2);
     const errorEntry = result.current.entries.find((e) => e.type === 'error');
-    expect(errorEntry).toBeDefined();
-    if (errorEntry && errorEntry.type === 'error') {
-      expect(errorEntry.message).toBe('LLM connection failed');
-    }
+    expect(errorEntry).toEqual(
+      expect.objectContaining({ type: 'error', message: 'LLM connection failed' })
+    );
     expect(result.current.status).toBe('ready');
   });
 
@@ -311,11 +349,11 @@ describe('useAgent', () => {
       await result.current.sendMessage('hello');
     });
 
+    expect(result.current.entries).toHaveLength(2);
     const errorEntry = result.current.entries.find((e) => e.type === 'error');
-    expect(errorEntry).toBeDefined();
-    if (errorEntry && errorEntry.type === 'error') {
-      expect(errorEntry.message).toBe('something went wrong');
-    }
+    expect(errorEntry).toEqual(
+      expect.objectContaining({ type: 'error', message: 'something went wrong' })
+    );
   });
 
   // -------------------------------------------------------------------------​
@@ -404,7 +442,12 @@ describe('useAgent', () => {
       await result.current.sendMessage('hello');
     });
 
-    expect(runner2.runStream).toHaveBeenCalled();
+    expect(runner2.runStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: { messages: [{ role: 'user', content: 'hello' }] },
+      }),
+      { signal: expect.any(AbortSignal) }
+    );
     expect(runner1.runStream).not.toHaveBeenCalled();
   });
 
@@ -480,5 +523,37 @@ describe('useAgent', () => {
     const assistantEntries = result.current.entries.filter((e) => e.type === 'assistant');
     expect(assistantEntries).toHaveLength(1);
     expect(assistantEntries[0].content).toBe('final');
+  });
+
+  it('clearEntries empties the entries list', () => {
+    const runner = createMockRunner();
+    const state = createMockState();
+    const { result } = renderHook(() => useAgent(runner as unknown, state));
+
+    act(() => {
+      result.current.addSystemEntry('test');
+    });
+    expect(result.current.entries).toHaveLength(1);
+
+    act(() => {
+      result.current.clearEntries();
+    });
+    expect(result.current.entries).toHaveLength(0);
+  });
+
+  it('addSystemEntry appends a system entry', () => {
+    const runner = createMockRunner();
+    const state = createMockState();
+    const { result } = renderHook(() => useAgent(runner as unknown, state));
+
+    act(() => {
+      result.current.addSystemEntry('Hello from system');
+    });
+
+    expect(result.current.entries).toHaveLength(1);
+    expect(result.current.entries[0].type).toBe('system');
+    if (result.current.entries[0].type === 'system') {
+      expect(result.current.entries[0].content).toBe('Hello from system');
+    }
   });
 });
