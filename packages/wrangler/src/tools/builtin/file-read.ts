@@ -25,9 +25,21 @@ export function createFileReadTool(deps: ToolDeps): Tool<ZodTypeAny> {
     async execute(args: z.infer<typeof FileReadSchema>) {
       const absolutePath = deps.resolvePath(args.filePath);
 
-      const fileStat = await stat(absolutePath).catch(() => null);
-      if (!fileStat?.isFile()) {
-        return `Error: File not found: ${args.filePath}`;
+      let fileStat;
+      try {
+        fileStat = await stat(absolutePath);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT') {
+          throw new Error(`File not found: ${args.filePath}`);
+        }
+        if (code === 'EACCES') {
+          throw new Error(`Permission denied: ${args.filePath}`);
+        }
+        throw new Error(`Failed to access file: ${args.filePath} (${(error as Error).message})`);
+      }
+      if (!fileStat.isFile()) {
+        return `Error: Not a file: ${args.filePath}`;
       }
 
       if (await isBinaryFile(absolutePath)) {

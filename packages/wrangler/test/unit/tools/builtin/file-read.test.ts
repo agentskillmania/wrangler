@@ -1,9 +1,20 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createFileReadTool } from '../../../../src/tools/builtin/file-read.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    stat: vi.fn(actual.stat),
+  };
+});
+
+const { stat } = await import('node:fs/promises');
 
 describe('file_read', () => {
   let workspace: string;
@@ -38,10 +49,9 @@ describe('file_read', () => {
     expect(result).not.toContain('5:line 5');
   });
 
-  it('returns error for non-existent file', async () => {
+  it('throws error for non-existent file', async () => {
     const tool = createFileReadTool(deps);
-    const result = await tool.execute({ filePath: 'nope.txt' });
-    expect(result).toContain('Error: File not found');
+    await expect(tool.execute({ filePath: 'nope.txt' })).rejects.toThrow('File not found');
   });
 
   it('rejects path traversal', async () => {
@@ -82,6 +92,7 @@ describe('file_read', () => {
     await writeFile(join(workspace, 'empty.txt'), '');
     const tool = createFileReadTool(deps);
     const result = await tool.execute({ filePath: 'empty.txt' });
+    expect(result).toBe('Total lines: 0');
   });
 
   it('returns error when offset exceeds file length', async () => {
@@ -91,10 +102,17 @@ describe('file_read', () => {
     expect(result).toContain('offset 100 exceeds file length');
   });
 
+  it('throws permission denied for EACCES instead of not found', async () => {
+    await writeFile(join(workspace, 'secret.txt'), 'secret');
+    vi.mocked(stat).mockRejectedValueOnce(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
+    const tool = createFileReadTool(deps);
+    await expect(tool.execute({ filePath: 'secret.txt' })).rejects.toThrow('Permission denied');
+  });
+
   it('has correct tool metadata', () => {
     const tool = createFileReadTool(deps);
     expect(tool.name).toBe('file_read');
-    expect(tool.description).toBeTruthy();
-    expect(tool.parameters).toBeDefined();
+    expect(tool.description).toContain('Read file contents');
+    expect(tool.parameters).toBeInstanceOf(z.ZodObject);
   });
 });

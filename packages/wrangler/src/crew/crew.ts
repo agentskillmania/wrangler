@@ -104,6 +104,11 @@ export class Crew {
   // ─── User message handling ───
 
   private handleUserMessage(content: string): void {
+    // Reset advanceCount for all agents on new user message
+    for (const agent of this.agents.values()) {
+      agent.advanceCount = 0;
+    }
+
     let primary = this.findPrimary();
     if (!primary) {
       primary = this.createAgentInstance('primary', this.config.meta.primaryAgent);
@@ -181,7 +186,7 @@ export class Crew {
 
   private async advanceAgent(agent: AgentInstance, messages: CrewMessage[]): Promise<void> {
     // Max-hop guard: prevent infinite auto-routing loops
-    const MAX_ADVANCES = 50;
+    const MAX_ADVANCES = 200;
     agent.advanceCount++;
     if (agent.advanceCount > MAX_ADVANCES) {
       this.emit({

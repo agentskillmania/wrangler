@@ -4,8 +4,8 @@ import { mkdir, rm, readFile, writeFile, readdir, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { createSnapshot, restoreSnapshot } from '@agentskillmania/colts';
-import type { AgentState, Snapshot } from '@agentskillmania/colts';
+import { serializeState, deserializeState } from '@agentskillmania/colts';
+import type { AgentState } from '@agentskillmania/colts';
 import { writeMeta, readMeta } from './meta.js';
 import { formatTranscriptEntry } from './transcript.js';
 import type { SessionMeta, TranscriptEntry } from '../types.js';
@@ -33,12 +33,32 @@ function hashWorkspacePath(workspacePath: string): string {
  */
 export class SessionStore {
   private readonly workspaceHash: string;
+  /** Per-session write queue to prevent concurrent file corruption */
+  private readonly writeQueues = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly baseDir: string,
     private readonly workspacePath: string
   ) {
     this.workspaceHash = hashWorkspacePath(workspacePath);
+  }
+
+  /**
+   * Serialize all writes for a given session to prevent race conditions.
+   * Concurrent writes to state.json / transcript.jsonl / meta.yaml
+   * can corrupt files or lose updates.
+   */
+  private async serialize<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.writeQueues.get(sessionId) ?? Promise.resolve();
+    const next = previous.then(() => operation());
+    this.writeQueues.set(sessionId, next);
+    try {
+      return await next;
+    } finally {
+      if (this.writeQueues.get(sessionId) === next) {
+        this.writeQueues.delete(sessionId);
+      }
+    }
   }
 
   /** 获取 workspace 分组目录 */
@@ -87,9 +107,11 @@ export class SessionStore {
 
   /** 保存 AgentState 到 state.json（Snapshot 格式） */
   async saveState(sessionId: string, state: AgentState): Promise<void> {
-    const dir = this.getSessionDir(sessionId);
-    const snapshot = createSnapshot(state);
-    await writeFile(join(dir, 'state.json'), JSON.stringify(snapshot, null, 2), 'utf-8');
+    return this.serialize(sessionId, async () => {
+      const dir = this.getSessionDir(sessionId);
+      const json = serializeState(state);
+      await writeFile(join(dir, 'state.json'), json, 'utf-8');
+    });
   }
 
   /** 从 state.json 加载 AgentState */
@@ -97,8 +119,7 @@ export class SessionStore {
     try {
       const dir = this.getSessionDir(sessionId);
       const raw = await readFile(join(dir, 'state.json'), 'utf-8');
-      const snapshot: Snapshot = JSON.parse(raw);
-      return restoreSnapshot(snapshot);
+      return deserializeState(raw);
     } catch {
       return null;
     }
@@ -106,18 +127,22 @@ export class SessionStore {
 
   /** 追加一条 transcript 记录 */
   async appendTranscript(sessionId: string, entry: TranscriptEntry): Promise<void> {
-    const dir = this.getSessionDir(sessionId);
-    const content = formatTranscriptEntry(entry);
-    await writeFile(join(dir, 'transcript.jsonl'), content, { flag: 'a', encoding: 'utf-8' });
+    return this.serialize(sessionId, async () => {
+      const dir = this.getSessionDir(sessionId);
+      const content = formatTranscriptEntry(entry);
+      await writeFile(join(dir, 'transcript.jsonl'), content, { flag: 'a', encoding: 'utf-8' });
+    });
   }
 
   /** 更新 session 元数据的部分字段 */
   async updateMeta(sessionId: string, updates: Partial<SessionMeta>): Promise<void> {
-    const dir = this.getSessionDir(sessionId);
-    const existing = await readMeta(dir);
-    if (!existing) return;
-    const updated: SessionMeta = { ...existing, ...updates, id: existing.id };
-    await writeMeta(dir, updated);
+    return this.serialize(sessionId, async () => {
+      const dir = this.getSessionDir(sessionId);
+      const existing = await readMeta(dir);
+      if (!existing) return;
+      const updated: SessionMeta = { ...existing, ...updates, id: existing.id };
+      await writeMeta(dir, updated);
+    });
   }
 
   /** 获取 session 元数据 */
@@ -157,9 +182,11 @@ export class SessionStore {
 
   /** Append a ConversationMessage to user-chat.jsonl */
   async appendMessage(sessionId: string, message: ConversationMessage): Promise<void> {
-    const dir = this.getSessionDir(sessionId);
-    const line = JSON.stringify(message) + '\n';
-    await writeFile(join(dir, 'user-chat.jsonl'), line, { flag: 'a', encoding: 'utf-8' });
+    return this.serialize(sessionId, async () => {
+      const dir = this.getSessionDir(sessionId);
+      const line = JSON.stringify(message) + '\n';
+      await writeFile(join(dir, 'user-chat.jsonl'), line, { flag: 'a', encoding: 'utf-8' });
+    });
   }
 
   /** Read all ConversationMessages from user-chat.jsonl */

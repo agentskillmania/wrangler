@@ -49,7 +49,6 @@ describe('SessionStore', () => {
       const sessionId = '1745800000-test';
       await store.createWithId(sessionId, 'GLM-4.7');
       const meta = await store.getMeta(sessionId);
-      expect(meta).not.toBeNull();
       expect(meta!.id).toBe(sessionId);
       expect(meta!.workspacePath).toBe(workspacePath);
       expect(meta!.model).toBe('GLM-4.7');
@@ -72,7 +71,6 @@ describe('SessionStore', () => {
       await store.saveState(sessionId, stateWithMsg);
       const loaded = await store.loadState(sessionId);
 
-      expect(loaded).not.toBeNull();
       expect(loaded!.id).toBe(stateWithMsg.id);
       expect(loaded!.context.messages).toHaveLength(1);
       expect(loaded!.context.messages[0].content).toBe('Hello');
@@ -83,7 +81,28 @@ describe('SessionStore', () => {
       expect(loaded).toBeNull();
     });
 
-    it('should use Snapshot format with checksum', async () => {
+    it('should survive concurrent saveState calls without corrupting state.json', async () => {
+      const sessionId = '1745800000-test';
+      await store.createWithId(sessionId, 'GLM-4.7');
+
+      const states = Array.from({ length: 10 }, (_, i) => {
+        const state = createAgentState({ name: `agent-${i}`, instructions: `msg-${i}`, tools: [] });
+        return addUserMessage(state, `message-${i}`);
+      });
+
+      // Fire all saves concurrently
+      await Promise.all(states.map((s) => store.saveState(sessionId, s)));
+
+      // Load back — must be valid JSON and one of the saved states
+      const loaded = await store.loadState(sessionId);
+      expect(loaded).not.toBeNull();
+      const name = loaded!.config.name;
+      const msg = loaded!.context.messages[0].content;
+      expect(name).toMatch(/^agent-\d+$/);
+      expect(msg).toBe(`message-${name.split('-')[1]}`);
+    });
+
+    it('should persist AgentState as plain JSON without snapshot wrapper', async () => {
       const sessionId = '1745800000-test';
       await store.createWithId(sessionId, 'GLM-4.7');
       const state = createAgentState({
@@ -96,9 +115,13 @@ describe('SessionStore', () => {
       const dirPath = store.getSessionDir(sessionId);
       const raw = await readFile(join(dirPath, 'state.json'), 'utf-8');
       const payload = JSON.parse(raw);
-      expect(payload.version).toBe('1.0.0');
-      expect(payload.checksum).toBeDefined();
-      expect(payload.state).toBeDefined();
+      // Plain AgentState — verify actual content, not just shape
+      expect(payload.config.name).toBe('test-agent');
+      expect(payload.config.instructions).toBe('You are a test agent.');
+      expect(payload.context.messages).toEqual([]);
+      // Not wrapped in snapshot format
+      expect(payload).not.toHaveProperty('version');
+      expect(payload).not.toHaveProperty('checksum');
     });
   });
 
@@ -152,7 +175,6 @@ describe('SessionStore', () => {
       await store.updateMeta(sessionId, { messageCount: 5, updatedAt: '2026-04-28T15:00:00.000Z' });
 
       const meta = await store.getMeta(sessionId);
-      expect(meta).not.toBeNull();
       expect(meta!.messageCount).toBe(5);
       expect(meta!.updatedAt).toBe('2026-04-28T15:00:00.000Z');
       expect(meta!.id).toBe(sessionId);
@@ -308,7 +330,8 @@ describe('SessionStore', () => {
       expect(lines).toHaveLength(2);
       // Each line is valid JSON
       for (const line of lines) {
-        expect(() => JSON.parse(line)).not.toThrow();
+        const parsed = JSON.parse(line);
+        expect(parsed).toBeInstanceOf(Object);
       }
     });
 

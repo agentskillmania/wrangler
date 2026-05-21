@@ -198,10 +198,10 @@ describe('createSessionMiddleware', () => {
         runnerOptions: mockRunnerOptions,
       });
       const loaded = await store.loadState(state.id);
-      expect(loaded).not.toBeNull();
       expect(loaded!.id).toBe(state.id);
       const meta = await store.getMeta(state.id);
-      expect(meta!.updatedAt).toBeDefined();
+      expect(typeof meta!.updatedAt).toBe('string');
+      expect(meta!.updatedAt.length).toBeGreaterThan(0);
     });
   });
 });

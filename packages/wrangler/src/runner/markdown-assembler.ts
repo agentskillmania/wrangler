@@ -195,7 +195,7 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
             toolCallId: msg.toolCallId ?? 'unknown',
             toolName: msg.toolName ?? 'unknown',
             content: [{ type: 'text', text: msg.content }],
-            isError: false,
+            isError: msg.content.startsWith('Error:'),
             timestamp: msg.timestamp ?? Date.now(),
           });
           break;

@@ -276,27 +276,52 @@ describe('Crew', () => {
       expect((errorEvent as { error: Error }).error.message).toContain('abort');
     });
 
-    it('max-hop guard prevents infinite loops', async () => {
+    it('resets advanceCount on new user message', async () => {
+      const factory = createMockRunnerFactory({ type: 'success', answer: 'ok' });
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        runnerFactory: factory,
+      }) as unknown as InternalCrew;
+
+      crew.pushInput({ type: 'user_message', content: 'Hello' });
+      await waitForEvent(crew, 'user_response');
+
+      const primary = [...(crew.agents as Map<string, { advanceCount: number }>).values()].find(
+        (a: { role: string }) => a.role === 'primary'
+      );
+      const countAfterFirst = primary!.advanceCount;
+      expect(countAfterFirst).toBeGreaterThan(0);
+
+      // Set to near-limit to prove reset works
+      primary!.advanceCount = 200;
+
+      // New user message should reset, allowing further advances
+      crew.pushInput({ type: 'user_message', content: 'Another' });
+      await waitForEvent(crew, 'user_response');
+
+      // After reset + one advance, count should be 1 (not 201)
+      expect(primary!.advanceCount).toBe(1);
+    });
+
+    it('max-hop guard prevents infinite loops (limit 200)', async () => {
       const factory = createMockRunnerFactory({ type: 'success', answer: 'loop' });
       const crew = new Crew(mockConfig, {
         llmClient: {} as never,
         runnerFactory: factory,
       }) as unknown as InternalCrew;
 
-      // Create primary agent
       crew.pushInput({ type: 'user_message', content: 'Hello' });
       await waitForEvent(crew, 'user_response');
 
-      // Get primary and set advance count to max
       const primary = [...(crew.agents as Map<string, { advanceCount: number }>).values()].find(
         (a: { role: string }) => a.role === 'primary'
       );
-      expect(primary).toBeDefined();
-      primary!.advanceCount = 50;
+      expect(primary!.role).toBe('primary');
 
-      // Push another message — should hit max-hop guard
+      // Manually set to 200 — next advance should trigger guard
+      primary!.advanceCount = 200;
       const errorP = waitForEvent(crew, 'error');
-      crew.pushInput({ type: 'user_message', content: 'Another' });
+      await (crew as any).advanceAgent(primary, []);
 
       const errorEvent = await errorP;
       expect(errorEvent.type).toBe('error');

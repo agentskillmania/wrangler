@@ -262,8 +262,29 @@ describe('MarkdownMessageAssembler', () => {
     const messages = assembler.build(state, opts);
 
     const toolMsg = messages.find((m) => m.role === 'toolResult');
-    expect(toolMsg).toBeDefined();
     expect(toolMsg!.toolCallId).toBe('tc-1');
+    expect(toolMsg!.isError).toBe(false);
+  });
+
+  it('marks tool result as error when content starts with Error:', () => {
+    const assembler = new MarkdownMessageAssembler();
+    const state = makeState({ instructions: 'Be helpful.' });
+    state.context.messages = [
+      {
+        role: 'tool',
+        content: 'Error: File not found: missing.txt',
+        toolCallId: 'tc-2',
+        toolName: 'file_read',
+        timestamp: 1003,
+      },
+    ] as any;
+    const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
+
+    const messages = assembler.build(state, opts);
+
+    const toolMsg = messages.find((m) => m.role === 'toolResult' && m.toolCallId === 'tc-2');
+    expect(toolMsg).toBeDefined();
+    expect(toolMsg!.isError).toBe(true);
   });
 
   it('handles assistant messages with toolCalls', () => {
@@ -287,17 +308,17 @@ describe('MarkdownMessageAssembler', () => {
 
     const messages = assembler.build(state, opts);
 
-    const assistantMsg = messages.find(
-      (m) =>
-        m.role === 'assistant' &&
-        Array.isArray(m.content) &&
-        m.content.some((c: any) => c.type === 'toolCall')
+    const assistantMsgs = messages.filter((m) => m.role === 'assistant');
+    expect(assistantMsgs).toHaveLength(2);
+    const assistantMsg = assistantMsgs[1];
+    expect(Array.isArray(assistantMsg.content)).toBe(true);
+    expect(assistantMsg.content).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'toolCall' })])
     );
-    expect(assistantMsg).toBeDefined();
-    const toolCall = (assistantMsg!.content as any[]).find((c: any) => c.type === 'toolCall');
-    expect(toolCall.id).toBe('tc-1');
-    expect(toolCall.name).toBe('search');
-    expect(assistantMsg!.stopReason).toBe('toolUse');
+    const toolCall = (assistantMsg.content as any[]).find((c: any) => c.type === 'toolCall');
+    expect(toolCall!.id).toBe('tc-1');
+    expect(toolCall!.name).toBe('search');
+    expect(assistantMsg.stopReason).toBe('toolUse');
   });
 
   it('handles assistant messages without toolCalls', () => {
@@ -314,14 +335,14 @@ describe('MarkdownMessageAssembler', () => {
 
     const messages = assembler.build(state, opts);
 
-    const assistantMsg = messages.find(
-      (m) =>
-        m.role === 'assistant' &&
-        Array.isArray(m.content) &&
-        m.content.some((c: any) => c.type === 'text' && c.text === 'Just a reply.')
+    const assistantMsgs = messages.filter((m) => m.role === 'assistant');
+    expect(assistantMsgs).toHaveLength(2);
+    const assistantMsg = assistantMsgs[1];
+    expect(Array.isArray(assistantMsg.content)).toBe(true);
+    expect(assistantMsg.content).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Just a reply.' })])
     );
-    expect(assistantMsg).toBeDefined();
-    expect(assistantMsg!.stopReason).toBe('stop');
+    expect(assistantMsg.stopReason).toBe('stop');
   });
 
   it('respects compression boundary', () => {
@@ -343,7 +364,6 @@ describe('MarkdownMessageAssembler', () => {
     const summaryMsg = messages.find(
       (m) => typeof m.content === 'string' && m.content.includes('Conversation History Summary')
     );
-    expect(summaryMsg).toBeDefined();
     expect(summaryMsg!.content).toContain('Previous conversation about X');
 
     // Should only include messages from anchor index onwards
