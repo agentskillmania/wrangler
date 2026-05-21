@@ -8,13 +8,12 @@ describe('createTodolistSupport', () => {
 
     expect(support.tools).toHaveLength(1);
     expect(support.tools[0].name).toBe('todolist');
-    expect(support.middleware).toBeDefined();
     expect(support.middleware.name).toBe('todolist');
   });
 
   it('takes no arguments', () => {
     const support = createTodolistSupport();
-    expect(support).toBeDefined();
+    expect(support.tools).toBeInstanceOf(Array);
   });
 
   it('tool returns structured todo result', async () => {
@@ -33,8 +32,8 @@ describe('createTodolistSupport', () => {
   it('middleware has beforeStep and afterStep hooks', () => {
     const support = createTodolistSupport();
 
-    expect(support.middleware.beforeStep).toBeDefined();
-    expect(support.middleware.afterStep).toBeDefined();
+    expect(typeof support.middleware.beforeStep).toBe('function');
+    expect(typeof support.middleware.afterStep).toBe('function');
   });
 
   it('middleware auto-initializes todoList in beforeStep', async () => {
@@ -57,8 +56,6 @@ describe('createTodolistSupport', () => {
       runnerOptions: {} as any,
     });
 
-    expect(result).toBeDefined();
-    expect(result!.state!.context.todoList).toBeDefined();
     expect(result!.state!.context.todoList.items).toHaveLength(0);
   });
 
@@ -92,7 +89,6 @@ describe('createTodolistSupport', () => {
       runnerOptions: {} as any,
     });
 
-    expect(result).toBeDefined();
     expect(result!.state!.context.todoList.items).toHaveLength(2);
     expect(result!.state!.context.todoList.items[0].subject).toBe('New task');
     expect(result!.state!.context.todoList.items[1].subject).toBe('Another task');

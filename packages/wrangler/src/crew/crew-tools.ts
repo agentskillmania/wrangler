@@ -23,12 +23,8 @@ export function createCreateTaskTool(deps: {
       'Create a new worker agent with a liaison. Prefer existing agent types from the catalog. Use instructions only when no suitable type exists.',
     parameters: CreateTaskSchema,
     async execute(args: z.infer<typeof CreateTaskSchema>) {
-      try {
-        const taskId = await deps.onCreateTask(args.workerType, args.task, args.instructions);
-        return `Task created. ID: ${taskId}. Worker type: ${args.workerType}. Status: started.`;
-      } catch (e) {
-        return `Failed to create task: ${(e as Error).message}`;
-      }
+      const taskId = await deps.onCreateTask(args.workerType, args.task, args.instructions);
+      return `Task created. ID: ${taskId}. Worker type: ${args.workerType}. Status: started.`;
     },
   };
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -42,6 +43,9 @@ describe('glob', () => {
     }
     const tool = createGlobTool(deps);
     const result = await tool.execute({ pattern: '**/*.ts' });
+    expect(result).toContain('... and 50 more files (showing first 100)');
+    expect(result).toContain('Total: 150 files');
+    // Truncation confirmed by the "... and 50 more" message above
   });
 
   it('searches within subpath', async () => {
@@ -87,7 +91,7 @@ describe('glob', () => {
   it('has correct tool metadata', () => {
     const tool = createGlobTool(deps);
     expect(tool.name).toBe('glob');
-    expect(tool.parameters).toBeDefined();
+    expect(tool.parameters).toBeInstanceOf(z.ZodObject);
   });
 
   it('handles files outside workspace root gracefully', async () => {

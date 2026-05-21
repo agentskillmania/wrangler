@@ -67,7 +67,7 @@ describe('createShellTool', () => {
     });
   });
 
-  it('should handle non-Error thrown by exec', async () => {
+  it('should propagate exec errors', async () => {
     const throwingDeps: ToolDeps = {
       workspaceRoot: tempDir,
       maxOutputSize: 1024,
@@ -82,8 +82,7 @@ describe('createShellTool', () => {
       grep: async () => '',
     };
     const tool = createShellTool(throwingDeps);
-    const result = await tool.execute({ command: 'anything' });
-    expect(result).toContain('Error: string error');
+    await expect(tool.execute({ command: 'anything' })).rejects.toThrow('string error');
   });
 
   it('should show (no output) when stdout is empty on success', async () => {

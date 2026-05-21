@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -45,6 +46,9 @@ describe('file_write', () => {
   it('shows all lines as additions for new file', async () => {
     const tool = createFileWriteTool(deps);
     const result = await tool.execute({ filePath: 'new.txt', content: 'line1\nline2' });
+    expect(result).toBe('File written: new.txt (2 lines)');
+    const content = await readFile(join(workspace, 'new.txt'), 'utf8');
+    expect(content).toBe('line1\nline2');
   });
 
   it('rejects path traversal', async () => {
@@ -65,10 +69,10 @@ describe('file_write', () => {
   it('has correct tool metadata', () => {
     const tool = createFileWriteTool(deps);
     expect(tool.name).toBe('file_write');
-    expect(tool.parameters).toBeDefined();
+    expect(tool.parameters).toBeInstanceOf(z.ZodObject);
   });
 
-  it('returns error message for non-traversal write failure', async () => {
+  it('throws error for non-traversal write failure', async () => {
     const failDeps: typeof deps = {
       workspaceRoot: workspace,
       maxOutputSize: 1024,
@@ -83,7 +87,8 @@ describe('file_write', () => {
       grep: async () => '',
     };
     const tool = createFileWriteTool(failDeps);
-    const result = await tool.execute({ filePath: 'test.txt', content: 'data' });
-    expect(result).toContain('Error: Failed to write file: Disk full');
+    await expect(tool.execute({ filePath: 'test.txt', content: 'data' })).rejects.toThrow(
+      'Disk full'
+    );
   });
 });

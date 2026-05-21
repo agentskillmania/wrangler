@@ -44,7 +44,7 @@ describe('createPythonTool', () => {
     expect(result).toContain('Provide either');
   });
 
-  it('should handle exec throwing an error', async () => {
+  it('should propagate exec errors', async () => {
     const throwingDeps: ToolDeps = {
       workspaceRoot: tempDir,
       maxOutputSize: 1024,
@@ -59,7 +59,6 @@ describe('createPythonTool', () => {
       grep: async () => '',
     };
     const tool = createPythonTool(throwingDeps);
-    const result = await tool.execute({ code: 'print(1)' });
-    expect(result).toContain('Error: sandbox crashed');
+    await expect(tool.execute({ code: 'print(1)' })).rejects.toThrow('sandbox crashed');
   });
 });

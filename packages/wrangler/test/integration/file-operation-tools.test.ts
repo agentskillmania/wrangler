@@ -103,7 +103,7 @@ describe('File Operation Tools E2E', () => {
       // Extract assistant response
       const messages = finalState.context.messages;
       const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-      expect(lastAssistant).toBeDefined();
+      expect(lastAssistant).toHaveProperty('content');
 
       const responseText =
         typeof lastAssistant!.content === 'string'
@@ -175,7 +175,7 @@ describe('File Operation Tools E2E', () => {
       // Verify LLM response contains the correct content
       const messages = finalState2.context.messages;
       const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-      expect(lastAssistant).toBeDefined();
+      expect(lastAssistant).toHaveProperty('content');
 
       const responseText =
         typeof lastAssistant!.content === 'string'
@@ -293,7 +293,7 @@ describe('File Operation Tools E2E', () => {
       // Verify LLM response mentions .ts files
       const messages = finalState.context.messages;
       const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-      expect(lastAssistant).toBeDefined();
+      expect(lastAssistant).toHaveProperty('content');
 
       const responseText =
         typeof lastAssistant!.content === 'string'
@@ -364,7 +364,7 @@ describe('File Operation Tools E2E', () => {
       // Verify LLM response mentions the correct file
       const messages = finalState.context.messages;
       const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-      expect(lastAssistant).toBeDefined();
+      expect(lastAssistant).toHaveProperty('content');
 
       const responseText =
         typeof lastAssistant!.content === 'string'

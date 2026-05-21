@@ -95,7 +95,7 @@ describe('Crew peer collaboration', () => {
         timeout.then(() => null as unknown as CrewOutputEvent),
       ]);
 
-      expect(result).not.toBeNull();
+      expect(result).toHaveProperty('content');
       expect(result.type).toBe('user_response');
       expect((result as { content: string }).content.length).toBeGreaterThan(0);
 

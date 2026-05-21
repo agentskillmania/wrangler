@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { createWebSearchTool } from '../../../../src/tools/builtin/web-search.js';
 import type { SearchProvider } from '../../../../src/tools/builtin/web-search.js';
 import { BingScrapeSearchProvider } from '../../../../src/tools/builtin/bing-scrape-search.js';
@@ -24,22 +25,21 @@ describe('web_search', () => {
     expect(result).toContain('No results found');
   });
 
-  it('returns error when provider throws', async () => {
+  it('throws when provider throws', async () => {
     const provider: SearchProvider = {
       search: async () => {
         throw new Error('API error');
       },
     };
     const tool = createWebSearchTool(provider);
-    const result = await tool.execute({ query: 'test' });
-    expect(result).toContain('Search failed');
+    await expect(tool.execute({ query: 'test' })).rejects.toThrow('API error');
   });
 
   it('has correct tool metadata', () => {
     const provider: SearchProvider = { search: async () => [] };
     const tool = createWebSearchTool(provider);
     expect(tool.name).toBe('web_search');
-    expect(tool.parameters).toBeDefined();
+    expect(tool.parameters).toBeInstanceOf(z.ZodObject);
   });
 
   it('accepts BingScrapeSearchProvider', async () => {

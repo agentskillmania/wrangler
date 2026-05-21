@@ -162,10 +162,12 @@ describe('SandboxToolDeps (mock sandbox)', () => {
         exitCode: 0,
       });
       const files = await deps.glob('**/*.ts');
-      expect(files.length).toBeGreaterThanOrEqual(2);
-      expect(files.some((f) => f.endsWith('a.ts'))).toBe(true);
-      expect(files.some((f) => f.endsWith('b.ts'))).toBe(true);
-      expect(files.some((f) => f.endsWith('c.js'))).toBe(false);
+      expect(files).toHaveLength(2);
+      const normalized = files.map((f) => f.replace(/\\/g, '/'));
+      expect(normalized).toEqual(
+        expect.arrayContaining([expect.stringMatching(/a\.ts$/), expect.stringMatching(/b\.ts$/)])
+      );
+      expect(normalized.filter((f) => f.endsWith('c.js'))).toHaveLength(0);
     });
 
     it('returns empty for no matches', async () => {

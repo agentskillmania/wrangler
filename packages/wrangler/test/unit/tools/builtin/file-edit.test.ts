@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -93,14 +94,11 @@ describe('file_edit', () => {
     expect(content.toString()).toContain('\r\n');
   });
 
-  it('returns error for non-existent file', async () => {
+  it('throws error for non-existent file', async () => {
     const tool = createFileEditTool(deps);
-    const result = await tool.execute({
-      filePath: 'nope.txt',
-      oldString: 'x',
-      newString: 'y',
-    });
-    expect(result).toContain('ENOENT');
+    await expect(
+      tool.execute({ filePath: 'nope.txt', oldString: 'x', newString: 'y' })
+    ).rejects.toThrow();
   });
 
   it('rejects path traversal', async () => {
@@ -113,6 +111,6 @@ describe('file_edit', () => {
   it('has correct tool metadata', () => {
     const tool = createFileEditTool(deps);
     expect(tool.name).toBe('file_edit');
-    expect(tool.parameters).toBeDefined();
+    expect(tool.parameters).toBeInstanceOf(z.ZodObject);
   });
 });

@@ -78,15 +78,13 @@ describe('US1: 创建 Runner 并执行单轮对话', () => {
 
       // Verify state.json
       const loaded = await session.store.loadState(sessionId);
-      expect(loaded).not.toBeNull();
-      expect(loaded!.id).toBe(sessionId);
+      expect(loaded).toHaveProperty('id', sessionId);
 
       // Verify meta.yaml — model should come from runnerOptions
       const meta = await session.store.getMeta(sessionId);
-      expect(meta).not.toBeNull();
-      expect(meta!.model).toBe(testConfig.testModel);
+      expect(meta).toHaveProperty('model', testConfig.testModel);
       expect(meta!.workspacePath).toBe('/test/workspace');
-      expect(meta!.updatedAt).toBeDefined();
+      expect(typeof meta!.updatedAt).toBe('string');
 
       // Verify user-chat.jsonl via conversation API
       const messages = await session.store.readConversation(sessionId);
@@ -163,7 +161,7 @@ describe('US2: 恢复 Session 继续对话', () => {
 
       // Round 2: Resume
       const loaded = await session.store.loadState(sessionId);
-      expect(loaded).not.toBeNull();
+      expect(loaded).toHaveProperty('id');
 
       const runner2 = makeRunner(session.tools, [session.middleware]);
 
@@ -185,7 +183,7 @@ describe('US2: 恢复 Session 继续对话', () => {
       const lastAssistant = [...finalState.context.messages]
         .reverse()
         .find((m) => m.role === 'assistant');
-      expect(lastAssistant).toBeDefined();
+      expect(lastAssistant).toHaveProperty('content');
       const responseText =
         typeof lastAssistant!.content === 'string'
           ? lastAssistant!.content
@@ -276,6 +274,6 @@ describe('US3: Session 管理操作', () => {
     expect(meta!.messageCount).toBe(stateWithMsg.context.messages.length);
 
     const loaded = await store.loadState('1745800000-count-test');
-    expect(loaded).not.toBeNull();
+    expect(loaded).toHaveProperty('id');
   });
 });

@@ -51,7 +51,6 @@ describe('PlanStore', () => {
     it('file name contains spec name and version', async () => {
       await store.save(makeDoc({ name: 'auth', specVersion: 2, version: 3 }));
       const doc = await store.get('auth', 2, 3);
-      expect(doc).not.toBeNull();
       expect(doc!.meta.specVersion).toBe(2);
       expect(doc!.meta.version).toBe(3);
     });
@@ -89,7 +88,6 @@ describe('PlanStore', () => {
       await store.save(makeDoc({ specVersion: 1, version: 2 }));
 
       const doc = await store.get('user-login', 1, 1);
-      expect(doc).not.toBeNull();
       expect(doc!.meta.version).toBe(1);
     });
   });
@@ -108,7 +106,6 @@ describe('PlanStore', () => {
       await store.save(makeDoc({ specVersion: 1, version: 2 }));
 
       const doc = await store.getLatestForSpec('user-login');
-      expect(doc).not.toBeNull();
       expect(doc!.meta.version).toBe(3);
     });
 
@@ -117,7 +114,6 @@ describe('PlanStore', () => {
       await store.save(makeDoc({ specVersion: 2, version: 1 }));
 
       const doc = await store.getLatestForSpec('user-login', 1);
-      expect(doc).not.toBeNull();
       expect(doc!.meta.specVersion).toBe(1);
     });
   });

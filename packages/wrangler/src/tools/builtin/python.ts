@@ -18,28 +18,24 @@ export function createPythonTool(deps: ToolDeps): Tool<ZodTypeAny> {
         return 'Error: Provide either `code` or `file` parameter.';
       }
 
-      try {
-        let command: string;
-        if (args.file) {
-          const filePath = deps.resolvePath(args.file);
-          command = `python3 ${filePath}`;
-        } else {
-          const escapedCode = args.code!.replace(/'/g, "'\\''");
-          command = `python3 -c '${escapedCode}'`;
-        }
-
-        const result = await deps.exec(command);
-
-        if (result.exitCode === 0) {
-          return result.stdout || '(no output)';
-        }
-        const parts: string[] = [`Exit code: ${result.exitCode}`];
-        if (result.stdout) parts.push(`\nSTDOUT:\n${result.stdout}`);
-        if (result.stderr) parts.push(`\nSTDERR:\n${result.stderr}`);
-        return parts.join('');
-      } catch (e) {
-        return `Error: ${(e as Error).message}`;
+      let command: string;
+      if (args.file) {
+        const filePath = deps.resolvePath(args.file);
+        command = `python3 ${filePath}`;
+      } else {
+        const escapedCode = args.code!.replace(/'/g, "'\\''");
+        command = `python3 -c '${escapedCode}'`;
       }
+
+      const result = await deps.exec(command);
+
+      if (result.exitCode === 0) {
+        return result.stdout || '(no output)';
+      }
+      const parts: string[] = [`Exit code: ${result.exitCode}`];
+      if (result.stdout) parts.push(`\nSTDOUT:\n${result.stdout}`);
+      if (result.stderr) parts.push(`\nSTDERR:\n${result.stderr}`);
+      return parts.join('');
     },
   };
 }

@@ -15,19 +15,15 @@ export function createGitTool(deps: ToolDeps): Tool<ZodTypeAny> {
     description: 'Execute git commands in the workspace.',
     parameters: GitSchema,
     async execute(args: z.infer<typeof GitSchema>) {
-      try {
-        const result = await deps.exec(`git ${args.command}`);
+      const result = await deps.exec(`git ${args.command}`);
 
-        if (result.exitCode === 0) {
-          return result.stdout || '(no output)';
-        }
-        const parts: string[] = [`Exit code: ${result.exitCode}`];
-        if (result.stdout) parts.push(`\nSTDOUT:\n${result.stdout}`);
-        if (result.stderr) parts.push(`\nSTDERR:\n${result.stderr}`);
-        return parts.join('');
-      } catch (e) {
-        return `Error: ${(e as Error).message}`;
+      if (result.exitCode === 0) {
+        return result.stdout || '(no output)';
       }
+      const parts: string[] = [`Exit code: ${result.exitCode}`];
+      if (result.stdout) parts.push(`\nSTDOUT:\n${result.stdout}`);
+      if (result.stderr) parts.push(`\nSTDERR:\n${result.stderr}`);
+      return parts.join('');
     },
   };
 }

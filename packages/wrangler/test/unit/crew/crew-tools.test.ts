@@ -33,11 +33,12 @@ describe('crew tools', () => {
       expect(result).toContain('task-2');
     });
 
-    it('handles callback error', async () => {
+    it('throws callback error', async () => {
       const onCreateTask = vi.fn().mockRejectedValue(new Error('boom'));
       const tool = createCreateTaskTool({ onCreateTask });
-      const result = await tool.execute({ workerType: 'searcher', task: 'search x' });
-      expect(result).toContain('boom');
+      await expect(tool.execute({ workerType: 'searcher', task: 'search x' })).rejects.toThrow(
+        'boom'
+      );
     });
   });
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
 import { createWebFetchTool } from '../../../../src/tools/builtin/web-fetch.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
 
@@ -92,14 +93,14 @@ describe('web_fetch', () => {
     expect(result).toContain('Unsupported content type');
   });
 
-  it('returns error on network failure', async () => {
+  it('throws on network failure', async () => {
     globalThis.fetch = vi
       .fn()
       .mockRejectedValue(new Error('ECONNREFUSED')) as unknown as typeof globalThis.fetch;
     const tool = createWebFetchTool(deps);
-    const result = await tool.execute({ url: 'https://unreachable.example.com' });
-    expect(result).toContain('Failed to fetch');
-    expect(result).toContain('ECONNREFUSED');
+    await expect(tool.execute({ url: 'https://unreachable.example.com' })).rejects.toThrow(
+      'ECONNREFUSED'
+    );
   });
 
   it('handles response with no content-type header', async () => {
@@ -117,7 +118,7 @@ describe('web_fetch', () => {
   it('has correct tool metadata', () => {
     const tool = createWebFetchTool(deps);
     expect(tool.name).toBe('web_fetch');
-    expect(tool.parameters).toBeDefined();
+    expect(tool.parameters).toBeInstanceOf(z.ZodObject);
   });
 
   it('falls back to raw HTML when Readability finds no article', async () => {

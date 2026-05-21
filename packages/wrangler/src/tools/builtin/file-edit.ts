@@ -16,22 +16,13 @@ export function createFileEditTool(deps: ToolDeps): Tool<ZodTypeAny> {
     description: 'Edit a file by replacing exact text matches. Preserves line endings.',
     parameters: FileEditSchema,
     async execute(args: z.infer<typeof FileEditSchema>) {
-      try {
-        const result = await deps.editFile(
-          args.filePath,
-          args.oldString,
-          args.newString,
-          args.replaceAll
-        );
-        return `Edited ${args.filePath}: ${result}`;
-      } catch (error) {
-        const err = error as Error;
-        if (err.message.includes('Path traversal detected')) {
-          throw err;
-        }
-        // editFile already formats error messages nicely, just return them
-        return err.message;
-      }
+      const result = await deps.editFile(
+        args.filePath,
+        args.oldString,
+        args.newString,
+        args.replaceAll
+      );
+      return `Edited ${args.filePath}: ${result}`;
     },
   };
 }

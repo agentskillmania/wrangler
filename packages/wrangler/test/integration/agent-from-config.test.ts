@@ -172,8 +172,8 @@ You are a helpful assistant. Answer in one short sentence.`
       state = addUserMessage(state, 'What is 2 + 2?');
 
       const result = await runner.run(state, { maxSteps: 5 });
-      expect(result).toBeDefined();
-      expect(result.state).toBeDefined();
+      expect(result).toHaveProperty('state');
+      expect(result).toHaveProperty('result');
       expect(result.result.type).toBe('success');
       expect(result.result.answer).toBeTruthy();
     },

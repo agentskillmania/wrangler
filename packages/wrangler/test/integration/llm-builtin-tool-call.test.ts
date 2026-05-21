@@ -76,13 +76,13 @@ describe('LLM tool calling: builtin tools', () => {
 
       // 3: Is the result correct? (file written to disk)
       const reportContent = await readFile(join(workspace, 'report.txt'), 'utf8').catch(() => null);
-      expect(reportContent).not.toBeNull();
+      expect(typeof reportContent).toBe('string');
       expect(reportContent!.toLowerCase()).toContain('file read successfully');
 
       // 4: Did the LLM understand the tool results?
       const assistantMessages = finalState.context.messages.filter((m) => m.role === 'assistant');
       const lastAssistant = assistantMessages[assistantMessages.length - 1];
-      expect(lastAssistant).toBeDefined();
+      expect(lastAssistant).toHaveProperty('content');
       const responseText =
         typeof lastAssistant!.content === 'string'
           ? lastAssistant!.content
@@ -226,7 +226,7 @@ describe('LLM tool calling: builtin tools', () => {
       expect(result.type).toBe('success');
 
       const summary = await readFile(join(workspace, 'summary.txt'), 'utf8').catch(() => null);
-      expect(summary).not.toBeNull();
+      expect(typeof summary).toBe('string');
       expect(summary!.toLowerCase()).toContain('5');
     },
     120000

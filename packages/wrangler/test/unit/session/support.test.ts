@@ -33,11 +33,9 @@ describe('createSessionSupport', () => {
       sessionBaseDir: testBaseDir,
     });
 
-    expect(result.middleware).toBeDefined();
     expect(result.middleware.name).toBe('session');
-    expect(result.store).toBeDefined();
-    expect(result.tools).toBeDefined();
-    expect(result.tools.length).toBeGreaterThanOrEqual(1);
+    expect(typeof result.store.exists).toBe('function');
+    expect(result.tools).toHaveLength(1);
   });
 
   it('should include calculator tool', () => {
@@ -82,7 +80,7 @@ describe('createSessionSupport', () => {
     await session.store.createWithId('test-session-1', 'test-model');
 
     const entries = await readdir(testBaseDir, { recursive: true });
-    const hasSession = (entries as string[]).some((e) => (e as string).includes('meta.yaml'));
-    expect(hasSession).toBe(true);
+    const sessionEntries = (entries as string[]).filter((e) => (e as string).includes('meta.yaml'));
+    expect(sessionEntries).toHaveLength(1);
   });
 });

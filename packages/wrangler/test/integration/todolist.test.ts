@@ -71,7 +71,7 @@ describe('US1: LLM creates todo tasks from natural language', () => {
       expect(result.type).toBe('success');
 
       // Verify todo list was created and populated
-      expect(finalState.context.todoList).toBeDefined();
+      expect(finalState.context.todoList).toHaveProperty('items');
       expect(finalState.context.todoList!.items.length).toBeGreaterThan(0);
 
       // Verify todo items reflect the 3 subtasks (haiku, count, even/odd check)
@@ -116,7 +116,7 @@ describe('US2: LLM executes todo list and marks items completed', () => {
       expect(result.type).toBe('success');
 
       // Verify todo list exists and has items
-      expect(finalState.context.todoList).toBeDefined();
+      expect(finalState.context.todoList).toHaveProperty('items');
       expect(finalState.context.todoList!.items.length).toBeGreaterThan(0);
 
       // Verify all tasks are marked as completed
@@ -170,13 +170,13 @@ describe('US3: Todo state persists across sessions', () => {
       const sessionId = state1.id;
 
       // Verify todos were created in round 1
-      expect(finalState1.context.todoList).toBeDefined();
+      expect(finalState1.context.todoList).toHaveProperty('items');
       expect(finalState1.context.todoList!.items.length).toBeGreaterThan(0);
       const todoCountAfterRound1 = finalState1.context.todoList!.items.length;
 
       // Round 2: Load session and verify LLM sees persisted todos
       const loaded = await session.store.loadState(sessionId);
-      expect(loaded).not.toBeNull();
+      expect(loaded).toHaveProperty('id');
 
       const runner2 = makeRunner(
         [...session.tools, ...todolistSupport.tools],
@@ -190,7 +190,7 @@ describe('US3: Todo state persists across sessions', () => {
       expect(result2.type).toBe('success');
 
       // Verify todo list was restored
-      expect(finalState2.context.todoList).toBeDefined();
+      expect(finalState2.context.todoList).toHaveProperty('items');
       expect(finalState2.context.todoList!.items.length).toBe(todoCountAfterRound1);
 
       // Verify LLM response references the persisted todo items
@@ -233,7 +233,7 @@ describe('US4: LLM sees todo list in system prompt', () => {
       const { state: stateWithTodos } = await runner.run(state);
 
       // Verify todos were created
-      expect(stateWithTodos.context.todoList).toBeDefined();
+      expect(stateWithTodos.context.todoList).toHaveProperty('items');
       expect(stateWithTodos.context.todoList!.items.length).toBeGreaterThan(0);
 
       // Now ask about the todo list

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -68,7 +69,7 @@ describe('grep', () => {
   it('has correct tool metadata', () => {
     const tool = createGrepTool(deps);
     expect(tool.name).toBe('grep');
-    expect(tool.parameters).toBeDefined();
+    expect(tool.parameters).toBeInstanceOf(z.ZodObject);
   });
 
   it('searches within subpath', async () => {
@@ -88,7 +89,13 @@ describe('grep', () => {
       await writeFile(join(workspace, `file${f}.ts`), lines);
     }
     const tool = createGrepTool(deps);
-    const result = await tool.execute({ pattern: 'match_\\d+_\\d+' });
+    const result = await tool.execute({ pattern: 'match_' }); // shell-safe pattern
+    expect(result).toContain('file0.ts:');
+    expect(result).toContain('file1.ts:');
+    expect(result).not.toContain('file2.ts:'); // file2 matches truncated after 100
+    // Should be capped at 100 matches total
+    const matchCount = (result.match(/Line \d+:/g) || []).length;
+    expect(matchCount).toBeLessThanOrEqual(100);
   });
 
   it('returns error for non-traversal path error', async () => {
@@ -115,6 +122,6 @@ describe('grep', () => {
     const tool = createGrepTool(deps);
     // Pattern that matches but ToolDeps might return odd-format lines
     const result = await tool.execute({ pattern: 'some content here' });
-    expect(result).toBeDefined();
+    expect(typeof result).toBe('string');
   });
 });

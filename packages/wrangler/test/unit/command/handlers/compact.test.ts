@@ -75,7 +75,6 @@ describe('createCompactHandler', () => {
 
       expect(compressor.compress).toHaveBeenCalledWith(state);
       expect(result.handled).toBe(true);
-      expect(result.state).toBeDefined();
       expect(result.state!.context.compression).toEqual({
         summary: 'Mock summary',
         anchor: 5,

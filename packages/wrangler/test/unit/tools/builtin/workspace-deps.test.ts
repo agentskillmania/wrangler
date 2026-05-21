@@ -231,9 +231,14 @@ describe('HostToolDeps', () => {
       writeFileSync(join(tempDir, 'src', 'c.js'), '');
 
       const files = await deps.glob('**/*.ts');
-      expect(files.length).toBe(2);
-      expect(files.some((f) => f.endsWith('a.ts'))).toBe(true);
-      expect(files.some((f) => f.endsWith('b.ts'))).toBe(true);
+      expect(files).toHaveLength(2);
+      const normalized = files.map((f) => f.replace(/\\/g, '/'));
+      expect(normalized).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/\/src\/a\.ts$/),
+          expect.stringMatching(/\/src\/b\.ts$/),
+        ])
+      );
     });
   });
 
@@ -265,9 +270,10 @@ describe('HostToolDeps', () => {
 
   describe('shell property', () => {
     it('should auto-detect shell', () => {
-      expect(deps.shell).toBeDefined();
-      expect(deps.shell.path).toBeTruthy();
-      expect(deps.shell.name).toBeTruthy();
+      expect(typeof deps.shell.path).toBe('string');
+      expect(typeof deps.shell.name).toBe('string');
+      expect(deps.shell.path.length).toBeGreaterThan(0);
+      expect(deps.shell.name.length).toBeGreaterThan(0);
     });
 
     it('should accept explicit shell override', () => {
@@ -287,7 +293,6 @@ describe('HostToolDeps', () => {
 describe('detectShell', () => {
   it('should return a shell with valid path and name', () => {
     const shell = detectShell();
-    expect(shell).toBeDefined();
     expect(typeof shell.path).toBe('string');
     expect(typeof shell.name).toBe('string');
     expect(shell.path.length).toBeGreaterThan(0);

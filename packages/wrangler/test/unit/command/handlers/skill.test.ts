@@ -67,7 +67,7 @@ describe('createSkillHandler', () => {
       const result = await handler.handle(ctx);
 
       expect(result.handled).toBe(false);
-      expect(result.state).toBeDefined();
+      expect(result.state).not.toBe(state);
       expect(result.response).toBeUndefined();
     });
 
@@ -96,7 +96,7 @@ describe('createSkillHandler', () => {
       const result = await handler.handle(ctx);
 
       expect(result.handled).toBe(true);
-      expect(result.state).toBeDefined();
+      expect(result.state).not.toBe(state);
       expect(result.response).toBe("Skill 'code-review' loaded.");
     });
 
@@ -221,7 +221,6 @@ describe('createSkillHandler', () => {
       const result = await handler.handle(ctx);
 
       // Verify state was returned and is a new object (immutable)
-      expect(result.state).toBeDefined();
       expect(result.state).not.toBe(state);
       // Verify the state ID is preserved
       expect(result.state!.id).toBe(state.id);
@@ -253,7 +252,6 @@ describe('createSkillHandler', () => {
       };
       const result = await handler.handle(ctx);
 
-      expect(result.state).toBeDefined();
       expect(result.state!.id).toBe(originalId);
       expect(result.state!.config.name).toBe('test-agent');
       expect(result.state!.config.instructions).toBe('Original instructions');

@@ -22,18 +22,14 @@ export function createWebSearchTool(searchProvider: SearchProvider): Tool<ZodTyp
     description: 'Search the web.',
     parameters: WebSearchSchema,
     async execute(args: z.infer<typeof WebSearchSchema>) {
-      try {
-        const results = await searchProvider.search(args.query);
-        if (results.length === 0) {
-          return `No results found for "${args.query}"`;
-        }
-        const output = results
-          .map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.snippet}`)
-          .join('\n\n');
-        return output;
-      } catch (e) {
-        return `Error: Search failed: ${(e as Error).message}`;
+      const results = await searchProvider.search(args.query);
+      if (results.length === 0) {
+        return `No results found for "${args.query}"`;
       }
+      const output = results
+        .map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.snippet}`)
+        .join('\n\n');
+      return output;
     },
   };
 }

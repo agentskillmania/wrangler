@@ -33,12 +33,7 @@ export function createWebFetchTool(deps: ToolDeps): Tool<ZodTypeAny> {
       }
 
       const timeout = 30000; // Default timeout, since ToolDeps doesn't have timeout
-      let response: Response;
-      try {
-        response = await fetch(args.url, { signal: AbortSignal.timeout(timeout) });
-      } catch (e) {
-        return `Error: Failed to fetch ${args.url}: ${(e as Error).message}`;
-      }
+      const response = await fetch(args.url, { signal: AbortSignal.timeout(timeout) });
 
       if (!response.ok) {
         return `Error: HTTP ${response.status} fetching ${args.url}`;

@@ -227,7 +227,7 @@ describe('Command System Integration Tests', () => {
     expect(result.data).toContain('compressed');
 
     // Assert compression metadata was written to state
-    expect(finalState.context.compression).toBeDefined();
+    expect(finalState.context.compression).toHaveProperty('removedTokenCount');
     expect(finalState.context.compression!.summary).toBe('Mock summary of conversation');
     expect(finalState.context.compression!.anchor).toBe(28);
   });

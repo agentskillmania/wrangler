@@ -32,9 +32,10 @@ describe('createBuiltinTools', () => {
   it('passes workspace config to file tools', async () => {
     const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
     const fileRead = tools.find((t) => t.name === 'file_read')!;
-    const result = await fileRead.execute({ filePath: 'nonexistent.txt' });
-    // Should attempt to read from workspace path, not throw about bad path
-    expect(result).toBeTypeOf('string');
+    // Should attempt to read from workspace path and throw when file missing
+    await expect(fileRead.execute({ filePath: 'nonexistent.txt' })).rejects.toThrow(
+      'File not found'
+    );
   });
 
   it('web_search uses default BingScrapeSearchProvider when no provider configured', async () => {

@@ -49,7 +49,6 @@ describe('SpecStore', () => {
     it('writes YAML frontmatter + markdown body', async () => {
       await store.save(makeDoc());
       const doc = await store.get('user-login', 1);
-      expect(doc).not.toBeNull();
       expect(doc!.body).toContain('# User Login');
     });
   });
@@ -86,7 +85,6 @@ describe('SpecStore', () => {
       await store.save(makeDoc({ version: 2 }));
 
       const doc = await store.get('user-login', 1);
-      expect(doc).not.toBeNull();
       expect(doc!.meta.version).toBe(1);
     });
   });
@@ -105,7 +103,6 @@ describe('SpecStore', () => {
       await store.save(makeDoc({ version: 2 }));
 
       const doc = await store.getLatest('user-login');
-      expect(doc).not.toBeNull();
       expect(doc!.meta.version).toBe(3);
     });
   });

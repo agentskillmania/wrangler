@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { createTodolistTool } from '../../../src/todolist/todo-tool.js';
 
 describe('todo-tool', () => {
@@ -6,13 +7,13 @@ describe('todo-tool', () => {
     it('has correct tool metadata', () => {
       const tool = createTodolistTool();
       expect(tool.name).toBe('todolist');
-      expect(tool.description).toBeTruthy();
-      expect(tool.parameters).toBeDefined();
+      expect(tool.description).toContain('Manage your task list');
+      expect(tool.parameters).toBeInstanceOf(z.ZodObject);
     });
 
     it('takes no arguments', () => {
       const tool = createTodolistTool();
-      expect(tool).toBeDefined();
+      expect(tool.name).toBe('todolist');
     });
   });
 

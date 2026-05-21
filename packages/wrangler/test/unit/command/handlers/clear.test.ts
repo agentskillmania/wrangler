@@ -57,7 +57,6 @@ describe('createClearHandler', () => {
         runnerOptions: mockRunnerOptions,
       };
       const result = await handler.handle(ctx);
-      expect(result.state).toBeDefined();
       expect(result.state!.context.messages).toHaveLength(0);
     });
 

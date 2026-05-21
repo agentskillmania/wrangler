@@ -16,13 +16,13 @@ describe('todo-middleware', () => {
     it('has correct metadata', () => {
       const mw = createTodolistMiddleware();
       expect(mw.name).toBe('todolist');
-      expect(mw.afterStep).toBeDefined();
-      expect(mw.beforeStep).toBeDefined();
+      expect(typeof mw.afterStep).toBe('function');
+      expect(typeof mw.beforeStep).toBe('function');
     });
 
     it('takes no arguments', () => {
       const mw = createTodolistMiddleware();
-      expect(mw).toBeDefined();
+      expect(mw.name).toBe('todolist');
     });
   });
 
@@ -45,7 +45,6 @@ describe('todo-middleware', () => {
         runnerOptions: {} as any,
       });
 
-      expect(result).toBeDefined();
       expect(result!.state!.context.todoList.items).toHaveLength(1);
       expect(result!.state!.context.todoList.items[0].subject).toBe('New task');
       expect(result!.state!.context.todoList.items[0].status).toBe('pending');
@@ -330,7 +329,6 @@ describe('todo-middleware', () => {
         runnerOptions: {} as any,
       });
 
-      expect(result!.state!.context.todoList).toBeDefined();
       expect(result!.state!.context.todoList.items).toHaveLength(1);
       expect(result!.state!.context.todoList.items[0].subject).toBe('New task');
     });
@@ -348,8 +346,6 @@ describe('todo-middleware', () => {
         runnerOptions: {} as any,
       });
 
-      expect(result).toBeDefined();
-      expect(result!.state!.context.todoList).toBeDefined();
       expect(result!.state!.context.todoList.items).toHaveLength(0);
     });
 
@@ -365,7 +361,6 @@ describe('todo-middleware', () => {
         runnerOptions: {} as any,
       });
 
-      expect(result).toBeDefined();
       expect(result!.state!.context.todoList.items).toHaveLength(1);
       expect(result!.state!.context.todoList.items[0].subject).toBe('Task 1');
     });

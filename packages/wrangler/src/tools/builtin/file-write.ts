@@ -14,17 +14,9 @@ export function createFileWriteTool(deps: ToolDeps): Tool<ZodTypeAny> {
     description: 'Write content to a file. Creates parent directories if needed.',
     parameters: FileWriteSchema,
     async execute(args: z.infer<typeof FileWriteSchema>) {
-      try {
-        await deps.writeFile(args.filePath, args.content);
-        const lineCount = args.content === '' ? 0 : args.content.split('\n').length;
-        return `File written: ${args.filePath} (${lineCount} line${lineCount !== 1 ? 's' : ''})`;
-      } catch (error) {
-        const err = error as Error;
-        if (err.message.includes('Path traversal detected')) {
-          throw err;
-        }
-        return `Error: Failed to write file: ${err.message}`;
-      }
+      await deps.writeFile(args.filePath, args.content);
+      const lineCount = args.content === '' ? 0 : args.content.split('\n').length;
+      return `File written: ${args.filePath} (${lineCount} line${lineCount !== 1 ? 's' : ''})`;
     },
   };
 }
