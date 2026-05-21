@@ -11,7 +11,8 @@ describe('createLLMClient', () => {
     };
     const client = createLLMClient(config);
     const stats = client.getStats();
-    expect(stats.queueSize).toBe(0);
+    expect(stats).toMatchObject({ queueSize: 0 });
+    expect(typeof client.call).toBe('function');
   });
 
   it('should create a client with baseUrl', () => {
@@ -22,7 +23,9 @@ describe('createLLMClient', () => {
       baseUrl: 'https://custom.example.com',
     };
     const client = createLLMClient(config);
-    expect(typeof client.getStats).toBe('function');
+    const stats = client.getStats();
+    expect(stats).toMatchObject({ queueSize: 0 });
+    expect(typeof client.call).toBe('function');
   });
 });
 

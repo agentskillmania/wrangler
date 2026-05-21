@@ -33,8 +33,8 @@ describe('@agentskillmania/wrangler-devtool', () => {
       const { readFileSync } = await import('node:fs');
       const content = readFileSync(filePath, 'utf-8');
 
-      expect(content).toContain('name: test-agent');
-      expect(content).toContain('---'); // YAML frontmatter
+      expect(content).toMatch(/^---\nname: test-agent\n/);
+      expect(content).toContain('description: A new agent');
 
       rmSync(dir, { recursive: true, force: true });
     },
