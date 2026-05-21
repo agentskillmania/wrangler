@@ -35,7 +35,7 @@ describe('forkSession', () => {
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
       model: 'gpt-4',
-      messageCount: opts.messages?.length ?? 0,
+      agentName: 'test-agent',
     };
     writeFileSync(join(dir, 'meta.yaml'), yaml.dump(meta), 'utf-8');
 
@@ -133,7 +133,7 @@ describe('forkSession', () => {
     expect(meta.workspacePath).toBe(newWsPath);
   });
 
-  it('should create new meta with correct messageCount', async () => {
+  it('should create new meta with correct agentName', async () => {
     const wsPath = join(tempDir, 'workspace');
     createSession('source-5', wsPath, {
       messages: ['a', 'b', 'c', 'd'],
@@ -147,7 +147,7 @@ describe('forkSession', () => {
     ) as Record<string, unknown>;
 
     expect(meta.id).toBe(newId);
-    expect(meta.messageCount).toBe(2);
+    expect(meta.agentName).toBe('test-agent');
     expect(meta.model).toBe('gpt-4');
   });
 
@@ -177,7 +177,7 @@ describe('forkSession', () => {
         createdAt: '2024-01-01T00:00:00Z',
         updatedAt: '2024-01-01T00:00:00Z',
         model: 'gpt-4',
-        messageCount: 1,
+        agentName: 'test-agent',
       }),
       'utf-8'
     );

@@ -116,7 +116,7 @@ export async function forkSession(sessionId: string, options: ForkOptions): Prom
     createdAt: now,
     updatedAt: now,
     model: sourceMeta.model,
-    messageCount: options.msg,
+    agentName: sourceMeta.agentName,
   };
 
   await writeMeta(newDir, newMeta);
