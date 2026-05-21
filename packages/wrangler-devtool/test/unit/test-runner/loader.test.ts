@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   loadTestFile,
@@ -316,8 +316,7 @@ describe('discoverTestFiles', () => {
 
     const files = await discoverTestFiles(tempDir);
     expect(files).toHaveLength(2);
-    expect(files.some((f) => f.endsWith('a.yaml'))).toBe(true);
-    expect(files.some((f) => f.endsWith('b.yml'))).toBe(true);
+    expect(files.map((f) => basename(f)).sort()).toEqual(['a.yaml', 'b.yml']);
   });
 
   it('should return empty array if test directory does not exist', async () => {

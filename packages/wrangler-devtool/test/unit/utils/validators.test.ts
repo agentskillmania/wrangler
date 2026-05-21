@@ -29,7 +29,7 @@ describe('isValidName', () => {
 
 describe('validateName', () => {
   it('should not throw for valid names', () => {
-    expect(() => validateName('valid')).not.toThrow();
+    validateName('valid');
   });
 
   it('should throw for invalid names', () => {

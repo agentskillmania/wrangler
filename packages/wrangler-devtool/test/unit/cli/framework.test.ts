@@ -19,7 +19,7 @@ describe('runCli', () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const code = await runCli({}, []);
     expect(code).toBe(ExitCode.Success);
-    expect(logSpy).toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Commands:'));
     logSpy.mockRestore();
   });
 
@@ -137,7 +137,7 @@ describe('runCli', () => {
     };
     const code = await runCli(commands, ['test']);
     expect(code).toBe(ExitCode.Success);
-    expect(logSpy).toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Subcommands:'));
     logSpy.mockRestore();
   });
 

@@ -374,7 +374,10 @@ expected:
     const report = await runner.run(join(tempDir, 'agent-workspace'));
 
     expect(report.summary.passed).toBe(1);
-    expect(mockRunner.run).toHaveBeenCalled();
+    expect(mockRunner.run).toHaveBeenCalledWith(
+      expect.objectContaining({}),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
   });
 
   it('should expose runTests function', async () => {

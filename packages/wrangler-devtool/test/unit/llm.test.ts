@@ -10,7 +10,6 @@ describe('createLLMClient', () => {
       model: 'gpt-4o',
     };
     const client = createLLMClient(config);
-    expect(client).toBeDefined();
     const stats = client.getStats();
     expect(stats.queueSize).toBe(0);
   });
@@ -23,7 +22,7 @@ describe('createLLMClient', () => {
       baseUrl: 'https://custom.example.com',
     };
     const client = createLLMClient(config);
-    expect(client).toBeDefined();
+    expect(typeof client.getStats).toBe('function');
   });
 });
 

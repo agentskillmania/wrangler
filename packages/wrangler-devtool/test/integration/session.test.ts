@@ -57,6 +57,9 @@ describe('US5 & US6: Session management', () => {
     const newStore = new SessionStore(baseDir, tempDir);
     const newDir = newStore.getSessionDir(newId);
     const newMeta = await newStore.getMeta(newId);
-    expect(newMeta).not.toBeNull();
+    expect(newMeta).toHaveProperty('id', newId);
+    expect(newMeta).toHaveProperty('model', 'glm-5');
+    expect(newMeta).toHaveProperty('workspacePath', tempDir);
+    expect(newMeta).toHaveProperty('messageCount', 2);
   });
 });

@@ -58,7 +58,7 @@ describe('forkSession', () => {
 
     const newId = await forkSession('source-1', { msg: 3, sessionBaseDir });
 
-    expect(newId).toBeDefined();
+    expect(typeof newId).toBe('string');
     expect(newId).not.toBe('source-1');
 
     const hash = createHash('md5').update(wsPath).digest('hex');
@@ -185,6 +185,6 @@ describe('forkSession', () => {
     // No state.json
 
     const newId = await forkSession('no-state', { msg: 1, sessionBaseDir });
-    expect(newId).toBeDefined();
+    expect(typeof newId).toBe('string');
   });
 });

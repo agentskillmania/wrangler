@@ -132,7 +132,8 @@ describe('session command', () => {
       expect(code).toBe(ExitCode.Success);
 
       const output = JSON.parse(logSpy.mock.calls[0][0] as string);
-      expect(output.newSessionId).toBeDefined();
+      expect(typeof output.newSessionId).toBe('string');
+      expect(output.newSessionId).not.toBe('source');
     } finally {
       if (originalEnv !== undefined) {
         process.env.WRANGLER_DEVTOOL_SESSION_DIR = originalEnv;

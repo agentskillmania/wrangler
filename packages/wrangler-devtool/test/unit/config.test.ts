@@ -36,7 +36,6 @@ describe('loadConfig', () => {
       'utf-8'
     );
     const config = await loadConfig();
-    expect(config).not.toBeNull();
     expect(config?.llm?.provider).toBe('openai');
     expect(config?.llm?.apiKey).toBe('sk-test');
     expect(config?.llm?.model).toBe('gpt-4o');

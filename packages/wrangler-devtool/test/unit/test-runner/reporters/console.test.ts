@@ -122,7 +122,7 @@ describe('printReport', () => {
   it('should print report to console', () => {
     const report = makeReport([makeCaseResult('Case 1', true)]);
     printReport(report);
-    expect(logSpy).toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Case 1'));
     const output = logSpy.mock.calls[0][0] as string;
     expect(output).toContain('Case 1');
   });

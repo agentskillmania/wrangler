@@ -64,9 +64,9 @@ describe('review command', () => {
 
     const output = JSON.parse(logSpy.mock.calls[0][0]);
     expect(output.static.passed).toBe(false);
-    expect(
-      output.static.issues.some((i: any) => i.description.includes('missing YAML frontmatter'))
-    ).toBe(true);
+    expect(output.static.issues).toContainEqual(
+      expect.objectContaining({ description: 'AGENT.md is missing YAML frontmatter' })
+    );
   });
 
   it('should report missing name field in static check', async () => {
@@ -83,8 +83,8 @@ describe('review command', () => {
     expect(code).toBe(ExitCode.GeneralError);
 
     const output = JSON.parse(logSpy.mock.calls[0][0]);
-    expect(output.static.issues.some((i: any) => i.description.includes('missing "name"'))).toBe(
-      true
+    expect(output.static.issues).toContainEqual(
+      expect.objectContaining({ description: 'AGENT.md frontmatter is missing "name" field' })
     );
   });
 
@@ -100,8 +100,12 @@ describe('review command', () => {
     expect(code).toBe(ExitCode.Success);
 
     const output = JSON.parse(logSpy.mock.calls[0][0]);
-    expect(output.static.issues.some((i: any) => i.description.includes('skills/'))).toBe(true);
-    expect(output.static.issues.some((i: any) => i.description.includes('test/'))).toBe(true);
+    expect(output.static.issues).toContainEqual(
+      expect.objectContaining({ description: 'No skills/ directory found' })
+    );
+    expect(output.static.issues).toContainEqual(
+      expect.objectContaining({ description: 'No test/ directory found' })
+    );
   });
 
   it('should run static checks on a single file', async () => {
@@ -129,7 +133,9 @@ describe('review command', () => {
     expect(code).toBe(ExitCode.Success);
 
     const output = JSON.parse(logSpy.mock.calls[0][0]);
-    expect(output.static.issues.some((i: any) => i.description.includes('very short'))).toBe(true);
+    expect(output.static.issues).toContainEqual(
+      expect.objectContaining({ description: 'File content is very short' })
+    );
   });
 
   it('should report non-markdown file', async () => {
@@ -141,8 +147,8 @@ describe('review command', () => {
     expect(code).toBe(ExitCode.Success);
 
     const output = JSON.parse(logSpy.mock.calls[0][0]);
-    expect(output.static.issues.some((i: any) => i.description.includes('non-Markdown'))).toBe(
-      true
+    expect(output.static.issues).toContainEqual(
+      expect.objectContaining({ description: 'Review target has non-Markdown extension: .txt' })
     );
   });
 
@@ -176,7 +182,6 @@ describe('review command', () => {
     expect(code).toBe(ExitCode.Success);
 
     const output = JSON.parse(logSpy.mock.calls[0][0]);
-    expect(output.deep).not.toBeNull();
     expect(output.deep.overallScore).toBe(4);
   });
 

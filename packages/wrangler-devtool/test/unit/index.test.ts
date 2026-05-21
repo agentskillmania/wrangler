@@ -1,29 +1,52 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const TEST_TIMEOUT = 30000;
 
 describe('@agentskillmania/wrangler-devtool', () => {
   it(
-    'should export public API',
+    'initWorkspace creates expected directory structure',
     async () => {
-      const mod = await import('../../src/index.js');
-      expect(mod).toBeDefined();
-      expect(typeof mod.initWorkspace).toBe('function');
-      expect(typeof mod.createTemplate).toBe('function');
-      expect(typeof mod.forkSession).toBe('function');
-      expect(typeof mod.listSessions).toBe('function');
-      expect(typeof mod.applyChanges).toBe('function');
-      expect(typeof mod.ExitCode).toBe('object');
-      expect(typeof mod.CliError).toBe('function');
-      expect(typeof mod.runTests).toBe('function');
-      expect(typeof mod.TestRunner).toBe('function');
-      expect(typeof mod.evaluateAssertion).toBe('function');
-      expect(typeof mod.loadTestCases).toBe('function');
-      expect(typeof mod.loadTestFile).toBe('function');
-      expect(typeof mod.discoverTestFiles).toBe('function');
-      expect(typeof mod.printReport).toBe('function');
-      expect(typeof mod.formatReport).toBe('function');
+      const { initWorkspace } = await import('../../src/index.js');
+      const dir = mkdtempSync(join(tmpdir(), 'init-test-'));
+
+      await initWorkspace(dir, { mode: 'agent' });
+
+      // Verify expected files/directories exist
+      const { existsSync } = await import('node:fs');
+      expect(existsSync(join(dir, 'AGENT.md'))).toBe(true);
+
+      rmSync(dir, { recursive: true, force: true });
     },
     TEST_TIMEOUT
   );
+
+  it(
+    'createTemplate generates correct file content',
+    async () => {
+      const { createTemplate } = await import('../../src/index.js');
+      const dir = mkdtempSync(join(tmpdir(), 'template-test-'));
+
+      const filePath = await createTemplate('agent', 'test-agent', dir);
+      const { readFileSync } = await import('node:fs');
+      const content = readFileSync(filePath, 'utf-8');
+
+      expect(content).toContain('name: test-agent');
+      expect(content).toContain('---'); // YAML frontmatter
+
+      rmSync(dir, { recursive: true, force: true });
+    },
+    TEST_TIMEOUT
+  );
+
+  it('CliError is a proper Error subclass', async () => {
+    const { CliError } = await import('../../src/index.js');
+    const err = new CliError('test message', 'TEST_CODE', 42);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toBe('test message');
+    expect(err.code).toBe('TEST_CODE');
+    expect(err.exitCode).toBe(42);
+  });
 });

@@ -77,8 +77,12 @@ expected:
 
     // ── Step 5: Review agent quality ──
     const reviewResult = await runReviewer('AGENT.md', agentContent);
-    expect(reviewResult.dimensions).toBeDefined();
-    expect(reviewResult.issues).toBeDefined();
+    expect(reviewResult.dimensions).toHaveProperty('clarity');
+    expect(reviewResult.dimensions).toHaveProperty('completeness');
+    expect(reviewResult.dimensions).toHaveProperty('focus');
+    expect(reviewResult.dimensions).toHaveProperty('safety');
+    expect(reviewResult.dimensions).toHaveProperty('efficiency');
+    expect(Array.isArray(reviewResult.issues)).toBe(true);
     expect(reviewResult.summary).toBeTruthy();
     expect(reviewResult).not.toHaveProperty('changes');
 

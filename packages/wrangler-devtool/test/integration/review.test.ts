@@ -29,8 +29,12 @@ You are a helpful assistant. Answer user questions clearly and concisely.
 `;
     const result = await runReviewer('AGENT.md', content);
 
-    expect(result.dimensions).toBeDefined();
-    expect(result.issues).toBeDefined();
+    expect(result.dimensions).toHaveProperty('clarity');
+    expect(result.dimensions).toHaveProperty('completeness');
+    expect(result.dimensions).toHaveProperty('focus');
+    expect(result.dimensions).toHaveProperty('safety');
+    expect(result.dimensions).toHaveProperty('efficiency');
+    expect(Array.isArray(result.issues)).toBe(true);
     expect(result.summary).toBeTruthy();
     // Review should never return file changes
     expect(result).not.toHaveProperty('changes');
