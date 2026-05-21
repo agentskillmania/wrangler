@@ -89,7 +89,7 @@ describe('config', () => {
       try {
         const config = await loadConfig({ globalDir: path.join(emptyDir, 'noglobal') });
         expect(config.hasValidConfig).toBe(false);
-        expect(config.configPath).toBeDefined();
+        expect(config.configPath).toBe(path.join(emptyDir, 'noglobal', 'config.yaml'));
       } finally {
         process.chdir(originalCwd);
       }

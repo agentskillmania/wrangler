@@ -6,7 +6,9 @@ import {
 
 describe('InteractionContext', () => {
   it('exports context with null default', () => {
-    expect(InteractionContext).toBeDefined();
+    expect(InteractionContext).toHaveProperty('Provider');
+    // Provider is a React internal object (not a plain function in React 18+);
+    // upgrading would require depending on React internals, so toBeDefined is reasonable here.
     expect(InteractionContext.Provider).toBeDefined();
     expect(InteractionContext._currentValue).toBeNull();
   });
