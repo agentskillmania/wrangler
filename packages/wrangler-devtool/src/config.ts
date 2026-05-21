@@ -70,19 +70,25 @@ function pickOptionalNumber(obj: Record<string, unknown>, key: string): number |
   return undefined;
 }
 
+export interface LoadConfigOptions {
+  extraPaths?: string[];
+  skipGlobal?: boolean;
+}
+
 /**
  * Load devtool configuration from wrangler.yaml or fallback config.
  *
  * Searches in this order:
  * 1. <cwd>/wrangler.yaml
- * 2. ~/.agentskillmania/wrangler/config.yaml
+ * 2. ~/.agentskillmania/wrangler/config.yaml (unless skipGlobal)
+ * 3. extraPaths
  *
  * @param cwd - Optional working directory to search first
- * @param extraPaths - Additional paths to search (used for testing)
+ * @param options - Loading options
  */
 export async function loadConfig(
   cwd?: string,
-  extraPaths?: string[]
+  options?: LoadConfigOptions
 ): Promise<DevToolConfig | null> {
   const searchPaths: string[] = [];
 
@@ -90,10 +96,13 @@ export async function loadConfig(
     searchPaths.push(resolve(cwd, 'wrangler.yaml'));
   }
   searchPaths.push(resolve(process.cwd(), 'wrangler.yaml'));
-  searchPaths.push(join(homedir(), '.agentskillmania', 'wrangler', 'config.yaml'));
 
-  if (extraPaths) {
-    searchPaths.push(...extraPaths);
+  if (!options?.skipGlobal) {
+    searchPaths.push(join(homedir(), '.agentskillmania', 'wrangler', 'config.yaml'));
+  }
+
+  if (options?.extraPaths) {
+    searchPaths.push(...options.extraPaths);
   }
 
   for (const path of searchPaths) {

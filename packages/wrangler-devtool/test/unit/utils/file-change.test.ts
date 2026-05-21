@@ -108,4 +108,79 @@ describe('applyChanges', () => {
     expect(result.error).toContain('Dry run');
     await expect(access(join(tempDir, 'dry.txt'))).rejects.toThrow();
   });
+
+  it('rejects create when file already exists', async () => {
+    await writeFile(join(tempDir, 'exists.txt'), 'original', 'utf-8');
+    const changes: FileChange[] = [{ file: 'exists.txt', type: 'create', new: 'dup' }];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
+    expect(result.applied).toBe(false);
+    expect(result.error).toContain('already exists');
+    expect(await readFile(join(tempDir, 'exists.txt'), 'utf-8')).toBe('original');
+  });
+
+  it('rejects edit when file does not exist', async () => {
+    const changes: FileChange[] = [
+      { file: 'missing.txt', type: 'edit', old: 'x', new: 'y' },
+    ];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
+    expect(result.applied).toBe(false);
+    expect(result.error).toContain('does not exist');
+  });
+
+  it('rejects edit when old content not found', async () => {
+    await writeFile(join(tempDir, 'edit2.txt'), 'hello world', 'utf-8');
+    const changes: FileChange[] = [
+      { file: 'edit2.txt', type: 'edit', old: 'not found', new: 'new' },
+    ];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
+    expect(result.applied).toBe(false);
+    expect(result.error).toContain('not found');
+  });
+
+  it('rejects delete when file does not exist', async () => {
+    const changes: FileChange[] = [{ file: 'gone.txt', type: 'delete' }];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
+    expect(result.applied).toBe(false);
+    expect(result.error).toContain('does not exist');
+  });
+
+  it('rejects create without new content', async () => {
+    const changes: FileChange[] = [
+      { file: 'no-content.txt', type: 'create' } as FileChange,
+    ];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
+    expect(result.applied).toBe(false);
+    expect(result.error).toContain("Create requires 'new'");
+  });
+
+  it('rejects edit without old or new content', async () => {
+    await writeFile(join(tempDir, 'edit3.txt'), 'content', 'utf-8');
+    const changes: FileChange[] = [
+      { file: 'edit3.txt', type: 'edit' } as FileChange,
+    ];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
+    expect(result.applied).toBe(false);
+    expect(result.error).toContain("Edit requires both 'old' and 'new'");
+  });
+
+  it('rejects . directory entry as already existing', async () => {
+    const changes: FileChange[] = [{ file: '.', type: 'create', new: 'x' }];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
+    expect(result.applied).toBe(false);
+  });
+
+  it('rejects .. directory entry as path escape', async () => {
+    const changes: FileChange[] = [{ file: '..', type: 'create', new: 'x' }];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
+    expect(result.applied).toBe(false);
+    expect(result.error).toContain('escapes workspace');
+  });
 });

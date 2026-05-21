@@ -1,5 +1,11 @@
 // @agentskillmania/wrangler-devtool
-// Wrangler 开发工具库
+// Wrangler development tool library
+
+// ── Primary API ──────────────────────────────────────────────────
+export { DevTool } from './devtool.js';
+export type { DevToolOptions } from './devtool.js';
+
+// ── Low-level exports ────────────────────────────────────────────
 
 export { ExitCode, CliError } from './cli/options.js';
 export type { CliErrorJson } from './cli/options.js';
@@ -37,7 +43,7 @@ export type { SoftEvaluationResult } from './test-runner/soft-evaluator.js';
 
 // Phase 3: Config and LLM
 export { loadConfig, requireLLMConfig } from './config.js';
-export type { LLMConfig, DevToolConfig } from './config.js';
+export type { LLMConfig, DevToolConfig, LoadConfigOptions } from './config.js';
 
 export { createLLMClient } from './llm.js';
 

@@ -23,7 +23,7 @@ describe('loadConfig', () => {
       `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n  baseUrl: https://api.example.com\n  thinkingEnabled: true\n  enablePromptThinking: true\n  maxConcurrency: 8\nmaxSteps: 100\nrequestTimeout: 300000\n`
     );
 
-    const config = await loadConfig(tempDir, [configPath]);
+    const config = await loadConfig(tempDir, { extraPaths: [configPath] });
 
     expect(config).not.toBeNull();
     expect(config!.llm!.provider).toBe('openai');
@@ -42,7 +42,7 @@ describe('loadConfig', () => {
       `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`
     );
 
-    const config = await loadConfig(tempDir, [configPath]);
+    const config = await loadConfig(tempDir, { extraPaths: [configPath] });
 
     expect(config!.maxSteps).toBeUndefined();
     expect(config!.requestTimeout).toBeUndefined();
@@ -58,7 +58,7 @@ describe('loadConfig', () => {
       `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\nmaxSteps: "200"\nrequestTimeout: "60000"\n`
     );
 
-    const config = await loadConfig(tempDir, [configPath]);
+    const config = await loadConfig(tempDir, { extraPaths: [configPath] });
     expect(config!.maxSteps).toBe(200);
     expect(config!.requestTimeout).toBe(60000);
   });
@@ -70,9 +70,38 @@ describe('loadConfig', () => {
       `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\nmaxSteps: not-a-number\nrequestTimeout: also-not\n`
     );
 
-    const config = await loadConfig(tempDir, [configPath]);
+    const config = await loadConfig(tempDir, { extraPaths: [configPath] });
     expect(config!.maxSteps).toBeUndefined();
     expect(config!.requestTimeout).toBeUndefined();
+  });
+
+  it('returns null when no config file exists', async () => {
+    const config = await loadConfig(tempDir, { skipGlobal: true });
+    expect(config).toBeNull();
+  });
+
+  it('returns null when YAML is malformed', async () => {
+    const configPath = join(tempDir, 'wrangler.yaml');
+    await writeFile(configPath, `: [invalid yaml`);
+
+    const config = await loadConfig(tempDir, { extraPaths: [configPath], skipGlobal: true });
+    expect(config).toBeNull();
+  });
+
+  it('returns null when llm section is missing', async () => {
+    const configPath = join(tempDir, 'wrangler.yaml');
+    await writeFile(configPath, `maxSteps: 100\n`);
+
+    const config = await loadConfig(tempDir, { extraPaths: [configPath], skipGlobal: true });
+    expect(config).toBeNull();
+  });
+
+  it('returns null when llm config is invalid — missing model', async () => {
+    const configPath = join(tempDir, 'wrangler.yaml');
+    await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-test\n`);
+
+    const config = await loadConfig(tempDir, { extraPaths: [configPath], skipGlobal: true });
+    expect(config).toBeNull();
   });
 });
 
