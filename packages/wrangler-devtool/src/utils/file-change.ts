@@ -2,7 +2,7 @@
 // 结构化文件变更应用器（create / edit / delete）
 
 import { readFile, writeFile, unlink, access } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import path, { resolve } from 'node:path';
 import { CliError, ExitCode } from '../cli/options.js';
 
 export interface FileChange {
@@ -37,8 +37,9 @@ function resolveFilePath(file: string, cwd?: string): string {
   const resolved = cwd ? resolve(cwd, file) : resolve(file);
   const cwdResolved = cwd ? resolve(cwd) : resolve(process.cwd());
 
-  // 安全检查：禁止逃出 cwd
-  if (!resolved.startsWith(cwdResolved)) {
+  // Security: prevent escaping cwd via symlinks or case-insensitive FS
+  const relative = path.relative(cwdResolved, resolved);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new CliError(
       `File path escapes workspace: ${file}`,
       'PATH_ESCAPE',
@@ -46,12 +47,12 @@ function resolveFilePath(file: string, cwd?: string): string {
     );
   }
 
-  // 安全检查：禁止操作隐藏文件
-  const base = resolved.split('/').pop() ?? '';
-  if (base.startsWith('.') && base !== '.') {
+  // Security: reject . and .. directory entries only; allow .dotfiles
+  const basename = path.basename(resolved);
+  if (basename === '.' || basename === '..') {
     throw new CliError(
-      `Hidden files are not allowed: ${file}`,
-      'HIDDEN_FILE',
+      `Invalid path: ${file}`,
+      'INVALID_PATH',
       ExitCode.ValidationFailure
     );
   }

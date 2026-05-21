@@ -8,7 +8,6 @@ import {
   runAgent,
   runReviewAgent,
 } from '../../../src/agents/orchestrator.js';
-import { resetLLMClient } from '../../../src/llm.js';
 import type { LLMConfig } from '../../../src/config.js';
 
 describe('loadPromptTemplate', () => {
@@ -117,6 +116,62 @@ describe('parseAgentOutput', () => {
       'Missing or invalid "changes"'
     );
   });
+
+  it('should parse JSON with nested code blocks inside values', () => {
+    const raw =
+      '```json\n' +
+      JSON.stringify({
+        changes: [
+          {
+            file: 'test.md',
+            type: 'create',
+            new: '```typescript\nconst x = 1;\n```',
+          },
+        ],
+        summary: 'Created file with code',
+      }) +
+      '\n```';
+    const output = parseAgentOutput(raw);
+    expect(output.changes).toHaveLength(1);
+    expect(output.changes[0].new).toContain('const x = 1;');
+    expect(output.summary).toBe('Created file with code');
+  });
+
+  it('should parse JSON when extra markdown appears after the code block', () => {
+    const inner = JSON.stringify({
+      changes: [{ file: 'x.md', type: 'create', new: 'y' }],
+      summary: 'done',
+    });
+    const raw = '```json\n' + inner + '\n```\n\nHere is more text with ```code``` blocks.';
+    const output = parseAgentOutput(raw);
+    expect(output.summary).toBe('done');
+  });
+
+  it('should parse raw JSON without any markdown fences', () => {
+    const raw = JSON.stringify({
+      changes: [{ file: 'x.md', type: 'create', new: 'y' }],
+      summary: 'plain json',
+    });
+    const output = parseAgentOutput(raw);
+    expect(output.summary).toBe('plain json');
+  });
+
+  it('should parse JSON when values contain braces and extra text follows', () => {
+    const inner = JSON.stringify({
+      changes: [{ file: 'x.md', type: 'create', new: 'function f() { return 1; }' }],
+      summary: 'done',
+    });
+    const raw = 'Some intro\n```json\n' + inner + '\n```\nExtra text with { braces } here.';
+    const output = parseAgentOutput(raw);
+    expect(output.changes[0].new).toBe('function f() { return 1; }');
+    expect(output.summary).toBe('done');
+  });
+
+  it('should parse JSON without fences when trailing text contains a brace', () => {
+    const raw = '{"changes":[],"summary":"done"}\nHere is a } brace.';
+    const output = parseAgentOutput(raw);
+    expect(output.summary).toBe('done');
+  });
 });
 
 describe('parseReviewReport', () => {
@@ -186,10 +241,9 @@ describe('parseReviewReport', () => {
 
 describe('callAgentLLM', () => {
   beforeEach(() => {
-    resetLLMClient();
   });
 
-  it('should call LLM and return content', async () => {
+  it('should call LLM with standard multi-message format', async () => {
     const { createLLMClient } = await import('../../../src/llm.js');
     const client = createLLMClient({
       provider: 'openai',
@@ -206,18 +260,33 @@ describe('callAgentLLM', () => {
 
     const result = await callAgentLLM(client, 'gpt-4o', 'You are helpful', 'Do something');
     expect(result).toBe('{"changes":[],"summary":"test"}');
-    expect(mockCall).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: 'gpt-4o',
-        messages: expect.arrayContaining([expect.objectContaining({ role: 'user' })]),
-      })
+
+    const callArg = mockCall.mock.calls[0][0];
+    expect(callArg.messages).toHaveLength(1);
+    expect(callArg.messages[0]).toMatchObject({
+      role: 'user',
+      content: '<system>\nYou are helpful\n</system>\n\nDo something',
+    });
+  });
+
+  it('should propagate LLM call errors', async () => {
+    const { createLLMClient } = await import('../../../src/llm.js');
+    const client = createLLMClient({
+      provider: 'openai',
+      apiKey: 'sk-test',
+      model: 'gpt-4o',
+    });
+
+    client.call = vi.fn().mockRejectedValue(new Error('Network timeout'));
+
+    await expect(callAgentLLM(client, 'gpt-4o', 'System', 'User')).rejects.toThrow(
+      'Network timeout'
     );
   });
 });
 
 describe('runAgent', () => {
   beforeEach(() => {
-    resetLLMClient();
   });
 
   it('should run agent and parse output', async () => {
@@ -241,11 +310,29 @@ describe('runAgent', () => {
     expect(output.changes).toHaveLength(1);
     expect(output.summary).toBe('Created test agent');
   });
+
+  it('should throw when LLM returns invalid JSON', async () => {
+    const { createLLMClient } = await import('../../../src/llm.js');
+    const client = createLLMClient({
+      provider: 'openai',
+      apiKey: 'sk-test',
+      model: 'gpt-4o',
+    });
+
+    client.call = vi.fn().mockResolvedValue({
+      content: 'not valid json',
+      tokens: { input: 10, output: 5 },
+      stopReason: 'stop',
+    });
+
+    await expect(runAgent(client, 'gpt-4o', 'architect', 'Create a test agent')).rejects.toThrow(
+      'No JSON object found'
+    );
+  });
 });
 
 describe('runReviewAgent', () => {
   beforeEach(() => {
-    resetLLMClient();
   });
 
   it('should run reviewer and parse report', async () => {
@@ -276,5 +363,24 @@ describe('runReviewAgent', () => {
     const report = await runReviewAgent(client, 'gpt-4o', 'Review this file');
     expect(report.overallScore).toBe(4);
     expect(report.summary).toBe('Good quality');
+  });
+
+  it('should throw when LLM returns invalid JSON', async () => {
+    const { createLLMClient } = await import('../../../src/llm.js');
+    const client = createLLMClient({
+      provider: 'openai',
+      apiKey: 'sk-test',
+      model: 'gpt-4o',
+    });
+
+    client.call = vi.fn().mockResolvedValue({
+      content: 'not valid json',
+      tokens: { input: 10, output: 5 },
+      stopReason: 'stop',
+    });
+
+    await expect(runReviewAgent(client, 'gpt-4o', 'Review this file')).rejects.toThrow(
+      'No JSON object found'
+    );
   });
 });

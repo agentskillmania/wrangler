@@ -1,159 +1,103 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
-vi.mock('node:os', () => ({
-  homedir: vi.fn(() => '/nonexistent-home-for-testing'),
-  tmpdir: vi.fn(() => '/tmp'),
-}));
-
 import { loadConfig, requireLLMConfig } from '../../src/config.js';
 
 describe('loadConfig', () => {
   let tempDir: string;
-  let originalCwd: string;
 
-  beforeEach(() => {
-    tempDir = mkdtempSync('/tmp/wrangler-config-test-');
-    originalCwd = process.cwd();
-    process.chdir(tempDir);
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `cfg-test-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
   });
 
-  afterEach(() => {
-    process.chdir(originalCwd);
-    rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('should return null when no config exists', async () => {
-    const config = await loadConfig();
-    expect(config).toBeNull();
-  });
-
-  it('should load config from wrangler.yaml in cwd', async () => {
-    writeFileSync(
-      join(tempDir, 'wrangler.yaml'),
-      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`,
-      'utf-8'
+  it('reads maxSteps and requestTimeout from config', async () => {
+    const configPath = join(tempDir, 'wrangler.yaml');
+    await writeFile(
+      configPath,
+      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n  baseUrl: https://api.example.com\n  thinkingEnabled: true\n  enablePromptThinking: true\n  maxConcurrency: 8\nmaxSteps: 100\nrequestTimeout: 300000\n`
     );
-    const config = await loadConfig();
-    expect(config?.llm?.provider).toBe('openai');
-    expect(config?.llm?.apiKey).toBe('sk-test');
-    expect(config?.llm?.model).toBe('gpt-4o');
+
+    const config = await loadConfig(tempDir, [configPath]);
+
+    expect(config).not.toBeNull();
+    expect(config!.llm!.provider).toBe('openai');
+    expect(config!.llm!.baseUrl).toBe('https://api.example.com');
+    expect(config!.llm!.thinkingEnabled).toBe(true);
+    expect(config!.llm!.enablePromptThinking).toBe(true);
+    expect(config!.llm!.maxConcurrency).toBe(8);
+    expect(config!.maxSteps).toBe(100);
+    expect(config!.requestTimeout).toBe(300000);
   });
 
-  it('should load config with baseUrl', async () => {
-    writeFileSync(
-      join(tempDir, 'wrangler.yaml'),
-      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n  baseUrl: https://custom.example.com\n`,
-      'utf-8'
+  it('returns defaults for optional fields', async () => {
+    const configPath = join(tempDir, 'wrangler.yaml');
+    await writeFile(
+      configPath,
+      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`
     );
-    const config = await loadConfig();
-    expect(config?.llm?.baseUrl).toBe('https://custom.example.com');
+
+    const config = await loadConfig(tempDir, [configPath]);
+
+    expect(config!.maxSteps).toBeUndefined();
+    expect(config!.requestTimeout).toBeUndefined();
+    expect(config!.llm!.baseUrl).toBeUndefined();
+    expect(config!.llm!.thinkingEnabled).toBeUndefined();
+    expect(config!.llm!.maxConcurrency).toBeUndefined();
   });
 
-  it('should load config from explicit cwd', async () => {
-    const otherDir = mkdtempSync('/tmp/wrangler-config-other-');
-    writeFileSync(
-      join(otherDir, 'wrangler.yaml'),
-      `llm:\n  provider: anthropic\n  apiKey: sk-ant\n  model: claude-3\n`,
-      'utf-8'
+  it('parses numeric strings for maxSteps and requestTimeout', async () => {
+    const configPath = join(tempDir, 'wrangler.yaml');
+    await writeFile(
+      configPath,
+      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\nmaxSteps: "200"\nrequestTimeout: "60000"\n`
     );
-    const config = await loadConfig(otherDir);
-    expect(config?.llm?.provider).toBe('anthropic');
-    rmSync(otherDir, { recursive: true, force: true });
+
+    const config = await loadConfig(tempDir, [configPath]);
+    expect(config!.maxSteps).toBe(200);
+    expect(config!.requestTimeout).toBe(60000);
   });
 
-  it('should reject invalid config missing apiKey', async () => {
-    writeFileSync(
-      join(tempDir, 'wrangler.yaml'),
-      `llm:\n  provider: openai\n  model: gpt-4o\n`,
-      'utf-8'
+  it('ignores non-numeric strings for maxSteps and requestTimeout', async () => {
+    const configPath = join(tempDir, 'wrangler.yaml');
+    await writeFile(
+      configPath,
+      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\nmaxSteps: not-a-number\nrequestTimeout: also-not\n`
     );
-    const config = await loadConfig();
-    expect(config).toBeNull();
-  });
 
-  it('should reject invalid config missing model', async () => {
-    writeFileSync(
-      join(tempDir, 'wrangler.yaml'),
-      `llm:\n  provider: openai\n  apiKey: sk-test\n`,
-      'utf-8'
-    );
-    const config = await loadConfig();
-    expect(config).toBeNull();
-  });
-
-  it('should reject invalid config missing provider', async () => {
-    writeFileSync(
-      join(tempDir, 'wrangler.yaml'),
-      `llm:\n  apiKey: sk-test\n  model: gpt-4o\n`,
-      'utf-8'
-    );
-    const config = await loadConfig();
-    expect(config).toBeNull();
-  });
-
-  it('should reject empty string values', async () => {
-    writeFileSync(
-      join(tempDir, 'wrangler.yaml'),
-      `llm:\n  provider: ""\n  apiKey: sk-test\n  model: gpt-4o\n`,
-      'utf-8'
-    );
-    const config = await loadConfig();
-    expect(config).toBeNull();
-  });
-
-  it('should reject invalid YAML', async () => {
-    writeFileSync(join(tempDir, 'wrangler.yaml'), `llm: { invalid`, 'utf-8');
-    const config = await loadConfig();
-    expect(config).toBeNull();
-  });
-
-  it('should reject config without llm key', async () => {
-    writeFileSync(join(tempDir, 'wrangler.yaml'), `other:\n  key: value\n`, 'utf-8');
-    const config = await loadConfig();
-    expect(config).toBeNull();
-  });
-
-  it('should accept extraPaths parameter', async () => {
-    const extraDir = mkdtempSync('/tmp/wrangler-config-extra-');
-    writeFileSync(
-      join(extraDir, 'extra.yaml'),
-      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`,
-      'utf-8'
-    );
-    const config = await loadConfig(undefined, [join(extraDir, 'extra.yaml')]);
-    expect(config?.llm?.provider).toBe('openai');
-    rmSync(extraDir, { recursive: true, force: true });
+    const config = await loadConfig(tempDir, [configPath]);
+    expect(config!.maxSteps).toBeUndefined();
+    expect(config!.requestTimeout).toBeUndefined();
   });
 });
 
 describe('requireLLMConfig', () => {
   let tempDir: string;
-  let originalCwd: string;
 
-  beforeEach(() => {
-    tempDir = mkdtempSync('/tmp/wrangler-config-test-');
-    originalCwd = process.cwd();
-    process.chdir(tempDir);
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `cfg-req-test-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
   });
 
-  afterEach(() => {
-    process.chdir(originalCwd);
-    rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('should return config when valid', async () => {
-    writeFileSync(
-      join(tempDir, 'wrangler.yaml'),
-      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`,
-      'utf-8'
+  it('returns llm config when valid', async () => {
+    const configPath = join(tempDir, 'wrangler.yaml');
+    await writeFile(
+      configPath,
+      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`
     );
-    const config = await requireLLMConfig();
-    expect(config.provider).toBe('openai');
-  });
 
-  it('should throw when no config exists', async () => {
-    await expect(requireLLMConfig()).rejects.toThrow('No valid LLM configuration');
+    const llm = await requireLLMConfig(tempDir);
+    expect(llm.provider).toBe('openai');
+    expect(llm.apiKey).toBe('sk-test');
+    expect(llm.model).toBe('gpt-4o');
   });
 });

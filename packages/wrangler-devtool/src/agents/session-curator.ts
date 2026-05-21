@@ -1,7 +1,7 @@
 // packages/wrangler-devtool/src/agents/session-curator.ts
 // Session Curator — session management helpers
 
-import { getLLMClient } from '../llm.js';
+import { createLLMClient } from '../llm.js';
 import { requireLLMConfig } from '../config.js';
 import { runAgent } from './orchestrator.js';
 import type { AgentOutput, AgentOptions } from './types.js';
@@ -18,7 +18,7 @@ export async function runSessionCurator(
   options?: AgentOptions
 ): Promise<AgentOutput> {
   const config = await requireLLMConfig();
-  const client = getLLMClient(config);
+  const client = createLLMClient(config);
   const model = options?.model ?? config.model;
   return runAgent(client, model, 'session-curator', prompt, existingContent, options);
 }

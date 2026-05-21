@@ -1,7 +1,7 @@
 // packages/wrangler-devtool/src/agents/skill-designer.ts
 // Skill Designer — generates or modifies skill definitions
 
-import { getLLMClient } from '../llm.js';
+import { createLLMClient } from '../llm.js';
 import { requireLLMConfig } from '../config.js';
 import { runAgent } from './orchestrator.js';
 import type { AgentOutput, AgentOptions } from './types.js';
@@ -15,7 +15,7 @@ export async function runSkillDesigner(
   options?: AgentOptions
 ): Promise<AgentOutput> {
   const config = await requireLLMConfig();
-  const client = getLLMClient(config);
+  const client = createLLMClient(config);
   const model = options?.model ?? config.model;
   return runAgent(client, model, 'skill-designer', prompt, existingContent, options);
 }

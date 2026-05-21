@@ -7,7 +7,7 @@ import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
 import { runReviewer } from '../../agents/reviewer.js';
 import { loadConfig } from '../../config.js';
-import yaml from 'js-yaml';
+import { parseAgentMd, CrewLoader } from '@agentskillmania/wrangler';
 
 interface StaticCheckIssue {
   severity: 'minor' | 'major' | 'critical';
@@ -30,21 +30,7 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-function parseFrontmatter(content: string): {
-  frontmatter: Record<string, unknown> | null;
-  body: string;
-} {
-  const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/);
-  if (!match) {
-    return { frontmatter: null, body: content };
-  }
-  try {
-    const frontmatter = yaml.load(match[1]) as Record<string, unknown> | null;
-    return { frontmatter, body: match[2] };
-  } catch {
-    return { frontmatter: null, body: content };
-  }
-}
+
 
 async function runStaticChecks(targetPath: string): Promise<StaticReviewResult> {
   const issues: StaticCheckIssue[] = [];
@@ -80,61 +66,37 @@ async function runStaticChecks(targetPath: string): Promise<StaticReviewResult> 
 
     if (hasAgentMd) {
       const content = await readFile(join(resolved, 'AGENT.md'), 'utf-8');
-      const { frontmatter } = parseFrontmatter(content);
-      if (!frontmatter) {
+      const parsed = parseAgentMd(content);
+      if (parsed.name === 'unknown') {
         issues.push({
           severity: 'major',
           location: join(resolved, 'AGENT.md'),
-          description: 'AGENT.md is missing YAML frontmatter',
-          suggestion: 'Add frontmatter with name and description fields',
+          description: 'AGENT.md is missing "name" field or YAML frontmatter',
+          suggestion: 'Add frontmatter with name field to the AGENT.md',
         });
-      } else {
-        if (!frontmatter.name) {
-          issues.push({
-            severity: 'major',
-            location: join(resolved, 'AGENT.md'),
-            description: 'AGENT.md frontmatter is missing "name" field',
-            suggestion: 'Add a name field to the frontmatter',
-          });
-        }
-        if (!frontmatter.description) {
-          issues.push({
-            severity: 'minor',
-            location: join(resolved, 'AGENT.md'),
-            description: 'AGENT.md frontmatter is missing "description" field',
-            suggestion: 'Add a description field to the frontmatter',
-          });
-        }
+      }
+      if (!parsed.description) {
+        issues.push({
+          severity: 'minor',
+          location: join(resolved, 'AGENT.md'),
+          description: 'AGENT.md is missing "description" field',
+          suggestion: 'Add a description field to the frontmatter',
+        });
       }
     }
 
     if (hasCrewMd) {
-      const content = await readFile(join(resolved, 'CREW.md'), 'utf-8');
-      const { frontmatter } = parseFrontmatter(content);
-      if (!frontmatter) {
+      try {
+        const loader = new CrewLoader(resolved);
+        await loader.load();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
         issues.push({
           severity: 'major',
           location: join(resolved, 'CREW.md'),
-          description: 'CREW.md is missing YAML frontmatter',
-          suggestion: 'Add frontmatter with name and description fields',
+          description: `CREW.md validation failed: ${message}`,
+          suggestion: 'Fix the CREW.md frontmatter or directory structure',
         });
-      } else {
-        if (!frontmatter.name) {
-          issues.push({
-            severity: 'major',
-            location: join(resolved, 'CREW.md'),
-            description: 'CREW.md frontmatter is missing "name" field',
-            suggestion: 'Add a name field to the frontmatter',
-          });
-        }
-        if (!frontmatter.description) {
-          issues.push({
-            severity: 'minor',
-            location: join(resolved, 'CREW.md'),
-            description: 'CREW.md frontmatter is missing "description" field',
-            suggestion: 'Add a description field to the frontmatter',
-          });
-        }
       }
     }
 
@@ -169,31 +131,22 @@ async function runStaticChecks(targetPath: string): Promise<StaticReviewResult> 
       });
     }
 
-    const { frontmatter } = parseFrontmatter(content);
-    if (!frontmatter) {
+    const parsed = parseAgentMd(content);
+    if (parsed.name === 'unknown') {
       issues.push({
         severity: 'major',
         location: resolved,
-        description: 'File is missing YAML frontmatter',
-        suggestion: 'Add frontmatter with name and description fields',
+        description: 'File is missing "name" field or YAML frontmatter',
+        suggestion: 'Add frontmatter with name field',
       });
-    } else {
-      if (!frontmatter.name) {
-        issues.push({
-          severity: 'major',
-          location: resolved,
-          description: 'Frontmatter is missing "name" field',
-          suggestion: 'Add a name field to the frontmatter',
-        });
-      }
-      if (!frontmatter.description) {
-        issues.push({
-          severity: 'minor',
-          location: resolved,
-          description: 'Frontmatter is missing "description" field',
-          suggestion: 'Add a description field to the frontmatter',
-        });
-      }
+    }
+    if (!parsed.description) {
+      issues.push({
+        severity: 'minor',
+        location: resolved,
+        description: 'File is missing "description" field',
+        suggestion: 'Add a description field to the frontmatter',
+      });
     }
 
     if (content.trim().length < 100) {

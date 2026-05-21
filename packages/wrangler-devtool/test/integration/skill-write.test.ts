@@ -1,11 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect } from 'vitest';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runSkillDesigner } from '../../src/agents/skill-designer.js';
+import { testConfig, itif } from './config.js';
 
 describe('US7: Generate a skill with AI', () => {
-  it('AC7.1-AC7.2: skill write generates valid skill file', async () => {
+  itif(testConfig.enabled)('AC7.1-AC7.2: skill write generates valid skill file', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
 
     const result = await runSkillDesigner(

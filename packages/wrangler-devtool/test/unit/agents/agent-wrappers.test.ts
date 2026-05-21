@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { resetLLMClient } from '../../../src/llm.js';
 import * as configModule from '../../../src/config.js';
 import * as orchestratorModule from '../../../src/agents/orchestrator.js';
 
@@ -26,7 +25,6 @@ const AGENTS: AgentWrapper[] = [
 
 describe('agent wrappers', () => {
   beforeEach(() => {
-    resetLLMClient();
   });
 
   afterEach(() => {

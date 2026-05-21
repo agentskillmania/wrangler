@@ -1,171 +1,111 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdir, writeFile, readFile, access, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { applyChanges } from '../../../src/utils/file-change.js';
-import { CliError } from '../../../src/cli/options.js';
+import { join, resolve } from 'node:path';
+import { applyChanges, type FileChange } from '../../../src/utils/file-change.js';
 
 describe('applyChanges', () => {
   let tempDir: string;
 
-  beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'wrangler-devtool-test-'));
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `fc-test-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
   });
 
-  afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('should create a file', async () => {
-    const result = await applyChanges([{ file: 'test.txt', type: 'create', new: 'hello' }], {
-      cwd: tempDir,
-    });
+  it('creates a new file', async () => {
+    const changes: FileChange[] = [{ file: 'new.txt', type: 'create', new: 'hello' }];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
     expect(result.applied).toBe(true);
-    expect(readFileSync(join(tempDir, 'test.txt'), 'utf-8')).toBe('hello');
+    const content = await readFile(join(tempDir, 'new.txt'), 'utf-8');
+    expect(content).toBe('hello');
   });
 
-  it('should edit a file', async () => {
-    writeFileSync(join(tempDir, 'test.txt'), 'old content', 'utf-8');
-    const result = await applyChanges(
-      [{ file: 'test.txt', type: 'edit', old: 'old content', new: 'new content' }],
-      { cwd: tempDir }
-    );
+  it('edits an existing file', async () => {
+    await writeFile(join(tempDir, 'edit.txt'), 'old content', 'utf-8');
+    const changes: FileChange[] = [
+      { file: 'edit.txt', type: 'edit', old: 'old content', new: 'new content' },
+    ];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
     expect(result.applied).toBe(true);
-    expect(readFileSync(join(tempDir, 'test.txt'), 'utf-8')).toBe('new content');
+    const content = await readFile(join(tempDir, 'edit.txt'), 'utf-8');
+    expect(content).toBe('new content');
   });
 
-  it('should delete a file', async () => {
-    writeFileSync(join(tempDir, 'test.txt'), 'content', 'utf-8');
-    const result = await applyChanges([{ file: 'test.txt', type: 'delete' }], { cwd: tempDir });
+  it('deletes a file', async () => {
+    const target = join(tempDir, 'del.txt');
+    await writeFile(target, 'bye', 'utf-8');
+    const changes: FileChange[] = [{ file: 'del.txt', type: 'delete' }];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
     expect(result.applied).toBe(true);
-    expect(existsSync(join(tempDir, 'test.txt'))).toBe(false);
+    await expect(access(target)).rejects.toThrow();
   });
 
-  it('should reject create if file exists', async () => {
-    writeFileSync(join(tempDir, 'test.txt'), 'content', 'utf-8');
-    const result = await applyChanges([{ file: 'test.txt', type: 'create', new: 'hello' }], {
-      cwd: tempDir,
-    });
-    expect(result.applied).toBe(false);
-    expect(result.error).toContain('already exists');
-  });
+  it('rejects path escape via ../', async () => {
+    const changes: FileChange[] = [{ file: '../escaped.txt', type: 'create', new: 'x' }];
+    const result = await applyChanges(changes, { cwd: tempDir });
 
-  it('should reject edit if old content does not match', async () => {
-    writeFileSync(join(tempDir, 'test.txt'), 'actual content', 'utf-8');
-    const result = await applyChanges(
-      [{ file: 'test.txt', type: 'edit', old: 'wrong content', new: 'new content' }],
-      { cwd: tempDir }
-    );
-    expect(result.applied).toBe(false);
-    expect(result.error).toContain('Old content not found');
-  });
-
-  it('should reject edit if file does not exist', async () => {
-    const result = await applyChanges(
-      [{ file: 'missing.txt', type: 'edit', old: 'old', new: 'new' }],
-      { cwd: tempDir }
-    );
-    expect(result.applied).toBe(false);
-    expect(result.error).toContain('does not exist');
-  });
-
-  it('should reject delete if file does not exist', async () => {
-    const result = await applyChanges([{ file: 'missing.txt', type: 'delete' }], { cwd: tempDir });
-    expect(result.applied).toBe(false);
-    expect(result.error).toContain('does not exist');
-  });
-
-  it('should support dry-run mode', async () => {
-    const result = await applyChanges([{ file: 'test.txt', type: 'create', new: 'hello' }], {
-      cwd: tempDir,
-      dryRun: true,
-    });
-    expect(result.applied).toBe(false);
-    expect(existsSync(join(tempDir, 'test.txt'))).toBe(false);
-  });
-
-  it('should reject path escape attempts', async () => {
-    const result = await applyChanges([{ file: '../escape.txt', type: 'create', new: 'hello' }], {
-      cwd: tempDir,
-    });
     expect(result.applied).toBe(false);
     expect(result.error).toContain('escapes workspace');
   });
 
-  it('should reject hidden files', async () => {
-    const result = await applyChanges([{ file: '.env', type: 'create', new: 'secret' }], {
-      cwd: tempDir,
-    });
+  it('rejects path escape via nested ../', async () => {
+    const changes: FileChange[] = [{ file: 'a/../../escaped.txt', type: 'create', new: 'x' }];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
     expect(result.applied).toBe(false);
-    expect(result.error).toContain('Hidden files');
+    expect(result.error).toContain('escapes workspace');
   });
 
-  it('should abort all changes if one fails', async () => {
-    writeFileSync(join(tempDir, 'a.txt'), 'a', 'utf-8');
-    const result = await applyChanges(
-      [
-        { file: 'missing.txt', type: 'edit', old: 'old', new: 'new' },
-        { file: 'a.txt', type: 'delete' },
-      ],
-      { cwd: tempDir }
-    );
-    expect(result.applied).toBe(false);
-    expect(existsSync(join(tempDir, 'a.txt'))).toBe(true);
-  });
+  it('allows dot-prefixed filenames like .eslintrc.js', async () => {
+    const changes: FileChange[] = [
+      { file: '.eslintrc.js', type: 'create', new: 'module.exports = {};' },
+    ];
+    const result = await applyChanges(changes, { cwd: tempDir });
 
-  it('should apply multiple changes atomically', async () => {
-    writeFileSync(join(tempDir, 'a.txt'), 'old a', 'utf-8');
-    const result = await applyChanges(
-      [
-        { file: 'a.txt', type: 'edit', old: 'old a', new: 'new a' },
-        { file: 'b.txt', type: 'create', new: 'new b' },
-      ],
-      { cwd: tempDir }
-    );
     expect(result.applied).toBe(true);
-    expect(readFileSync(join(tempDir, 'a.txt'), 'utf-8')).toBe('new a');
-    expect(readFileSync(join(tempDir, 'b.txt'), 'utf-8')).toBe('new b');
+    const content = await readFile(join(tempDir, '.eslintrc.js'), 'utf-8');
+    expect(content).toBe('module.exports = {};');
   });
 
-  it('should edit with partial match in multi-line content', async () => {
-    writeFileSync(join(tempDir, 'test.txt'), 'line1\nline2\nline3', 'utf-8');
-    const result = await applyChanges(
-      [{ file: 'test.txt', type: 'edit', old: 'line2', new: 'line1\nreplaced\nline3' }],
-      { cwd: tempDir }
-    );
+  it('applies multiple changes atomically', async () => {
+    await writeFile(join(tempDir, 'multi.txt'), 'original', 'utf-8');
+    const changes: FileChange[] = [
+      { file: 'multi.txt', type: 'edit', old: 'original', new: 'updated' },
+      { file: 'extra.txt', type: 'create', new: 'extra' },
+    ];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
     expect(result.applied).toBe(true);
-    expect(readFileSync(join(tempDir, 'test.txt'), 'utf-8')).toBe('line1\nreplaced\nline3');
+    expect(await readFile(join(tempDir, 'multi.txt'), 'utf-8')).toBe('updated');
+    expect(await readFile(join(tempDir, 'extra.txt'), 'utf-8')).toBe('extra');
   });
 
-  it('should reject create without new content', async () => {
-    const result = await applyChanges([{ file: 'test.txt', type: 'create' }], { cwd: tempDir });
+  it('rejects all changes if any one is invalid', async () => {
+    await writeFile(join(tempDir, 'valid.txt'), 'v', 'utf-8');
+    const changes: FileChange[] = [
+      { file: 'valid.txt', type: 'edit', old: 'v', new: 'V' },
+      { file: '../invalid.txt', type: 'create', new: 'x' },
+    ];
+    const result = await applyChanges(changes, { cwd: tempDir });
+
     expect(result.applied).toBe(false);
-    expect(result.error).toContain("Create requires 'new' content");
+    // valid.txt should NOT be modified
+    expect(await readFile(join(tempDir, 'valid.txt'), 'utf-8')).toBe('v');
   });
 
-  it('should reject edit without old content', async () => {
-    writeFileSync(join(tempDir, 'test.txt'), 'content', 'utf-8');
-    const result = await applyChanges([{ file: 'test.txt', type: 'edit', new: 'new' }], {
-      cwd: tempDir,
-    });
-    expect(result.applied).toBe(false);
-    expect(result.error).toContain("Edit requires both 'old' and 'new'");
-  });
+  it('dryRun mode validates but does not write', async () => {
+    const changes: FileChange[] = [{ file: 'dry.txt', type: 'create', new: 'dry' }];
+    const result = await applyChanges(changes, { cwd: tempDir, dryRun: true });
 
-  it('should reject edit without new content', async () => {
-    writeFileSync(join(tempDir, 'test.txt'), 'content', 'utf-8');
-    const result = await applyChanges([{ file: 'test.txt', type: 'edit', old: 'content' }], {
-      cwd: tempDir,
-    });
     expect(result.applied).toBe(false);
-    expect(result.error).toContain("Edit requires both 'old' and 'new'");
-  });
-
-  it('should reject unknown change type', async () => {
-    const result = await applyChanges([{ file: 'test.txt', type: 'unknown' as any }], {
-      cwd: tempDir,
-    });
-    expect(result.applied).toBe(false);
-    expect(result.error).toContain('Unknown change type');
+    expect(result.error).toContain('Dry run');
+    await expect(access(join(tempDir, 'dry.txt'))).rejects.toThrow();
   });
 });

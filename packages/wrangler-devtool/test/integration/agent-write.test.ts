@@ -1,11 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect } from 'vitest';
 import { mkdtemp, readFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAgentArchitect } from '../../src/agents/architect.js';
+import { testConfig, itif } from './config.js';
 
 describe('US2: Generate an agent with AI', () => {
-  it('AC2.1: agent write generates complete AGENT.md', async () => {
+  itif(testConfig.enabled)('AC2.1: agent write generates complete AGENT.md', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
 
     const result = await runAgentArchitect(
@@ -20,7 +21,7 @@ describe('US2: Generate an agent with AI', () => {
     expect(result.changes[0].new).toContain('name:');
   }, 30000);
 
-  it('AC2.4: agent write updates existing file with edit type', async () => {
+  itif(testConfig.enabled)('AC2.4: agent write updates existing file with edit type', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
 
     // First create an agent

@@ -3,7 +3,7 @@
 
 import type { SoftEvaluation, AgentRunOutput } from './types.js';
 import type { LLMConfig } from '../config.js';
-import { getLLMClient } from '../llm.js';
+import { createLLMClient } from '../llm.js';
 
 export interface SoftEvaluationResult {
   name: string;
@@ -47,7 +47,7 @@ export async function evaluateSoft(
   output: AgentRunOutput,
   config: LLMConfig
 ): Promise<SoftEvaluationResult> {
-  const client = getLLMClient(config);
+  const client = createLLMClient(config);
   const prompt = buildPrompt(evaluation, output);
 
   try {

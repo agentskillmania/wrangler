@@ -9,10 +9,8 @@ export type { InitOptions } from './tools/init-workspace.js';
 
 export { createTemplate } from './tools/create-template.js';
 
-export { forkSession } from './tools/session-fork.js';
-export type { ForkOptions } from './tools/session-fork.js';
-
-export { listSessions } from './tools/session-list.js';
+export { forkSession, listSessions } from './tools/session-manager.js';
+export type { ForkOptions, ListOptions } from './tools/session-manager.js';
 
 export { applyChanges } from './utils/file-change.js';
 export type { FileChange, ApplyOptions, ApplyResult } from './utils/file-change.js';
@@ -41,7 +39,7 @@ export type { SoftEvaluationResult } from './test-runner/soft-evaluator.js';
 export { loadConfig, requireLLMConfig } from './config.js';
 export type { LLMConfig, DevToolConfig } from './config.js';
 
-export { createLLMClient, getLLMClient, resetLLMClient } from './llm.js';
+export { createLLMClient } from './llm.js';
 
 // Phase 3: Agents
 export { runAgentArchitect } from './agents/architect.js';

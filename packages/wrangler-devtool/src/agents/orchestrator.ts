@@ -36,6 +36,47 @@ export function assemblePrompt(
 }
 
 /**
+ * Extract the outermost JSON object from a text string.
+ * Uses brace-depth tracking to correctly handle nested objects
+ * and braces inside string values.
+ */
+function extractJsonObject(text: string): string {
+  const startIdx = text.indexOf('{');
+  if (startIdx === -1) return '';
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = startIdx; i < text.length; i++) {
+    const char = text[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+    } else {
+      if (char === '"') {
+        inString = true;
+      } else if (char === '{') {
+        depth++;
+      } else if (char === '}') {
+        depth--;
+        if (depth === 0) {
+          return text.slice(startIdx, i + 1);
+        }
+      }
+    }
+  }
+
+  return '';
+}
+
+/**
  * Extract and parse JSON from an LLM response string.
  * Handles markdown code blocks and raw JSON.
  */
@@ -43,7 +84,6 @@ export function parseAgentOutput(raw: string): AgentOutput {
   const trimmed = raw.trim();
 
   // Try to extract JSON from markdown code block.
-  // Use first ``` to last ``` to handle nested code blocks inside JSON values.
   const firstBacktick = trimmed.indexOf('```');
   const lastBacktick = trimmed.lastIndexOf('```');
   let jsonText = trimmed;
@@ -54,13 +94,12 @@ export function parseAgentOutput(raw: string): AgentOutput {
     jsonText = content;
   }
 
-  const startIdx = jsonText.indexOf('{');
-  const endIdx = jsonText.lastIndexOf('}');
-  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+  const jsonStr = extractJsonObject(jsonText);
+  if (!jsonStr) {
     throw new Error('No JSON object found in LLM response');
   }
 
-  const parsed = JSON.parse(jsonText.slice(startIdx, endIdx + 1));
+  const parsed = JSON.parse(jsonStr);
 
   if (!parsed.changes || !Array.isArray(parsed.changes)) {
     throw new Error('Missing or invalid "changes" array in LLM output');
@@ -91,13 +130,12 @@ export function parseReviewReport(raw: string): ReviewReport {
     jsonText = content;
   }
 
-  const startIdx = jsonText.indexOf('{');
-  const endIdx = jsonText.lastIndexOf('}');
-  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+  const jsonStr = extractJsonObject(jsonText);
+  if (!jsonStr) {
     throw new Error('No JSON object found in LLM response');
   }
 
-  const parsed = JSON.parse(jsonText.slice(startIdx, endIdx + 1));
+  const parsed = JSON.parse(jsonStr);
 
   if (typeof parsed.overallScore !== 'number') {
     throw new Error('Missing or invalid "overallScore" in review report');
@@ -125,12 +163,13 @@ export async function callAgentLLM(
   userMessage: string,
   options?: AgentOptions
 ): Promise<string> {
+  const combinedContent = `<system>\n${systemPrompt}\n</system>\n\n${userMessage}`;
   const response = await client.call({
     model,
     messages: [
       {
         role: 'user',
-        content: `${systemPrompt}\n\n${userMessage}`,
+        content: combinedContent,
         timestamp: Date.now(),
       },
     ],

@@ -12,10 +12,15 @@ export interface LLMConfig {
   apiKey: string;
   model: string;
   baseUrl?: string;
+  thinkingEnabled?: boolean;
+  enablePromptThinking?: boolean;
+  maxConcurrency?: number;
 }
 
 export interface DevToolConfig {
   llm?: LLMConfig;
+  maxSteps?: number;
+  requestTimeout?: number;
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -55,6 +60,16 @@ function isValidLLMConfig(obj: unknown): obj is LLMConfig {
   );
 }
 
+function pickOptionalNumber(obj: Record<string, unknown>, key: string): number | undefined {
+  const val = obj[key];
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return undefined;
+}
+
 /**
  * Load devtool configuration from wrangler.yaml or fallback config.
  *
@@ -91,6 +106,17 @@ export async function loadConfig(
         if (typeof llmRaw.baseUrl === 'string' && llmRaw.baseUrl.length > 0) {
           result.llm!.baseUrl = llmRaw.baseUrl;
         }
+        if (typeof llmRaw.thinkingEnabled === 'boolean') {
+          result.llm!.thinkingEnabled = llmRaw.thinkingEnabled;
+        }
+        if (typeof llmRaw.enablePromptThinking === 'boolean') {
+          result.llm!.enablePromptThinking = llmRaw.enablePromptThinking;
+        }
+        if (typeof llmRaw.maxConcurrency === 'number') {
+          result.llm!.maxConcurrency = llmRaw.maxConcurrency;
+        }
+        result.maxSteps = pickOptionalNumber(config, 'maxSteps');
+        result.requestTimeout = pickOptionalNumber(config, 'requestTimeout');
         return result;
       }
     }

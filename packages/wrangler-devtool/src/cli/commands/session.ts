@@ -2,8 +2,7 @@
 
 import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
-import { listSessions } from '../../tools/session-list.js';
-import { forkSession } from '../../tools/session-fork.js';
+import { listSessions, forkSession } from '../../tools/session-manager.js';
 
 export const sessionCommand = defineCommand({
   name: 'session',
@@ -13,9 +12,17 @@ export const sessionCommand = defineCommand({
       name: 'list',
       description: 'List sessions for a workspace',
       args: '[workspace-path]',
-      handler: async (args) => {
-        const workspacePath = args[0] as string | undefined;
-        const sessions = await listSessions(workspacePath);
+      options: {
+        'all-workspaces': {
+          type: 'boolean',
+          description: 'List sessions from all workspaces',
+        },
+      },
+      handler: async (args, options) => {
+        const sessions = await listSessions({
+          workspacePath: args[0],
+          allWorkspaces: options['all-workspaces'] as boolean,
+        });
         console.log(JSON.stringify({ success: true, sessions }));
         return ExitCode.Success;
       },
@@ -25,14 +32,10 @@ export const sessionCommand = defineCommand({
       description: 'Fork a session from a historical message',
       args: '<session-id>',
       options: {
-        msg: {
-          type: 'number',
-          required: true,
-          description: 'Message position (1-based)',
-        },
-        name: {
+        before: {
           type: 'string',
-          description: 'New session name',
+          required: true,
+          description: 'Message ID to fork up to (inclusive)',
         },
         workspace: {
           type: 'string',
@@ -49,8 +52,7 @@ export const sessionCommand = defineCommand({
           );
         }
         const newId = await forkSession(sessionId, {
-          msg: options.msg as number,
-          name: options.name as string | undefined,
+          upToMessageId: options.before as string,
           workspace: options.workspace as string | undefined,
         });
         console.log(JSON.stringify({ success: true, newSessionId: newId }));

@@ -31,6 +31,8 @@ export interface TestRunnerDeps {
   llmClient?: ILLMProvider;
   runnerFactory?: (options: EnhancedRunnerOptions) => Promise<EnhancedRunner>;
   crewFactory?: (config: Awaited<ReturnType<CrewLoader['load']>>, options: CrewOptions) => Crew;
+  requestTimeout?: number;
+  maxSteps?: number;
 }
 
 function defaultRunnerFactory(options: EnhancedRunnerOptions): Promise<EnhancedRunner> {
@@ -246,6 +248,8 @@ export class TestRunner {
       workspacePath,
       skillDirs: agentDef.skillDirs,
       mcpConfigPaths: agentDef.mcpPaths,
+      requestTimeout: this.deps.requestTimeout,
+      maxSteps: this.deps.maxSteps,
     });
 
     let state = createAgentState({

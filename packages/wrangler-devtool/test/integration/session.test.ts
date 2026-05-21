@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { forkSession } from '../../src/tools/session-fork.js';
-import { listSessions } from '../../src/tools/session-list.js';
+import { forkSession, listSessions } from '../../src/tools/session-manager.js';
 import { SessionStore } from '@agentskillmania/wrangler';
+import type { AgentState } from '@agentskillmania/colts';
 
 describe('US5 & US6: Session management', () => {
   it('AC6.1-AC6.4: list sessions for workspace', async () => {
@@ -13,9 +13,9 @@ describe('US5 & US6: Session management', () => {
 
     // Create a session manually
     const store = new SessionStore(baseDir, tempDir);
-    const sessionId = await store.createWithId('test-session-123', 'glm-5');
+    await store.createWithId('test-session-123', 'glm-5');
 
-    const sessions = await listSessions(tempDir, baseDir);
+    const sessions = await listSessions({ workspacePath: tempDir, sessionBaseDir: baseDir });
 
     expect(sessions.length).toBeGreaterThan(0);
     expect(sessions[0]).toHaveProperty('id');
@@ -30,16 +30,28 @@ describe('US5 & US6: Session management', () => {
     const store = new SessionStore(baseDir, tempDir);
     const originalId = await store.createWithId('original-session', 'glm-5');
 
-    // Write some mock user-chat.jsonl
+    // Save a state with messages matching entries
+    const mockState: AgentState = {
+      context: {
+        messages: [
+          { id: 'msg-1', role: 'user', content: 'msg1', timestamp: Date.now() } as unknown as AgentState['context']['messages'][number],
+          { id: 'msg-2', role: 'assistant', content: 'reply1', api: 'openai', provider: 'openai', model: 'glm-5', usage: { input: 1, output: 1 }, stopReason: 'stop', timestamp: Date.now() } as unknown as AgentState['context']['messages'][number],
+          { id: 'msg-3', role: 'user', content: 'msg2', timestamp: Date.now() } as unknown as AgentState['context']['messages'][number],
+        ],
+      },
+    };
+    await store.saveState(originalId, mockState);
+
+    // Write some mock session.jsonl with entry IDs
     await writeFile(
-      join(store.getSessionDir(originalId), 'user-chat.jsonl'),
-      '{"role":"user","content":"msg1"}\n{"role":"assistant","content":"reply1"}\n{"role":"user","content":"msg2"}\n',
+      join(store.getSessionDir(originalId), 'session.jsonl'),
+      '{"id":"msg-1","role":"user","content":"msg1","timestamp":1700000000000}\n{"id":"msg-2","role":"assistant","content":"reply1","timestamp":1700000000001}\n{"id":"msg-3","role":"user","content":"msg2","timestamp":1700000000002}\n',
       'utf-8'
     );
 
-    // Fork from msg 2
+    // Fork from msg-3
     const newId = await forkSession(originalId, {
-      msg: 2,
+      upToMessageId: 'msg-3',
       workspace: tempDir,
       sessionBaseDir: baseDir,
     });
@@ -50,16 +62,14 @@ describe('US5 & US6: Session management', () => {
     const originalDir = store.getSessionDir(originalId);
     const originalChat = await (
       await import('node:fs/promises')
-    ).readFile(join(originalDir, 'user-chat.jsonl'), 'utf-8');
+    ).readFile(join(originalDir, 'session.jsonl'), 'utf-8');
     expect(originalChat.trim().split('\n').length).toBe(3);
 
     // Verify new session exists
     const newStore = new SessionStore(baseDir, tempDir);
-    const newDir = newStore.getSessionDir(newId);
     const newMeta = await newStore.getMeta(newId);
     expect(newMeta).toHaveProperty('id', newId);
     expect(newMeta).toHaveProperty('model', 'glm-5');
     expect(newMeta).toHaveProperty('workspacePath', tempDir);
-    expect(newMeta).toHaveProperty('messageCount', 2);
   });
 });

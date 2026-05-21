@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { createLLMClient, getLLMClient, resetLLMClient } from '../../src/llm.js';
+import { describe, it, expect } from 'vitest';
+import { createLLMClient } from '../../src/llm.js';
 import type { LLMConfig } from '../../src/config.js';
 
 describe('createLLMClient', () => {
@@ -11,8 +11,16 @@ describe('createLLMClient', () => {
     };
     const client = createLLMClient(config);
     const stats = client.getStats();
-    expect(stats).toMatchObject({ queueSize: 0 });
-    expect(typeof client.call).toBe('function');
+
+    // Provider should be registered
+    expect(stats.providerActiveCounts.has('openai')).toBe(true);
+
+    // API key should be registered (masked: first 8 chars + '...')
+    expect(stats.keyHealth.has('sk-test...')).toBe(true);
+
+    // Fresh client has no active requests or queue
+    expect(stats.queueSize).toBe(0);
+    expect(stats.activeRequests).toBe(0);
   });
 
   it('should create a client with baseUrl', () => {
@@ -24,36 +32,55 @@ describe('createLLMClient', () => {
     };
     const client = createLLMClient(config);
     const stats = client.getStats();
-    expect(stats).toMatchObject({ queueSize: 0 });
-    expect(typeof client.call).toBe('function');
-  });
-});
 
-describe('getLLMClient', () => {
-  beforeEach(() => {
-    resetLLMClient();
+    // baseUrl does not affect stats, but client creation should succeed
+    expect(stats.providerActiveCounts.has('openai')).toBe(true);
+    expect(stats.keyHealth.has('sk-test...')).toBe(true);
   });
 
-  it('should return the same shared client', () => {
+  it('should use maxConcurrency from config', () => {
+    const config: LLMConfig = {
+      provider: 'anthropic',
+      apiKey: 'sk-ant-test',
+      model: 'claude-3',
+      maxConcurrency: 10,
+    };
+    const client = createLLMClient(config);
+    const stats = client.getStats();
+
+    // Provider registered with the custom name
+    expect(stats.providerActiveCounts.has('anthropic')).toBe(true);
+    expect(stats.keyHealth.has('sk-ant-t...')).toBe(true);
+  });
+
+  it('should default maxConcurrency when not specified', () => {
     const config: LLMConfig = {
       provider: 'openai',
-      apiKey: 'sk-test',
+      apiKey: 'sk-default',
       model: 'gpt-4o',
     };
-    const client1 = getLLMClient(config);
-    const client2 = getLLMClient(config);
-    expect(client1).toBe(client2);
+    const client = createLLMClient(config);
+    const stats = client.getStats();
+
+    // Should still register successfully with defaults
+    expect(stats.providerActiveCounts.has('openai')).toBe(true);
+    expect(stats.keyHealth.has('sk-defau...')).toBe(true);
   });
 
-  it('should create a new client after reset', () => {
+  it('should create a client with all optional fields', () => {
     const config: LLMConfig = {
-      provider: 'openai',
-      apiKey: 'sk-test',
-      model: 'gpt-4o',
+      provider: 'google',
+      apiKey: 'sk-full-test',
+      model: 'gemini-pro',
+      baseUrl: 'https://custom.google.com',
+      thinkingEnabled: true,
+      enablePromptThinking: true,
+      maxConcurrency: 3,
     };
-    const client1 = getLLMClient(config);
-    resetLLMClient();
-    const client2 = getLLMClient(config);
-    expect(client1).not.toBe(client2);
+    const client = createLLMClient(config);
+    const stats = client.getStats();
+
+    expect(stats.providerActiveCounts.has('google')).toBe(true);
+    expect(stats.keyHealth.has('sk-full-...')).toBe(true);
   });
 });
