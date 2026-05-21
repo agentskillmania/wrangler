@@ -23,7 +23,7 @@ describe('session/meta', () => {
     createdAt: '2026-04-28T14:30:00.000Z',
     updatedAt: '2026-04-28T14:30:00.000Z',
     model: 'GLM-4.7',
-    messageCount: 0,
+    agentName: 'test-agent',
   };
 
   describe('writeMeta', () => {
@@ -37,10 +37,10 @@ describe('session/meta', () => {
 
     it('should overwrite existing meta.yaml', async () => {
       await writeMeta(testDir, sampleMeta);
-      const updated = { ...sampleMeta, messageCount: 5 };
+      const updated = { ...sampleMeta, agentName: 'updated-agent' };
       await writeMeta(testDir, updated);
       const content = await readFile(join(testDir, 'meta.yaml'), 'utf-8');
-      expect(content).toContain('messageCount: 5');
+      expect(content).toContain('updated-agent');
     });
   });
 

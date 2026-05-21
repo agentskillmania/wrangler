@@ -7,12 +7,11 @@ import { createHash } from 'node:crypto';
 import { serializeState, deserializeState } from '@agentskillmania/colts';
 import type { AgentState } from '@agentskillmania/colts';
 import { writeMeta, readMeta } from './meta.js';
-import { formatTranscriptEntry } from './transcript.js';
-import type { SessionMeta, TranscriptEntry } from '../types.js';
-import type { ConversationMessage } from './types.js';
+import type { SessionMeta } from '../types.js';
+import type { SessionEntry } from './types.js';
 
 /**
- * 计算 workspace 路径的 MD5 哈希，用于 session 目录分组
+ * Compute MD5 hash of workspace path for session directory grouping.
  */
 function hashWorkspacePath(workspacePath: string): string {
   const absolute = resolve(workspacePath);
@@ -20,16 +19,16 @@ function hashWorkspacePath(workspacePath: string): string {
 }
 
 /**
- * Session 持久化管理器
+ * Session persistence manager.
  *
- * 按 workspace 路径 MD5 分组存储 session。
- * session ID 直接使用 colts state.id（{timestamp}-{random}，无前缀）。
+ * Sessions are stored grouped by workspace path MD5 hash.
+ * Session ID uses colts state.id directly ({timestamp}-{random}, no prefix).
  *
- * 目录结构：
+ * Directory structure:
  * {baseDir}/{md5(workspacePath)}/{sessionId}/
  *   ├── meta.yaml
- *   ├── state.json    (Snapshot 格式)
- *   └── transcript.jsonl
+ *   ├── state.json      (snapshot format)
+ *   └── session.jsonl
  */
 export class SessionStore {
   private readonly workspaceHash: string;
@@ -45,7 +44,7 @@ export class SessionStore {
 
   /**
    * Serialize all writes for a given session to prevent race conditions.
-   * Concurrent writes to state.json / transcript.jsonl / meta.yaml
+   * Concurrent writes to state.json / session.jsonl / meta.yaml
    * can corrupt files or lose updates.
    */
   private async serialize<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
@@ -61,22 +60,22 @@ export class SessionStore {
     }
   }
 
-  /** 获取 workspace 分组目录 */
+  /** Get workspace group directory */
   private getWorkspaceDir(): string {
     return join(this.baseDir, this.workspaceHash);
   }
 
-  /** 获取 session 目录的完整路径 */
+  /** Get full path to session directory */
   getSessionDir(sessionId: string): string {
     return join(this.getWorkspaceDir(), sessionId);
   }
 
-  /** 检查 session 是否存在（同步） */
+  /** Check if session exists (synchronous) */
   exists(sessionId: string): boolean {
     return existsSync(this.getSessionDir(sessionId));
   }
 
-  /** 检查 session 目录是否存在（异步版本） */
+  /** Check if session directory exists (async) */
   async existsAsync(sessionId: string): Promise<boolean> {
     try {
       await stat(this.getSessionDir(sessionId));
@@ -86,8 +85,8 @@ export class SessionStore {
     }
   }
 
-  /** 使用指定 ID 创建 session */
-  async createWithId(sessionId: string, model: string): Promise<string> {
+  /** Create session with specified ID, model, and agent name */
+  async createWithId(sessionId: string, model: string, agentName: string): Promise<string> {
     const dir = this.getSessionDir(sessionId);
     await mkdir(dir, { recursive: true });
 
@@ -98,14 +97,14 @@ export class SessionStore {
       createdAt: now,
       updatedAt: now,
       model,
-      messageCount: 0,
+      agentName,
     };
     await writeMeta(dir, meta);
 
     return sessionId;
   }
 
-  /** 保存 AgentState 到 state.json（Snapshot 格式） */
+  /** Save AgentState to state.json (snapshot format) */
   async saveState(sessionId: string, state: AgentState): Promise<void> {
     return this.serialize(sessionId, async () => {
       const dir = this.getSessionDir(sessionId);
@@ -114,7 +113,7 @@ export class SessionStore {
     });
   }
 
-  /** 从 state.json 加载 AgentState */
+  /** Load AgentState from state.json */
   async loadState(sessionId: string): Promise<AgentState | null> {
     try {
       const dir = this.getSessionDir(sessionId);
@@ -125,16 +124,31 @@ export class SessionStore {
     }
   }
 
-  /** 追加一条 transcript 记录 */
-  async appendTranscript(sessionId: string, entry: TranscriptEntry): Promise<void> {
+  /** Append a SessionEntry to session.jsonl */
+  async appendEntry(sessionId: string, entry: SessionEntry): Promise<void> {
     return this.serialize(sessionId, async () => {
       const dir = this.getSessionDir(sessionId);
-      const content = formatTranscriptEntry(entry);
-      await writeFile(join(dir, 'transcript.jsonl'), content, { flag: 'a', encoding: 'utf-8' });
+      const line = JSON.stringify(entry) + '\n';
+      await writeFile(join(dir, 'session.jsonl'), line, { flag: 'a', encoding: 'utf-8' });
     });
   }
 
-  /** 更新 session 元数据的部分字段 */
+  /** Read all SessionEntries from session.jsonl */
+  async readEntries(sessionId: string): Promise<SessionEntry[]> {
+    try {
+      const dir = this.getSessionDir(sessionId);
+      const content = await readFile(join(dir, 'session.jsonl'), 'utf-8');
+      return content
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as SessionEntry);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Update partial fields of session metadata */
   async updateMeta(sessionId: string, updates: Partial<SessionMeta>): Promise<void> {
     return this.serialize(sessionId, async () => {
       const dir = this.getSessionDir(sessionId);
@@ -145,13 +159,13 @@ export class SessionStore {
     });
   }
 
-  /** 获取 session 元数据 */
+  /** Get session metadata */
   async getMeta(sessionId: string): Promise<SessionMeta | null> {
     const dir = this.getSessionDir(sessionId);
     return readMeta(dir);
   }
 
-  /** 列出当前 workspace 的所有 session */
+  /** List all sessions for current workspace */
   async listSessions(): Promise<SessionMeta[]> {
     try {
       const wsDir = this.getWorkspaceDir();
@@ -172,35 +186,24 @@ export class SessionStore {
     }
   }
 
-  /** 删除 session */
+  /** Delete session */
   async deleteSession(sessionId: string): Promise<void> {
     const dir = this.getSessionDir(sessionId);
     await rm(dir, { recursive: true, force: true });
   }
 
-  // ─── Conversation model (Layer 5+, replaces transcript) ───
-
-  /** Append a ConversationMessage to user-chat.jsonl */
-  async appendMessage(sessionId: string, message: ConversationMessage): Promise<void> {
-    return this.serialize(sessionId, async () => {
-      const dir = this.getSessionDir(sessionId);
-      const line = JSON.stringify(message) + '\n';
-      await writeFile(join(dir, 'user-chat.jsonl'), line, { flag: 'a', encoding: 'utf-8' });
-    });
-  }
-
-  /** Read all ConversationMessages from user-chat.jsonl */
-  async readConversation(sessionId: string): Promise<ConversationMessage[]> {
-    try {
-      const dir = this.getSessionDir(sessionId);
-      const content = await readFile(join(dir, 'user-chat.jsonl'), 'utf-8');
-      return content
-        .trim()
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line) as ConversationMessage);
-    } catch {
-      return [];
-    }
+  /**
+   * Resume an existing session by loading state, meta, and recent entries.
+   * Returns null if the session does not exist or state.json is missing.
+   */
+  async resume(
+    sessionId: string
+  ): Promise<{ state: AgentState; meta: SessionMeta; recentEntries: SessionEntry[] } | null> {
+    const meta = await this.getMeta(sessionId);
+    if (!meta) return null;
+    const state = await this.loadState(sessionId);
+    if (!state) return null;
+    const recentEntries = await this.readEntries(sessionId);
+    return { state, meta, recentEntries };
   }
 }

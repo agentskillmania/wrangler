@@ -77,7 +77,7 @@ describe('createSessionSupport', () => {
     });
 
     // Simulate what AgentRunner would do when middleware is integrated
-    await session.store.createWithId('test-session-1', 'test-model');
+    await session.store.createWithId('test-session-1', 'test-model', 'test-agent');
 
     const entries = await readdir(testBaseDir, { recursive: true });
     const sessionEntries = (entries as string[]).filter((e) => (e as string).includes('meta.yaml'));

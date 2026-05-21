@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, rm, readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { SessionStore } from '../../../src/session/session-store.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
-import type { TranscriptEntry } from '../../../src/types.js';
-import type { ConversationMessage } from '../../../src/session/types.js';
+import type { SessionEntry } from '../../../src/session/types.js';
 
 describe('SessionStore', () => {
   let store: SessionStore;
@@ -28,7 +28,7 @@ describe('SessionStore', () => {
     });
 
     it('should return true after createWithId', async () => {
-      const sessionId = await store.createWithId('1745800000-test', 'GLM-4.7');
+      const sessionId = await store.createWithId('1745800000-test', 'GLM-4.7', 'test-agent');
       expect(store.exists(sessionId)).toBe(true);
     });
   });
@@ -36,7 +36,7 @@ describe('SessionStore', () => {
   describe('createWithId', () => {
     it('should create session directory with meta.yaml', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
       const dirPath = store.getSessionDir(sessionId);
       const dirStat = await stat(dirPath);
       expect(dirStat.isDirectory()).toBe(true);
@@ -45,21 +45,21 @@ describe('SessionStore', () => {
       expect(files).toContain('meta.yaml');
     });
 
-    it('should write correct metadata', async () => {
+    it('should write correct metadata including agentName', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.createWithId(sessionId, 'GLM-4.7', 'my-agent');
       const meta = await store.getMeta(sessionId);
       expect(meta!.id).toBe(sessionId);
       expect(meta!.workspacePath).toBe(workspacePath);
       expect(meta!.model).toBe('GLM-4.7');
-      expect(meta!.messageCount).toBe(0);
+      expect(meta!.agentName).toBe('my-agent');
     });
   });
 
   describe('saveState / loadState', () => {
     it('should save and restore AgentState via snapshot', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
 
       const state = createAgentState({
         name: 'test-agent',
@@ -83,7 +83,7 @@ describe('SessionStore', () => {
 
     it('should survive concurrent saveState calls without corrupting state.json', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
 
       const states = Array.from({ length: 10 }, (_, i) => {
         const state = createAgentState({ name: `agent-${i}`, instructions: `msg-${i}`, tools: [] });
@@ -104,7 +104,7 @@ describe('SessionStore', () => {
 
     it('should persist AgentState as plain JSON without snapshot wrapper', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
       const state = createAgentState({
         name: 'test-agent',
         instructions: 'You are a test agent.',
@@ -125,57 +125,13 @@ describe('SessionStore', () => {
     });
   });
 
-  describe('appendTranscript', () => {
-    it('should append transcript entry to file', async () => {
-      const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
-
-      const entry: TranscriptEntry = {
-        type: 'user',
-        content: 'Hello',
-        timestamp: Date.now(),
-      };
-      await store.appendTranscript(sessionId, entry);
-
-      const dirPath = store.getSessionDir(sessionId);
-      const content = await readFile(join(dirPath, 'transcript.jsonl'), 'utf-8');
-      const parsed = JSON.parse(content.trim());
-      expect(parsed.type).toBe('user');
-      expect(parsed.content).toBe('Hello');
-    });
-
-    it('should append multiple entries in order', async () => {
-      const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
-
-      await store.appendTranscript(sessionId, {
-        type: 'user',
-        content: 'Hello',
-        timestamp: Date.now(),
-      });
-      await store.appendTranscript(sessionId, {
-        type: 'assistant',
-        content: 'Hi there!',
-        timestamp: Date.now(),
-      });
-
-      const dirPath = store.getSessionDir(sessionId);
-      const content = await readFile(join(dirPath, 'transcript.jsonl'), 'utf-8');
-      const lines = content.trim().split('\n');
-      expect(lines).toHaveLength(2);
-      expect(JSON.parse(lines[0]).type).toBe('user');
-      expect(JSON.parse(lines[1]).type).toBe('assistant');
-    });
-  });
-
   describe('updateMeta', () => {
     it('should update metadata fields', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
-      await store.updateMeta(sessionId, { messageCount: 5, updatedAt: '2026-04-28T15:00:00.000Z' });
+      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.updateMeta(sessionId, { updatedAt: '2026-04-28T15:00:00.000Z' });
 
       const meta = await store.getMeta(sessionId);
-      expect(meta!.messageCount).toBe(5);
       expect(meta!.updatedAt).toBe('2026-04-28T15:00:00.000Z');
       expect(meta!.id).toBe(sessionId);
     });
@@ -187,7 +143,7 @@ describe('SessionStore', () => {
       await mkdir(dir, { recursive: true });
 
       // Should not throw
-      await store.updateMeta(sessionId, { messageCount: 5 });
+      await store.updateMeta(sessionId, { updatedAt: '2026-04-28T15:00:00.000Z' });
     });
   });
 
@@ -198,15 +154,15 @@ describe('SessionStore', () => {
     });
 
     it('should list sessions for the workspace', async () => {
-      await store.createWithId('1745800001-test1', 'GLM-4.7');
-      await store.createWithId('1745800002-test2', 'GLM-4.7');
+      await store.createWithId('1745800001-test1', 'GLM-4.7', 'agent-1');
+      await store.createWithId('1745800002-test2', 'GLM-4.7', 'agent-2');
 
       const sessions = await store.listSessions();
       expect(sessions).toHaveLength(2);
     });
 
     it('should not list sessions from different workspace', async () => {
-      await store.createWithId('1745800001-test1', 'GLM-4.7');
+      await store.createWithId('1745800001-test1', 'GLM-4.7', 'test-agent');
 
       const otherStore = new SessionStore(testBaseDir, '/other/workspace');
       const sessions = await otherStore.listSessions();
@@ -214,7 +170,7 @@ describe('SessionStore', () => {
     });
 
     it('should skip non-directory entries in workspace dir', async () => {
-      await store.createWithId('1745800001-test1', 'GLM-4.7');
+      await store.createWithId('1745800001-test1', 'GLM-4.7', 'test-agent');
       // Create a file in the workspace dir (not a directory)
       const { writeFile } = await import('node:fs/promises');
       const wsDir = store.getSessionDir('').replace(/\/$/, '');
@@ -226,9 +182,9 @@ describe('SessionStore', () => {
     });
 
     it('should skip sessions with missing or corrupt meta', async () => {
-      await store.createWithId('1745800001-test1', 'GLM-4.7');
+      await store.createWithId('1745800001-test1', 'GLM-4.7', 'test-agent');
       // Create a directory without meta.yaml
-      const { mkdir: mkdirFn, writeFile: writeFileFn } = await import('node:fs/promises');
+      const { mkdir: mkdirFn } = await import('node:fs/promises');
       const wsDir = store.getSessionDir('').replace(/\/$/, '');
       const parentDir = wsDir.substring(0, wsDir.lastIndexOf('/'));
       await mkdirFn(join(parentDir, 'empty-session-dir'), { recursive: true });
@@ -248,7 +204,7 @@ describe('SessionStore', () => {
       const relStore = new SessionStore(testBaseDir, relPath);
 
       const sessionId = '1745800000-norm';
-      await absStore.createWithId(sessionId, 'GLM-4.7');
+      await absStore.createWithId(sessionId, 'GLM-4.7', 'test-agent');
 
       const sessions = await relStore.listSessions();
       expect(sessions).toHaveLength(1);
@@ -259,7 +215,7 @@ describe('SessionStore', () => {
   describe('deleteSession', () => {
     it('should remove session directory', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
       expect(store.exists(sessionId)).toBe(true);
 
       await store.deleteSession(sessionId);
@@ -267,65 +223,80 @@ describe('SessionStore', () => {
     });
   });
 
-  describe('appendMessage / readConversation', () => {
-    it('should append a ConversationMessage to user-chat.jsonl', async () => {
+  describe('appendEntry', () => {
+    it('should append a SessionEntry to session.jsonl', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
 
-      const msg: ConversationMessage = {
+      const entry: SessionEntry = {
+        id: randomUUID(),
         role: 'user',
         content: 'Hello agent',
         timestamp: Date.now(),
       };
-      await store.appendMessage(sessionId, msg);
+      await store.appendEntry(sessionId, entry);
 
       const dirPath = store.getSessionDir(sessionId);
-      const content = await readFile(join(dirPath, 'user-chat.jsonl'), 'utf-8');
+      const content = await readFile(join(dirPath, 'session.jsonl'), 'utf-8');
       const parsed = JSON.parse(content.trim());
+      expect(parsed.id).toBe(entry.id);
       expect(parsed.role).toBe('user');
       expect(parsed.content).toBe('Hello agent');
-      expect(parsed.timestamp).toBe(msg.timestamp);
+      expect(parsed.timestamp).toBe(entry.timestamp);
     });
 
-    it('should read all ConversationMessages in order', async () => {
+    it('should append multiple entries in order', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
 
-      await store.appendMessage(sessionId, {
+      await store.appendEntry(sessionId, {
+        id: randomUUID(),
         role: 'user',
         content: 'Hello',
         timestamp: 1000,
       });
-      await store.appendMessage(sessionId, {
+      await store.appendEntry(sessionId, {
+        id: randomUUID(),
         role: 'assistant',
         content: 'Hi!',
         timestamp: 2000,
       });
-      await store.appendMessage(sessionId, {
+      await store.appendEntry(sessionId, {
+        id: randomUUID(),
         role: 'tool',
         content: 'result output',
         timestamp: 3000,
         toolName: 'read',
       });
 
-      const messages = await store.readConversation(sessionId);
-      expect(messages).toHaveLength(3);
-      expect(messages[0].role).toBe('user');
-      expect(messages[0].content).toBe('Hello');
-      expect(messages[1].role).toBe('assistant');
-      expect(messages[2].role).toBe('tool');
-      expect(messages[2].toolName).toBe('read');
+      const dirPath = store.getSessionDir(sessionId);
+      const raw = await readFile(join(dirPath, 'session.jsonl'), 'utf-8');
+      const lines = raw.trim().split('\n');
+      expect(lines).toHaveLength(3);
+      expect(JSON.parse(lines[0]).role).toBe('user');
+      expect(JSON.parse(lines[1]).role).toBe('assistant');
+      expect(JSON.parse(lines[2]).role).toBe('tool');
     });
 
     it('should write one JSON per line (JSONL format)', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
 
-      await store.appendMessage(sessionId, { role: 'user', content: 'a', timestamp: 1 });
-      await store.appendMessage(sessionId, { role: 'user', content: 'b', timestamp: 2 });
+      await store.appendEntry(sessionId, {
+        id: randomUUID(),
+        role: 'user',
+        content: 'a',
+        timestamp: 1,
+      });
+      await store.appendEntry(sessionId, {
+        id: randomUUID(),
+        role: 'user',
+        content: 'b',
+        timestamp: 2,
+      });
 
       const dirPath = store.getSessionDir(sessionId);
-      const raw = await readFile(join(dirPath, 'user-chat.jsonl'), 'utf-8');
+      const raw = await readFile(join(dirPath, 'session.jsonl'), 'utf-8');
       const lines = raw.trim().split('\n');
       expect(lines).toHaveLength(2);
       // Each line is valid JSON
@@ -335,33 +306,30 @@ describe('SessionStore', () => {
       }
     });
 
-    it('should return empty array for non-existent session', async () => {
-      const messages = await store.readConversation('nonexistent-id');
-      expect(messages).toEqual([]);
-    });
-
-    it('should handle messages with optional fields', async () => {
+    it('should handle entries with optional fields', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
 
-      const errorMsg: ConversationMessage = {
+      const errorEntry: SessionEntry = {
+        id: randomUUID(),
         role: 'error',
         content: 'something went wrong',
         timestamp: Date.now(),
         errorMessage: 'ENOENT: file not found',
       };
-      await store.appendMessage(sessionId, errorMsg);
+      await store.appendEntry(sessionId, errorEntry);
 
-      const messages = await store.readConversation(sessionId);
-      expect(messages).toHaveLength(1);
-      expect(messages[0].errorMessage).toBe('ENOENT: file not found');
+      const entries = await store.readEntries(sessionId);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].errorMessage).toBe('ENOENT: file not found');
     });
 
-    it('should handle messages with exitCode and toolArguments', async () => {
+    it('should handle entries with exitCode and toolArguments', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7');
+      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
 
-      const toolMsg: ConversationMessage = {
+      const toolEntry: SessionEntry = {
+        id: randomUUID(),
         role: 'tool',
         content: 'command output',
         timestamp: Date.now(),
@@ -369,13 +337,85 @@ describe('SessionStore', () => {
         toolArguments: '{"command":"ls -la"}',
         exitCode: 0,
       };
-      await store.appendMessage(sessionId, toolMsg);
+      await store.appendEntry(sessionId, toolEntry);
 
-      const messages = await store.readConversation(sessionId);
-      expect(messages).toHaveLength(1);
-      expect(messages[0].toolName).toBe('shell');
-      expect(messages[0].toolArguments).toBe('{"command":"ls -la"}');
-      expect(messages[0].exitCode).toBe(0);
+      const entries = await store.readEntries(sessionId);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].toolName).toBe('shell');
+      expect(entries[0].toolArguments).toBe('{"command":"ls -la"}');
+      expect(entries[0].exitCode).toBe(0);
+    });
+  });
+
+  describe('readEntries', () => {
+    const sessionId = '1745800000-read-test';
+
+    it('reads SessionEntry objects from session.jsonl', async () => {
+      await store.createWithId(sessionId, 'test-model', 'test-agent');
+      const entry: SessionEntry = {
+        id: randomUUID(),
+        role: 'user',
+        content: 'hello',
+        timestamp: Date.now(),
+      };
+      await store.appendEntry(sessionId, entry);
+      const entries = await store.readEntries(sessionId);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].id).toBe(entry.id);
+      expect(entries[0].role).toBe('user');
+      expect(entries[0].content).toBe('hello');
+    });
+
+    it('returns empty array when session.jsonl does not exist', async () => {
+      await store.createWithId(sessionId, 'test-model', 'test-agent');
+      const entries = await store.readEntries(sessionId);
+      expect(entries).toEqual([]);
+    });
+
+    it('returns empty array for non-existent session', async () => {
+      const entries = await store.readEntries('nonexistent-id');
+      expect(entries).toEqual([]);
+    });
+  });
+
+  describe('resume', () => {
+    it('returns state, meta, and entries for existing session', async () => {
+      const sessionId = '1745800000-resume-test';
+      await store.createWithId(sessionId, 'test-model', 'test-agent');
+      await store.appendEntry(sessionId, {
+        id: randomUUID(),
+        role: 'user',
+        content: 'hello',
+        timestamp: Date.now(),
+      });
+      const agentState = createAgentState({
+        name: 'test-agent',
+        instructions: 'test',
+        tools: [],
+      });
+      await store.saveState(sessionId, agentState);
+
+      const result = await store.resume(sessionId);
+      expect(result).not.toBeNull();
+      expect(result!.meta.id).toBe(sessionId);
+      expect(result!.meta.agentName).toBe('test-agent');
+      expect(result!.state).toBeDefined();
+      expect(result!.state.id).toBe(agentState.id);
+      expect(result!.recentEntries).toHaveLength(1);
+      expect(result!.recentEntries[0].role).toBe('user');
+      expect(result!.recentEntries[0].content).toBe('hello');
+    });
+
+    it('returns null for non-existent session', async () => {
+      const result = await store.resume('nonexistent');
+      expect(result).toBeNull();
+    });
+
+    it('returns null when state.json missing', async () => {
+      const sessionId = '1745800000-resume-nostate';
+      await store.createWithId(sessionId, 'test-model', 'test-agent');
+      const result = await store.resume(sessionId);
+      expect(result).toBeNull();
     });
   });
 });

@@ -5,14 +5,12 @@
 import './types/colts-augmentation.js';
 
 // Types
-export type { SessionMeta, TranscriptEntry } from './types.js';
+export type { SessionMeta, SessionEntry } from './types.js';
 
 // Session support
 export { createSessionSupport } from './session/support.js';
 export { SessionStore } from './session/session-store.js';
 export { writeMeta, readMeta } from './session/meta.js';
-export { formatTranscriptEntry } from './session/transcript.js';
-export type { ConversationMessage } from './session/types.js';
 
 // Middleware (advanced usage)
 export { createSessionMiddleware } from './middleware/session-middleware.js';

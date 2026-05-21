@@ -1,9 +1,9 @@
 /**
- * User Story: 创建 Runner 并执行单轮对话
+ * User Story: Create Runner and execute single-turn conversation
  *
- * 作为开发者，我用 createSessionSupport 创建 session 基础设施，
- * 自己创建 AgentRunner，发送一条用户消息，
- * agent 执行完成后我能拿到结果，且 session 被正确持久化。
+ * As a developer, I use createSessionSupport to set up session infrastructure,
+ * create my own AgentRunner, send a user message,
+ * and after agent execution I get the result with the session correctly persisted.
  *
  * Prerequisites:
  * - Set ENABLE_INTEGRATION_TESTS=true in .env
@@ -23,7 +23,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { testConfig, itif } from './config.js';
 
-function makeRunner(tools: ToolDefinition[], middleware: any[]) {
+function makeRunner(tools: ToolDefinition[], middleware: unknown[]) {
   return new AgentRunner({
     model: testConfig.testModel,
     llm: { apiKey: testConfig.apiKey, provider: testConfig.provider, baseUrl: testConfig.baseUrl },
@@ -32,7 +32,7 @@ function makeRunner(tools: ToolDefinition[], middleware: any[]) {
   });
 }
 
-describe('US1: 创建 Runner 并执行单轮对话', () => {
+describe('US1: Create Runner and execute single-turn conversation', () => {
   let testBaseDir: string;
 
   beforeAll(() => {
@@ -84,19 +84,20 @@ describe('US1: 创建 Runner 并执行单轮对话', () => {
       const meta = await session.store.getMeta(sessionId);
       expect(meta).toHaveProperty('model', testConfig.testModel);
       expect(meta!.workspacePath).toBe('/test/workspace');
+      expect(meta!.agentName).toBe('test-agent');
       expect(typeof meta!.updatedAt).toBe('string');
 
-      // Verify user-chat.jsonl via conversation API
-      const messages = await session.store.readConversation(sessionId);
-      expect(messages.length).toBeGreaterThanOrEqual(1);
-      const assistantMsgs = messages.filter((m) => m.role === 'assistant');
-      expect(assistantMsgs.length).toBeGreaterThan(0);
+      // Verify session.jsonl via readEntries
+      const entries = await session.store.readEntries(sessionId);
+      expect(entries.length).toBeGreaterThanOrEqual(1);
+      const assistantEntries = entries.filter((e) => e.role === 'assistant');
+      expect(assistantEntries.length).toBeGreaterThan(0);
     },
     60000
   );
 
   itif(testConfig.enabled)(
-    'should handle calculator tool call and persist transcript',
+    'should handle calculator tool call and persist session entries',
     async () => {
       const session = createSessionSupport({
         workspacePath: '/test/workspace',
@@ -120,12 +121,13 @@ describe('US1: 创建 Runner 并执行单轮对话', () => {
 });
 
 /**
- * User Story: 恢复 Session 继续对话
+ * User Story: Resume Session and continue conversation
  *
- * 作为开发者，我通过 SessionStore 加载之前保存的 state，
- * 追加新的用户消息，继续执行 agent，session 记录被追加而非覆盖。
+ * As a developer, I load a previously saved state via SessionStore,
+ * append a new user message, continue executing the agent,
+ * and session entries are appended rather than overwritten.
  */
-describe('US2: 恢复 Session 继续对话', () => {
+describe('US2: Resume Session and continue conversation', () => {
   let testBaseDir: string;
 
   beforeEach(async () => {
@@ -168,9 +170,9 @@ describe('US2: 恢复 Session 继续对话', () => {
       const resumedState = addUserMessage(loaded!, 'What is my name?');
       const { state: finalState } = await runner2.run(resumedState);
 
-      // Verify conversation has entries from both rounds
-      const messages = await session.store.readConversation(sessionId);
-      const assistantEntries = messages.filter((m) => m.role === 'assistant');
+      // Verify session entries have entries from both rounds
+      const entries = await session.store.readEntries(sessionId);
+      const assistantEntries = entries.filter((e) => e.role === 'assistant');
       expect(assistantEntries.length).toBeGreaterThanOrEqual(2);
 
       // Verify state contains both user messages
@@ -195,11 +197,11 @@ describe('US2: 恢复 Session 继续对话', () => {
 });
 
 /**
- * User Story: Session 管理操作
+ * User Story: Session management operations
  *
- * 作为开发者，我通过 SessionStore 列出、查询、删除 session。
+ * As a developer, I list, query, and delete sessions via SessionStore.
  */
-describe('US3: Session 管理操作', () => {
+describe('US3: Session management operations', () => {
   let testBaseDir: string;
 
   beforeEach(async () => {
@@ -217,14 +219,15 @@ describe('US3: Session 管理操作', () => {
       sessionBaseDir: testBaseDir,
     });
 
-    await store.createWithId('1745800001-session-a', 'GLM-4.7');
-    await store.createWithId('1745800002-session-b', 'GLM-4.7');
+    await store.createWithId('1745800001-session-a', 'GLM-4.7', 'agent-a');
+    await store.createWithId('1745800002-session-b', 'GLM-4.7', 'agent-b');
 
     const sessions = await store.listSessions();
     expect(sessions).toHaveLength(2);
 
     const meta = await store.getMeta('1745800001-session-a');
     expect(meta!.model).toBe('GLM-4.7');
+    expect(meta!.agentName).toBe('agent-a');
 
     await store.deleteSession('1745800001-session-a');
     const afterDelete = await store.listSessions();
@@ -241,8 +244,8 @@ describe('US3: Session 管理操作', () => {
       sessionBaseDir: testBaseDir,
     });
 
-    await sessionA.store.createWithId('1745800001-a-session', 'GLM-4.7');
-    await sessionB.store.createWithId('1745800002-b-session', 'GLM-4.7');
+    await sessionA.store.createWithId('1745800001-a-session', 'GLM-4.7', 'agent-a');
+    await sessionB.store.createWithId('1745800002-b-session', 'GLM-4.7', 'agent-b');
 
     const sessionsA = await sessionA.store.listSessions();
     const sessionsB = await sessionB.store.listSessions();
@@ -253,27 +256,21 @@ describe('US3: Session 管理操作', () => {
     expect(sessionsB[0].id).toBe('1745800002-b-session');
   });
 
-  it('should track message count across state saves', async () => {
+  it('should persist state and read entries after save', async () => {
     const { store } = createSessionSupport({
       workspacePath: '/test/workspace',
       sessionBaseDir: testBaseDir,
     });
 
-    await store.createWithId('1745800000-count-test', 'GLM-4.7');
+    await store.createWithId('1745800000-count-test', 'GLM-4.7', 'test-agent');
 
     const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
     const stateWithMsg = addUserMessage(state, 'Hello');
 
     await store.saveState('1745800000-count-test', stateWithMsg);
-    await store.updateMeta('1745800000-count-test', {
-      messageCount: stateWithMsg.context.messages.length,
-      updatedAt: new Date().toISOString(),
-    });
-
-    const meta = await store.getMeta('1745800000-count-test');
-    expect(meta!.messageCount).toBe(stateWithMsg.context.messages.length);
 
     const loaded = await store.loadState('1745800000-count-test');
     expect(loaded).toHaveProperty('id');
+    expect(loaded!.context.messages).toHaveLength(1);
   });
 });
