@@ -37,9 +37,9 @@
     "directory": "packages/wrangler-cli"
   },
   "dependencies": {
-    "@agentskillmania/colts": "^0.3.0",
-    "@agentskillmania/llm-client": "^0.2.2",
-    "@agentskillmania/settings-yaml": "^0.3.0",
+    "@agentskillmania/colts": "link:../../../colts/packages/colts",
+    "@agentskillmania/llm-client": "link:../../../colts/packages/llm-client",
+    "@agentskillmania/settings-yaml": "link:../../../colts/packages/settings-yaml",
     "@agentskillmania/wrangler": "workspace:*",
     "@inkjs/ui": "^2.0.0",
     "ink": "^5.1.0",
