@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill-UI Daemon</title>
+<link rel="stylesheet" href="playground.css">
+</head>
+<body>
+<header>
+  <div class="logo">skill<span>-ui</span> daemon</div>
+  <div class="dot" id="dot"></div>
+  <div class="status" id="connStatus">connecting...</div>
+</header>
+<div class="layout">
+<aside>
+  <button class="nav-item active" data-page="chat">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z"/></svg>
+    Chat
+  </button>
+  <button class="nav-item" data-page="agents">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>
+    Agents
+  </button>
+  <button class="nav-item" data-page="skills">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"/></svg>
+    Skills
+  </button>
+  <button class="nav-item" data-page="sessions">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>
+    Sessions
+  </button>
+  <button class="nav-item" data-page="files">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/></svg>
+    Files
+  </button>
+  <button class="nav-item" data-page="state">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6"/></svg>
+    Agent State
+  </button>
+  <button class="nav-item" data-page="config">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
+    Config
+  </button>
+</aside>
+<main>
+
+<!-- ═══ CHAT ═══ -->
+<div class="page active" id="page-chat">
+  <div class="page-title">Chat with Agent</div>
+  <div class="page-desc">Start a new conversation or resume an existing one.</div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="chat-new">New Conversation</button>
+    <button class="tab" data-tab="chat-resume">Resume Session</button>
+  </div>
+
+  <div class="tab-content active" id="tab-chat-new">
+    <div class="inline-form open" style="margin-bottom:16px">
+      <div class="row">
+        <div class="field"><label>Agent</label><select id="ch-agent"><option value="">Loading...</option></select></div>
+        <div class="field"><label>Workspace Path</label><input id="ch-workspace" placeholder="/path/to/your/project"><span class="hint">The project directory where the agent works</span></div>
+      </div>
+      <div class="field" style="margin-bottom:12px"><label>Message</label><textarea id="ch-new-msg" placeholder="What do you want the agent to do?" rows="2"></textarea></div>
+      <button class="btn btn-primary" onclick="startNewChat()">Send</button>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-chat-resume">
+    <div class="inline-form open" style="margin-bottom:16px">
+      <div class="row">
+        <div class="field"><label>Session ID</label><input id="ch-resume-id" placeholder="Paste a session ID"><span class="hint">From a previous conversation</span></div>
+      </div>
+      <div class="field" style="margin-bottom:12px"><label>Message</label><textarea id="ch-resume-msg" placeholder="Continue the conversation..." rows="2"></textarea></div>
+      <button class="btn btn-primary" onclick="resumeChat()">Resume</button>
+    </div>
+  </div>
+
+  <div class="inline-form open" style="margin-bottom:16px">
+    <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px">Stream Output</div>
+    <div class="chat-area" id="chat-stream"><div style="text-align:center;padding:40px 20px;color:var(--text3)"><p>Send a message above to start streaming</p></div></div>
+    <div class="chat-bar">
+      <button class="btn btn-danger btn-sm" onclick="stopChat()">Stop</button>
+      <button class="btn btn-secondary btn-sm" onclick="clearChat()">Clear</button>
+      <span class="session-id" id="ch-session"></span>
+    </div>
+  </div>
+
+  <div class="inline-form open" style="margin-bottom:16px">
+    <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">AskHuman Response</div>
+    <div class="row">
+      <div class="field"><label>Request ID</label><input id="ch-req-id" placeholder="human-xxx"></div>
+      <div class="field"><label>Response</label><input id="ch-req-resp" placeholder="Your answer"></div>
+      <button class="btn btn-secondary" onclick="respondHuman()">Respond</button>
+    </div>
+  </div>
+
+  <div class="inline-form open" style="margin-bottom:16px">
+    <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">Message History</div>
+    <div class="row">
+      <div class="field"><label>Session ID</label><input id="ch-hist-id" placeholder="session-id"></div>
+      <button class="btn btn-secondary" onclick="getMessages()">Load History</button>
+    </div>
+    <div class="result" id="ch-hist-res"></div>
+  </div>
+</div>
+
+<!-- ═══ AGENTS ═══ -->
+<div class="page" id="page-agents">
+  <div class="page-title">Agents</div>
+  <div class="page-desc">Manage agent definitions. Each agent is a directory with an AGENT.md file.</div>
+  <div class="toolbar">
+    <button class="btn btn-primary btn-sm" onclick="toggleAgentForm()">+ New Agent</button>
+    <button class="btn btn-secondary btn-sm" onclick="loadAgentList()">Refresh</button>
+  </div>
+  <div class="inline-form" id="ag-form">
+    <h4>Create Agent</h4>
+    <div class="row"><div class="field"><label>Name</label><input id="ag-new-name" placeholder="my-agent"><div class="field-error" id="ag-name-err"></div></div></div>
+    <div class="field" style="margin-bottom:12px"><label>Instructions</label><textarea id="ag-new-inst" rows="3" placeholder="You are a helpful assistant."></textarea></div>
+    <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="submitAgentCreate()">Create</button><button class="btn btn-secondary btn-sm" onclick="toggleAgentForm()">Cancel</button></div>
+  </div>
+  <table class="data-table"><thead><tr><th>Name</th><th style="width:60%">Path</th><th style="width:120px"></th></tr></thead><tbody id="ag-tbody"><tr class="empty-row"><td colspan="3">Loading...</td></tr></tbody></table>
+  <div class="detail-panel" id="ag-detail">
+    <div class="detail-header"><h3 id="ag-detail-name">-</h3><button class="btn btn-ghost btn-sm" onclick="closeAgentDetail()">Close</button></div>
+    <div class="detail-body">
+      <div class="detail-section"><div class="detail-label">Instructions</div><div class="result" id="ag-detail-inst" style="max-height:200px"></div></div>
+      <div class="detail-section">
+        <div class="detail-label">Files</div>
+        <div id="ag-detail-files" style="margin-bottom:8px"></div>
+        <div class="row"><div class="field"><label>File Path</label><input id="ag-fpath" placeholder="AGENT.md"></div><button class="btn btn-secondary btn-sm" onclick="readAgentFile()">Read</button><button class="btn btn-secondary btn-sm" onclick="writeAgentFile()">Write</button></div>
+        <div class="field" style="margin-bottom:8px"><label>Content (for write)</label><textarea id="ag-fcontent" rows="3" placeholder="File content"></textarea></div>
+        <div class="result" id="ag-file-res"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SKILLS ═══ -->
+<div class="page" id="page-skills">
+  <div class="page-title">Skills</div>
+  <div class="page-desc">Manage skill definitions. Each skill is a directory with a SKILL.md file.</div>
+  <div class="toolbar">
+    <button class="btn btn-primary btn-sm" onclick="toggleSkillForm()">+ New Skill</button>
+    <button class="btn btn-secondary btn-sm" onclick="loadSkillList()">Refresh</button>
+  </div>
+  <div class="inline-form" id="sk-form">
+    <h4>Create Skill</h4>
+    <div class="row"><div class="field"><label>Name</label><input id="sk-new-name" placeholder="my-skill"><div class="field-error" id="sk-name-err"></div></div><div class="field"><label>Description</label><input id="sk-new-desc" placeholder="What this skill does"></div></div>
+    <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="submitSkillCreate()">Create</button><button class="btn btn-secondary btn-sm" onclick="toggleSkillForm()">Cancel</button></div>
+  </div>
+  <table class="data-table"><thead><tr><th>Name</th><th style="width:60%">Path</th><th style="width:120px"></th></tr></thead><tbody id="sk-tbody"><tr class="empty-row"><td colspan="3">Loading...</td></tr></tbody></table>
+  <div class="detail-panel" id="sk-detail">
+    <div class="detail-header"><h3 id="sk-detail-name">-</h3><button class="btn btn-ghost btn-sm" onclick="closeSkillDetail()">Close</button></div>
+    <div class="detail-body">
+      <div class="detail-section"><div class="detail-label">Details</div><div class="result" id="sk-detail-info" style="max-height:200px"></div></div>
+      <div class="detail-section">
+        <div class="detail-label">Files</div>
+        <div class="row"><div class="field"><label>File Path</label><input id="sk-fpath" placeholder="SKILL.md"></div><button class="btn btn-secondary btn-sm" onclick="readSkillFile()">Read</button><button class="btn btn-secondary btn-sm" onclick="writeSkillFile()">Write</button></div>
+        <div class="field" style="margin-bottom:8px"><label>Content (for write)</label><textarea id="sk-fcontent" rows="3" placeholder="File content"></textarea></div>
+        <div class="result" id="sk-file-res"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SESSIONS ═══ -->
+<div class="page" id="page-sessions">
+  <div class="page-title">Sessions</div>
+  <div class="page-desc">View and manage conversation sessions. Sessions are created automatically when you chat.</div>
+  <div class="toolbar">
+    <div class="field" style="min-width:260px;margin-bottom:0"><label>Filter by Workspace</label><input id="ss-ws" placeholder="Optional: /path/to/workspace"></div>
+    <button class="btn btn-secondary btn-sm" onclick="loadSessionList()">Refresh</button>
+  </div>
+  <table class="data-table"><thead><tr><th>Session ID</th><th>Agent</th><th>Workspace</th><th style="width:160px"></th></tr></thead><tbody id="ss-tbody"><tr class="empty-row"><td colspan="4">Loading...</td></tr></tbody></table>
+  <div class="detail-panel" id="ss-detail">
+    <div class="detail-header"><h3 id="ss-detail-id">-</h3><button class="btn btn-ghost btn-sm" onclick="closeSessionDetail()">Close</button></div>
+    <div class="detail-body"><div class="result" id="ss-detail-info"></div></div>
+  </div>
+</div>
+
+<!-- ═══ FILES ═══ -->
+<div class="page" id="page-files">
+  <div class="page-title">Workspace Files</div>
+  <div class="page-desc">Browse and edit files in the agent's workspace. Requires a session ID.</div>
+  <div class="toolbar">
+    <div class="field" style="min-width:300px;margin-bottom:0"><label>Session ID</label><input id="fi-sid" placeholder="Paste a session ID"></div>
+    <button class="btn btn-secondary btn-sm" onclick="loadFileTree()">Browse</button>
+  </div>
+  <div style="display:flex;gap:16px">
+    <div style="min-width:240px;max-width:300px">
+      <div class="detail-label" style="margin-bottom:8px">File Tree</div>
+      <div class="result" id="fi-tree" style="min-height:300px;max-height:500px"></div>
+    </div>
+    <div style="flex:1">
+      <div class="detail-label" style="margin-bottom:8px"><span id="fi-current-path">Select a file</span></div>
+      <div class="field" style="margin-bottom:8px"><textarea id="fi-content" rows="16" placeholder="Select a file from the tree to view its content"></textarea></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="saveFileContent()">Save</button>
+        <button class="btn btn-secondary btn-sm" onclick="createNewFile()">Create New</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCurrentFile()">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ AGENT STATE ═══ -->
+<div class="page" id="page-state">
+  <div class="page-title">Agent State</div>
+  <div class="page-desc">Watch an agent's real-time state via SSE.</div>
+  <div class="inline-form open" style="margin-bottom:16px">
+    <div class="row">
+      <div class="field"><label>Session ID</label><input id="st-sid" placeholder="session-id"></div>
+      <button class="btn btn-primary btn-sm" onclick="watchState()">Watch</button>
+      <button class="btn btn-danger btn-sm" onclick="stopStateWatch()">Stop</button>
+    </div>
+    <div class="result" id="st-res" style="max-height:500px"></div>
+  </div>
+</div>
+
+<!-- ═══ CONFIG ═══ -->
+<div class="page" id="page-config">
+  <div class="page-title">Configuration</div>
+  <div class="page-desc">View and update daemon configuration. Changes take effect immediately.</div>
+  <div class="inline-form open" style="margin-bottom:16px">
+    <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">Current Config</div>
+    <button class="btn btn-secondary btn-sm" onclick="getConfig()" style="margin-bottom:12px">Load Config</button>
+    <div class="result" id="cfg-res"></div>
+  </div>
+  <div class="inline-form open" style="margin-bottom:16px">
+    <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">Patch Config</div>
+    <div class="field" style="margin-bottom:12px"><label>JSON</label><textarea id="cfg-patch" rows="3" placeholder='{"llm":{"model":"gpt-4"}}'></textarea></div>
+    <button class="btn btn-primary btn-sm" onclick="patchConfig()">Apply</button>
+  </div>
+</div>
+
+</main>
+</div>
+<script src="playground.js"></script>
+</body>
+</html>
