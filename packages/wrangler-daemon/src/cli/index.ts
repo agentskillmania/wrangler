@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 /**
  * wrangler-daemon CLI — start / stop / status
+ *
+ * `start` spawns a detached background process (like pm2).
+ * The child process uses `daemon.ts` auto-start logic which
+ * writes PID and handles signals.
  */
 import { Daemon } from '../daemon.js';
 import { PID_PATH, APP_DIR } from '../constants.js';
 import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
 const command = process.argv[2];
@@ -22,19 +28,19 @@ function parseArgs(argv: string[]): Record<string, string> {
   return result;
 }
 
-async function start(): Promise<void> {
+/**
+ * Run daemon in foreground (used by the spawned background process).
+ * Writes PID file and handles SIGINT/SIGTERM for graceful shutdown.
+ */
+async function runForeground(): Promise<void> {
   const port = args.port ? parseInt(args.port, 10) : 3100;
   const host = args.host ?? 'localhost';
-
-  console.log(`[wrangler-daemon] starting on ${host}:${port}...`);
 
   await mkdir(APP_DIR, { recursive: true });
 
   const daemon = new Daemon({ port, host });
 
-  // Graceful shutdown on SIGINT/SIGTERM
   const shutdown = async () => {
-    console.log('[wrangler-daemon] shutting down...');
     await daemon.shutdown();
     await unlink(PID_PATH).catch(() => {});
     process.exit(0);
@@ -44,10 +50,37 @@ async function start(): Promise<void> {
 
   await daemon.startup();
 
-  // Write PID file
   await writeFile(PID_PATH, String(process.pid), 'utf-8');
+}
 
-  console.log(`[wrangler-daemon] listening at http://${daemon.address}`);
+/**
+ * Spawn daemon as a detached background process.
+ * Inherits stdio so startup errors are visible, then unrefs
+ * so the parent can exit immediately.
+ */
+async function start(): Promise<void> {
+  if (existsSync(PID_PATH)) {
+    const pid = parseInt(await readFile(PID_PATH, 'utf-8'), 10);
+    try {
+      process.kill(pid, 0);
+      console.error(`[wrangler-daemon] already running (PID ${pid})`);
+      process.exit(1);
+    } catch {
+      await unlink(PID_PATH);
+    }
+  }
+
+  const port = args.port ? parseInt(args.port, 10) : 3100;
+  const host = args.host ?? 'localhost';
+
+  const bin = fileURLToPath(import.meta.url);
+  const child = spawn(process.execPath, [bin, '--run', '--port', String(port), '--host', host], {
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.unref();
+
+  console.log(`[wrangler-daemon] started (PID ${child.pid})`);
 }
 
 async function stop(): Promise<void> {
@@ -58,7 +91,7 @@ async function stop(): Promise<void> {
   const pid = parseInt(await readFile(PID_PATH, 'utf-8'), 10);
   try {
     process.kill(pid, 'SIGTERM');
-    console.log(`[wrangler-daemon] sent SIGTERM to process ${pid}`);
+    console.log(`[wrangler-daemon] stopped (PID ${pid})`);
     await unlink(PID_PATH);
   } catch {
     console.error(`[wrangler-daemon] process ${pid} not found, cleaning PID file`);
@@ -81,6 +114,10 @@ async function status(): Promise<void> {
 }
 
 switch (command) {
+  case '--run':
+    // Internal: foreground mode used by the detached child process
+    await runForeground();
+    break;
   case 'start':
     await start();
     break;
