@@ -30,8 +30,6 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-
-
 async function runStaticChecks(targetPath: string): Promise<StaticReviewResult> {
   const issues: StaticCheckIssue[] = [];
   const resolved = resolve(targetPath);

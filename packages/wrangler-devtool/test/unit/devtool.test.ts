@@ -50,9 +50,7 @@ describe('DevTool', () => {
     });
 
     it('throws on missing LLM config', () => {
-      expect(() => new DevTool({} as DevToolOptions)).toThrow(
-        /llm configuration is required/i
-      );
+      expect(() => new DevTool({} as DevToolOptions)).toThrow(/llm configuration is required/i);
     });
 
     it('throws on invalid LLM config — missing provider', () => {
@@ -113,10 +111,7 @@ describe('DevTool', () => {
 
     it('creates instance from wrangler.yaml file', async () => {
       const configPath = join(tempDir, 'wrangler.yaml');
-      await writeFile(
-        configPath,
-        `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`
-      );
+      await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`);
 
       const tool = await DevTool.fromConfig(tempDir);
 
@@ -125,10 +120,7 @@ describe('DevTool', () => {
 
     it('creates instance from explicit config path', async () => {
       const configPath = join(tempDir, 'custom.yaml');
-      await writeFile(
-        configPath,
-        `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`
-      );
+      await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`);
 
       const tool = await DevTool.fromConfig(tempDir, { extraPaths: [configPath] });
 
@@ -136,9 +128,9 @@ describe('DevTool', () => {
     });
 
     it('throws when no config found', async () => {
-      await expect(
-        DevTool.fromConfig(tempDir, { skipGlobal: true })
-      ).rejects.toThrow(/no valid llm configuration/i);
+      await expect(DevTool.fromConfig(tempDir, { skipGlobal: true })).rejects.toThrow(
+        /no valid llm configuration/i
+      );
     });
 
     it('throws when config has invalid LLM section', async () => {
@@ -321,9 +313,7 @@ describe('DevTool', () => {
     });
 
     it('applyChanges applies file changes', async () => {
-      const changes = [
-        { file: 'new-file.txt', type: 'create' as const, new: 'hello world' },
-      ];
+      const changes = [{ file: 'new-file.txt', type: 'create' as const, new: 'hello world' }];
 
       const result = await tool.applyChanges(changes, { cwd: tempDir });
 

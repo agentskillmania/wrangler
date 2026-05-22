@@ -50,11 +50,7 @@ function resolveFilePath(file: string, cwd?: string): string {
   // Security: reject . and .. directory entries only; allow .dotfiles
   const basename = path.basename(resolved);
   if (basename === '.' || basename === '..') {
-    throw new CliError(
-      `Invalid path: ${file}`,
-      'INVALID_PATH',
-      ExitCode.ValidationFailure
-    );
+    throw new CliError(`Invalid path: ${file}`, 'INVALID_PATH', ExitCode.ValidationFailure);
   }
 
   return resolved;

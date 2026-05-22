@@ -153,7 +153,17 @@ export type CrewOutputEvent =
   | CrewToolInvokedEvent
   | CrewToolCompletedEvent
   | CrewAgentAdvancedEvent
-  | CrewMessageRoutedEvent;
+  | CrewMessageRoutedEvent
+  | CrewA2UIEvent;
+
+export interface CrewA2UIEvent {
+  readonly type: 'a2ui';
+  readonly agentId: string;
+  readonly operation: string;
+  readonly payload: Record<string, unknown>;
+  readonly surfaceId: string;
+  readonly timestamp: number;
+}
 
 export type CrewEventHandler = (event: CrewOutputEvent) => void;
 

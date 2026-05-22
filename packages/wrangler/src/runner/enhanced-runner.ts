@@ -29,6 +29,7 @@ import { createClearHandler } from '../command/handlers/clear.js';
 import { createCompactHandler } from '../command/handlers/compact.js';
 import { createSkillsHandler } from '../command/handlers/skills.js';
 import { createSkillHandler } from '../command/handlers/skill.js';
+import { createA2UITools, A2UIMiddleware } from '../tools/a2ui/index.js';
 
 /**
  * EnhancedRunner — Pre-wired AgentRunner with all wrangler runtime mechanisms
@@ -97,11 +98,17 @@ export class EnhancedRunner {
 
     const todolistSupport = createTodolistSupport();
 
+    // A2UI support (conditional)
+    const a2uiEnabled = options.a2ui?.enabled === true;
+    const a2uiTools = a2uiEnabled ? createA2UITools() : [];
+    const a2uiMiddleware = a2uiEnabled ? [new A2UIMiddleware()] : [];
+
     const allTools: Tool<ZodTypeAny>[] = [
       ...sessionSupport.tools,
       ...builtinTools,
       ...mcpTools,
       ...todolistSupport.tools,
+      ...a2uiTools,
       ...(options.extraTools ?? []),
     ];
 
@@ -169,7 +176,12 @@ export class EnhancedRunner {
       llmClient: options.llmClient,
       tools: finalToolRegistry ? undefined : allTools,
       toolRegistry: finalToolRegistry,
-      middleware: [commandMiddleware, sessionSupport.middleware, todolistSupport.middleware],
+      middleware: [
+        commandMiddleware,
+        sessionSupport.middleware,
+        todolistSupport.middleware,
+        ...a2uiMiddleware,
+      ],
       systemPrompt: buildTimeContext(),
       skillDirs: options.skillDirs,
       thinkingEnabled: options.thinkingEnabled,

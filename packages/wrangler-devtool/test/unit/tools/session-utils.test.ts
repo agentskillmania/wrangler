@@ -42,10 +42,7 @@ describe('findSessionGlobally', () => {
     await rm(baseDir, { recursive: true, force: true });
   });
 
-  async function createSession(
-    workspacePath: string,
-    sessionId: string
-  ): Promise<void> {
+  async function createSession(workspacePath: string, sessionId: string): Promise<void> {
     const store = new SessionStore(baseDir, workspacePath);
     await store.createWithId(sessionId, 'gpt-4', 'test-agent');
     // Save a minimal state so resume() works

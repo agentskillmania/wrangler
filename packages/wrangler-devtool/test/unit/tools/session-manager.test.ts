@@ -76,7 +76,14 @@ describe('forkSession', () => {
     // assistant msg entry -> id = message.id
     const entries: SessionEntry[] = [
       { id: user1Id, role: 'user', content: 'Hello', timestamp: Date.now() },
-      { id: randomUUID(), role: 'tool', content: '{"result": "ok"}', timestamp: Date.now(), toolName: 'test_tool', toolArguments: '{}' },
+      {
+        id: randomUUID(),
+        role: 'tool',
+        content: '{"result": "ok"}',
+        timestamp: Date.now(),
+        toolName: 'test_tool',
+        toolArguments: '{}',
+      },
       { id: assistant1Id, role: 'assistant', content: 'Hi there', timestamp: Date.now() },
       { id: user2Id, role: 'user', content: 'How are you?', timestamp: Date.now() },
       { id: assistant2Id, role: 'assistant', content: 'I am fine', timestamp: Date.now() },
@@ -86,7 +93,15 @@ describe('forkSession', () => {
       await store.appendEntry(sessionId, entry);
     }
 
-    return { entries, messageIds: { user1: user1Id, assistant1: assistant1Id, user2: user2Id, assistant2: assistant2Id } };
+    return {
+      entries,
+      messageIds: {
+        user1: user1Id,
+        assistant1: assistant1Id,
+        user2: user2Id,
+        assistant2: assistant2Id,
+      },
+    };
   }
 
   it('creates a new session truncated to the specified message id', async () => {

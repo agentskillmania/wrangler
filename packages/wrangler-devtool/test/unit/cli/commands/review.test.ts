@@ -65,7 +65,9 @@ describe('review command', () => {
     const output = JSON.parse(logSpy.mock.calls[0][0]);
     expect(output.static.passed).toBe(false);
     expect(output.static.issues).toContainEqual(
-      expect.objectContaining({ description: 'AGENT.md is missing "name" field or YAML frontmatter' })
+      expect.objectContaining({
+        description: 'AGENT.md is missing "name" field or YAML frontmatter',
+      })
     );
   });
 
@@ -84,7 +86,9 @@ describe('review command', () => {
 
     const output = JSON.parse(logSpy.mock.calls[0][0]);
     expect(output.static.issues).toContainEqual(
-      expect.objectContaining({ description: 'AGENT.md is missing "name" field or YAML frontmatter' })
+      expect.objectContaining({
+        description: 'AGENT.md is missing "name" field or YAML frontmatter',
+      })
     );
   });
 

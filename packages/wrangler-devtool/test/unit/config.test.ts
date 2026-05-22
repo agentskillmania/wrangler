@@ -37,10 +37,7 @@ describe('loadConfig', () => {
 
   it('returns defaults for optional fields', async () => {
     const configPath = join(tempDir, 'wrangler.yaml');
-    await writeFile(
-      configPath,
-      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`
-    );
+    await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`);
 
     const config = await loadConfig(tempDir, { extraPaths: [configPath] });
 
@@ -119,10 +116,7 @@ describe('requireLLMConfig', () => {
 
   it('returns llm config when valid', async () => {
     const configPath = join(tempDir, 'wrangler.yaml');
-    await writeFile(
-      configPath,
-      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`
-    );
+    await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`);
 
     const llm = await requireLLMConfig(tempDir);
     expect(llm.provider).toBe('openai');

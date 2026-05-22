@@ -34,9 +34,29 @@ describe('US5 & US6: Session management', () => {
     const mockState: AgentState = {
       context: {
         messages: [
-          { id: 'msg-1', role: 'user', content: 'msg1', timestamp: Date.now() } as unknown as AgentState['context']['messages'][number],
-          { id: 'msg-2', role: 'assistant', content: 'reply1', api: 'openai', provider: 'openai', model: 'glm-5', usage: { input: 1, output: 1 }, stopReason: 'stop', timestamp: Date.now() } as unknown as AgentState['context']['messages'][number],
-          { id: 'msg-3', role: 'user', content: 'msg2', timestamp: Date.now() } as unknown as AgentState['context']['messages'][number],
+          {
+            id: 'msg-1',
+            role: 'user',
+            content: 'msg1',
+            timestamp: Date.now(),
+          } as unknown as AgentState['context']['messages'][number],
+          {
+            id: 'msg-2',
+            role: 'assistant',
+            content: 'reply1',
+            api: 'openai',
+            provider: 'openai',
+            model: 'glm-5',
+            usage: { input: 1, output: 1 },
+            stopReason: 'stop',
+            timestamp: Date.now(),
+          } as unknown as AgentState['context']['messages'][number],
+          {
+            id: 'msg-3',
+            role: 'user',
+            content: 'msg2',
+            timestamp: Date.now(),
+          } as unknown as AgentState['context']['messages'][number],
         ],
       },
     };

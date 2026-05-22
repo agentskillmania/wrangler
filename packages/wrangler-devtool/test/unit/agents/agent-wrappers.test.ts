@@ -24,8 +24,7 @@ const AGENTS: AgentWrapper[] = [
 ];
 
 describe('agent wrappers', () => {
-  beforeEach(() => {
-  });
+  beforeEach(() => {});
 
   afterEach(() => {
     vi.restoreAllMocks();

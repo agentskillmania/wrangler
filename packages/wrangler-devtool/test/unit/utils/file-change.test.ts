@@ -120,9 +120,7 @@ describe('applyChanges', () => {
   });
 
   it('rejects edit when file does not exist', async () => {
-    const changes: FileChange[] = [
-      { file: 'missing.txt', type: 'edit', old: 'x', new: 'y' },
-    ];
+    const changes: FileChange[] = [{ file: 'missing.txt', type: 'edit', old: 'x', new: 'y' }];
     const result = await applyChanges(changes, { cwd: tempDir });
 
     expect(result.applied).toBe(false);
@@ -149,9 +147,7 @@ describe('applyChanges', () => {
   });
 
   it('rejects create without new content', async () => {
-    const changes: FileChange[] = [
-      { file: 'no-content.txt', type: 'create' } as FileChange,
-    ];
+    const changes: FileChange[] = [{ file: 'no-content.txt', type: 'create' } as FileChange];
     const result = await applyChanges(changes, { cwd: tempDir });
 
     expect(result.applied).toBe(false);
@@ -160,9 +156,7 @@ describe('applyChanges', () => {
 
   it('rejects edit without old or new content', async () => {
     await writeFile(join(tempDir, 'edit3.txt'), 'content', 'utf-8');
-    const changes: FileChange[] = [
-      { file: 'edit3.txt', type: 'edit' } as FileChange,
-    ];
+    const changes: FileChange[] = [{ file: 'edit3.txt', type: 'edit' } as FileChange];
     const result = await applyChanges(changes, { cwd: tempDir });
 
     expect(result.applied).toBe(false);

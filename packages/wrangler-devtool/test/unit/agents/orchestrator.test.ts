@@ -240,8 +240,7 @@ describe('parseReviewReport', () => {
 });
 
 describe('callAgentLLM', () => {
-  beforeEach(() => {
-  });
+  beforeEach(() => {});
 
   it('should call LLM with standard multi-message format', async () => {
     const { createLLMClient } = await import('../../../src/llm.js');
@@ -286,8 +285,7 @@ describe('callAgentLLM', () => {
 });
 
 describe('runAgent', () => {
-  beforeEach(() => {
-  });
+  beforeEach(() => {});
 
   it('should run agent and parse output', async () => {
     const { createLLMClient } = await import('../../../src/llm.js');
@@ -332,8 +330,7 @@ describe('runAgent', () => {
 });
 
 describe('runReviewAgent', () => {
-  beforeEach(() => {
-  });
+  beforeEach(() => {});
 
   it('should run reviewer and parse report', async () => {
     const { createLLMClient } = await import('../../../src/llm.js');

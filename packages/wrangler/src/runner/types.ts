@@ -10,6 +10,11 @@ import type {
 import type { SearchProvider } from '../tools/builtin/index.js';
 import type { CommandHandler } from '../command/types.js';
 
+export interface A2UIConfig {
+  /** Enable A2UI support */
+  enabled: boolean;
+}
+
 export interface EnhancedRunnerOptions {
   llmClient: ILLMProvider;
   model?: string;
@@ -31,4 +36,6 @@ export interface EnhancedRunnerOptions {
   compression?: CompressionConfig | IContextCompressor;
   /** Custom command handlers (override built-in if same name) */
   commands?: CommandHandler[];
+  /** A2UI support configuration */
+  a2ui?: A2UIConfig;
 }

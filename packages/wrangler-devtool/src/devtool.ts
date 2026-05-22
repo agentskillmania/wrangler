@@ -2,7 +2,7 @@
 // DevTool facade — single entry point for programmatic usage
 
 import { loadConfig } from './config.js';
-import type { LLMConfig, DevToolConfig as FileDevToolConfig } from './config.js';
+import type { LLMConfig } from './config.js';
 import { createLLMClient } from './llm.js';
 import { LLMClient } from '@agentskillmania/llm-client';
 import { runAgent } from './agents/orchestrator.js';
@@ -162,10 +162,7 @@ export class DevTool {
   /**
    * Apply structured file changes to disk.
    */
-  async applyChanges(
-    changes: FileChange[],
-    options?: ApplyOptions
-  ): Promise<ApplyResult> {
+  async applyChanges(changes: FileChange[], options?: ApplyOptions): Promise<ApplyResult> {
     return applyChanges(changes, options);
   }
 

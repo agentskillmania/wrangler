@@ -38,6 +38,16 @@ export type { MCPLoaderOptions } from './tools/mcp/index.js';
 export { discoverGlobalConfigPath } from './tools/mcp/index.js';
 export { createMCPTool, jsonSchemaToZod } from './tools/mcp/index.js';
 
+// A2UI support
+export { createA2UITools, A2UIMiddleware, a2uiRespond } from './tools/a2ui/index.js';
+export type {
+  A2UIOperation,
+  A2UIEvent,
+  ComponentNode,
+  ComponentOperation,
+  A2UIUserResponse,
+} from './tools/a2ui/index.js';
+
 // Todolist (Layer 3)
 export { createTodolistSupport } from './todolist/index.js';
 export type { TodoStatus, TodoItem, TodoList } from './todolist/index.js';

@@ -28,10 +28,7 @@ export interface ListOptions {
  * Creates a new session containing all entries up to and including
  * the specified message ID. The AgentState is also truncated to match.
  */
-export async function forkSession(
-  sessionId: string,
-  options: ForkOptions
-): Promise<string> {
+export async function forkSession(sessionId: string, options: ForkOptions): Promise<string> {
   const baseDir = options.sessionBaseDir ?? getDefaultSessionBaseDir();
 
   // 1. Find source session
