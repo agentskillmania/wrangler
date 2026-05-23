@@ -13,25 +13,43 @@ import {
 import type { LLMConfig } from '../../../src/config.js';
 
 describe('loadPromptTemplate', () => {
-  it('should load architect prompt', async () => {
+  it('should load architect prompt with domain knowledge', async () => {
     const prompt = await loadPromptTemplate('architect');
     expect(prompt).toContain('Agent Architect');
+    expect(prompt).toContain('AGENT.md');
+    expect(prompt).toContain('frontmatter');
+    expect(prompt).toContain('SOP');
     expect(prompt).toContain('Output Format');
   });
 
-  it('should load skill-designer prompt', async () => {
+  it('should load skill-designer prompt with Agent Skills standard', async () => {
     const prompt = await loadPromptTemplate('skill-designer');
     expect(prompt).toContain('Skill Designer');
+    expect(prompt).toContain('Output Format');
+    expect(prompt).toContain('Rules');
+    expect(prompt).toContain('Example');
+    expect(prompt).toContain('SKILL.md');
   });
 
-  it('should load crew-composer prompt', async () => {
+  it('should load crew-composer prompt with collaboration patterns', async () => {
     const prompt = await loadPromptTemplate('crew-composer');
     expect(prompt).toContain('Crew Composer');
+    expect(prompt).toContain('CREW.md');
+    expect(prompt).toContain('primary-agent');
+    expect(prompt).toContain('agents/');
+    expect(prompt).toContain('SOP');
   });
 
-  it('should load reviewer prompt', async () => {
+  it('should load reviewer prompt with quantitative criteria', async () => {
     const prompt = await loadPromptTemplate('reviewer');
-    expect(prompt).toContain('Code Reviewer');
+    expect(prompt).toContain('Definition Reviewer');
+    expect(prompt).toContain('Clarity');
+    expect(prompt).toContain('Completeness');
+    expect(prompt).toContain('Focus');
+    expect(prompt).toContain('Safety');
+    expect(prompt).toContain('Efficiency');
+    expect(prompt).toContain('1-5');
+    expect(prompt).toContain('suggestion');
   });
 
   it('should load session-curator prompt', async () => {
