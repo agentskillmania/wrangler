@@ -77,7 +77,17 @@ describe('Daemon', () => {
     daemon = new Daemon({ port: 0 });
     await daemon.startup();
 
-    const response = await fetch(`http://${daemon.address}/`);
+    const addr = daemon.address;
+    // Address may be "host:port" or "::1:port" — split last segment as port
+    const addrStr =
+      typeof addr === 'string' ? addr : `${(addr as any).address}:${(addr as any).port}`;
+    const lastColon = addrStr.lastIndexOf(':');
+    const hostPart = addrStr.slice(0, lastColon);
+    const portPart = addrStr.slice(lastColon + 1);
+    const url = hostPart.includes(':')
+      ? `http://[${hostPart}]:${portPart}/`
+      : `http://${hostPart}:${portPart}/`;
+    const response = await fetch(url);
     expect(response.ok).toBe(true);
     expect(response.headers.get('content-type')).toContain('text/html');
 

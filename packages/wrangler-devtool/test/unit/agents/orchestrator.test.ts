@@ -4,6 +4,7 @@ import {
   assemblePrompt,
   parseAgentOutput,
   parseReviewReport,
+  parseSessionSummary,
   callAgentLLM,
   runAgent,
   runReviewAgent,
@@ -379,5 +380,39 @@ describe('runReviewAgent', () => {
     await expect(runReviewAgent(client, 'gpt-4o', 'Review this file')).rejects.toThrow(
       'No JSON object found'
     );
+  });
+});
+
+describe('parseSessionSummary', () => {
+  it('should parse valid session summary from raw JSON', () => {
+    const raw = JSON.stringify({
+      title: 'Code Review Discussion',
+      description: 'Reviewed authentication module for security issues',
+    });
+    const summary = parseSessionSummary(raw);
+    expect(summary.title).toBe('Code Review Discussion');
+    expect(summary.description).toBe('Reviewed authentication module for security issues');
+  });
+
+  it('should parse session summary inside markdown code block', () => {
+    const raw =
+      '```json\n' +
+      JSON.stringify({ title: 'Bug Fix', description: 'Fixed null pointer in parser' }) +
+      '\n```';
+    const summary = parseSessionSummary(raw);
+    expect(summary.title).toBe('Bug Fix');
+    expect(summary.description).toBe('Fixed null pointer in parser');
+  });
+
+  it('should throw when title is missing', () => {
+    expect(() => parseSessionSummary('{"description":"no title"}')).toThrow('title');
+  });
+
+  it('should throw when description is missing', () => {
+    expect(() => parseSessionSummary('{"title":"no desc"}')).toThrow('description');
+  });
+
+  it('should throw when no JSON found', () => {
+    expect(() => parseSessionSummary('just text')).toThrow('No JSON object found');
   });
 });

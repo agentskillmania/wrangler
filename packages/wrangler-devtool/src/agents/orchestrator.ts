@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { LLMClient } from '@agentskillmania/llm-client';
-import type { AgentOutput, ReviewReport, AgentOptions } from './types.js';
+import type { AgentOutput, ReviewReport, SessionSummary, AgentOptions } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -151,6 +151,39 @@ export function parseReviewReport(raw: string): ReviewReport {
   }
 
   return parsed as ReviewReport;
+}
+
+/**
+ * Parse a session summary from LLM response.
+ */
+export function parseSessionSummary(raw: string): SessionSummary {
+  const trimmed = raw.trim();
+
+  const firstBacktick = trimmed.indexOf('```');
+  const lastBacktick = trimmed.lastIndexOf('```');
+  let jsonText = trimmed;
+
+  if (firstBacktick !== -1 && lastBacktick !== -1 && lastBacktick > firstBacktick) {
+    let content = trimmed.slice(firstBacktick + 3, lastBacktick);
+    content = content.replace(/^json\s*\n?/, '').trim();
+    jsonText = content;
+  }
+
+  const jsonStr = extractJsonObject(jsonText);
+  if (!jsonStr) {
+    throw new Error('No JSON object found in LLM response');
+  }
+
+  const parsed = JSON.parse(jsonStr);
+
+  if (typeof parsed.title !== 'string' || parsed.title.length === 0) {
+    throw new Error('Missing or invalid "title" in session summary');
+  }
+  if (typeof parsed.description !== 'string' || parsed.description.length === 0) {
+    throw new Error('Missing or invalid "description" in session summary');
+  }
+
+  return { title: parsed.title, description: parsed.description };
 }
 
 /**

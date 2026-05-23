@@ -37,3 +37,8 @@ export interface AgentOptions {
   model?: string;
   timeout?: number;
 }
+
+export interface SessionSummary {
+  title: string;
+  description: string;
+}
