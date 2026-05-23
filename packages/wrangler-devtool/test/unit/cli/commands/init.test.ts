@@ -42,6 +42,19 @@ describe('init command', () => {
     expect(entries).toContain('test');
   });
 
+  it('should initialize skill workspace', async () => {
+    const dir = join(tempDir, 'skill-ws');
+    const code = await initCommand.handler!([dir], { type: 'skill' });
+    expect(code).toBe(ExitCode.Success);
+
+    const entries = readdirSync(dir);
+    expect(entries).not.toContain('AGENT.md');
+    expect(entries).not.toContain('CREW.md');
+    expect(entries).toContain('skills');
+    expect(entries).toContain('test');
+    expect(entries).toContain('mcp.json');
+  });
+
   it('should use cwd when directory is omitted', async () => {
     const originalCwd = process.cwd();
     process.chdir(tempDir);

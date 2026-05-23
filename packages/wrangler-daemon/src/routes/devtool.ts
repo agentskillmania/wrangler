@@ -136,9 +136,9 @@ export async function devtoolRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'path and type are required' });
     }
 
-    const validTypes = ['agent', 'crew'];
+    const validTypes = ['agent', 'crew', 'skill'];
     if (!validTypes.includes(body.type)) {
-      return reply.code(400).send({ error: 'type must be agent or crew' });
+      return reply.code(400).send({ error: 'type must be agent, crew, or skill' });
     }
 
     try {

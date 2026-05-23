@@ -9,7 +9,7 @@ import * as nodeFs from 'node:fs';
 import { CliError, ExitCode } from '../cli/options.js';
 
 export interface InitOptions {
-  type: 'agent' | 'crew';
+  type: 'agent' | 'crew' | 'skill';
   noGit?: boolean;
 }
 

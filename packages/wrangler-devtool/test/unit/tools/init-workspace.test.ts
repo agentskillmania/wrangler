@@ -117,4 +117,23 @@ describe('initProject', () => {
     expect(testYaml).toContain('name: example-test');
     expect(testYaml).toContain('expected:');
   });
+
+  it('should create skill workspace without AGENT.md or CREW.md', async () => {
+    const dir = join(tempDir, 'skill-workspace');
+    await initProject(dir, { type: 'skill' });
+
+    const entries = readdirSync(dir);
+    expect(entries).toContain('skills');
+    expect(entries).toContain('test');
+    expect(entries).toContain('mcp.json');
+    expect(entries).toContain('mcp.json.example');
+    expect(entries).not.toContain('AGENT.md');
+    expect(entries).not.toContain('CREW.md');
+    expect(entries).not.toContain('agents');
+
+    const skillMd = readFileSync(join(dir, 'skills', 'example.md'), 'utf-8');
+    expect(skillMd).toContain('name: example');
+
+    expect(existsSync(join(dir, '.git'))).toBe(true);
+  });
 });

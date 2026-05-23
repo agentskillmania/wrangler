@@ -25,9 +25,9 @@ export const initCommand = defineCommand({
     const type = options.type as string;
     const noGit = options['no-git'] as boolean;
 
-    if (!['agent', 'crew'].includes(type)) {
+    if (!['agent', 'crew', 'skill'].includes(type)) {
       throw new CliError(
-        `Invalid type: ${type}. Must be one of: agent, crew`,
+        `Invalid type: ${type}. Must be one of: agent, crew, skill`,
         'INVALID_TYPE',
         ExitCode.ValidationFailure
       );

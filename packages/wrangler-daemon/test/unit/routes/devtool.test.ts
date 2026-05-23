@@ -399,7 +399,7 @@ describe('Devtool API', () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('type must be agent or crew');
+      expect(body.error).toBe('type must be agent, crew, or skill');
     });
 
     it('passes noGit option', async () => {
