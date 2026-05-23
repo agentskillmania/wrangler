@@ -6,11 +6,10 @@
  * So that I get the correct directory structure without manual setup
  *
  * Acceptance Criteria:
- * 1. Specify path and mode 'agent', get directory with AGENT.md, skills/, test/, mcp.json, .git/
- * 2. Specify path and mode 'crew', get directory with CREW.md, agents/, skills/, test/, .git/
- * 3. Specify mode 'bare' with noGit, get minimal structure without .git/
- * 4. Invalid mode returns 400
- * 5. Missing path or mode returns 400
+ * 1. Specify path and type 'agent', get directory with AGENT.md, skills/, test/, mcp.json, .git/
+ * 2. Specify path and type 'crew', get directory with CREW.md, agents/, skills/, test/, .git/
+ * 3. Invalid type returns 400
+ * 4. Missing path or type returns 400
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -63,15 +62,15 @@ describe('Integration: Workspace Initialization', () => {
     const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'agent' }),
+      body: JSON.stringify({ type: 'agent' }),
     });
 
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error).toBe('path and mode are required');
+    expect(body.error).toBe('path and type are required');
   });
 
-  it('returns 400 when mode is missing', async () => {
+  it('returns 400 when type is missing', async () => {
     const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -81,19 +80,19 @@ describe('Integration: Workspace Initialization', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 for invalid mode', async () => {
+  it('returns 400 for invalid type', async () => {
     const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: workspaceDir, mode: 'invalid' }),
+      body: JSON.stringify({ path: workspaceDir, type: 'invalid' }),
     });
 
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error).toContain('mode must be');
+    expect(body.error).toContain('type must be');
   });
 
-  // ─── AC 1: Agent mode creates full structure ───────────────
+  // ─── AC 1: Agent type creates full structure ───────────────
 
   itif(testConfig.enabled)(
     'creates agent workspace with AGENT.md, skills/, test/, mcp.json, .git/',
@@ -101,7 +100,7 @@ describe('Integration: Workspace Initialization', () => {
       const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: workspaceDir, mode: 'agent' }),
+        body: JSON.stringify({ path: workspaceDir, type: 'agent' }),
       });
 
       expect(res.ok).toBe(true);
@@ -122,7 +121,7 @@ describe('Integration: Workspace Initialization', () => {
     }
   );
 
-  // ─── AC 2: Crew mode creates crew structure ─────────────────
+  // ─── AC 2: Crew type creates crew structure ─────────────────
 
   itif(testConfig.enabled)(
     'creates crew workspace with CREW.md, agents/, skills/, test/, .git/',
@@ -130,7 +129,7 @@ describe('Integration: Workspace Initialization', () => {
       const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: workspaceDir, mode: 'crew' }),
+        body: JSON.stringify({ path: workspaceDir, type: 'crew' }),
       });
 
       expect(res.ok).toBe(true);
@@ -145,19 +144,4 @@ describe('Integration: Workspace Initialization', () => {
       expect(crewContent).toContain('---');
     }
   );
-
-  // ─── AC 3: Bare mode with noGit skips .git ─────────────────
-
-  itif(testConfig.enabled)('creates bare workspace without .git when noGit is true', async () => {
-    const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: workspaceDir, mode: 'bare', noGit: true }),
-    });
-
-    expect(res.ok).toBe(true);
-
-    expect(existsSync(join(workspaceDir, 'skills'))).toBe(true);
-    expect(existsSync(join(workspaceDir, '.git'))).toBe(false);
-  });
 });

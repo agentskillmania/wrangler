@@ -9,7 +9,7 @@ import * as nodeFs from 'node:fs';
 import { CliError, ExitCode } from '../cli/options.js';
 
 export interface InitOptions {
-  mode: 'agent' | 'crew' | 'bare';
+  type: 'agent' | 'crew';
   noGit?: boolean;
 }
 
@@ -43,12 +43,12 @@ async function isInGitRepo(dir: string): Promise<boolean> {
 }
 
 /**
- * 初始化 wrangler workspace
+ * Initialize a new wrangler project (agent or crew).
  *
- * @param cwd - 目标目录
- * @param options - 初始化选项
+ * @param cwd - Target directory
+ * @param options - Initialization options
  */
-export async function initWorkspace(cwd: string, options: InitOptions): Promise<void> {
+export async function initProject(cwd: string, options: InitOptions): Promise<void> {
   const dir = resolve(cwd);
 
   // 检查目录是否已存在且非空
@@ -92,11 +92,11 @@ export async function initWorkspace(cwd: string, options: InitOptions): Promise<
   await writeFile(join(dir, 'test', 'example.yaml'), testExample, 'utf-8');
 
   // 模式特定文件
-  if (options.mode === 'agent') {
+  if (options.type === 'agent') {
     const name = basename(dir);
     const agentTemplate = await loadTemplate('agent.md');
     await writeFile(join(dir, 'AGENT.md'), renderTemplate(agentTemplate, { name }), 'utf-8');
-  } else if (options.mode === 'crew') {
+  } else if (options.type === 'crew') {
     const name = basename(dir);
     const crewTemplate = await loadTemplate('crew.md');
     await writeFile(join(dir, 'CREW.md'), renderTemplate(crewTemplate, { name }), 'utf-8');

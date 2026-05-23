@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { initWorkspace } from '../../../src/tools/init-workspace.js';
+import { initProject } from '../../../src/tools/init-workspace.js';
 import { CliError } from '../../../src/cli/options.js';
 
-describe('initWorkspace', () => {
+describe('initProject', () => {
   let tempDir: string;
 
   beforeEach(() => {
@@ -18,7 +18,7 @@ describe('initWorkspace', () => {
 
   it('should create agent workspace', async () => {
     const dir = join(tempDir, 'agent-workspace');
-    await initWorkspace(dir, { mode: 'agent' });
+    await initProject(dir, { type: 'agent' });
 
     const entries = readdirSync(dir);
     expect(entries).toContain('AGENT.md');
@@ -42,7 +42,7 @@ describe('initWorkspace', () => {
 
   it('should create crew workspace', async () => {
     const dir = join(tempDir, 'crew-workspace');
-    await initWorkspace(dir, { mode: 'crew' });
+    await initProject(dir, { type: 'crew' });
 
     const entries = readdirSync(dir);
     expect(entries).toContain('CREW.md');
@@ -55,32 +55,18 @@ describe('initWorkspace', () => {
     expect(existsSync(join(dir, '.git'))).toBe(true);
   });
 
-  it('should create bare workspace', async () => {
-    const dir = join(tempDir, 'bare-workspace');
-    await initWorkspace(dir, { mode: 'bare' });
-
-    const entries = readdirSync(dir);
-    expect(entries).not.toContain('AGENT.md');
-    expect(entries).not.toContain('CREW.md');
-    expect(entries).toContain('skills');
-    expect(entries).toContain('test');
-    expect(entries).toContain('mcp.json');
-
-    expect(existsSync(join(dir, '.git'))).toBe(true);
-  });
-
   it('should reject non-empty directory', async () => {
     const dir = join(tempDir, 'non-empty');
     const fs = await import('node:fs/promises');
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(join(dir, 'existing.txt'), 'hello', 'utf-8');
 
-    await expect(initWorkspace(dir, { mode: 'agent' })).rejects.toThrow(CliError);
+    await expect(initProject(dir, { type: 'agent' })).rejects.toThrow(CliError);
   });
 
   it('should use directory name as default name', async () => {
     const dir = join(tempDir, 'my-agent');
-    await initWorkspace(dir, { mode: 'agent' });
+    await initProject(dir, { type: 'agent' });
 
     const content = readFileSync(join(dir, 'AGENT.md'), 'utf-8');
     expect(content).toContain('name: my-agent');
@@ -88,14 +74,14 @@ describe('initWorkspace', () => {
 
   it('should create missing directories', async () => {
     const dir = join(tempDir, 'deeply', 'nested', 'workspace');
-    await initWorkspace(dir, { mode: 'bare' });
+    await initProject(dir, { type: 'agent' });
 
     expect(readdirSync(dir)).toContain('skills');
   });
 
   it('should skip git init with --no-git', async () => {
     const dir = join(tempDir, 'no-git');
-    await initWorkspace(dir, { mode: 'agent', noGit: true });
+    await initProject(dir, { type: 'agent', noGit: true });
 
     expect(existsSync(join(dir, '.git'))).toBe(false);
   });
@@ -111,7 +97,7 @@ describe('initWorkspace', () => {
     const { execSync } = await import('node:child_process');
     execSync('git init', { cwd: parentDir });
 
-    await initWorkspace(childDir, { mode: 'agent' });
+    await initProject(childDir, { type: 'agent' });
 
     // child should not have its own .git
     expect(existsSync(join(childDir, '.git'))).toBe(false);
@@ -121,7 +107,7 @@ describe('initWorkspace', () => {
 
   it('should create example skill and test files', async () => {
     const dir = join(tempDir, 'with-examples');
-    await initWorkspace(dir, { mode: 'bare' });
+    await initProject(dir, { type: 'agent' });
 
     const skillMd = readFileSync(join(dir, 'skills', 'example.md'), 'utf-8');
     expect(skillMd).toContain('name: example');

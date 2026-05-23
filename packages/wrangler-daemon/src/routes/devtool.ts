@@ -127,24 +127,24 @@ export async function devtoolRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /api/devtool/workspace/init
    *
-   * Initialize a new wrangler workspace.
-   * Body: { path: string, mode: 'agent' | 'crew' | 'bare', noGit?: boolean }
+   * Initialize a new wrangler project.
+   * Body: { path: string, type: 'agent' | 'crew', noGit?: boolean }
    */
   fastify.post('/api/devtool/workspace/init', async (request, reply) => {
-    const body = request.body as { path?: string; mode?: string; noGit?: boolean };
-    if (!body.path || !body.mode) {
-      return reply.code(400).send({ error: 'path and mode are required' });
+    const body = request.body as { path?: string; type?: string; noGit?: boolean };
+    if (!body.path || !body.type) {
+      return reply.code(400).send({ error: 'path and type are required' });
     }
 
-    const validModes = ['agent', 'crew', 'bare'];
-    if (!validModes.includes(body.mode)) {
-      return reply.code(400).send({ error: 'mode must be agent, crew, or bare' });
+    const validTypes = ['agent', 'crew'];
+    if (!validTypes.includes(body.type)) {
+      return reply.code(400).send({ error: 'type must be agent or crew' });
     }
 
     try {
       const devtool = createDevTool(getConfig());
-      await devtool.initWorkspace(body.path, {
-        mode: body.mode as 'agent' | 'crew' | 'bare',
+      await devtool.initProject(body.path, {
+        type: body.type as 'agent' | 'crew',
         noGit: body.noGit,
       });
       return { ok: true };

@@ -2,7 +2,7 @@ import { describe, expect } from 'vitest';
 import { mkdtemp, readFile, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initWorkspace } from '../../src/tools/init-workspace.js';
+import { initProject } from '../../src/tools/init-workspace.js';
 import { runAgentArchitect } from '../../src/agents/architect.js';
 import { runSkillDesigner } from '../../src/agents/skill-designer.js';
 import { runReviewer } from '../../src/agents/reviewer.js';
@@ -17,7 +17,7 @@ describe('US8: End-to-end project lifecycle', () => {
       const tempDir = await mkdtemp(join(tmpdir(), 'devtool-lifecycle-'));
 
       // ── Step 1: Init workspace ──
-      await initWorkspace(tempDir, { mode: 'agent' });
+      await initProject(tempDir, { type: 'agent' });
 
       const entries = await readdir(tempDir);
       expect(entries).toContain('AGENT.md');

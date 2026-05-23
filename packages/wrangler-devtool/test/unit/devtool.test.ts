@@ -276,10 +276,10 @@ describe('DevTool', () => {
       await rm(tempDir, { recursive: true, force: true });
     });
 
-    it('initWorkspace creates agent workspace with AGENT.md', async () => {
+    it('initProject creates agent workspace with AGENT.md', async () => {
       const wsDir = join(tempDir, 'agent-ws');
 
-      await tool.initWorkspace(wsDir, { mode: 'agent' });
+      await tool.initProject(wsDir, { type: 'agent' });
 
       const { existsSync } = await import('node:fs');
       expect(existsSync(join(wsDir, 'AGENT.md'))).toBe(true);
@@ -288,10 +288,10 @@ describe('DevTool', () => {
       expect(existsSync(join(wsDir, 'test'))).toBe(true);
     });
 
-    it('initWorkspace creates crew workspace with CREW.md', async () => {
+    it('initProject creates crew workspace with CREW.md', async () => {
       const wsDir = join(tempDir, 'crew-ws');
 
-      await tool.initWorkspace(wsDir, { mode: 'crew' });
+      await tool.initProject(wsDir, { type: 'crew' });
 
       const { existsSync } = await import('node:fs');
       expect(existsSync(join(wsDir, 'CREW.md'))).toBe(true);

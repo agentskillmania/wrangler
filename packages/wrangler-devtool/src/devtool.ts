@@ -8,7 +8,7 @@ import { LLMClient } from '@agentskillmania/llm-client';
 import { runAgent } from './agents/orchestrator.js';
 import { runReviewAgent, runSessionCuratorAgent } from './agents/orchestrator.js';
 import type { AgentOutput, ReviewReport, SessionSummary, AgentOptions } from './agents/types.js';
-import { initWorkspace } from './tools/init-workspace.js';
+import { initProject } from './tools/init-workspace.js';
 import type { InitOptions } from './tools/init-workspace.js';
 import { createTemplate } from './tools/create-template.js';
 import { applyChanges } from './utils/file-change.js';
@@ -138,10 +138,10 @@ export class DevTool {
   // ── File operations ────────────────────────────────────────────
 
   /**
-   * Initialize a new wrangler workspace.
+   * Initialize a new wrangler project (agent or crew).
    */
-  async initWorkspace(cwd: string, options: InitOptions): Promise<void> {
-    return initWorkspace(cwd, options);
+  async initProject(cwd: string, options: InitOptions): Promise<void> {
+    return initProject(cwd, options);
   }
 
   /**

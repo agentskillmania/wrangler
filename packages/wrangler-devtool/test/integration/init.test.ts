@@ -2,25 +2,25 @@ import { describe, it, expect } from 'vitest';
 import { mkdtemp, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initWorkspace } from '../../src/tools/init-workspace.js';
+import { initProject } from '../../src/tools/init-workspace.js';
 
 describe('US1: Initialize a workspace', () => {
-  it('AC1.1: init --mode agent creates correct directory structure', async () => {
+  it('AC1.1: init --type agent creates correct directory structure', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
     const targetDir = join(tempDir, 'my-agent');
 
-    await initWorkspace(targetDir, { mode: 'agent' });
+    await initProject(targetDir, { type: 'agent' });
 
     await expect(access(join(targetDir, 'AGENT.md'))).resolves.toBeUndefined();
     await expect(access(join(targetDir, 'skills'))).resolves.toBeUndefined();
     await expect(access(join(targetDir, 'test'))).resolves.toBeUndefined();
   });
 
-  it('AC1.3: init --mode crew creates correct directory structure', async () => {
+  it('AC1.3: init --type crew creates correct directory structure', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
     const targetDir = join(tempDir, 'my-crew');
 
-    await initWorkspace(targetDir, { mode: 'crew' });
+    await initProject(targetDir, { type: 'crew' });
 
     await expect(access(join(targetDir, 'CREW.md'))).resolves.toBeUndefined();
     await expect(access(join(targetDir, 'agents'))).resolves.toBeUndefined();
@@ -32,7 +32,7 @@ describe('US1: Initialize a workspace', () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
     const targetDir = join(tempDir, 'my-agent');
 
-    await initWorkspace(targetDir, { mode: 'agent' });
+    await initProject(targetDir, { type: 'agent' });
 
     const { readFile } = await import('node:fs/promises');
     const content = await readFile(join(targetDir, 'AGENT.md'), 'utf-8');

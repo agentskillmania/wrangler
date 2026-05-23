@@ -10,7 +10,7 @@ export type { DevToolOptions } from './devtool.js';
 export { ExitCode, CliError } from './cli/options.js';
 export type { CliErrorJson } from './cli/options.js';
 
-export { initWorkspace } from './tools/init-workspace.js';
+export { initProject } from './tools/init-workspace.js';
 export type { InitOptions } from './tools/init-workspace.js';
 
 export { createTemplate } from './tools/create-template.js';

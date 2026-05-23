@@ -2,17 +2,17 @@
 
 import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
-import { initWorkspace } from '../../tools/init-workspace.js';
+import { initProject } from '../../tools/init-workspace.js';
 
 export const initCommand = defineCommand({
   name: 'init',
-  description: 'Initialize a wrangler workspace',
+  description: 'Initialize a wrangler project',
   args: '[directory]',
   options: {
-    mode: {
+    type: {
       type: 'string',
       required: true,
-      description: 'Workspace mode: agent, crew, or bare',
+      description: 'Project type: agent or crew',
     },
     'no-git': {
       type: 'boolean',
@@ -22,19 +22,19 @@ export const initCommand = defineCommand({
   },
   handler: async (args, options) => {
     const directory = (args[0] as string | undefined) ?? process.cwd();
-    const mode = options.mode as string;
-    const noGit = options['noGit'] as boolean;
+    const type = options.type as string;
+    const noGit = options['no-git'] as boolean;
 
-    if (!['agent', 'crew', 'bare'].includes(mode)) {
+    if (!['agent', 'crew'].includes(type)) {
       throw new CliError(
-        `Invalid mode: ${mode}. Must be one of: agent, crew, bare`,
-        'INVALID_MODE',
+        `Invalid type: ${type}. Must be one of: agent, crew`,
+        'INVALID_TYPE',
         ExitCode.ValidationFailure
       );
     }
 
-    await initWorkspace(directory, { mode: mode as 'agent' | 'crew' | 'bare', noGit });
-    console.log(JSON.stringify({ success: true, directory, mode }));
+    await initProject(directory, { type: type as 'agent' | 'crew', noGit });
+    console.log(JSON.stringify({ success: true, directory, type }));
     return ExitCode.Success;
   },
 });

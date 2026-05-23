@@ -10,7 +10,7 @@ const mockRunAgentArchitect = vi.fn();
 const mockRunSkillDesigner = vi.fn();
 const mockRunCrewComposer = vi.fn();
 const mockRunReviewer = vi.fn();
-const mockInitWorkspace = vi.fn();
+const mockInitProject = vi.fn();
 const mockCreateTemplate = vi.fn();
 const mockApplyChanges = vi.fn();
 const mockRunTests = vi.fn();
@@ -22,7 +22,7 @@ vi.mock('@agentskillmania/wrangler-devtool', () => ({
     runCrewComposer: mockRunCrewComposer,
     runSessionCurator: vi.fn(),
     runReviewer: mockRunReviewer,
-    initWorkspace: mockInitWorkspace,
+    initProject: mockInitProject,
     createTemplate: mockCreateTemplate,
     applyChanges: mockApplyChanges,
     runTests: mockRunTests,
@@ -54,7 +54,7 @@ describe('Devtool API', () => {
     mockRunSkillDesigner.mockReset();
     mockRunCrewComposer.mockReset();
     mockRunReviewer.mockReset();
-    mockInitWorkspace.mockReset();
+    mockInitProject.mockReset();
     mockCreateTemplate.mockReset();
     mockApplyChanges.mockReset();
     mockRunTests.mockReset();
@@ -351,34 +351,34 @@ describe('Devtool API', () => {
   });
 
   describe('POST /api/devtool/workspace/init', () => {
-    it('initializes workspace and returns ok', async () => {
-      mockInitWorkspace.mockResolvedValue(undefined);
+    it('initializes project and returns ok', async () => {
+      mockInitProject.mockResolvedValue(undefined);
 
       const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: '/tmp/my-workspace', mode: 'agent' }),
+        body: JSON.stringify({ path: '/tmp/my-workspace', type: 'agent' }),
       });
 
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.ok).toBe(true);
-      expect(mockInitWorkspace).toHaveBeenCalledWith('/tmp/my-workspace', { mode: 'agent' });
+      expect(mockInitProject).toHaveBeenCalledWith('/tmp/my-workspace', { type: 'agent' });
     });
 
     it('returns 400 when path is missing', async () => {
       const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'agent' }),
+        body: JSON.stringify({ type: 'agent' }),
       });
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('path and mode are required');
+      expect(body.error).toBe('path and type are required');
     });
 
-    it('returns 400 when mode is missing', async () => {
+    it('returns 400 when type is missing', async () => {
       const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -387,33 +387,33 @@ describe('Devtool API', () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('path and mode are required');
+      expect(body.error).toBe('path and type are required');
     });
 
-    it('returns 400 for invalid mode', async () => {
+    it('returns 400 for invalid type', async () => {
       const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: '/tmp/ws', mode: 'invalid' }),
+        body: JSON.stringify({ path: '/tmp/ws', type: 'invalid' }),
       });
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('mode must be agent, crew, or bare');
+      expect(body.error).toBe('type must be agent or crew');
     });
 
     it('passes noGit option', async () => {
-      mockInitWorkspace.mockResolvedValue(undefined);
+      mockInitProject.mockResolvedValue(undefined);
 
       const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: '/tmp/ws', mode: 'crew', noGit: true }),
+        body: JSON.stringify({ path: '/tmp/ws', type: 'crew', noGit: true }),
       });
 
       expect(res.ok).toBe(true);
-      expect(mockInitWorkspace).toHaveBeenCalledWith('/tmp/ws', {
-        mode: 'crew',
+      expect(mockInitProject).toHaveBeenCalledWith('/tmp/ws', {
+        type: 'crew',
         noGit: true,
       });
     });
@@ -583,12 +583,12 @@ describe('Devtool API', () => {
   // Cross-cutting: error handling for file operation routes
   describe('error handling', () => {
     it('POST /api/devtool/workspace/init returns 500 on failure', async () => {
-      mockInitWorkspace.mockRejectedValue(new Error('disk full'));
+      mockInitProject.mockRejectedValue(new Error('disk full'));
 
       const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: '/tmp/ws', mode: 'agent' }),
+        body: JSON.stringify({ path: '/tmp/ws', type: 'agent' }),
       });
 
       expect(res.status).toBe(500);

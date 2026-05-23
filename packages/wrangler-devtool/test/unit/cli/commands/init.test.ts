@@ -21,7 +21,7 @@ describe('init command', () => {
 
   it('should initialize agent workspace', async () => {
     const dir = join(tempDir, 'agent-ws');
-    const code = await initCommand.handler!([dir], { mode: 'agent' });
+    const code = await initCommand.handler!([dir], { type: 'agent' });
     expect(code).toBe(ExitCode.Success);
 
     const entries = readdirSync(dir);
@@ -32,7 +32,7 @@ describe('init command', () => {
 
   it('should initialize crew workspace', async () => {
     const dir = join(tempDir, 'crew-ws');
-    const code = await initCommand.handler!([dir], { mode: 'crew' });
+    const code = await initCommand.handler!([dir], { type: 'crew' });
     expect(code).toBe(ExitCode.Success);
 
     const entries = readdirSync(dir);
@@ -42,23 +42,11 @@ describe('init command', () => {
     expect(entries).toContain('test');
   });
 
-  it('should initialize bare workspace', async () => {
-    const dir = join(tempDir, 'bare-ws');
-    const code = await initCommand.handler!([dir], { mode: 'bare' });
-    expect(code).toBe(ExitCode.Success);
-
-    const entries = readdirSync(dir);
-    expect(entries).not.toContain('AGENT.md');
-    expect(entries).not.toContain('CREW.md');
-    expect(entries).toContain('skills');
-    expect(entries).toContain('test');
-  });
-
   it('should use cwd when directory is omitted', async () => {
     const originalCwd = process.cwd();
     process.chdir(tempDir);
     try {
-      const code = await initCommand.handler!([], { mode: 'agent' });
+      const code = await initCommand.handler!([], { type: 'agent' });
       expect(code).toBe(ExitCode.Success);
       expect(existsSync(join(tempDir, 'AGENT.md'))).toBe(true);
     } finally {
@@ -66,9 +54,9 @@ describe('init command', () => {
     }
   });
 
-  it('should reject invalid mode', async () => {
+  it('should reject invalid type', async () => {
     const dir = join(tempDir, 'bad-ws');
-    await expect(initCommand.handler!([dir], { mode: 'invalid' })).rejects.toThrow();
+    await expect(initCommand.handler!([dir], { type: 'invalid' })).rejects.toThrow();
   });
 
   it('should reject non-empty directory', async () => {
@@ -77,6 +65,6 @@ describe('init command', () => {
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(join(dir, 'existing.txt'), 'hello', 'utf-8');
 
-    await expect(initCommand.handler!([dir], { mode: 'agent' })).rejects.toThrow();
+    await expect(initCommand.handler!([dir], { type: 'agent' })).rejects.toThrow();
   });
 });

@@ -23,12 +23,12 @@ describe('@agentskillmania/wrangler-devtool', () => {
   });
 
   it(
-    'initWorkspace creates expected directory structure',
+    'initProject creates expected directory structure',
     async () => {
-      const { initWorkspace } = await import('../../src/index.js');
+      const { initProject } = await import('../../src/index.js');
       const dir = mkdtempSync(join(tmpdir(), 'init-test-'));
 
-      await initWorkspace(dir, { mode: 'agent' });
+      await initProject(dir, { type: 'agent' });
 
       // Verify expected files/directories exist
       const { existsSync } = await import('node:fs');
