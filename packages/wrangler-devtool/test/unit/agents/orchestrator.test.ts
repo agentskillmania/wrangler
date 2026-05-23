@@ -8,6 +8,7 @@ import {
   callAgentLLM,
   runAgent,
   runReviewAgent,
+  runSessionCuratorAgent,
 } from '../../../src/agents/orchestrator.js';
 import type { LLMConfig } from '../../../src/config.js';
 
@@ -36,6 +37,8 @@ describe('loadPromptTemplate', () => {
   it('should load session-curator prompt', async () => {
     const prompt = await loadPromptTemplate('session-curator');
     expect(prompt).toContain('Session Curator');
+    expect(prompt).toContain('title');
+    expect(prompt).toContain('description');
   });
 
   it('should throw for missing template', async () => {
@@ -414,5 +417,33 @@ describe('parseSessionSummary', () => {
 
   it('should throw when no JSON found', () => {
     expect(() => parseSessionSummary('just text')).toThrow('No JSON object found');
+  });
+});
+
+describe('runSessionCuratorAgent', () => {
+  it('should run session curator and parse summary', async () => {
+    const { createLLMClient } = await import('../../../src/llm.js');
+    const client = createLLMClient({
+      provider: 'openai',
+      apiKey: 'sk-test',
+      model: 'gpt-4o',
+    });
+
+    client.call = vi.fn().mockResolvedValue({
+      content: JSON.stringify({
+        title: 'Code Review',
+        description: 'Reviewed auth module for security issues',
+      }),
+      tokens: { input: 100, output: 50 },
+      stopReason: 'stop',
+    });
+
+    const summary = await runSessionCuratorAgent(
+      client,
+      'gpt-4o',
+      'User asked about code review...'
+    );
+    expect(summary.title).toBe('Code Review');
+    expect(summary.description).toBe('Reviewed auth module for security issues');
   });
 });

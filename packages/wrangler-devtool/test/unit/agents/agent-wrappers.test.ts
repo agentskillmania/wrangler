@@ -16,11 +16,11 @@ interface AgentWrapper {
 }
 
 // runReviewer uses runReviewAgent instead of runAgent, so it is tested separately
+// runSessionCurator uses runSessionCuratorAgent instead of runAgent, so it is tested separately
 const AGENTS: AgentWrapper[] = [
   { name: 'runAgentArchitect', fn: runAgentArchitect, agentType: 'architect' },
   { name: 'runCrewComposer', fn: runCrewComposer, agentType: 'crew-composer' },
   { name: 'runSkillDesigner', fn: runSkillDesigner, agentType: 'skill-designer' },
-  { name: 'runSessionCurator', fn: runSessionCurator, agentType: 'session-curator' },
 ];
 
 describe('agent wrappers', () => {
@@ -149,6 +149,53 @@ describe('agent wrappers', () => {
         expect.anything(),
         'gpt-4o',
         expect.stringContaining('test.ts'),
+        undefined
+      );
+    });
+  });
+
+  describe('runSessionCurator (special — uses runSessionCuratorAgent)', () => {
+    it('throws without LLM config', async () => {
+      vi.spyOn(configModule, 'requireLLMConfig').mockRejectedValue(
+        new Error('No valid LLM configuration found.')
+      );
+      await expect(runSessionCurator('test text')).rejects.toThrow('No valid LLM configuration');
+    });
+
+    it('uses custom model from options', async () => {
+      vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue({
+        provider: 'openai',
+        apiKey: 'sk-test',
+        model: 'gpt-4o',
+      });
+      const runSessionCuratorSpy = vi
+        .spyOn(orchestratorModule, 'runSessionCuratorAgent')
+        .mockResolvedValue({ title: 'Test', description: 'Summary' });
+
+      await runSessionCurator('test text', { model: 'custom-model' });
+      expect(runSessionCuratorSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        'custom-model',
+        'test text',
+        { model: 'custom-model' }
+      );
+    });
+
+    it('uses config model when no options provided', async () => {
+      vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue({
+        provider: 'openai',
+        apiKey: 'sk-test',
+        model: 'gpt-4o',
+      });
+      const runSessionCuratorSpy = vi
+        .spyOn(orchestratorModule, 'runSessionCuratorAgent')
+        .mockResolvedValue({ title: 'Test', description: 'Summary' });
+
+      await runSessionCurator('test text');
+      expect(runSessionCuratorSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        'gpt-4o',
+        'test text',
         undefined
       );
     });

@@ -10,21 +10,26 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const { runAgentMock, runReviewAgentMock, mockOutput } = vi.hoisted(() => {
-  const output = {
-    changes: [{ file: 'AGENT.md', type: 'create' as const, content: '# Test' }],
-    summary: 'Generated agent definition',
-  };
-  return {
-    runAgentMock: vi.fn().mockResolvedValue(output),
-    runReviewAgentMock: vi.fn(),
-    mockOutput: output,
-  };
-});
+const { runAgentMock, runReviewAgentMock, runSessionCuratorAgentMock, mockOutput } = vi.hoisted(
+  () => {
+    const output = {
+      changes: [{ file: 'AGENT.md', type: 'create' as const, content: '# Test' }],
+      summary: 'Generated agent definition',
+    };
+    const mockSummary = { title: 'Test Session', description: 'A test session summary' };
+    return {
+      runAgentMock: vi.fn().mockResolvedValue(output),
+      runReviewAgentMock: vi.fn(),
+      runSessionCuratorAgentMock: vi.fn().mockResolvedValue(mockSummary),
+      mockOutput: output,
+    };
+  }
+);
 
 vi.mock('../../src/agents/orchestrator.js', () => ({
   runAgent: runAgentMock,
   runReviewAgent: runReviewAgentMock,
+  runSessionCuratorAgent: runSessionCuratorAgentMock,
   loadPromptTemplate: vi.fn().mockResolvedValue('template'),
   assemblePrompt: vi.fn().mockReturnValue('assembled'),
   parseAgentOutput: vi.fn(),
@@ -196,13 +201,11 @@ describe('DevTool', () => {
       expect(templateName).toBe('crew-composer');
     });
 
-    it('runSessionCurator delegates to runAgent with session-curator template', async () => {
-      const result = await tool.runSessionCurator('Summarize session');
+    it('runSessionCurator delegates to runSessionCuratorAgent', async () => {
+      const result = await tool.runSessionCurator('Summarize this conversation');
 
-      expect(result).toEqual(mockOutput);
-      expect(runAgentMock).toHaveBeenCalledOnce();
-      const [, , templateName] = runAgentMock.mock.calls[0]!;
-      expect(templateName).toBe('session-curator');
+      expect(result).toEqual({ title: 'Test Session', description: 'A test session summary' });
+      expect(runSessionCuratorAgentMock).toHaveBeenCalledOnce();
     });
   });
 

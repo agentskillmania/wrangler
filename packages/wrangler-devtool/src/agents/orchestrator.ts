@@ -243,3 +243,18 @@ export async function runReviewAgent(
   const raw = await callAgentLLM(client, model, systemPrompt, userPrompt, options);
   return parseReviewReport(raw);
 }
+
+/**
+ * Run the session curator agent to summarize conversation text.
+ */
+export async function runSessionCuratorAgent(
+  client: LLMClient,
+  model: string,
+  text: string,
+  options?: AgentOptions
+): Promise<SessionSummary> {
+  const template = await loadPromptTemplate('session-curator');
+  const systemPrompt = `${template}\n\n## Input Text\n\n${text}`;
+  const raw = await callAgentLLM(client, model, systemPrompt, text, options);
+  return parseSessionSummary(raw);
+}

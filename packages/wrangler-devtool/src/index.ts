@@ -69,5 +69,6 @@ export type {
   ReviewReport,
   ReviewDimension,
   ReviewIssue,
+  SessionSummary,
   AgentOptions,
 } from './agents/types.js';

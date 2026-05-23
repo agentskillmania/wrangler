@@ -1,24 +1,23 @@
 // packages/wrangler-devtool/src/agents/session-curator.ts
-// Session Curator — session management helpers
+// Session Curator — conversation summarizer
 
 import { createLLMClient } from '../llm.js';
 import { requireLLMConfig } from '../config.js';
-import { runAgent } from './orchestrator.js';
-import type { AgentOutput, AgentOptions } from './types.js';
+import { runSessionCuratorAgent } from './orchestrator.js';
+import type { SessionSummary, AgentOptions } from './types.js';
 
 /**
- * Run the Session Curator for session-related operations.
+ * Run the Session Curator to summarize conversation text.
  *
- * Currently a thin wrapper around the orchestrator. Future phases may
- * expand this with specialized session analysis capabilities.
+ * Takes any text (conversation transcript, dialogue, etc.) and returns
+ * a concise title and description.
  */
 export async function runSessionCurator(
-  prompt: string,
-  existingContent?: string,
+  text: string,
   options?: AgentOptions
-): Promise<AgentOutput> {
+): Promise<SessionSummary> {
   const config = await requireLLMConfig();
   const client = createLLMClient(config);
   const model = options?.model ?? config.model;
-  return runAgent(client, model, 'session-curator', prompt, existingContent, options);
+  return runSessionCuratorAgent(client, model, text, options);
 }

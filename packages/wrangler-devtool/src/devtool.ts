@@ -6,8 +6,8 @@ import type { LLMConfig } from './config.js';
 import { createLLMClient } from './llm.js';
 import { LLMClient } from '@agentskillmania/llm-client';
 import { runAgent } from './agents/orchestrator.js';
-import { runReviewAgent } from './agents/orchestrator.js';
-import type { AgentOutput, ReviewReport, AgentOptions } from './agents/types.js';
+import { runReviewAgent, runSessionCuratorAgent } from './agents/orchestrator.js';
+import type { AgentOutput, ReviewReport, SessionSummary, AgentOptions } from './agents/types.js';
 import { initWorkspace } from './tools/init-workspace.js';
 import type { InitOptions } from './tools/init-workspace.js';
 import { createTemplate } from './tools/create-template.js';
@@ -114,15 +114,11 @@ export class DevTool {
   }
 
   /**
-   * Run the Session Curator for session-related operations.
+   * Run the Session Curator to summarize conversation text.
    */
-  async runSessionCurator(
-    prompt: string,
-    existingContent?: string,
-    options?: AgentOptions
-  ): Promise<AgentOutput> {
+  async runSessionCurator(text: string, options?: AgentOptions): Promise<SessionSummary> {
     const model = options?.model ?? this.llmConfig.model;
-    return runAgent(this.client, model, 'session-curator', prompt, existingContent, options);
+    return runSessionCuratorAgent(this.client, model, text, options);
   }
 
   /**
