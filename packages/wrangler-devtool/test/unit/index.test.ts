@@ -6,21 +6,29 @@ import { tmpdir } from 'node:os';
 const TEST_TIMEOUT = 30000;
 
 describe('@agentskillmania/wrangler-devtool', () => {
-  it('exports DevTool class as primary API', async () => {
-    const { DevTool } = await import('../../src/index.js');
+  it(
+    'exports DevTool class as primary API',
+    async () => {
+      const { DevTool } = await import('../../src/index.js');
 
-    expect(DevTool).toBeTypeOf('function');
-    const tool = new DevTool({
-      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
-    });
-    expect(tool).toBeInstanceOf(DevTool);
-  });
+      expect(DevTool).toBeTypeOf('function');
+      const tool = new DevTool({
+        llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
+      });
+      expect(tool).toBeInstanceOf(DevTool);
+    },
+    TEST_TIMEOUT
+  );
 
-  it('exports DevToolConfig type', async () => {
-    // Type-only export, just verify re-export exists
-    const types = await import('../../src/index.js');
-    expect(types).toBeDefined();
-  });
+  it(
+    'exports DevToolConfig type',
+    async () => {
+      // Type-only export, just verify re-export exists
+      const types = await import('../../src/index.js');
+      expect(types).toBeDefined();
+    },
+    TEST_TIMEOUT
+  );
 
   it(
     'initProject creates expected directory structure',

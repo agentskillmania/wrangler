@@ -38,6 +38,16 @@ export interface AgentOptions {
   timeout?: number;
 }
 
+/** Options for run* agent methods (with iterative loop control) */
+export interface AgentRunOptions {
+  model?: string;
+  timeout?: number;
+  /** Max iterative rounds (generation → review → refine). Default: 3 */
+  maxRounds?: number;
+  /** Per-dimension minimum score to pass review. Default: 4 */
+  scoreThreshold?: number;
+}
+
 export interface SessionSummary {
   title: string;
   description: string;
