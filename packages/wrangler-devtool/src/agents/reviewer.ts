@@ -1,10 +1,11 @@
 // packages/wrangler-devtool/src/agents/reviewer.ts
 // Code Reviewer — LLM-based qualitative review (read-only)
 
-import { createLLMClient } from '../llm.js';
-import { requireLLMConfig } from '../config.js';
-import { runReviewAgent } from './orchestrator.js';
-import type { ReviewReport, AgentOptions } from './types.js';
+import { runReview, createReviewRunner } from './orchestrator.js';
+import type { ReviewReport, AgentRunOptions } from './types.js';
+import type { RunnerConfig } from './orchestrator.js';
+import type { EnhancedRunner } from '@agentskillmania/wrangler';
+import type { AgentState } from '@agentskillmania/colts';
 
 /**
  * Run the Code Reviewer on a target file's content.
@@ -12,14 +13,22 @@ import type { ReviewReport, AgentOptions } from './types.js';
 export async function runReviewer(
   targetPath: string,
   content: string,
-  prompt?: string,
-  options?: AgentOptions
+  prompt: string | undefined,
+  config: RunnerConfig & AgentRunOptions
 ): Promise<ReviewReport> {
-  const config = await requireLLMConfig();
-  const client = createLLMClient(config);
-  const model = options?.model ?? config.model;
+  const reviewContent = `Review the following wrangler definition file (${targetPath}):\n\n\`\`\`markdown\n${content}\n\`\`\`\n${prompt ? `\nAdditional focus: ${prompt}` : ''}`;
+  return runReview(reviewContent, {
+    llmClient: config.llmClient,
+    workspacePath: config.workspacePath,
+    model: config.model,
+  });
+}
 
-  const reviewPrompt = `Review the following wrangler definition file (${targetPath}):\n\n\`\`\`markdown\n${content}\n\`\`\`\n${prompt ? `\nAdditional focus: ${prompt}` : ''}`;
-
-  return runReviewAgent(client, model, reviewPrompt, options);
+/**
+ * Create a reviewer runner for streaming usage.
+ */
+export async function createReviewerRunner(
+  config: RunnerConfig
+): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+  return createReviewRunner(config);
 }

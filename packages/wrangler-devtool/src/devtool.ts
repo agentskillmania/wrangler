@@ -4,10 +4,15 @@
 import { loadConfig } from './config.js';
 import type { LLMConfig } from './config.js';
 import { createLLMClient } from './llm.js';
-import { LLMClient } from '@agentskillmania/llm-client';
-import { runAgent } from './agents/orchestrator.js';
-import { runReviewAgent, runSessionCuratorAgent } from './agents/orchestrator.js';
-import type { AgentOutput, ReviewReport, SessionSummary, AgentOptions } from './agents/types.js';
+import type { ILLMProvider } from '@agentskillmania/colts';
+import { runAgentArchitect, createArchitectRunner } from './agents/architect.js';
+import { runSkillDesigner, createSkillDesignerRunner } from './agents/skill-designer.js';
+import { runCrewComposer, createCrewComposerRunner } from './agents/crew-composer.js';
+import { runReviewer, createReviewerRunner as createReviewerRunnerFn } from './agents/reviewer.js';
+import { runSessionCurator, createCuratorRunnerWrapper } from './agents/session-curator.js';
+import type { AgentOutput, ReviewReport, SessionSummary, AgentRunOptions } from './agents/types.js';
+import type { EnhancedRunner } from '@agentskillmania/wrangler';
+import type { AgentState } from '@agentskillmania/colts';
 import { initProject } from './tools/init-workspace.js';
 import type { InitOptions } from './tools/init-workspace.js';
 import { createTemplate } from './tools/create-template.js';
@@ -18,6 +23,7 @@ import type { TestReport, TestCliOptions } from './test-runner/types.js';
 
 export interface DevToolOptions {
   llm: LLMConfig;
+  workspacePath?: string;
   maxSteps?: number;
   requestTimeout?: number;
 }
@@ -39,8 +45,9 @@ function validateLLMConfig(llm: unknown): asserts llm is LLMConfig {
 }
 
 export class DevTool {
-  private readonly client: LLMClient;
+  private readonly client: ILLMProvider;
   private readonly llmConfig: LLMConfig;
+  private readonly _workspacePath: string;
   readonly maxSteps?: number;
   readonly requestTimeout?: number;
 
@@ -48,6 +55,7 @@ export class DevTool {
     validateLLMConfig(config.llm);
     this.llmConfig = config.llm;
     this.client = createLLMClient(config.llm);
+    this._workspacePath = config.workspacePath ?? process.cwd();
     this.maxSteps = config.maxSteps;
     this.requestTimeout = config.requestTimeout;
   }
@@ -70,83 +78,119 @@ export class DevTool {
     }
     return new DevTool({
       llm: config.llm,
+      workspacePath: cwd,
       maxSteps: config.maxSteps,
       requestTimeout: config.requestTimeout,
     });
   }
 
-  // ── Agent methods ──────────────────────────────────────────────
+  // ── Agent run methods ──────────────────────────────────────────
 
-  /**
-   * Run the Agent Architect to generate or modify an agent definition.
-   */
   async runAgentArchitect(
     prompt: string,
     existingContent?: string,
-    options?: AgentOptions
+    options?: AgentRunOptions
   ): Promise<AgentOutput> {
-    const model = options?.model ?? this.llmConfig.model;
-    return runAgent(this.client, model, 'architect', prompt, existingContent, options);
+    return runAgentArchitect(prompt, existingContent, {
+      llmClient: this.client,
+      workspacePath: this._workspacePath,
+      model: options?.model ?? this.llmConfig.model,
+      ...options,
+    });
   }
 
-  /**
-   * Run the Skill Designer to generate or modify a skill definition.
-   */
   async runSkillDesigner(
     prompt: string,
     existingContent?: string,
-    options?: AgentOptions
+    options?: AgentRunOptions
   ): Promise<AgentOutput> {
-    const model = options?.model ?? this.llmConfig.model;
-    return runAgent(this.client, model, 'skill-designer', prompt, existingContent, options);
+    return runSkillDesigner(prompt, existingContent, {
+      llmClient: this.client,
+      workspacePath: this._workspacePath,
+      model: options?.model ?? this.llmConfig.model,
+      ...options,
+    });
   }
 
-  /**
-   * Run the Crew Composer to generate or modify a crew definition.
-   */
   async runCrewComposer(
     prompt: string,
     existingContent?: string,
-    options?: AgentOptions
+    options?: AgentRunOptions
   ): Promise<AgentOutput> {
-    const model = options?.model ?? this.llmConfig.model;
-    return runAgent(this.client, model, 'crew-composer', prompt, existingContent, options);
+    return runCrewComposer(prompt, existingContent, {
+      llmClient: this.client,
+      workspacePath: this._workspacePath,
+      model: options?.model ?? this.llmConfig.model,
+      ...options,
+    });
   }
 
-  /**
-   * Run the Session Curator to summarize conversation text.
-   */
-  async runSessionCurator(text: string, options?: AgentOptions): Promise<SessionSummary> {
-    const model = options?.model ?? this.llmConfig.model;
-    return runSessionCuratorAgent(this.client, model, text, options);
+  async runSessionCurator(text: string, options?: AgentRunOptions): Promise<SessionSummary> {
+    return runSessionCurator(text, {
+      llmClient: this.client,
+      workspacePath: this._workspacePath,
+      model: options?.model ?? this.llmConfig.model,
+      ...options,
+    });
   }
 
-  /**
-   * Run the Code Reviewer on a target file's content.
-   */
   async runReviewer(
     targetPath: string,
     content: string,
     prompt?: string,
-    options?: AgentOptions
+    options?: AgentRunOptions
   ): Promise<ReviewReport> {
-    const model = options?.model ?? this.llmConfig.model;
-    const reviewPrompt = `Review the following wrangler definition file (${targetPath}):\n\n\`\`\`markdown\n${content}\n\`\`\`\n${prompt ? `\nAdditional focus: ${prompt}` : ''}`;
-    return runReviewAgent(this.client, model, reviewPrompt, options);
+    return runReviewer(targetPath, content, prompt, {
+      llmClient: this.client,
+      workspacePath: this._workspacePath,
+      model: options?.model ?? this.llmConfig.model,
+      ...options,
+    });
+  }
+
+  // ── create*Runner methods ─────────────────────────────────────
+
+  async createArchitectRunner(): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+    return createArchitectRunner({
+      llmClient: this.client,
+      workspacePath: this._workspacePath,
+    });
+  }
+
+  async createSkillDesignerRunner(): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+    return createSkillDesignerRunner({
+      llmClient: this.client,
+      workspacePath: this._workspacePath,
+    });
+  }
+
+  async createCrewComposerRunner(): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+    return createCrewComposerRunner({
+      llmClient: this.client,
+      workspacePath: this._workspacePath,
+    });
+  }
+
+  async createReviewerRunner(): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+    return createReviewerRunnerFn({
+      llmClient: this.client,
+      workspacePath: this._workspacePath,
+    });
+  }
+
+  async createSessionCuratorRunner(): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+    return createCuratorRunnerWrapper({
+      llmClient: this.client,
+      workspacePath: this._workspacePath,
+    });
   }
 
   // ── File operations ────────────────────────────────────────────
 
-  /**
-   * Initialize a new wrangler project (agent or crew).
-   */
   async initProject(cwd: string, options: InitOptions): Promise<void> {
     return initProject(cwd, options);
   }
 
-  /**
-   * Create a new template file (agent, skill, crew, or session).
-   */
   async createTemplate(
     type: 'agent' | 'skill' | 'crew' | 'session',
     name: string,
@@ -155,18 +199,12 @@ export class DevTool {
     return createTemplate(type, name, cwd);
   }
 
-  /**
-   * Apply structured file changes to disk.
-   */
   async applyChanges(changes: FileChange[], options?: ApplyOptions): Promise<ApplyResult> {
     return applyChanges(changes, options);
   }
 
   // ── Test runner ────────────────────────────────────────────────
 
-  /**
-   * Run test cases against agent or crew definitions.
-   */
   async runTests(targetPath: string, options: TestCliOptions = {}): Promise<TestReport> {
     const runner = new TestRunner();
     return runner.run(targetPath, options);

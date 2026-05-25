@@ -237,7 +237,8 @@ describe('review command', () => {
     expect(mockReviewer).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      'check for security issues'
+      'check for security issues',
+      expect.any(Object)
     );
   });
 });

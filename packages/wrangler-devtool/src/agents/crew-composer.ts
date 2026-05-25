@@ -1,21 +1,35 @@
 // packages/wrangler-devtool/src/agents/crew-composer.ts
 // Crew Composer — generates or modifies crew definitions
 
-import { createLLMClient } from '../llm.js';
-import { requireLLMConfig } from '../config.js';
-import { runAgent } from './orchestrator.js';
-import type { AgentOutput, AgentOptions } from './types.js';
+import { runGenerationWithLoop, createGenerationRunner } from './orchestrator.js';
+import type { AgentOutput, AgentRunOptions } from './types.js';
+import type { RunnerConfig } from './orchestrator.js';
+import type { EnhancedRunner } from '@agentskillmania/wrangler';
+import type { AgentState } from '@agentskillmania/colts';
 
 /**
  * Run the Crew Composer to generate or modify a crew definition.
  */
 export async function runCrewComposer(
   prompt: string,
-  existingContent?: string,
-  options?: AgentOptions
+  existingContent: string | undefined,
+  config: RunnerConfig & AgentRunOptions
 ): Promise<AgentOutput> {
-  const config = await requireLLMConfig();
-  const client = createLLMClient(config);
-  const model = options?.model ?? config.model;
-  return runAgent(client, model, 'crew-composer', prompt, existingContent, options);
+  const result = await runGenerationWithLoop(
+    'crew-composer',
+    prompt,
+    { llmClient: config.llmClient, workspacePath: config.workspacePath, model: config.model },
+    existingContent,
+    config
+  );
+  return result.output;
+}
+
+/**
+ * Create a crew composer runner for streaming usage.
+ */
+export async function createCrewComposerRunner(
+  config: RunnerConfig
+): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+  return createGenerationRunner('crew-composer', config);
 }

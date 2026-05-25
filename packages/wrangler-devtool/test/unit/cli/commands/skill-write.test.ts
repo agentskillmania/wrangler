@@ -94,7 +94,11 @@ describe('skill write', () => {
       apply: true,
     });
 
-    expect(mock).toHaveBeenCalledWith(expect.stringContaining('Infer a skill name'), undefined);
+    expect(mock).toHaveBeenCalledWith(
+      expect.stringContaining('Infer a skill name'),
+      undefined,
+      expect.any(Object)
+    );
     expect(existsSync(join(tempDir, 'skills', 'inferred.md'))).toBe(true);
   });
 });

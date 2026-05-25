@@ -97,7 +97,11 @@ describe('agent write', () => {
       apply: true,
     });
 
-    expect(mock).toHaveBeenCalledWith(expect.stringContaining('Agent name: my-agent'), undefined);
+    expect(mock).toHaveBeenCalledWith(
+      expect.stringContaining('Agent name: my-agent'),
+      undefined,
+      expect.any(Object)
+    );
   });
 
   it('should return validation failure if edit old content does not match', async () => {

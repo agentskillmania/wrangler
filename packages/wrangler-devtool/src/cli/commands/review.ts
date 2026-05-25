@@ -6,7 +6,8 @@ import { join, resolve, extname } from 'node:path';
 import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
 import { runReviewer } from '../../agents/reviewer.js';
-import { loadConfig } from '../../config.js';
+import { loadConfig, requireLLMConfig } from '../../config.js';
+import { createLLMClient } from '../../llm.js';
 import { parseAgentMd, CrewLoader } from '@agentskillmania/wrangler';
 
 interface StaticCheckIssue {
@@ -239,10 +240,13 @@ export const reviewCommand = defineCommand({
       }
 
       if (content.length > 0) {
+        const llmConfig = await requireLLMConfig();
+        const llmClient = createLLMClient(llmConfig);
         const deepReport = await runReviewer(
           reviewTarget,
           content,
-          (options.prompt as string | undefined) || undefined
+          (options.prompt as string | undefined) || undefined,
+          { llmClient, workspacePath: process.cwd(), model: llmConfig.model }
         );
         report.deep = deepReport;
       } else {

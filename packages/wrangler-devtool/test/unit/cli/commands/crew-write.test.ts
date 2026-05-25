@@ -89,6 +89,10 @@ describe('crew write', () => {
       apply: true,
     });
 
-    expect(mock).toHaveBeenCalledWith(expect.stringContaining('Crew name: my-crew'), undefined);
+    expect(mock).toHaveBeenCalledWith(
+      expect.stringContaining('Crew name: my-crew'),
+      undefined,
+      expect.any(Object)
+    );
   });
 });

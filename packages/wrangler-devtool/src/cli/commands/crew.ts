@@ -8,6 +8,8 @@ import { CliError, ExitCode } from '../options.js';
 import { createTemplate } from '../../tools/create-template.js';
 import { runCrewComposer } from '../../agents/crew-composer.js';
 import { applyChanges } from '../../utils/file-change.js';
+import { requireLLMConfig } from '../../config.js';
+import { createLLMClient } from '../../llm.js';
 
 async function fileExists(filePath: string): Promise<boolean> {
   try {
@@ -72,7 +74,13 @@ export const crewCommand = defineCommand({
         }
 
         const fullPrompt = name ? `Crew name: ${name}\n${prompt}` : prompt;
-        const output = await runCrewComposer(fullPrompt, existingContent);
+        const llmConfig = await requireLLMConfig();
+        const llmClient = createLLMClient(llmConfig);
+        const output = await runCrewComposer(fullPrompt, existingContent, {
+          llmClient,
+          workspacePath: cwd,
+          model: llmConfig.model,
+        });
 
         const result = await applyChanges(output.changes, { cwd, dryRun });
 

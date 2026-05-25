@@ -1,11 +1,13 @@
 // packages/wrangler-devtool/src/agents/orchestrator.ts
-// Agent orchestration layer — assembles prompts, calls LLM, parses output
+// Agent orchestration layer — uses EnhancedRunner from wrangler to execute agents
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { LLMClient } from '@agentskillmania/llm-client';
-import type { AgentOutput, ReviewReport, SessionSummary, AgentOptions } from './types.js';
+import { EnhancedRunner } from '@agentskillmania/wrangler';
+import { createAgentState, addUserMessage, addAssistantMessage } from '@agentskillmania/colts';
+import type { AgentState, ILLMProvider } from '@agentskillmania/colts';
+import type { AgentOutput, ReviewReport, SessionSummary, AgentRunOptions } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -18,27 +20,7 @@ export async function loadPromptTemplate(name: string): Promise<string> {
 }
 
 /**
- * Assemble the full prompt by injecting user content into the template.
- */
-export function assemblePrompt(
-  template: string,
-  userPrompt: string,
-  existingContent?: string
-): string {
-  let result = template;
-  result = result.replace(/\{\{USER_PROMPT\}\}/g, userPrompt);
-  if (existingContent !== undefined) {
-    result = result.replace(/\{\{EXISTING_CONTENT\}\}/g, existingContent);
-    result += `\n\n## Existing Content\n\nThe file currently contains:\n\n\`\`\`markdown\n${existingContent}\n\`\`\`\n`;
-  }
-  result += `\n\n## User Request\n\n${userPrompt}\n`;
-  return result;
-}
-
-/**
  * Extract the outermost JSON object from a text string.
- * Uses brace-depth tracking to correctly handle nested objects
- * and braces inside string values.
  */
 function extractJsonObject(text: string): string {
   const startIdx = text.indexOf('{');
@@ -77,13 +59,10 @@ function extractJsonObject(text: string): string {
 }
 
 /**
- * Extract and parse JSON from an LLM response string.
- * Handles markdown code blocks and raw JSON.
+ * Parse JSON from LLM response text.
  */
-export function parseAgentOutput(raw: string): AgentOutput {
+function parseJsonFromResponse(raw: string): unknown {
   const trimmed = raw.trim();
-
-  // Try to extract JSON from markdown code block.
   const firstBacktick = trimmed.indexOf('```');
   const lastBacktick = trimmed.lastIndexOf('```');
   let jsonText = trimmed;
@@ -95,166 +74,322 @@ export function parseAgentOutput(raw: string): AgentOutput {
   }
 
   const jsonStr = extractJsonObject(jsonText);
-  if (!jsonStr) {
-    throw new Error('No JSON object found in LLM response');
-  }
-
-  const parsed = JSON.parse(jsonStr);
-
-  if (!parsed.changes || !Array.isArray(parsed.changes)) {
-    throw new Error('Missing or invalid "changes" array in LLM output');
-  }
-  if (typeof parsed.summary !== 'string') {
-    throw new Error('Missing or invalid "summary" string in LLM output');
-  }
-
-  return {
-    changes: parsed.changes,
-    summary: parsed.summary,
-  };
+  if (!jsonStr) throw new Error('No JSON object found in LLM response');
+  return JSON.parse(jsonStr);
 }
 
 /**
- * Parse a review report from LLM response.
+ * Parse an AgentOutput from LLM response.
+ */
+export function parseAgentOutput(raw: string): AgentOutput {
+  const parsed = parseJsonFromResponse(raw);
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Invalid JSON in LLM response');
+  }
+  const obj = parsed as Record<string, unknown>;
+  if (!Array.isArray(obj.changes)) {
+    throw new Error('Missing or invalid "changes" array');
+  }
+  if (typeof obj.summary !== 'string') {
+    throw new Error('Missing or invalid "summary" string');
+  }
+  return { changes: obj.changes, summary: obj.summary };
+}
+
+/**
+ * Parse a ReviewReport from LLM response.
  */
 export function parseReviewReport(raw: string): ReviewReport {
-  const trimmed = raw.trim();
-
-  const firstBacktick = trimmed.indexOf('```');
-  const lastBacktick = trimmed.lastIndexOf('```');
-  let jsonText = trimmed;
-
-  if (firstBacktick !== -1 && lastBacktick !== -1 && lastBacktick > firstBacktick) {
-    let content = trimmed.slice(firstBacktick + 3, lastBacktick);
-    content = content.replace(/^json\s*\n?/, '').trim();
-    jsonText = content;
+  const parsed = parseJsonFromResponse(raw);
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Invalid JSON in LLM response');
   }
-
-  const jsonStr = extractJsonObject(jsonText);
-  if (!jsonStr) {
-    throw new Error('No JSON object found in LLM response');
+  const obj = parsed as Record<string, unknown>;
+  if (typeof obj.overallScore !== 'number') {
+    throw new Error('Missing or invalid "overallScore"');
   }
-
-  const parsed = JSON.parse(jsonStr);
-
-  if (typeof parsed.overallScore !== 'number') {
-    throw new Error('Missing or invalid "overallScore" in review report');
+  if (!obj.dimensions || typeof obj.dimensions !== 'object') {
+    throw new Error('Missing or invalid "dimensions"');
   }
-  if (!parsed.dimensions || typeof parsed.dimensions !== 'object') {
-    throw new Error('Missing or invalid "dimensions" in review report');
+  if (!Array.isArray(obj.issues)) {
+    throw new Error('Missing or invalid "issues" array');
   }
-  if (!Array.isArray(parsed.issues)) {
-    throw new Error('Missing or invalid "issues" array in review report');
+  if (typeof obj.summary !== 'string') {
+    throw new Error('Missing or invalid "summary"');
   }
-  if (typeof parsed.summary !== 'string') {
-    throw new Error('Missing or invalid "summary" in review report');
-  }
-
   return parsed as ReviewReport;
 }
 
 /**
- * Parse a session summary from LLM response.
+ * Parse a SessionSummary from LLM response.
  */
 export function parseSessionSummary(raw: string): SessionSummary {
-  const trimmed = raw.trim();
-
-  const firstBacktick = trimmed.indexOf('```');
-  const lastBacktick = trimmed.lastIndexOf('```');
-  let jsonText = trimmed;
-
-  if (firstBacktick !== -1 && lastBacktick !== -1 && lastBacktick > firstBacktick) {
-    let content = trimmed.slice(firstBacktick + 3, lastBacktick);
-    content = content.replace(/^json\s*\n?/, '').trim();
-    jsonText = content;
+  const parsed = parseJsonFromResponse(raw);
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Invalid JSON in LLM response');
   }
-
-  const jsonStr = extractJsonObject(jsonText);
-  if (!jsonStr) {
-    throw new Error('No JSON object found in LLM response');
+  const obj = parsed as Record<string, unknown>;
+  if (typeof obj.title !== 'string' || obj.title.length === 0) {
+    throw new Error('Missing or invalid "title"');
   }
-
-  const parsed = JSON.parse(jsonStr);
-
-  if (typeof parsed.title !== 'string' || parsed.title.length === 0) {
-    throw new Error('Missing or invalid "title" in session summary');
+  if (typeof obj.description !== 'string' || obj.description.length === 0) {
+    throw new Error('Missing or invalid "description"');
   }
-  if (typeof parsed.description !== 'string' || parsed.description.length === 0) {
-    throw new Error('Missing or invalid "description" in session summary');
-  }
-
-  return { title: parsed.title, description: parsed.description };
+  return { title: obj.title, description: obj.description };
 }
 
+// ── Runner config ──────────────────────────────────────────
+
+export interface RunnerConfig {
+  llmClient: ILLMProvider;
+  workspacePath: string;
+  model?: string;
+}
+
+// ── Factory functions ──────────────────────────────────────
+
 /**
- * Call the LLM with a system prompt and user message.
+ * Create an EnhancedRunner for generation agents (architect, skill-designer, crew-composer).
+ * These agents need file tools to read/write workspace files.
  */
-export async function callAgentLLM(
-  client: LLMClient,
-  model: string,
-  systemPrompt: string,
-  userMessage: string,
-  options?: AgentOptions
-): Promise<string> {
-  const combinedContent = `<system>\n${systemPrompt}\n</system>\n\n${userMessage}`;
-  const response = await client.call({
-    model,
-    messages: [
-      {
-        role: 'user',
-        content: combinedContent,
-        timestamp: Date.now(),
-      },
-    ],
-    requestTimeout: options?.timeout ?? 1800000,
+export async function createGenerationRunner(
+  promptName: string,
+  runnerConfig: RunnerConfig
+): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+  const template = await loadPromptTemplate(promptName);
+  const runner = await EnhancedRunner.create({
+    llmClient: runnerConfig.llmClient,
+    model: runnerConfig.model,
+    workspacePath: runnerConfig.workspacePath,
+    builtinTools: {
+      fileRead: true,
+      fileWrite: true,
+      fileEdit: true,
+      glob: true,
+      grep: true,
+    },
+    enableSession: false,
+    enableTodolist: false,
+    enableCommands: false,
+    mcpConfigPaths: [],
+    skillDirs: [],
   });
 
-  return response.content;
+  const state = createAgentState({
+    name: promptName,
+    instructions: template,
+    tools: [],
+  });
+
+  return { runner, state };
 }
 
 /**
- * Run a built-in agent that produces file changes.
+ * Create an EnhancedRunner for the reviewer agent.
+ * No builtin tools needed — only evaluates text content.
  */
-export async function runAgent(
-  client: LLMClient,
-  model: string,
+export async function createReviewRunner(
+  runnerConfig: RunnerConfig
+): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+  const template = await loadPromptTemplate('reviewer');
+  const runner = await EnhancedRunner.create({
+    llmClient: runnerConfig.llmClient,
+    model: runnerConfig.model,
+    workspacePath: runnerConfig.workspacePath,
+    builtinTools: {},
+    enableSession: false,
+    enableTodolist: false,
+    enableCommands: false,
+    mcpConfigPaths: [],
+    skillDirs: [],
+  });
+
+  const state = createAgentState({
+    name: 'reviewer',
+    instructions: template,
+    tools: [],
+  });
+
+  return { runner, state };
+}
+
+/**
+ * Create an EnhancedRunner for the session curator agent.
+ */
+export async function createCuratorRunner(
+  runnerConfig: RunnerConfig
+): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+  const template = await loadPromptTemplate('session-curator');
+  const runner = await EnhancedRunner.create({
+    llmClient: runnerConfig.llmClient,
+    model: runnerConfig.model,
+    workspacePath: runnerConfig.workspacePath,
+    builtinTools: {},
+    enableSession: false,
+    enableTodolist: false,
+    enableCommands: false,
+    mcpConfigPaths: [],
+    skillDirs: [],
+  });
+
+  const state = createAgentState({
+    name: 'session-curator',
+    instructions: template,
+    tools: [],
+  });
+
+  return { runner, state };
+}
+
+// ── Helpers ────────────────────────────────────────────────
+
+/**
+ * Get the last assistant message content from a state.
+ */
+function getLastAssistantContent(state: AgentState): string {
+  const messages = state.context.messages;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant') {
+      return messages[i].content;
+    }
+  }
+  return '';
+}
+
+/**
+ * Check if a review report passes the score threshold on all dimensions.
+ */
+function reviewPasses(report: ReviewReport, threshold: number): boolean {
+  const dims = report.dimensions;
+  return (
+    dims.clarity.score >= threshold &&
+    dims.completeness.score >= threshold &&
+    dims.focus.score >= threshold &&
+    dims.safety.score >= threshold &&
+    dims.efficiency.score >= threshold
+  );
+}
+
+/**
+ * Build review feedback text for the next generation round.
+ */
+function buildReviewFeedback(report: ReviewReport): string {
+  const lines = [
+    '## Review Feedback (previous round did not pass)\n',
+    `Overall score: ${report.overallScore}/5\n`,
+    'Dimension scores:',
+  ];
+  for (const [name, dim] of Object.entries(report.dimensions)) {
+    lines.push(`- ${name}: ${dim.score}/5 — ${dim.reasoning}`);
+  }
+  if (report.issues.length > 0) {
+    lines.push('\nIssues to address:');
+    for (const issue of report.issues) {
+      lines.push(`- [${issue.severity}] ${issue.location}: ${issue.description}`);
+      lines.push(`  Suggestion: ${issue.suggestion}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+// ── Execution functions ────────────────────────────────────
+
+/**
+ * Run a generation agent with the iterative review loop.
+ *
+ * Each round: generation → review → threshold check.
+ * If review passes, return immediately. If not, inject feedback and iterate.
+ */
+export async function runGenerationWithLoop(
   promptName: string,
   userPrompt: string,
+  runnerConfig: RunnerConfig,
   existingContent?: string,
-  options?: AgentOptions
-): Promise<AgentOutput> {
-  const template = await loadPromptTemplate(promptName);
-  const systemPrompt = assemblePrompt(template, userPrompt, existingContent);
-  const raw = await callAgentLLM(client, model, systemPrompt, userPrompt, options);
-  return parseAgentOutput(raw);
+  options?: AgentRunOptions
+): Promise<{ output: AgentOutput; review?: ReviewReport }> {
+  const maxRounds = options?.maxRounds ?? 3;
+  const threshold = options?.scoreThreshold ?? 4;
+
+  let userMessage = userPrompt;
+  if (existingContent) {
+    userMessage += `\n\n## Existing Content\n\n\`\`\`markdown\n${existingContent}\n\`\`\``;
+  }
+
+  let lastOutput: AgentOutput | undefined;
+  let lastReview: ReviewReport | undefined;
+
+  for (let round = 0; round < maxRounds; round++) {
+    const { runner, state: initialState } = await createGenerationRunner(promptName, runnerConfig);
+
+    let state = addUserMessage(initialState, userMessage);
+
+    // Inject previous round's output and review feedback for refinement
+    if (round > 0 && lastOutput && lastReview) {
+      state = addAssistantMessage(state, JSON.stringify(lastOutput));
+      state = addUserMessage(state, buildReviewFeedback(lastReview));
+    }
+
+    const { state: genState } = await runner.run(state);
+    const genRaw = getLastAssistantContent(genState);
+
+    try {
+      lastOutput = parseAgentOutput(genRaw);
+    } catch {
+      lastOutput = { changes: [], summary: genRaw };
+    }
+
+    // Skip review on single-round mode or on the final round
+    if (maxRounds <= 1 || round === maxRounds - 1) {
+      return { output: lastOutput, review: lastReview };
+    }
+
+    // Run reviewer on the generated output
+    const { runner: reviewRunner, state: reviewInitialState } =
+      await createReviewRunner(runnerConfig);
+    const reviewContent = `Review the following generated content:\n\n${JSON.stringify(lastOutput, null, 2)}`;
+    const reviewState = addUserMessage(reviewInitialState, reviewContent);
+    const { state: afterReview } = await reviewRunner.run(reviewState);
+    const reviewRaw = getLastAssistantContent(afterReview);
+
+    try {
+      lastReview = parseReviewReport(reviewRaw);
+    } catch {
+      // If review parsing fails, assume pass to avoid infinite loop
+      return { output: lastOutput, review: undefined };
+    }
+
+    if (reviewPasses(lastReview, threshold)) {
+      return { output: lastOutput, review: lastReview };
+    }
+  }
+
+  return { output: lastOutput!, review: lastReview };
 }
 
 /**
- * Run the reviewer agent that produces a review report.
+ * Run the reviewer on content (no loop).
  */
-export async function runReviewAgent(
-  client: LLMClient,
-  model: string,
-  userPrompt: string,
-  options?: AgentOptions
+export async function runReview(
+  content: string,
+  runnerConfig: RunnerConfig
 ): Promise<ReviewReport> {
-  const template = await loadPromptTemplate('reviewer');
-  const systemPrompt = `${template}\n\n## Review Target\n\n${userPrompt}`;
-  const raw = await callAgentLLM(client, model, systemPrompt, userPrompt, options);
+  const { runner, state: initialState } = await createReviewRunner(runnerConfig);
+  const state = addUserMessage(initialState, content);
+  const { state: afterRun } = await runner.run(state);
+  const raw = getLastAssistantContent(afterRun);
   return parseReviewReport(raw);
 }
 
 /**
- * Run the session curator agent to summarize conversation text.
+ * Run the session curator on text (no loop).
  */
-export async function runSessionCuratorAgent(
-  client: LLMClient,
-  model: string,
+export async function runCurator(
   text: string,
-  options?: AgentOptions
+  runnerConfig: RunnerConfig
 ): Promise<SessionSummary> {
-  const template = await loadPromptTemplate('session-curator');
-  const systemPrompt = `${template}\n\n## Input Text\n\n${text}`;
-  const raw = await callAgentLLM(client, model, systemPrompt, text, options);
+  const { runner, state: initialState } = await createCuratorRunner(runnerConfig);
+  const state = addUserMessage(initialState, text);
+  const { state: afterRun } = await runner.run(state);
+  const raw = getLastAssistantContent(afterRun);
   return parseSessionSummary(raw);
 }

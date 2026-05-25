@@ -1,203 +1,184 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as configModule from '../../../src/config.js';
-import * as orchestratorModule from '../../../src/agents/orchestrator.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createAgentState, addUserMessage, addAssistantMessage } from '@agentskillmania/colts';
 
-// Import all agent wrapper functions
+// Mock EnhancedRunner — shared with orchestrator test pattern
+const mocks = vi.hoisted(() => ({
+  run: vi.fn(),
+  create: vi.fn(),
+}));
+
+vi.mock('@agentskillmania/wrangler', () => ({
+  EnhancedRunner: {
+    create: mocks.create,
+  },
+}));
+
 import { runAgentArchitect } from '../../../src/agents/architect.js';
-import { runCrewComposer } from '../../../src/agents/crew-composer.js';
 import { runSkillDesigner } from '../../../src/agents/skill-designer.js';
+import { runCrewComposer } from '../../../src/agents/crew-composer.js';
 import { runReviewer } from '../../../src/agents/reviewer.js';
 import { runSessionCurator } from '../../../src/agents/session-curator.js';
 
-interface AgentWrapper {
-  name: string;
-  fn: (prompt: string, existing?: string, options?: { model?: string }) => Promise<unknown>;
-  agentType: string;
+/** Build a mock runner return value with a real AgentState */
+function makeRunnerReturn(content: string) {
+  const state = createAgentState({ name: 'test', instructions: '', tools: [] });
+  const withUser = addUserMessage(state, 'test input');
+  const withAssistant = addAssistantMessage(withUser, content);
+  return {
+    state: withAssistant,
+    result: { type: 'success' as const, answer: content, totalSteps: 1 },
+  };
 }
 
-// runReviewer uses runReviewAgent instead of runAgent, so it is tested separately
-// runSessionCurator uses runSessionCuratorAgent instead of runAgent, so it is tested separately
-const AGENTS: AgentWrapper[] = [
-  { name: 'runAgentArchitect', fn: runAgentArchitect, agentType: 'architect' },
-  { name: 'runCrewComposer', fn: runCrewComposer, agentType: 'crew-composer' },
-  { name: 'runSkillDesigner', fn: runSkillDesigner, agentType: 'skill-designer' },
-];
+function makeAgentOutputJson(summary: string) {
+  return JSON.stringify({
+    changes: [{ file: 'AGENT.md', type: 'create', new: `name: test\n${summary}` }],
+    summary,
+  });
+}
+
+function makeReviewReportJson(score: number) {
+  return JSON.stringify({
+    overallScore: score,
+    dimensions: {
+      clarity: { score, reasoning: 'test' },
+      completeness: { score, reasoning: 'test' },
+      focus: { score, reasoning: 'test' },
+      safety: { score, reasoning: 'test' },
+      efficiency: { score, reasoning: 'test' },
+    },
+    issues: [],
+    summary: 'test review',
+  });
+}
 
 describe('agent wrappers', () => {
-  beforeEach(() => {});
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'devtool-wrapper-test-'));
+    mocks.run.mockReset();
+    mocks.create.mockReset();
+    mocks.create.mockResolvedValue({
+      run: mocks.run,
+      runStream: vi.fn(),
+      on: vi.fn().mockReturnThis(),
+    });
+  });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it.each(AGENTS)('$name throws without LLM config', async ({ fn }) => {
-    vi.spyOn(configModule, 'requireLLMConfig').mockRejectedValue(
-      new Error('No valid LLM configuration found.')
-    );
-    await expect(fn('test')).rejects.toThrow('No valid LLM configuration');
-  });
+  const baseConfig = {
+    llmClient: {} as never,
+    workspacePath: tempDir,
+  };
 
-  it.each(AGENTS)('$name uses custom model from options', async ({ fn, agentType }) => {
-    vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue({
-      provider: 'openai',
-      apiKey: 'sk-test',
-      model: 'gpt-4o',
-    });
-    const runAgentSpy = vi.spyOn(orchestratorModule, 'runAgent').mockResolvedValue({
-      changes: [],
-      summary: 'test',
-    });
+  // ── Generation wrappers ────────────────────────────────
 
-    await fn('test', undefined, { model: 'custom-model' });
-    expect(runAgentSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      'custom-model',
-      agentType,
-      'test',
-      undefined,
-      { model: 'custom-model' }
-    );
-  });
+  describe('runAgentArchitect', () => {
+    it('should return agent output via generation loop', async () => {
+      const outputJson = makeAgentOutputJson('architect output');
+      const reviewJson = makeReviewReportJson(5);
 
-  it.each(AGENTS)('$name uses config model when no options provided', async ({ fn, agentType }) => {
-    vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue({
-      provider: 'openai',
-      apiKey: 'sk-test',
-      model: 'gpt-4o',
-    });
-    const runAgentSpy = vi.spyOn(orchestratorModule, 'runAgent').mockResolvedValue({
-      changes: [],
-      summary: 'test',
-    });
+      mocks.run
+        .mockResolvedValueOnce(makeRunnerReturn(outputJson))
+        .mockResolvedValueOnce(makeRunnerReturn(reviewJson));
 
-    await fn('test');
-    expect(runAgentSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      'gpt-4o',
-      agentType,
-      'test',
-      undefined,
-      undefined
-    );
-  });
-
-  it.each(AGENTS)('$name passes existing content to orchestrator', async ({ fn, agentType }) => {
-    vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue({
-      provider: 'openai',
-      apiKey: 'sk-test',
-      model: 'gpt-4o',
-    });
-    const runAgentSpy = vi.spyOn(orchestratorModule, 'runAgent').mockResolvedValue({
-      changes: [],
-      summary: 'test',
-    });
-
-    await fn('test', 'existing content');
-    expect(runAgentSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      'gpt-4o',
-      agentType,
-      'test',
-      'existing content',
-      undefined
-    );
-  });
-
-  describe('runReviewer (special — uses runReviewAgent)', () => {
-    it('throws without LLM config', async () => {
-      vi.spyOn(configModule, 'requireLLMConfig').mockRejectedValue(
-        new Error('No valid LLM configuration found.')
-      );
-      await expect(runReviewer('test.ts', 'content')).rejects.toThrow('No valid LLM configuration');
-    });
-
-    it('uses custom model from options', async () => {
-      vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue({
-        provider: 'openai',
-        apiKey: 'sk-test',
-        model: 'gpt-4o',
+      const result = await runAgentArchitect('create an agent', undefined, {
+        ...baseConfig,
+        maxRounds: 3,
       });
-      const runReviewSpy = vi.spyOn(orchestratorModule, 'runReviewAgent').mockResolvedValue({
-        summary: 'review',
-        issues: [],
-        suggestions: [],
-      } as any);
 
-      await runReviewer('test.ts', 'content', 'focus', { model: 'custom-model' });
-      expect(runReviewSpy).toHaveBeenCalledWith(
-        expect.anything(),
-        'custom-model',
-        expect.stringContaining('test.ts'),
-        { model: 'custom-model' }
-      );
+      expect(result.summary).toBe('architect output');
+      expect(result.changes).toHaveLength(1);
     });
 
-    it('uses config model when no options provided', async () => {
-      vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue({
-        provider: 'openai',
-        apiKey: 'sk-test',
-        model: 'gpt-4o',
-      });
-      const runReviewSpy = vi.spyOn(orchestratorModule, 'runReviewAgent').mockResolvedValue({
-        summary: 'review',
-        issues: [],
-        suggestions: [],
-      } as any);
+    it('should pass existingContent through', async () => {
+      mocks.run.mockResolvedValueOnce(makeRunnerReturn(outputJson('test')));
 
-      await runReviewer('test.ts', 'content');
-      expect(runReviewSpy).toHaveBeenCalledWith(
-        expect.anything(),
-        'gpt-4o',
-        expect.stringContaining('test.ts'),
-        undefined
-      );
+      const result = await runAgentArchitect('update', 'existing content', {
+        ...baseConfig,
+        maxRounds: 1,
+      });
+
+      // Verify the runner was called with a state containing existing content
+      const callState = mocks.run.mock.calls[0][0];
+      const userMsg = callState.context.messages.find((m: { role: string }) => m.role === 'user');
+      expect(userMsg.content).toContain('existing content');
+      expect(result.summary).toBe('test');
     });
   });
 
-  describe('runSessionCurator (special — uses runSessionCuratorAgent)', () => {
-    it('throws without LLM config', async () => {
-      vi.spyOn(configModule, 'requireLLMConfig').mockRejectedValue(
-        new Error('No valid LLM configuration found.')
-      );
-      await expect(runSessionCurator('test text')).rejects.toThrow('No valid LLM configuration');
+  describe('runSkillDesigner', () => {
+    it('should return skill output via generation loop', async () => {
+      mocks.run.mockResolvedValueOnce(makeRunnerReturn(makeAgentOutputJson('skill output')));
+
+      const result = await runSkillDesigner('create a skill', undefined, {
+        ...baseConfig,
+        maxRounds: 1,
+      });
+
+      expect(result.summary).toBe('skill output');
+    });
+  });
+
+  describe('runCrewComposer', () => {
+    it('should return crew output via generation loop', async () => {
+      mocks.run.mockResolvedValueOnce(makeRunnerReturn(makeAgentOutputJson('crew output')));
+
+      const result = await runCrewComposer('create a crew', undefined, {
+        ...baseConfig,
+        maxRounds: 1,
+      });
+
+      expect(result.summary).toBe('crew output');
+    });
+  });
+
+  // ── Reviewer wrapper ───────────────────────────────────
+
+  describe('runReviewer', () => {
+    it('should return review report', async () => {
+      mocks.run.mockResolvedValueOnce(makeRunnerReturn(makeReviewReportJson(4)));
+
+      const result = await runReviewer('AGENT.md', 'agent content', 'check safety', baseConfig);
+
+      expect(result.overallScore).toBe(4);
     });
 
-    it('uses custom model from options', async () => {
-      vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue({
-        provider: 'openai',
-        apiKey: 'sk-test',
-        model: 'gpt-4o',
-      });
-      const runSessionCuratorSpy = vi
-        .spyOn(orchestratorModule, 'runSessionCuratorAgent')
-        .mockResolvedValue({ title: 'Test', description: 'Summary' });
+    it('should include target path in review prompt', async () => {
+      mocks.run.mockResolvedValueOnce(makeRunnerReturn(makeReviewReportJson(3)));
 
-      await runSessionCurator('test text', { model: 'custom-model' });
-      expect(runSessionCuratorSpy).toHaveBeenCalledWith(
-        expect.anything(),
-        'custom-model',
-        'test text',
-        { model: 'custom-model' }
-      );
+      await runReviewer('CREW.md', 'crew content', undefined, baseConfig);
+
+      // The runner was called with a state containing the review prompt
+      const callState = mocks.run.mock.calls[0][0];
+      const userMsg = callState.context.messages.find((m: { role: string }) => m.role === 'user');
+      expect(userMsg.content).toContain('CREW.md');
     });
+  });
 
-    it('uses config model when no options provided', async () => {
-      vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue({
-        provider: 'openai',
-        apiKey: 'sk-test',
-        model: 'gpt-4o',
-      });
-      const runSessionCuratorSpy = vi
-        .spyOn(orchestratorModule, 'runSessionCuratorAgent')
-        .mockResolvedValue({ title: 'Test', description: 'Summary' });
+  // ── Session curator wrapper ────────────────────────────
 
-      await runSessionCurator('test text');
-      expect(runSessionCuratorSpy).toHaveBeenCalledWith(
-        expect.anything(),
-        'gpt-4o',
-        'test text',
-        undefined
-      );
+  describe('runSessionCurator', () => {
+    it('should return session summary', async () => {
+      const summaryJson = JSON.stringify({ title: 'Bug Fix', description: 'Fixed null pointer' });
+      mocks.run.mockResolvedValueOnce(makeRunnerReturn(summaryJson));
+
+      const result = await runSessionCurator('conversation text', baseConfig);
+
+      expect(result.title).toBe('Bug Fix');
+      expect(result.description).toBe('Fixed null pointer');
     });
   });
 });
+
+/** Shorthand to make a single agent output JSON string */
+function outputJson(summary: string) {
+  return makeAgentOutputJson(summary);
+}

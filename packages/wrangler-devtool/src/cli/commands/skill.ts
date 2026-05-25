@@ -8,6 +8,8 @@ import { CliError, ExitCode } from '../options.js';
 import { createTemplate } from '../../tools/create-template.js';
 import { runSkillDesigner } from '../../agents/skill-designer.js';
 import { applyChanges } from '../../utils/file-change.js';
+import { requireLLMConfig } from '../../config.js';
+import { createLLMClient } from '../../llm.js';
 
 async function fileExists(filePath: string): Promise<boolean> {
   try {
@@ -83,7 +85,13 @@ export const skillCommand = defineCommand({
         const fullPrompt = name
           ? `Skill name: ${name}\nTarget file: skills/${name}.md\n${prompt}`
           : `Infer a skill name from this request. ${prompt}`;
-        const output = await runSkillDesigner(fullPrompt, existingContent);
+        const llmConfig = await requireLLMConfig();
+        const llmClient = createLLMClient(llmConfig);
+        const output = await runSkillDesigner(fullPrompt, existingContent, {
+          llmClient,
+          workspacePath: cwd,
+          model: llmConfig.model,
+        });
 
         const result = await applyChanges(output.changes, { cwd, dryRun });
 

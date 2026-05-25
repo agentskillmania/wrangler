@@ -48,21 +48,27 @@ export type { LLMConfig, DevToolConfig, LoadConfigOptions } from './config.js';
 export { createLLMClient } from './llm.js';
 
 // Phase 3: Agents
-export { runAgentArchitect } from './agents/architect.js';
-export { runSkillDesigner } from './agents/skill-designer.js';
-export { runCrewComposer } from './agents/crew-composer.js';
-export { runReviewer } from './agents/reviewer.js';
-export { runSessionCurator } from './agents/session-curator.js';
+export { runAgentArchitect, createArchitectRunner } from './agents/architect.js';
+export { runSkillDesigner, createSkillDesignerRunner } from './agents/skill-designer.js';
+export { runCrewComposer, createCrewComposerRunner } from './agents/crew-composer.js';
+export { runReviewer, createReviewerRunner } from './agents/reviewer.js';
+export {
+  runSessionCurator,
+  createCuratorRunnerWrapper as createSessionCuratorRunner,
+} from './agents/session-curator.js';
 
 export {
   loadPromptTemplate,
-  assemblePrompt,
   parseAgentOutput,
   parseReviewReport,
-  callAgentLLM,
-  runAgent,
-  runReviewAgent,
+  createGenerationRunner,
+  createReviewRunner,
+  createCuratorRunner,
+  runGenerationWithLoop,
+  runReview as runReviewAgent,
+  runCurator as runCuratorAgent,
 } from './agents/orchestrator.js';
+export type { RunnerConfig } from './agents/orchestrator.js';
 
 export type {
   AgentOutput,
@@ -71,4 +77,5 @@ export type {
   ReviewIssue,
   SessionSummary,
   AgentOptions,
+  AgentRunOptions,
 } from './agents/types.js';

@@ -10,31 +10,64 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const { runAgentMock, runReviewAgentMock, runSessionCuratorAgentMock, mockOutput } = vi.hoisted(
-  () => {
-    const output = {
-      changes: [{ file: 'AGENT.md', type: 'create' as const, content: '# Test' }],
-      summary: 'Generated agent definition',
-    };
-    const mockSummary = { title: 'Test Session', description: 'A test session summary' };
-    return {
-      runAgentMock: vi.fn().mockResolvedValue(output),
-      runReviewAgentMock: vi.fn(),
-      runSessionCuratorAgentMock: vi.fn().mockResolvedValue(mockSummary),
-      mockOutput: output,
-    };
-  }
-);
+const {
+  runAgentArchitectMock,
+  runSkillDesignerMock,
+  runCrewComposerMock,
+  runReviewerMock,
+  runSessionCuratorMock,
+  mockOutput,
+} = vi.hoisted(() => {
+  const output = {
+    changes: [{ file: 'AGENT.md', type: 'create' as const, new: '# Test' }],
+    summary: 'Generated agent definition',
+  };
+  const mockReport = {
+    overallScore: 8,
+    dimensions: {
+      clarity: { score: 8, reasoning: 'Clear' },
+      completeness: { score: 7, reasoning: 'Mostly complete' },
+      focus: { score: 9, reasoning: 'Well focused' },
+      safety: { score: 8, reasoning: 'Safe' },
+      efficiency: { score: 7, reasoning: 'Reasonable' },
+    },
+    issues: [],
+    summary: 'Good definition',
+  };
+  const mockSummary = { title: 'Test Session', description: 'A test session summary' };
+  return {
+    runAgentArchitectMock: vi.fn().mockResolvedValue(output),
+    runSkillDesignerMock: vi.fn().mockResolvedValue(output),
+    runCrewComposerMock: vi.fn().mockResolvedValue(output),
+    runReviewerMock: vi.fn().mockResolvedValue(mockReport),
+    runSessionCuratorMock: vi.fn().mockResolvedValue(mockSummary),
+    mockOutput: output,
+  };
+});
 
-vi.mock('../../src/agents/orchestrator.js', () => ({
-  runAgent: runAgentMock,
-  runReviewAgent: runReviewAgentMock,
-  runSessionCuratorAgent: runSessionCuratorAgentMock,
-  loadPromptTemplate: vi.fn().mockResolvedValue('template'),
-  assemblePrompt: vi.fn().mockReturnValue('assembled'),
-  parseAgentOutput: vi.fn(),
-  parseReviewReport: vi.fn(),
-  callAgentLLM: vi.fn(),
+vi.mock('../../src/agents/architect.js', () => ({
+  runAgentArchitect: runAgentArchitectMock,
+  createArchitectRunner: vi.fn(),
+}));
+
+vi.mock('../../src/agents/skill-designer.js', () => ({
+  runSkillDesigner: runSkillDesignerMock,
+  createSkillDesignerRunner: vi.fn(),
+}));
+
+vi.mock('../../src/agents/crew-composer.js', () => ({
+  runCrewComposer: runCrewComposerMock,
+  createCrewComposerRunner: vi.fn(),
+}));
+
+vi.mock('../../src/agents/reviewer.js', () => ({
+  runReviewer: runReviewerMock,
+  createReviewerRunner: vi.fn(),
+}));
+
+vi.mock('../../src/agents/session-curator.js', () => ({
+  runSessionCurator: runSessionCuratorMock,
+  createCuratorRunnerWrapper: vi.fn(),
 }));
 
 import type { DevToolOptions } from '../../src/devtool.js';
@@ -153,112 +186,109 @@ describe('DevTool', () => {
 
     beforeEach(() => {
       tool = new DevTool({ llm: VALID_LLM_CONFIG });
-      runAgentMock.mockClear();
-      runAgentMock.mockResolvedValue(mockOutput);
+      runAgentArchitectMock.mockClear();
+      runAgentArchitectMock.mockResolvedValue(mockOutput);
     });
 
-    it('runAgentArchitect delegates to runAgent with architect template', async () => {
+    it('runAgentArchitect delegates to wrapper with prompt and model', async () => {
       const result = await tool.runAgentArchitect('Create a review agent');
 
       expect(result).toEqual(mockOutput);
-      expect(runAgentMock).toHaveBeenCalledOnce();
-      const [, model, templateName, prompt] = runAgentMock.mock.calls[0]!;
-      expect(model).toBe('gpt-4o');
-      expect(templateName).toBe('architect');
+      expect(runAgentArchitectMock).toHaveBeenCalledOnce();
+      const [prompt, existingContent, config] = runAgentArchitectMock.mock.calls[0]!;
       expect(prompt).toBe('Create a review agent');
+      expect(existingContent).toBeUndefined();
+      expect(config.model).toBe('gpt-4o');
+      expect(config.llmClient).toBeDefined();
     });
 
-    it('runAgentArchitect passes existingContent and options', async () => {
+    it('runAgentArchitect passes existingContent and custom model', async () => {
       await tool.runAgentArchitect('Modify', 'existing content', {
         model: 'gpt-4o-mini',
         timeout: 30000,
       });
 
-      expect(runAgentMock).toHaveBeenCalledOnce();
-      const [, model, , prompt, content, opts] = runAgentMock.mock.calls[0]!;
-      expect(model).toBe('gpt-4o-mini');
+      expect(runAgentArchitectMock).toHaveBeenCalledOnce();
+      const [prompt, content, config] = runAgentArchitectMock.mock.calls[0]!;
       expect(prompt).toBe('Modify');
       expect(content).toBe('existing content');
-      expect(opts).toEqual({ model: 'gpt-4o-mini', timeout: 30000 });
+      expect(config.model).toBe('gpt-4o-mini');
     });
 
-    it('runSkillDesigner delegates to runAgent with skill-designer template', async () => {
+    it('runSkillDesigner delegates to wrapper', async () => {
+      runSkillDesignerMock.mockClear();
+      runSkillDesignerMock.mockResolvedValue(mockOutput);
+
       const result = await tool.runSkillDesigner('Design a testing skill');
 
       expect(result).toEqual(mockOutput);
-      expect(runAgentMock).toHaveBeenCalledOnce();
-      const [, model, templateName] = runAgentMock.mock.calls[0]!;
-      expect(model).toBe('gpt-4o');
-      expect(templateName).toBe('skill-designer');
+      expect(runSkillDesignerMock).toHaveBeenCalledOnce();
+      const [prompt] = runSkillDesignerMock.mock.calls[0]!;
+      expect(prompt).toBe('Design a testing skill');
     });
 
-    it('runCrewComposer delegates to runAgent with crew-composer template', async () => {
+    it('runCrewComposer delegates to wrapper', async () => {
+      runCrewComposerMock.mockClear();
+      runCrewComposerMock.mockResolvedValue(mockOutput);
+
       const result = await tool.runCrewComposer('Compose a dev team');
 
       expect(result).toEqual(mockOutput);
-      expect(runAgentMock).toHaveBeenCalledOnce();
-      const [, , templateName] = runAgentMock.mock.calls[0]!;
-      expect(templateName).toBe('crew-composer');
+      expect(runCrewComposerMock).toHaveBeenCalledOnce();
+      const [prompt] = runCrewComposerMock.mock.calls[0]!;
+      expect(prompt).toBe('Compose a dev team');
     });
 
-    it('runSessionCurator delegates to runSessionCuratorAgent', async () => {
+    it('runSessionCurator delegates to wrapper', async () => {
       const result = await tool.runSessionCurator('Summarize this conversation');
 
       expect(result).toEqual({ title: 'Test Session', description: 'A test session summary' });
-      expect(runSessionCuratorAgentMock).toHaveBeenCalledOnce();
+      expect(runSessionCuratorMock).toHaveBeenCalledOnce();
+      const [text] = runSessionCuratorMock.mock.calls[0]!;
+      expect(text).toBe('Summarize this conversation');
     });
   });
 
   describe('runReviewer', () => {
     let tool: InstanceType<typeof DevTool>;
-    const mockReport = {
-      overallScore: 8,
-      dimensions: {
-        clarity: { score: 8, reasoning: 'Clear' },
-        completeness: { score: 7, reasoning: 'Mostly complete' },
-        focus: { score: 9, reasoning: 'Well focused' },
-        safety: { score: 8, reasoning: 'Safe' },
-        efficiency: { score: 7, reasoning: 'Reasonable' },
-      },
-      issues: [],
-      summary: 'Good definition',
-    };
 
     beforeEach(() => {
       tool = new DevTool({ llm: VALID_LLM_CONFIG });
-      runReviewAgentMock.mockClear();
-      runReviewAgentMock.mockResolvedValue(mockReport);
+      runReviewerMock.mockClear();
+      runReviewerMock.mockResolvedValue({
+        overallScore: 8,
+        dimensions: {
+          clarity: { score: 8, reasoning: 'Clear' },
+          completeness: { score: 7, reasoning: 'Mostly complete' },
+          focus: { score: 9, reasoning: 'Well focused' },
+          safety: { score: 8, reasoning: 'Safe' },
+          efficiency: { score: 7, reasoning: 'Reasonable' },
+        },
+        issues: [],
+        summary: 'Good definition',
+      });
     });
 
-    it('delegates to runReviewAgent with target and content', async () => {
+    it('delegates to wrapper with target path and content', async () => {
       const result = await tool.runReviewer('AGENT.md', '# My Agent');
 
-      expect(result).toEqual(mockReport);
-      expect(runReviewAgentMock).toHaveBeenCalledOnce();
-      const [client, model, prompt, options] = runReviewAgentMock.mock.calls[0]!;
-      expect(model).toBe('gpt-4o');
-      expect(prompt).toContain('AGENT.md');
-      expect(options).toBeUndefined();
+      expect(result.overallScore).toBe(8);
+      expect(runReviewerMock).toHaveBeenCalledOnce();
+      const [targetPath, content] = runReviewerMock.mock.calls[0]!;
+      expect(targetPath).toBe('AGENT.md');
+      expect(content).toBe('# My Agent');
     });
 
-    it('includes additional prompt when provided', async () => {
-      await tool.runReviewer('AGENT.md', '# My Agent', 'Focus on safety');
-
-      expect(runReviewAgentMock).toHaveBeenCalledOnce();
-      const [, , prompt] = runReviewAgentMock.mock.calls[0]!;
-      expect(prompt).toContain('Focus on safety');
-    });
-
-    it('passes options through', async () => {
-      await tool.runReviewer('AGENT.md', '# My Agent', undefined, {
+    it('passes additional prompt and options through', async () => {
+      await tool.runReviewer('AGENT.md', '# My Agent', 'Focus on safety', {
         model: 'gpt-4o-mini',
         timeout: 30000,
       });
 
-      expect(runReviewAgentMock).toHaveBeenCalledOnce();
-      const [, model, , opts] = runReviewAgentMock.mock.calls[0]!;
-      expect(model).toBe('gpt-4o-mini');
-      expect(opts).toEqual({ model: 'gpt-4o-mini', timeout: 30000 });
+      expect(runReviewerMock).toHaveBeenCalledOnce();
+      const [, , prompt, config] = runReviewerMock.mock.calls[0]!;
+      expect(prompt).toBe('Focus on safety');
+      expect(config.model).toBe('gpt-4o-mini');
     });
   });
 
