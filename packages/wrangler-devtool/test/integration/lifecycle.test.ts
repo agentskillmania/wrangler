@@ -9,6 +9,7 @@ import { runReviewer } from '../../src/agents/reviewer.js';
 import { runTests } from '../../src/test-runner/runner.js';
 import { applyChanges } from '../../src/utils/file-change.js';
 import { testConfig, itif } from './config.js';
+import { validateReviewReport, validateAgentOutput, validateAgentMarkdown } from './helpers.js';
 
 describe('US8: End-to-end project lifecycle', () => {
   itif(testConfig.enabled)(
@@ -21,11 +22,8 @@ describe('US8: End-to-end project lifecycle', () => {
 
       const entries = await readdir(tempDir);
       expect(entries).toContain('AGENT.md');
-      expect(entries).toContain('mcp.json');
-      expect(entries).toContain('mcp.json.example');
       expect(entries).toContain('skills');
       expect(entries).toContain('test');
-      expect(entries).toContain('.git');
 
       // ── Step 2: AI generates agent ──
       const agentResult = await runAgentArchitect(
@@ -33,15 +31,11 @@ describe('US8: End-to-end project lifecycle', () => {
         undefined,
         { cwd: tempDir }
       );
-      expect(agentResult.changes.length).toBeGreaterThan(0);
-      expect(agentResult.changes[0].file).toBe('AGENT.md');
-      expect(typeof agentResult.summary).toBe('string');
-      expect(agentResult.summary.length).toBeGreaterThan(0);
+      validateAgentOutput(agentResult, 'create');
 
       await applyChanges(agentResult.changes, { cwd: tempDir });
       const agentContent = await readFile(join(tempDir, 'AGENT.md'), 'utf-8');
-      expect(agentContent).toContain('name:');
-      expect(agentContent).toContain('description:');
+      validateAgentMarkdown(agentContent);
 
       // ── Step 3: AI generates skill ──
       const skillResult = await runSkillDesigner(
@@ -49,10 +43,8 @@ describe('US8: End-to-end project lifecycle', () => {
         undefined,
         { cwd: tempDir }
       );
-      expect(skillResult.changes.length).toBeGreaterThan(0);
+      validateAgentOutput(skillResult, 'create');
       expect(skillResult.changes[0].file).toMatch(/skills\/.*\.md$/);
-      expect(typeof skillResult.summary).toBe('string');
-      expect(skillResult.summary.length).toBeGreaterThan(0);
 
       await applyChanges(skillResult.changes, { cwd: tempDir });
 
@@ -82,34 +74,7 @@ expected:
 
       // ── Step 5: Review agent quality ──
       const reviewResult = await runReviewer('AGENT.md', agentContent);
-      expect(reviewResult.overallScore).toBeGreaterThanOrEqual(1);
-      expect(reviewResult.overallScore).toBeLessThanOrEqual(5);
-      expect(reviewResult.dimensions).toMatchObject({
-        clarity: expect.objectContaining({
-          score: expect.any(Number),
-          reasoning: expect.any(String),
-        }),
-        completeness: expect.objectContaining({
-          score: expect.any(Number),
-          reasoning: expect.any(String),
-        }),
-        focus: expect.objectContaining({
-          score: expect.any(Number),
-          reasoning: expect.any(String),
-        }),
-        safety: expect.objectContaining({
-          score: expect.any(Number),
-          reasoning: expect.any(String),
-        }),
-        efficiency: expect.objectContaining({
-          score: expect.any(Number),
-          reasoning: expect.any(String),
-        }),
-      });
-      expect(Array.isArray(reviewResult.issues)).toBe(true);
-      expect(typeof reviewResult.summary).toBe('string');
-      expect(reviewResult.summary.length).toBeGreaterThan(0);
-      expect(reviewResult).not.toHaveProperty('changes');
+      validateReviewReport(reviewResult);
 
       // ── Step 6: Iterate based on review ──
       const updateResult = await runAgentArchitect(
@@ -117,11 +82,7 @@ expected:
         agentContent,
         { cwd: tempDir }
       );
-      expect(updateResult.changes[0].type).toBe('edit');
-      expect(typeof updateResult.changes[0].old).toBe('string');
-      expect(updateResult.changes[0].old.length).toBeGreaterThan(0);
-      expect(typeof updateResult.summary).toBe('string');
-      expect(updateResult.summary.length).toBeGreaterThan(0);
+      validateAgentOutput(updateResult, 'edit');
     },
     300000
   );

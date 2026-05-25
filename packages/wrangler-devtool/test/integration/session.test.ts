@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { forkSession, listSessions } from '../../src/tools/session-manager.js';
@@ -91,5 +91,35 @@ describe('US5 & US6: Session management', () => {
     expect(newMeta).toHaveProperty('id', newId);
     expect(newMeta).toHaveProperty('model', 'glm-5');
     expect(newMeta).toHaveProperty('workspacePath', tempDir);
+  });
+
+  it('fork non-existent session throws error', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
+    const baseDir = join(tempDir, 'sessions');
+
+    await expect(
+      forkSession('nonexistent-session-id', {
+        upToMessageId: 'msg-1',
+        workspace: tempDir,
+        sessionBaseDir: baseDir,
+      })
+    ).rejects.toThrow();
+  });
+
+  it('list sessions on empty directory returns empty array', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
+    const baseDir = join(tempDir, 'sessions');
+    await mkdir(baseDir, { recursive: true });
+
+    const sessions = await listSessions({ workspacePath: tempDir, sessionBaseDir: baseDir });
+    expect(sessions).toEqual([]);
+  });
+
+  it('list sessions on non-existent directory returns empty array', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
+    const baseDir = join(tempDir, 'no-such-dir');
+
+    const sessions = await listSessions({ workspacePath: tempDir, sessionBaseDir: baseDir });
+    expect(sessions).toEqual([]);
   });
 });

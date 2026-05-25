@@ -1,13 +1,15 @@
 import { describe, expect } from 'vitest';
-import { mkdtemp, readFile, access } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAgentArchitect } from '../../src/agents/architect.js';
+import { applyChanges } from '../../src/utils/file-change.js';
 import { testConfig, itif } from './config.js';
+import { validateAgentOutput, validateAgentMarkdown } from './helpers.js';
 
 describe('US2: Generate an agent with AI', () => {
   itif(testConfig.enabled)(
-    'AC2.1: agent write generates complete AGENT.md',
+    'AC2.1: agent write generates valid AGENT.md with frontmatter',
     async () => {
       const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
 
@@ -17,10 +19,12 @@ describe('US2: Generate an agent with AI', () => {
         { cwd: tempDir }
       );
 
-      expect(result.changes.length).toBeGreaterThan(0);
-      expect(result.changes[0].file).toBe('AGENT.md');
-      expect(result.changes[0].type).toBe('create');
-      expect(result.changes[0].new).toContain('name:');
+      validateAgentOutput(result, 'create');
+
+      // Apply changes and verify actual file content
+      await applyChanges(result.changes, { cwd: tempDir });
+      const content = await readFile(join(tempDir, 'AGENT.md'), 'utf-8');
+      validateAgentMarkdown(content);
     },
     30000
   );
@@ -34,9 +38,6 @@ describe('US2: Generate an agent with AI', () => {
       const firstResult = await runAgentArchitect('你是一个简单的echo agent', undefined, {
         cwd: tempDir,
       });
-
-      // Apply the change
-      const { applyChanges } = await import('../../src/utils/file-change.js');
       await applyChanges(firstResult.changes, { cwd: tempDir });
 
       // Then update it
@@ -45,8 +46,7 @@ describe('US2: Generate an agent with AI', () => {
         cwd: tempDir,
       });
 
-      expect(secondResult.changes[0].type).toBe('edit');
-      expect(secondResult.changes[0].old).toBeTruthy();
+      validateAgentOutput(secondResult, 'edit');
     },
     30000
   );

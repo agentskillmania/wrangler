@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runSkillDesigner } from '../../src/agents/skill-designer.js';
 import { testConfig, itif } from './config.js';
+import { validateAgentOutput, validateSkillMarkdown } from './helpers.js';
 
 describe('US7: Generate a skill with AI', () => {
   itif(testConfig.enabled)(
@@ -17,12 +18,11 @@ describe('US7: Generate a skill with AI', () => {
         { cwd: tempDir }
       );
 
-      expect(result.changes.length).toBeGreaterThan(0);
+      validateAgentOutput(result, 'create');
+
       const change = result.changes[0];
       expect(change.file).toMatch(/skills\/.*\.md$/);
-      expect(change.new).toContain('name:');
-      // Description may be in frontmatter or body, just verify it's a valid markdown file
-      expect(change.new).toContain('---');
+      validateSkillMarkdown(change.new!);
     },
     30000
   );
