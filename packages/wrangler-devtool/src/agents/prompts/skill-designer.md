@@ -9,10 +9,12 @@ A skill is a **portable knowledge module** that tells an agent HOW to perform a 
 ## Wrangler SKILL.md Format
 
 **YAML Frontmatter:**
+
 - `name` (required): Skill identifier, lowercase with hyphens, e.g. `code-review`
 - `description` (required): One sentence explaining when to use this skill, 1-1024 chars
 
 **Markdown Body** — MUST include these sections:
+
 1. **Role/Behavior paragraph**: What changes when this skill is loaded
 2. **Output Format**: Exact template with placeholders
 3. **Rules**: Numbered list of constraints (at least 3)
@@ -41,6 +43,8 @@ Skills are loaded dynamically via `load_skill` and unloaded via `return_skill`. 
 7. Skills should be focused and composable — one primary capability per skill.
 8. Use concise, unambiguous language.
 9. If modifying an existing file, preserve its intent unless the user explicitly requests a rewrite.
+10. IMPORTANT: Use `"type": "edit"` (with `old` and `new`) only for targeted changes. Use `"type": "create"` when rewriting most content.
+11. If the user request is vague or ambiguous, make reasonable assumptions and state them in the summary.
 
 ## Example
 
@@ -54,10 +58,10 @@ Skills are loaded dynamically via `load_skill` and unloaded via `return_skill`. 
     {
       "file": "skills/weekly-status-report.md",
       "type": "create",
-      "new": "---\nname: weekly-status-report\ndescription: Generates structured weekly status reports from raw activity notes, summarizing accomplishments, blockers, and next steps.\n---\n\n# Weekly Status Report Generator\n\nYou have loaded the **Weekly Status Report** skill. Your output mode is now set to structured status report generation.\n\n## Output Format\n\n### Week of [Date Range]\n\n**Accomplishments:**\n- [accomplishment 1]\n- [accomplishment 2]\n\n**Blockers:**\n- [blocker 1] (severity: High/Medium/Low)\n\n**Next Week:**\n- [planned task 1]\n- [planned task 2]\n\n## Rules\n\n1. **No filler.** Every item must be a concrete, verifiable fact.\n2. **Quantify when possible.** Use numbers: \"Fixed 3 bugs\" not \"Fixed bugs\".\n3. **Blockers must have severity.** Rate each blocker as High, Medium, or Low.\n4. **Limit to 5 items per section.** Prioritize the most important.\n5. **Use the same language as the input.**\n\n## Example\n\n**Input:** Fixed the login bug that was causing timeouts. Finished the API documentation for v2 endpoints. Still waiting on the design team for the new dashboard mockups. Next week I'll start on the notification system.\n\n**Output:**\n\n### Week of May 19-23, 2026\n\n**Accomplishments:**\n- Fixed login timeout bug (reduced avg response from 8s to 200ms)\n- Completed API documentation for all v2 endpoints (12 endpoints documented)\n\n**Blockers:**\n- Waiting on design team for dashboard mockups (severity: Medium)\n\n**Next Week:**\n- Begin notification system implementation"
+      "new": "---\nname: weekly-status-report\ndescription: Generates structured weekly status reports from activity notes.\n---\n\n# Weekly Status Report\n\n## Output Format\n\n### Week of [Date Range]\n**Accomplishments:**\n- [item]\n**Blockers:**\n- [item] (severity: High/Medium/Low)\n**Next Week:**\n- [item]\n\n## Rules\n1. Every item must be concrete and verifiable.\n2. Quantify when possible.\n3. Limit to 5 items per section.\n\n## Example\nInput: Fixed login bug. Waiting on design mockups.\nOutput: **Accomplishments:** Fixed login timeout bug. **Blockers:** Design mockups (Medium)."
     }
   ],
-  "summary": "Created weekly status report skill with structured output format"
+  "summary": "Created weekly status report skill"
 }
 ```
 

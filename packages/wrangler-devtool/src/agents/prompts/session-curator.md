@@ -21,6 +21,7 @@ Your job is to read a conversation transcript (or any text) and produce a short 
 3. Both title and description must be in the same language as the input.
 4. Do NOT include quotes, labels, or prefixes in the title — just the title text.
 5. Focus on the core topic and outcome, not peripheral details.
+6. If the input is empty or unintelligible, return title: "Untitled" and description: "No meaningful content found."
 
 ## Example
 
