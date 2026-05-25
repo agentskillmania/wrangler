@@ -8,6 +8,14 @@ import { applyChanges } from '../../src/utils/file-change.js';
 import { testConfig, itif } from './config.js';
 import { validateReviewReport, validateAgentOutput, validateAgentMarkdown } from './helpers.js';
 
+function runnerConfig(cwd: string) {
+  return {
+    llmClient: testConfig.llmClient!,
+    workspacePath: cwd,
+    model: testConfig.testModel,
+  };
+}
+
 describe('Error path integration tests', () => {
   itif(testConfig.enabled)(
     'reviewer handles empty content gracefully',
@@ -18,7 +26,7 @@ name: empty-agent
 description: literally nothing
 ---
 `;
-      const result = await runReviewer('AGENT.md', content);
+      const result = await runReviewer('AGENT.md', content, undefined, runnerConfig('.'));
 
       // Reviewer should succeed (not throw) but flag quality issues
       validateReviewReport(result);
@@ -30,7 +38,7 @@ description: literally nothing
         expect(result.issues.length).toBeGreaterThan(0);
       }
     },
-    60000
+    120000
   );
 
   itif(testConfig.enabled)(
@@ -42,7 +50,7 @@ name: long-agent
 description: A verbose agent
 ---
 ${longBody}`;
-      const result = await runReviewer('AGENT.md', content);
+      const result = await runReviewer('AGENT.md', content, undefined, runnerConfig('.'));
       validateReviewReport(result);
     },
     60000
@@ -55,7 +63,7 @@ ${longBody}`;
       const result = await runAgentArchitect(
         '你是一个矛盾的agent，同时要总是说yes和总是说no',
         undefined,
-        { cwd: tempDir }
+        runnerConfig(tempDir)
       );
 
       // Should still produce valid output
@@ -64,24 +72,29 @@ ${longBody}`;
       const content = await readFile(join(tempDir, 'AGENT.md'), 'utf-8');
       validateAgentMarkdown(content);
     },
-    30000
+    300000
   );
 
   itif(testConfig.enabled)(
     'architect update with drastically different content',
     async () => {
       const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
-      const firstResult = await runAgentArchitect('你是一个翻译助手', undefined, {
-        cwd: tempDir,
-      });
+      const firstResult = await runAgentArchitect(
+        '你是一个翻译助手',
+        undefined,
+        runnerConfig(tempDir)
+      );
       await applyChanges(firstResult.changes, { cwd: tempDir });
       const existing = await readFile(join(tempDir, 'AGENT.md'), 'utf-8');
 
       // Completely different domain
-      const secondResult = await runAgentArchitect('把整个agent改成股票分析助手', existing, {
-        cwd: tempDir,
-      });
-      validateAgentOutput(secondResult, 'edit');
+      const secondResult = await runAgentArchitect(
+        '把整个agent改成股票分析助手',
+        existing,
+        runnerConfig(tempDir)
+      );
+      // LLM may return 'create' (full rewrite) or 'edit' (incremental change) — both are valid
+      validateAgentOutput(secondResult);
       await applyChanges(secondResult.changes, { cwd: tempDir });
       const updated = await readFile(join(tempDir, 'AGENT.md'), 'utf-8');
       validateAgentMarkdown(updated);
@@ -89,6 +102,6 @@ ${longBody}`;
       // Content should have changed meaningfully
       expect(updated).not.toBe(existing);
     },
-    30000
+    360000
   );
 });

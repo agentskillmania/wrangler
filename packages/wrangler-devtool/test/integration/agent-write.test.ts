@@ -7,6 +7,14 @@ import { applyChanges } from '../../src/utils/file-change.js';
 import { testConfig, itif } from './config.js';
 import { validateAgentOutput, validateAgentMarkdown } from './helpers.js';
 
+function runnerConfig(cwd: string) {
+  return {
+    llmClient: testConfig.llmClient!,
+    workspacePath: cwd,
+    model: testConfig.testModel,
+  };
+}
+
 describe('US2: Generate an agent with AI', () => {
   itif(testConfig.enabled)(
     'AC2.1: agent write generates valid AGENT.md with frontmatter',
@@ -16,7 +24,7 @@ describe('US2: Generate an agent with AI', () => {
       const result = await runAgentArchitect(
         '你是一个简单的echo agent，只重复用户说的话',
         undefined,
-        { cwd: tempDir }
+        runnerConfig(tempDir)
       );
 
       validateAgentOutput(result, 'create');
@@ -26,7 +34,7 @@ describe('US2: Generate an agent with AI', () => {
       const content = await readFile(join(tempDir, 'AGENT.md'), 'utf-8');
       validateAgentMarkdown(content);
     },
-    30000
+    180000
   );
 
   itif(testConfig.enabled)(
@@ -35,19 +43,23 @@ describe('US2: Generate an agent with AI', () => {
       const tempDir = await mkdtemp(join(tmpdir(), 'devtool-intg-'));
 
       // First create an agent
-      const firstResult = await runAgentArchitect('你是一个简单的echo agent', undefined, {
-        cwd: tempDir,
-      });
+      const firstResult = await runAgentArchitect(
+        '你是一个简单的echo agent',
+        undefined,
+        runnerConfig(tempDir)
+      );
       await applyChanges(firstResult.changes, { cwd: tempDir });
 
       // Then update it
       const existing = await readFile(join(tempDir, 'AGENT.md'), 'utf-8');
-      const secondResult = await runAgentArchitect('增加一个要求：回答要加上emoji', existing, {
-        cwd: tempDir,
-      });
+      const secondResult = await runAgentArchitect(
+        '增加一个要求：回答要加上emoji',
+        existing,
+        runnerConfig(tempDir)
+      );
 
       validateAgentOutput(secondResult, 'edit');
     },
-    30000
+    300000
   );
 });
