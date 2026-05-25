@@ -38,4 +38,17 @@ export interface EnhancedRunnerOptions {
   commands?: CommandHandler[];
   /** A2UI support configuration */
   a2ui?: A2UIConfig;
+  /** Builtin tool toggles. Omit to load all; pass empty {} to load none. */
+  builtinTools?: {
+    fileRead?: boolean;
+    fileWrite?: boolean;
+    fileEdit?: boolean;
+    glob?: boolean;
+    grep?: boolean;
+    shell?: boolean;
+    webSearch?: boolean;
+    webFetch?: boolean;
+    python?: boolean;
+    git?: boolean;
+  };
 }

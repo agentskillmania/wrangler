@@ -87,6 +87,36 @@ export class EnhancedRunner {
       sandbox: sandboxInstance,
     });
 
+    // Filter builtin tools based on toggle options.
+    // When builtinTools is provided, it acts as a whitelist:
+    // - Listed with true → include
+    // - Listed with false → exclude
+    // - Not listed → exclude
+    // When omitted → include all (backward compatible)
+    const toolToggles = options.builtinTools;
+    const filteredBuiltinTools = toolToggles
+      ? builtinTools.filter((tool) => {
+          const toggleMap: Record<
+            string,
+            keyof NonNullable<EnhancedRunnerOptions['builtinTools']>
+          > = {
+            file_read: 'fileRead',
+            file_write: 'fileWrite',
+            file_edit: 'fileEdit',
+            glob: 'glob',
+            grep: 'grep',
+            shell: 'shell',
+            web_search: 'webSearch',
+            web_fetch: 'webFetch',
+            python: 'python',
+            git: 'git',
+          };
+          const key = toggleMap[tool.name as string];
+          if (!key || !(key in toolToggles)) return false;
+          return toolToggles[key] !== false;
+        })
+      : builtinTools;
+
     const mcpConfigPaths = options.mcpConfigPaths ?? [];
     const mcpTools = await loadMCPTools({ configPaths: mcpConfigPaths });
 
@@ -105,7 +135,7 @@ export class EnhancedRunner {
 
     const allTools: Tool<ZodTypeAny>[] = [
       ...sessionSupport.tools,
-      ...builtinTools,
+      ...filteredBuiltinTools,
       ...mcpTools,
       ...todolistSupport.tools,
       ...a2uiTools,

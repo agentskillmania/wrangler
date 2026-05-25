@@ -304,4 +304,91 @@ describe('EnhancedRunner', () => {
     expect(mockRunStream).toHaveBeenCalledWith(mockState, mockOptions);
     expect(result).toBe(mockAsyncGenerator);
   });
+
+  // ── builtinTools toggle tests ──────────────────────────────────────
+
+  it('should include all builtin tools when builtinTools is not provided', async () => {
+    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+    vi.mocked(createBuiltinTools).mockReturnValueOnce([
+      { name: 'file_read' },
+      { name: 'file_write' },
+      { name: 'shell' },
+    ]);
+
+    await EnhancedRunner.create(makeOptions());
+
+    const calls = await getAgentRunnerCalls();
+    const tools = calls[calls.length - 1][0].tools;
+    const names = tools.map((t: { name: string }) => t.name);
+    expect(names).toEqual(expect.arrayContaining(['file_read', 'file_write', 'shell']));
+  });
+
+  it('should exclude all builtin tools when builtinTools is empty object', async () => {
+    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+    vi.mocked(createBuiltinTools).mockReturnValueOnce([
+      { name: 'file_read' },
+      { name: 'shell' },
+      { name: 'web_search' },
+    ]);
+
+    await EnhancedRunner.create(makeOptions({ builtinTools: {} }));
+
+    const calls = await getAgentRunnerCalls();
+    const tools = calls[calls.length - 1][0].tools;
+    const names = tools.map((t: { name: string }) => t.name);
+    expect(names).not.toContain('file_read');
+    expect(names).not.toContain('shell');
+    expect(names).not.toContain('web_search');
+  });
+
+  it('should include only enabled tools when builtinTools has partial entries', async () => {
+    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+    vi.mocked(createBuiltinTools).mockReturnValueOnce([
+      { name: 'file_read' },
+      { name: 'file_write' },
+      { name: 'shell' },
+      { name: 'grep' },
+    ]);
+
+    await EnhancedRunner.create(
+      makeOptions({
+        builtinTools: { fileRead: true, fileWrite: true },
+      })
+    );
+
+    const calls = await getAgentRunnerCalls();
+    const tools = calls[calls.length - 1][0].tools;
+    const names = tools.map((t: { name: string }) => t.name);
+    expect(names).toContain('file_read');
+    expect(names).toContain('file_write');
+    expect(names).not.toContain('shell');
+    expect(names).not.toContain('grep');
+  });
+
+  it('should treat builtinTools as whitelist: unlisted tools excluded, listed as false excluded', async () => {
+    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+    vi.mocked(createBuiltinTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
+
+    // shell: false → excluded; file_read not listed → also excluded
+    await EnhancedRunner.create(makeOptions({ builtinTools: { shell: false } }));
+
+    const calls = await getAgentRunnerCalls();
+    const tools = calls[calls.length - 1][0].tools;
+    const names = tools.map((t: { name: string }) => t.name);
+    expect(names).not.toContain('file_read');
+    expect(names).not.toContain('shell');
+  });
+
+  it('should include listed tool and exclude unlisted when builtinTools is whitelist', async () => {
+    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+    vi.mocked(createBuiltinTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
+
+    await EnhancedRunner.create(makeOptions({ builtinTools: { fileRead: true } }));
+
+    const calls = await getAgentRunnerCalls();
+    const tools = calls[calls.length - 1][0].tools;
+    const names = tools.map((t: { name: string }) => t.name);
+    expect(names).toContain('file_read');
+    expect(names).not.toContain('shell');
+  });
 });
