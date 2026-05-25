@@ -51,4 +51,10 @@ export interface EnhancedRunnerOptions {
     python?: boolean;
     git?: boolean;
   };
+  /** Whether to enable session support (default: true) */
+  enableSession?: boolean;
+  /** Whether to enable todolist support (default: true) */
+  enableTodolist?: boolean;
+  /** Whether to enable command middleware (default: true) */
+  enableCommands?: boolean;
 }

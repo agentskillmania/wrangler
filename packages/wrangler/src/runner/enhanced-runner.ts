@@ -120,13 +120,19 @@ export class EnhancedRunner {
     const mcpConfigPaths = options.mcpConfigPaths ?? [];
     const mcpTools = await loadMCPTools({ configPaths: mcpConfigPaths });
 
-    const sessionSupport = createSessionSupport({
-      workspacePath,
-      sessionBaseDir: options.sessionBaseDir,
-      askHumanHandler: options.askHumanHandler,
-    });
+    const sessionEnabled = options.enableSession !== false;
+    const sessionSupport = sessionEnabled
+      ? createSessionSupport({
+          workspacePath,
+          sessionBaseDir: options.sessionBaseDir,
+          askHumanHandler: options.askHumanHandler,
+        })
+      : { tools: [] as Tool<ZodTypeAny>[], middleware: { name: 'session' } };
 
-    const todolistSupport = createTodolistSupport();
+    const todolistEnabled = options.enableTodolist !== false;
+    const todolistSupport = todolistEnabled
+      ? createTodolistSupport()
+      : { tools: [] as Tool<ZodTypeAny>[], middleware: { name: 'todolist' } };
 
     // A2UI support (conditional)
     const a2uiEnabled = options.a2ui?.enabled === true;
@@ -142,51 +148,55 @@ export class EnhancedRunner {
       ...(options.extraTools ?? []),
     ];
 
-    // Build command registry with built-in + custom handlers
-    const commandRegistry = new CommandRegistry();
-    commandRegistry.register(createClearHandler());
-    commandRegistry.register(createCompactHandler());
-    if (options.skillDirs && options.skillDirs.length > 0) {
-      const skillProvider = new FilesystemSkillProvider(options.skillDirs);
-      commandRegistry.register(createSkillsHandler(skillProvider));
-      commandRegistry.register(createSkillHandler(skillProvider));
-    }
-    for (const cmd of options.commands ?? []) {
-      commandRegistry.register(cmd);
-    }
-    // Create compressor instance for both AgentRunner auto-compression and /compact command
+    // Build command registry with built-in + custom handlers (conditional)
+    const commandsEnabled = options.enableCommands !== false;
+    let commandMiddleware: { name: string } | undefined;
     let compressorInstance: IContextCompressor | undefined;
-    if (options.compression) {
-      if (typeof options.compression === 'object' && 'shouldCompress' in options.compression) {
-        compressorInstance = options.compression as IContextCompressor;
-      } else {
-        const compressionConfig = { ...(options.compression as CompressionConfig) };
-        // Auto-detect context window size from llm-client if not explicitly set
-        if (!compressionConfig.contextWindowSize) {
-          try {
-            const meta = (
-              options.llmClient as unknown as {
-                getModelMeta?: (model: string) => { contextWindow: number; maxTokens: number };
-              }
-            ).getModelMeta?.(options.model ?? 'glm-5.1');
-            if (meta) {
-              compressionConfig.contextWindowSize = meta.contextWindow;
-            }
-          } catch {
-            // Model not found in registry, use message-count fallback
-          }
-        }
-        compressorInstance = new DefaultContextCompressor(
-          compressionConfig,
-          options.llmClient,
-          options.model
-        );
+    if (commandsEnabled) {
+      const commandRegistry = new CommandRegistry();
+      commandRegistry.register(createClearHandler());
+      commandRegistry.register(createCompactHandler());
+      if (options.skillDirs && options.skillDirs.length > 0) {
+        const skillProvider = new FilesystemSkillProvider(options.skillDirs);
+        commandRegistry.register(createSkillsHandler(skillProvider));
+        commandRegistry.register(createSkillHandler(skillProvider));
       }
-    }
+      for (const cmd of options.commands ?? []) {
+        commandRegistry.register(cmd);
+      }
+      // Create compressor instance for both AgentRunner auto-compression and /compact command
+      if (options.compression) {
+        if (typeof options.compression === 'object' && 'shouldCompress' in options.compression) {
+          compressorInstance = options.compression as IContextCompressor;
+        } else {
+          const compressionConfig = { ...(options.compression as CompressionConfig) };
+          // Auto-detect context window size from llm-client if not explicitly set
+          if (!compressionConfig.contextWindowSize) {
+            try {
+              const meta = (
+                options.llmClient as unknown as {
+                  getModelMeta?: (model: string) => { contextWindow: number; maxTokens: number };
+                }
+              ).getModelMeta?.(options.model ?? 'glm-5.1');
+              if (meta) {
+                compressionConfig.contextWindowSize = meta.contextWindow;
+              }
+            } catch {
+              // Model not found in registry, use message-count fallback
+            }
+          }
+          compressorInstance = new DefaultContextCompressor(
+            compressionConfig,
+            options.llmClient,
+            options.model
+          );
+        }
+      }
 
-    const commandMiddleware = createCommandMiddleware(commandRegistry, {
-      compressor: compressorInstance,
-    });
+      commandMiddleware = createCommandMiddleware(commandRegistry, {
+        compressor: compressorInstance,
+      });
+    }
 
     // Build tool registry and optionally wrap with confirmation
     let finalToolRegistry: import('@agentskillmania/colts').IToolRegistry | undefined;
@@ -207,9 +217,9 @@ export class EnhancedRunner {
       tools: finalToolRegistry ? undefined : allTools,
       toolRegistry: finalToolRegistry,
       middleware: [
-        commandMiddleware,
-        sessionSupport.middleware,
-        todolistSupport.middleware,
+        ...(commandMiddleware ? [commandMiddleware] : []),
+        ...(sessionEnabled ? [sessionSupport.middleware] : []),
+        ...(todolistEnabled ? [todolistSupport.middleware] : []),
         ...a2uiMiddleware,
       ],
       systemPrompt: buildTimeContext(),

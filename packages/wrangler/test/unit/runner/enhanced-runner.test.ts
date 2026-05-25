@@ -391,4 +391,69 @@ describe('EnhancedRunner', () => {
     expect(names).toContain('file_read');
     expect(names).not.toContain('shell');
   });
+
+  // ── enableSession / enableTodolist / enableCommands toggle tests ──
+
+  it('should skip session support when enableSession is false', async () => {
+    const { createSessionSupport } = await import('../../../src/session/support.js');
+    vi.mocked(createSessionSupport).mockClear();
+
+    await EnhancedRunner.create(makeOptions({ enableSession: false }));
+
+    expect(createSessionSupport).not.toHaveBeenCalled();
+  });
+
+  it('should skip session tools and middleware when enableSession is false', async () => {
+    await EnhancedRunner.create(makeOptions({ enableSession: false }));
+
+    const calls = await getAgentRunnerCalls();
+    const callArgs = calls[calls.length - 1][0];
+    const middlewareNames = callArgs.middleware.map((m: { name: string }) => m.name);
+    expect(middlewareNames).not.toContain('session');
+  });
+
+  it('should initialize session support when enableSession is not set', async () => {
+    const { createSessionSupport } = await import('../../../src/session/support.js');
+    vi.mocked(createSessionSupport).mockClear();
+
+    await EnhancedRunner.create(makeOptions());
+
+    expect(createSessionSupport).toHaveBeenCalled();
+  });
+
+  it('should skip todolist support when enableTodolist is false', async () => {
+    const { createTodolistSupport } = await import('../../../src/todolist/support.js');
+    vi.mocked(createTodolistSupport).mockClear();
+
+    await EnhancedRunner.create(makeOptions({ enableTodolist: false }));
+
+    expect(createTodolistSupport).not.toHaveBeenCalled();
+  });
+
+  it('should skip todolist middleware when enableTodolist is false', async () => {
+    await EnhancedRunner.create(makeOptions({ enableTodolist: false }));
+
+    const calls = await getAgentRunnerCalls();
+    const callArgs = calls[calls.length - 1][0];
+    const middlewareNames = callArgs.middleware.map((m: { name: string }) => m.name);
+    expect(middlewareNames).not.toContain('todolist');
+  });
+
+  it('should skip command middleware when enableCommands is false', async () => {
+    await EnhancedRunner.create(makeOptions({ enableCommands: false }));
+
+    const calls = await getAgentRunnerCalls();
+    const callArgs = calls[calls.length - 1][0];
+    const middlewareNames = callArgs.middleware.map((m: { name: string }) => m.name);
+    expect(middlewareNames).not.toContain('command');
+  });
+
+  it('should have only todolist middleware when session and commands are disabled', async () => {
+    await EnhancedRunner.create(makeOptions({ enableSession: false, enableCommands: false }));
+
+    const calls = await getAgentRunnerCalls();
+    const callArgs = calls[calls.length - 1][0];
+    const middlewareNames = callArgs.middleware.map((m: { name: string }) => m.name);
+    expect(middlewareNames).toEqual(['todolist']);
+  });
 });
