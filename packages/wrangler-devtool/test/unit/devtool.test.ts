@@ -16,6 +16,11 @@ const {
   runCrewComposerMock,
   runReviewerMock,
   runSessionCuratorMock,
+  createArchitectRunnerMock,
+  createSkillDesignerRunnerMock,
+  createCrewComposerRunnerMock,
+  createReviewerRunnerMock,
+  createCuratorRunnerWrapperMock,
   mockOutput,
 } = vi.hoisted(() => {
   const output = {
@@ -23,51 +28,60 @@ const {
     summary: 'Generated agent definition',
   };
   const mockReport = {
-    overallScore: 8,
+    overallScore: 4,
     dimensions: {
-      clarity: { score: 8, reasoning: 'Clear' },
-      completeness: { score: 7, reasoning: 'Mostly complete' },
-      focus: { score: 9, reasoning: 'Well focused' },
-      safety: { score: 8, reasoning: 'Safe' },
-      efficiency: { score: 7, reasoning: 'Reasonable' },
+      clarity: { score: 4, reasoning: 'Clear' },
+      completeness: { score: 3, reasoning: 'Mostly complete' },
+      focus: { score: 5, reasoning: 'Well focused' },
+      safety: { score: 4, reasoning: 'Safe' },
+      efficiency: { score: 3, reasoning: 'Reasonable' },
     },
     issues: [],
     summary: 'Good definition',
   };
   const mockSummary = { title: 'Test Session', description: 'A test session summary' };
+  const mockRunnerResult = {
+    runner: { run: vi.fn(), runStream: vi.fn(), on: vi.fn().mockReturnThis() },
+    state: { config: { name: 'test', instructions: '', tools: [] }, context: { messages: [] } },
+  };
   return {
     runAgentArchitectMock: vi.fn().mockResolvedValue(output),
     runSkillDesignerMock: vi.fn().mockResolvedValue(output),
     runCrewComposerMock: vi.fn().mockResolvedValue(output),
     runReviewerMock: vi.fn().mockResolvedValue(mockReport),
     runSessionCuratorMock: vi.fn().mockResolvedValue(mockSummary),
+    createArchitectRunnerMock: vi.fn().mockResolvedValue(mockRunnerResult),
+    createSkillDesignerRunnerMock: vi.fn().mockResolvedValue(mockRunnerResult),
+    createCrewComposerRunnerMock: vi.fn().mockResolvedValue(mockRunnerResult),
+    createReviewerRunnerMock: vi.fn().mockResolvedValue(mockRunnerResult),
+    createCuratorRunnerWrapperMock: vi.fn().mockResolvedValue(mockRunnerResult),
     mockOutput: output,
   };
 });
 
 vi.mock('../../src/agents/architect.js', () => ({
   runAgentArchitect: runAgentArchitectMock,
-  createArchitectRunner: vi.fn(),
+  createArchitectRunner: createArchitectRunnerMock,
 }));
 
 vi.mock('../../src/agents/skill-designer.js', () => ({
   runSkillDesigner: runSkillDesignerMock,
-  createSkillDesignerRunner: vi.fn(),
+  createSkillDesignerRunner: createSkillDesignerRunnerMock,
 }));
 
 vi.mock('../../src/agents/crew-composer.js', () => ({
   runCrewComposer: runCrewComposerMock,
-  createCrewComposerRunner: vi.fn(),
+  createCrewComposerRunner: createCrewComposerRunnerMock,
 }));
 
 vi.mock('../../src/agents/reviewer.js', () => ({
   runReviewer: runReviewerMock,
-  createReviewerRunner: vi.fn(),
+  createReviewerRunner: createReviewerRunnerMock,
 }));
 
 vi.mock('../../src/agents/session-curator.js', () => ({
   runSessionCurator: runSessionCuratorMock,
-  createCuratorRunnerWrapper: vi.fn(),
+  createCuratorRunnerWrapper: createCuratorRunnerWrapperMock,
 }));
 
 import type { DevToolOptions } from '../../src/devtool.js';
@@ -249,6 +263,54 @@ describe('DevTool', () => {
     });
   });
 
+  describe('create*Runner methods', () => {
+    let tool: InstanceType<typeof DevTool>;
+
+    beforeEach(() => {
+      tool = new DevTool({ llm: VALID_LLM_CONFIG });
+    });
+
+    it('createArchitectRunner delegates to wrapper module', async () => {
+      const result = await tool.createArchitectRunner();
+
+      expect(createArchitectRunnerMock).toHaveBeenCalledOnce();
+      expect(result).toHaveProperty('runner');
+      expect(result).toHaveProperty('state');
+    });
+
+    it('createSkillDesignerRunner delegates to wrapper module', async () => {
+      const result = await tool.createSkillDesignerRunner();
+
+      expect(createSkillDesignerRunnerMock).toHaveBeenCalledOnce();
+      expect(result).toHaveProperty('runner');
+      expect(result).toHaveProperty('state');
+    });
+
+    it('createCrewComposerRunner delegates to wrapper module', async () => {
+      const result = await tool.createCrewComposerRunner();
+
+      expect(createCrewComposerRunnerMock).toHaveBeenCalledOnce();
+      expect(result).toHaveProperty('runner');
+      expect(result).toHaveProperty('state');
+    });
+
+    it('createReviewerRunner delegates to wrapper module', async () => {
+      const result = await tool.createReviewerRunner();
+
+      expect(createReviewerRunnerMock).toHaveBeenCalledOnce();
+      expect(result).toHaveProperty('runner');
+      expect(result).toHaveProperty('state');
+    });
+
+    it('createSessionCuratorRunner delegates to wrapper module', async () => {
+      const result = await tool.createSessionCuratorRunner();
+
+      expect(createCuratorRunnerWrapperMock).toHaveBeenCalledOnce();
+      expect(result).toHaveProperty('runner');
+      expect(result).toHaveProperty('state');
+    });
+  });
+
   describe('runReviewer', () => {
     let tool: InstanceType<typeof DevTool>;
 
@@ -256,13 +318,13 @@ describe('DevTool', () => {
       tool = new DevTool({ llm: VALID_LLM_CONFIG });
       runReviewerMock.mockClear();
       runReviewerMock.mockResolvedValue({
-        overallScore: 8,
+        overallScore: 4,
         dimensions: {
-          clarity: { score: 8, reasoning: 'Clear' },
-          completeness: { score: 7, reasoning: 'Mostly complete' },
-          focus: { score: 9, reasoning: 'Well focused' },
-          safety: { score: 8, reasoning: 'Safe' },
-          efficiency: { score: 7, reasoning: 'Reasonable' },
+          clarity: { score: 4, reasoning: 'Clear' },
+          completeness: { score: 3, reasoning: 'Mostly complete' },
+          focus: { score: 5, reasoning: 'Well focused' },
+          safety: { score: 4, reasoning: 'Safe' },
+          efficiency: { score: 3, reasoning: 'Reasonable' },
         },
         issues: [],
         summary: 'Good definition',
@@ -272,7 +334,7 @@ describe('DevTool', () => {
     it('delegates to wrapper with target path and content', async () => {
       const result = await tool.runReviewer('AGENT.md', '# My Agent');
 
-      expect(result.overallScore).toBe(8);
+      expect(result.overallScore).toBe(4);
       expect(runReviewerMock).toHaveBeenCalledOnce();
       const [targetPath, content] = runReviewerMock.mock.calls[0]!;
       expect(targetPath).toBe('AGENT.md');

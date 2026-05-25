@@ -174,6 +174,35 @@ describe('orchestrator', () => {
       const output = parseAgentOutput(raw);
       expect(output.changes[0].new).toContain('const x = 1;');
     });
+
+    it('should extract JSON from text with no closing brace', () => {
+      expect(() => parseAgentOutput('some text without braces')).toThrow('No JSON object found');
+    });
+
+    it('should extract deeply nested JSON', () => {
+      const raw = JSON.stringify({
+        changes: [
+          {
+            file: 'test.md',
+            type: 'create',
+            new: '{"nested": {"deep": true}}',
+          },
+        ],
+        summary: 'Nested test',
+      });
+      const output = parseAgentOutput(raw);
+      expect(output.changes).toHaveLength(1);
+      expect(output.summary).toBe('Nested test');
+    });
+
+    it('should handle JSON with escaped quotes in values', () => {
+      const raw = JSON.stringify({
+        changes: [{ file: 'test.md', type: 'create', new: 'He said "hello" to me' }],
+        summary: 'Escaped quotes test',
+      });
+      const output = parseAgentOutput(raw);
+      expect(output.changes[0].new).toBe('He said "hello" to me');
+    });
   });
 
   // ── Retained: parseReviewReport ────────────────────────
@@ -524,6 +553,63 @@ describe('orchestrator', () => {
       expect(feedbackMsg.content).toContain('Review Feedback');
       expect(feedbackMsg.content).toContain('Unclear');
       expect(feedbackMsg.content).toContain('Missing description');
+    });
+
+    it('should pass when all dimensions equal threshold exactly', async () => {
+      const output = makeAgentOutput('boundary test');
+      const boundaryReport: ReviewReport = {
+        overallScore: 4,
+        dimensions: {
+          clarity: { score: 4, reasoning: 'OK' },
+          completeness: { score: 4, reasoning: 'OK' },
+          focus: { score: 4, reasoning: 'OK' },
+          safety: { score: 4, reasoning: 'OK' },
+          efficiency: { score: 4, reasoning: 'OK' },
+        },
+        issues: [],
+        summary: 'All at threshold',
+      };
+
+      mocks.run
+        .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(output)))
+        .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(boundaryReport)));
+
+      const result = await runGenerationWithLoop(
+        'architect',
+        'test input',
+        { llmClient: {} as never, workspacePath: tempDir },
+        undefined,
+        { maxRounds: 3, scoreThreshold: 4 }
+      );
+
+      // Should pass and stop after round 1 (2 calls total)
+      expect(mocks.run).toHaveBeenCalledTimes(2);
+      expect(result.review?.overallScore).toBe(4);
+    });
+
+    it('should stop iteration after unparseable review instead of continuing', async () => {
+      const output = makeAgentOutput('round 1');
+      const passReport = makeReviewReport(5);
+      const output2 = makeAgentOutput('round 2');
+
+      mocks.run
+        .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(output)))
+        .mockResolvedValueOnce(makeRunnerReturn('not valid review json'))
+        .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(output2)))
+        .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(passReport)));
+
+      const result = await runGenerationWithLoop(
+        'architect',
+        'test input',
+        { llmClient: {} as never, workspacePath: tempDir },
+        undefined,
+        { maxRounds: 3, scoreThreshold: 4 }
+      );
+
+      // Should stop at 2 calls (gen + failed review), not continue to 4
+      expect(mocks.run).toHaveBeenCalledTimes(2);
+      expect(result.output.summary).toBe('round 1');
+      expect(result.review).toBeUndefined();
     });
   });
 
