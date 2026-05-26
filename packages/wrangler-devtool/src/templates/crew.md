@@ -5,16 +5,16 @@ description: A new crew
 
 # {{name}}
 
-描述这个 Crew 的目标和协调规则。
+Describe this crew's goals and coordination rules.
 
-## 成员
+## Members
 
-- Agent A: 负责分析和规划
-- Agent B: 负责编码实现
-- Agent C: 负责测试验证
+- Agent A: Analysis and planning
+- Agent B: Implementation
+- Agent C: Testing and verification
 
-## 协作规则
+## Collaboration Rules
 
-- Agent A 完成规划后，将任务分发给 Agent B
-- Agent B 完成编码后，提交给 Agent C 测试
-- 所有 Agent 共享同一个 todo list
+- Agent A distributes tasks to Agent B after planning
+- Agent B submits to Agent C for testing after implementation
+- All agents share the same todo list
