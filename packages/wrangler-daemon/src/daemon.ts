@@ -16,6 +16,8 @@ import { fileRoutes } from './routes/files.js';
 import { agentStateRoutes } from './routes/agent-state.js';
 import { skillFileRoutes } from './routes/skill-files.js';
 import { agentFileRoutes } from './routes/agent-files.js';
+import { crewRoutes } from './routes/crews.js';
+import { crewFileRoutes } from './routes/crew-files.js';
 import { devtoolRoutes } from './routes/devtool.js';
 import { devtoolStreamRoutes } from './routes/devtool-stream.js';
 import { CONFIG_PATH, AGENTS_DIR, SKILLS_DIR, SESSIONS_DIR, CREWS_DIR } from './constants.js';
@@ -111,6 +113,8 @@ export class Daemon {
     this.fastify.register(agentStateRoutes);
     this.fastify.register(skillFileRoutes);
     this.fastify.register(agentFileRoutes);
+    this.fastify.register(crewRoutes);
+    this.fastify.register(crewFileRoutes);
     this.fastify.register(devtoolRoutes);
     this.fastify.register(devtoolStreamRoutes);
 
