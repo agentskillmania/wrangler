@@ -166,4 +166,24 @@ describe('AgentSession', () => {
       expect((objResult!.data as { result: string }).result).toContain('error');
     });
   });
+
+  describe('AgentSessionOptions', () => {
+    it('accepts new EnhancedRunner parameters', () => {
+      const options: import('../../src/core/agent-session.js').AgentSessionOptions = {
+        workspacePath: '/tmp/test',
+        agentName: 'test',
+        builtinTools: { shell: false, fileRead: true },
+        enableSession: false,
+        enableTodolist: false,
+        enableCommands: true,
+        sandbox: false,
+        thinkingEnabled: false,
+        a2ui: { enabled: true },
+      };
+      expect(options.builtinTools!.shell).toBe(false);
+      expect(options.enableSession).toBe(false);
+      expect(options.sandbox).toBe(false);
+      expect(options.a2ui!.enabled).toBe(true);
+    });
+  });
 });

@@ -37,6 +37,25 @@ export interface AgentSessionOptions {
   mcpConfigPaths?: string[];
   sessionBaseDir?: string;
   sessionStore?: SessionStore;
+  // EnhancedRunner options — all optional with defaults matching current behavior
+  builtinTools?: {
+    fileRead?: boolean;
+    fileWrite?: boolean;
+    fileEdit?: boolean;
+    glob?: boolean;
+    grep?: boolean;
+    shell?: boolean;
+    webSearch?: boolean;
+    webFetch?: boolean;
+    python?: boolean;
+    git?: boolean;
+  };
+  enableSession?: boolean;
+  enableTodolist?: boolean;
+  enableCommands?: boolean;
+  sandbox?: boolean;
+  thinkingEnabled?: boolean;
+  a2ui?: { enabled: boolean };
 }
 
 /** Default agent instructions when none provided */
