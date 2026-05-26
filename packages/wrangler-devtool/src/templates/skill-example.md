@@ -1,18 +1,28 @@
 ---
 name: example
-description: An example skill demonstrating the SKILL.md format
+description: An example skill demonstrating the SKILL.md format. Use when learning how to write wrangler skills.
 ---
 
 # Example Skill
 
-Describe what this skill does.
+Describe what changes when this skill is loaded — not "who you are" but "what you should do".
 
-## When to Use
+## Output Format
 
-Use this skill when the user asks you to perform X.
+Describe the exact output structure with placeholders.
 
-## Steps
+## Rules
 
-1. First step
-2. Second step
-3. Output format requirements
+1. [Behavioral rule — what to do]
+2. [Behavioral rule — what NOT to do]
+3. [Constraint or quality standard]
+
+## Example
+
+**Input:** [sample input]
+
+**Output:**
+
+```
+[sample output following the format above]
+```

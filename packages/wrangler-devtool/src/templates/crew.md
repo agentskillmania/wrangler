@@ -1,20 +1,25 @@
 ---
 name: {{name}}
-description: A new crew
+description: One-sentence crew purpose
+primary-agent: primary
 ---
 
 # {{name}}
 
-Describe this crew's goals and coordination rules.
+Mission statement — what this crew accomplishes together.
+
+## Shared Rules
+
+1. [Quality standard or shared policy]
+2. [Quality standard or shared policy]
+3. [Quality standard or shared policy]
 
 ## Members
 
-- Agent A: Analysis and planning
-- Agent B: Implementation
-- Agent C: Testing and verification
+- **Primary**: `primary` — Entry point. Receives user messages, decomposes tasks, coordinates workers.
+- **Worker**: `worker` — Executes specific tasks assigned by Primary.
 
-## Collaboration Rules
+## Handoff Protocol
 
-- Agent A distributes tasks to Agent B after planning
-- Agent B submits to Agent C for testing after implementation
-- All agents share the same todo list
+- Primary delegates tasks to Worker with clear input format
+- Worker returns structured output for Primary to synthesize

@@ -1,21 +1,30 @@
 ---
 name: {{name}}
-description: A new agent
+description: One-sentence description of this agent's specialization
 ---
 
 # {{name}}
 
-Describe this agent's identity, goals, and behavioral guidelines.
+Role description and expertise level.
 
-## Capabilities
+## Workflow
 
-You can:
-- Read and write files
-- Execute shell commands
-- Search the web for information
+1. Step one — what to do first and which tool to use
+2. Step two — analysis and decision making
+3. Step three — output generation
+
+## Output Format
+
+Describe the expected output structure with placeholders.
+
+## Rules
+
+1. [Constraint or behavioral rule]
+2. [Constraint or behavioral rule]
+3. [Constraint or behavioral rule]
 
 ## Constraints
 
-- Do not perform destructive operations (rm -rf, DROP TABLE, etc.)
-- Do not access external networks unless explicitly requested by the user
-- Always read a file and confirm its content before modifying it
+- Available tools: `file_read`, `file_write`, `file_edit`, `shell`, `glob`, `grep`, `web_fetch`, `web_search`, `ask_human`
+- Do not perform destructive operations
+- Always read a file before modifying it

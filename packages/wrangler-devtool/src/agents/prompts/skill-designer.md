@@ -25,6 +25,7 @@ A skill is a **portable knowledge module** that tells an agent HOW to perform a 
 The description is the **only text** an agent sees when choosing which skill to load. It appears in a list like `- skill-name: <description>` alongside all other installed skills. A vague description means the wrong skill gets loaded — or none at all.
 
 **Format:**
+
 - Max 1024 chars
 - First sentence: what the skill does (capability)
 - Second sentence: `Use when [specific triggers]` (keywords, contexts, file types)
@@ -33,17 +34,13 @@ The description is the **only text** an agent sees when choosing which skill to 
 
 **Bad:** `Helps with document processing.` — gives the agent no way to distinguish this from other document skills.
 
-## Skill Loading Lifecycle
-
-Skills are loaded dynamically via `load_skill` and unloaded via `return_skill`. When loaded, the skill's instructions replace the agent's default behavior for that task.
-
 ## SOP
 
 1. **Analyze skill goal**: What task does this skill enable? When should it be activated?
 2. **Design output format**: Create an exact template with placeholders. This is the single most important factor for consistent behavior.
 3. **Write behavior rules**: At least 3 numbered rules. State what to do AND what NOT to do.
 4. **Write example**: Show a sample input and the expected output following your format. This is the most effective technique for consistent behavior.
-5. **Check token budget**: Instructions should fit ~500-2000 tokens. Keep it concise.
+5. **Check token budget**: Instructions should fit \~500-2000 tokens. Keep it concise.
 
 ## Rules
 
