@@ -11,7 +11,7 @@ A skill is a **portable knowledge module** that tells an agent HOW to perform a 
 **YAML Frontmatter:**
 
 - `name` (required): Skill identifier, lowercase with hyphens, e.g. `code-review`
-- `description` (required): One sentence explaining when to use this skill, 1-1024 chars
+- `description` (required): What the skill does and when to trigger it, 1-1024 chars (see Description Guide below)
 
 **Markdown Body** — MUST include these sections:
 
@@ -19,6 +19,19 @@ A skill is a **portable knowledge module** that tells an agent HOW to perform a 
 2. **Output Format**: Exact template with placeholders
 3. **Rules**: Numbered list of constraints (at least 3)
 4. **Example**: At least one input -> output pair (CRITICAL for consistency)
+
+## Description Guide
+
+The description is the **only text** an agent sees when choosing which skill to load. It appears in a list like `- skill-name: <description>` alongside all other installed skills. A vague description means the wrong skill gets loaded — or none at all.
+
+**Format:**
+- Max 1024 chars
+- First sentence: what the skill does (capability)
+- Second sentence: `Use when [specific triggers]` (keywords, contexts, file types)
+
+**Good:** `Extract text and tables from PDF files, fill forms, merge documents. Use when working with PDF files or when user mentions PDFs, forms, or document extraction.`
+
+**Bad:** `Helps with document processing.` — gives the agent no way to distinguish this from other document skills.
 
 ## Skill Loading Lifecycle
 
@@ -58,7 +71,7 @@ Skills are loaded dynamically via `load_skill` and unloaded via `return_skill`. 
     {
       "file": "skills/weekly-status-report.md",
       "type": "create",
-      "new": "---\nname: weekly-status-report\ndescription: Generates structured weekly status reports from raw activity notes, summarizing accomplishments, blockers, and next steps.\n---\n\n# Weekly Status Report Generator\n\nYou have loaded the **Weekly Status Report** skill. Your output mode is now set to structured status report generation.\n\n## Output Format\n\n### Week of [Date Range]\n\n**Accomplishments:**\n- [accomplishment 1]\n- [accomplishment 2]\n\n**Blockers:**\n- [blocker 1] (severity: High/Medium/Low)\n\n**Next Week:**\n- [planned task 1]\n- [planned task 2]\n\n## Rules\n\n1. **No filler.** Every item must be a concrete, verifiable fact.\n2. **Quantify when possible.** Use numbers: \"Fixed 3 bugs\" not \"Fixed bugs\".\n3. **Blockers must have severity.** Rate each blocker as High, Medium, or Low.\n4. **Limit to 5 items per section.** Prioritize the most important.\n5. **Use the same language as the input.**\n\n## Example\n\n**Input:** Fixed the login bug that was causing timeouts. Finished the API documentation for v2 endpoints. Still waiting on the design team for the new dashboard mockups. Next week I'll start on the notification system.\n\n**Output:**\n\n### Week of May 19-23, 2026\n\n**Accomplishments:**\n- Fixed login timeout bug (reduced avg response from 8s to 200ms)\n- Completed API documentation for all v2 endpoints (12 endpoints documented)\n\n**Blockers:**\n- Waiting on design team for dashboard mockups (severity: Medium)\n\n**Next Week:**\n- Begin notification system implementation"
+      "new": "---\nname: weekly-status-report\ndescription: Generates structured weekly status reports from raw activity notes, summarizing accomplishments, blockers, and next steps. Use when user asks to write status reports, weekly updates, or progress summaries.\n---\n\n# Weekly Status Report Generator\n\nYou have loaded the **Weekly Status Report** skill. Your output mode is now set to structured status report generation.\n\n## Output Format\n\n### Week of [Date Range]\n\n**Accomplishments:**\n- [accomplishment 1]\n- [accomplishment 2]\n\n**Blockers:**\n- [blocker 1] (severity: High/Medium/Low)\n\n**Next Week:**\n- [planned task 1]\n- [planned task 2]\n\n## Rules\n\n1. **No filler.** Every item must be a concrete, verifiable fact.\n2. **Quantify when possible.** Use numbers: \"Fixed 3 bugs\" not \"Fixed bugs\".\n3. **Blockers must have severity.** Rate each blocker as High, Medium, or Low.\n4. **Limit to 5 items per section.** Prioritize the most important.\n5. **Use the same language as the input.**\n\n## Example\n\n**Input:** Fixed the login bug that was causing timeouts. Finished the API documentation for v2 endpoints. Still waiting on the design team for the new dashboard mockups. Next week I'll start on the notification system.\n\n**Output:**\n\n### Week of May 19-23, 2026\n\n**Accomplishments:**\n- Fixed login timeout bug (reduced avg response from 8s to 200ms)\n- Completed API documentation for all v2 endpoints (12 endpoints documented)\n\n**Blockers:**\n- Waiting on design team for dashboard mockups (severity: Medium)\n\n**Next Week:**\n- Begin notification system implementation"
     }
   ],
   "summary": "Created weekly status report skill with structured output format"
