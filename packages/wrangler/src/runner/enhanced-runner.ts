@@ -30,6 +30,7 @@ import { createCompactHandler } from '../command/handlers/compact.js';
 import { createSkillsHandler } from '../command/handlers/skills.js';
 import { createSkillHandler } from '../command/handlers/skill.js';
 import { createA2UITools, A2UIMiddleware } from '../tools/a2ui/index.js';
+import path from 'node:path';
 
 /**
  * EnhancedRunner — Pre-wired AgentRunner with all wrangler runtime mechanisms
@@ -156,10 +157,23 @@ export class EnhancedRunner {
       const commandRegistry = new CommandRegistry();
       commandRegistry.register(createClearHandler());
       commandRegistry.register(createCompactHandler());
-      if (options.skillDirs && options.skillDirs.length > 0) {
-        const skillProvider = new FilesystemSkillProvider(options.skillDirs);
-        commandRegistry.register(createSkillsHandler(skillProvider));
-        commandRegistry.register(createSkillHandler(skillProvider));
+      {
+        // When a2ui is enabled, automatically include the a2ui-generation skill from @agentskillmania/agenui
+        const skillDirs = [...(options.skillDirs ?? [])];
+        if (a2uiEnabled) {
+          try {
+            const agenuiRoot = require.resolve('@agentskillmania/agenui/package.json');
+            const agenuiSkillsDir = path.join(path.dirname(agenuiRoot), 'dist', 'skills');
+            skillDirs.push(agenuiSkillsDir);
+          } catch {
+            /* agenui not installed — skip */
+          }
+        }
+        if (skillDirs.length > 0) {
+          const skillProvider = new FilesystemSkillProvider(skillDirs);
+          commandRegistry.register(createSkillsHandler(skillProvider));
+          commandRegistry.register(createSkillHandler(skillProvider));
+        }
       }
       for (const cmd of options.commands ?? []) {
         commandRegistry.register(cmd);
