@@ -17,6 +17,7 @@ import { agentStateRoutes } from './routes/agent-state.js';
 import { skillFileRoutes } from './routes/skill-files.js';
 import { agentFileRoutes } from './routes/agent-files.js';
 import { devtoolRoutes } from './routes/devtool.js';
+import { devtoolStreamRoutes } from './routes/devtool-stream.js';
 import { CONFIG_PATH, AGENTS_DIR, SKILLS_DIR, SESSIONS_DIR } from './constants.js';
 import type { DaemonOptions } from './types.js';
 
@@ -111,6 +112,7 @@ export class Daemon {
     this.fastify.register(skillFileRoutes);
     this.fastify.register(agentFileRoutes);
     this.fastify.register(devtoolRoutes);
+    this.fastify.register(devtoolStreamRoutes);
 
     // Decorate fastify with managers for route access
     this.fastify.decorate('configManager', this.configManager);
