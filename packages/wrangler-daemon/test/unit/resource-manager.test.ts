@@ -331,4 +331,184 @@ describe('ResourceManager', () => {
       expect(names).toContain('visible.ts');
     });
   });
+
+  // ─── Crew CRUD ───
+
+  describe('listCrews', () => {
+    it('returns empty array when no crews', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      const crews = await manager.listCrews();
+      expect(crews).toEqual([]);
+    });
+
+    it('discovers crews with CREW.md', async () => {
+      await mkdir(crewsDir, { recursive: true });
+      const crewDir = join(crewsDir, 'test-crew');
+      await mkdir(crewDir, { recursive: true });
+      await mkdir(join(crewDir, 'agents'), { recursive: true });
+      await mkdir(join(crewDir, 'skills'), { recursive: true });
+      await writeFile(
+        join(crewDir, 'CREW.md'),
+        '---\nname: Test Crew\ndescription: A test crew\n---\n\n# Test Crew\n'
+      );
+
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      const crews = await manager.listCrews();
+      expect(crews).toHaveLength(1);
+      expect(crews[0].id).toBe('test-crew');
+      expect(crews[0].name).toBe('Test Crew');
+      expect(crews[0].description).toBe('A test crew');
+      expect(crews[0].agentCount).toBe(0);
+      expect(crews[0].skillCount).toBe(0);
+    });
+
+    it('skips directories without CREW.md', async () => {
+      await mkdir(crewsDir, { recursive: true });
+      await mkdir(join(crewsDir, 'invalid-crew'), { recursive: true });
+
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      const crews = await manager.listCrews();
+      expect(crews).toEqual([]);
+    });
+
+    it('counts agents and skills subdirectories', async () => {
+      await mkdir(crewsDir, { recursive: true });
+      const crewDir = join(crewsDir, 'full-crew');
+      await mkdir(crewDir, { recursive: true });
+      await mkdir(join(crewDir, 'agents'), { recursive: true });
+      await mkdir(join(crewDir, 'agents', 'agent-a'), { recursive: true });
+      await mkdir(join(crewDir, 'skills'), { recursive: true });
+      await mkdir(join(crewDir, 'skills', 'skill-x'), { recursive: true });
+      await mkdir(join(crewDir, 'skills', 'skill-y'), { recursive: true });
+      await writeFile(join(crewDir, 'CREW.md'), '---\nname: Full\n---\n\n# Full\n');
+
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      const crews = await manager.listCrews();
+      expect(crews[0].agentCount).toBe(1);
+      expect(crews[0].skillCount).toBe(2);
+    });
+
+    it('returns empty when crews directory does not exist', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, join(tempDir, 'nonexistent-crews'));
+      const crews = await manager.listCrews();
+      expect(crews).toEqual([]);
+    });
+  });
+
+  describe('getCrew', () => {
+    it('returns null for non-existent crew', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      const result = await manager.getCrew('non-existent');
+      expect(result).toBeNull();
+    });
+
+    it('returns parsed crew detail with agents and skills', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      await manager.createCrew({
+        name: 'detail-crew',
+        description: 'A crew for detail test',
+        primaryAgent: 'leader',
+        instructions: 'Do things.',
+      });
+
+      // Add agent files manually
+      await writeFile(join(crewsDir, 'detail-crew', 'agents', 'leader.md'), '# Leader\n');
+
+      // Add skill directory with SKILL.md
+      const skillDir = join(crewsDir, 'detail-crew', 'skills', 'search');
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(join(skillDir, 'SKILL.md'), '---\nname: search\n---\n');
+
+      const detail = await manager.getCrew('detail-crew');
+      expect(detail).not.toBeNull();
+      expect(detail!.id).toBe('detail-crew');
+      expect(detail!.name).toBe('detail-crew');
+      expect(detail!.description).toBe('A crew for detail test');
+      expect(detail!.primaryAgent).toBe('leader');
+      expect(detail!.crewMd).toContain('detail-crew');
+      expect(detail!.agents).toHaveLength(1);
+      expect(detail!.agents[0].name).toBe('leader');
+      expect(detail!.agents[0].fileName).toBe('leader.md');
+      expect(detail!.skills).toHaveLength(1);
+      expect(detail!.skills[0].name).toBe('search');
+    });
+
+    it('returns null when id is not a directory', async () => {
+      await mkdir(crewsDir, { recursive: true });
+      await writeFile(join(crewsDir, 'not-a-dir.txt'), 'file content');
+
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      const result = await manager.getCrew('not-a-dir.txt');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('createCrew', () => {
+    it('creates directory structure and CREW.md', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      const id = await manager.createCrew({
+        name: 'new-crew',
+        description: 'A new crew',
+        instructions: 'Work together.',
+      });
+
+      expect(id).toBe('new-crew');
+
+      const { stat: statFn } = await import('node:fs/promises');
+      const agentsStat = await statFn(join(crewsDir, 'new-crew', 'agents'));
+      const skillsStat = await statFn(join(crewsDir, 'new-crew', 'skills'));
+      expect(agentsStat.isDirectory()).toBe(true);
+      expect(skillsStat.isDirectory()).toBe(true);
+
+      const content = await import('node:fs/promises').then((fs) =>
+        fs.readFile(join(crewsDir, 'new-crew', 'CREW.md'), 'utf-8')
+      );
+      expect(content).toContain('name: new-crew');
+      expect(content).toContain('description: A new crew');
+      expect(content).toContain('Work together.');
+    });
+
+    it('creates CREW.md without optional fields', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      await manager.createCrew({ name: 'minimal-crew' });
+
+      const content = await import('node:fs/promises').then((fs) =>
+        fs.readFile(join(crewsDir, 'minimal-crew', 'CREW.md'), 'utf-8')
+      );
+      expect(content).toContain('name: minimal-crew');
+      expect(content).not.toContain('description:');
+      expect(content).not.toContain('primary-agent:');
+    });
+  });
+
+  describe('deleteCrew', () => {
+    it('removes crew directory', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+      await manager.createCrew({ name: 'to-delete' });
+
+      await manager.deleteCrew('to-delete');
+
+      const crews = await manager.listCrews();
+      expect(crews).toHaveLength(0);
+    });
+  });
 });

@@ -11,6 +11,9 @@ import type {
   SkillFile,
   CreateAgentOptions,
   CreateSkillOptions,
+  CrewInfo,
+  CrewDetail,
+  CreateCrewOptions,
 } from '../types.js';
 
 /**
@@ -191,6 +194,123 @@ export class ResourceManager {
     const skillDir = join(this.skillsDir, id);
     await rm(skillDir, { recursive: true, force: true });
   }
+
+  /** List all valid crews (directories with CREW.md) */
+  async listCrews(): Promise<CrewInfo[]> {
+    const crews: CrewInfo[] = [];
+    try {
+      const entries = await readdir(this.crewsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const crewDir = join(this.crewsDir, entry.name);
+        try {
+          const content = await readFile(join(crewDir, 'CREW.md'), 'utf-8');
+          const parsed = parseCrewMd(content, entry.name);
+          const agents = await this.listSubDirs(join(crewDir, 'agents'));
+          const skills = await this.listSubDirs(join(crewDir, 'skills'));
+          crews.push({
+            id: entry.name,
+            name: parsed.name,
+            description: parsed.description ?? '',
+            path: crewDir,
+            agentCount: agents.length,
+            skillCount: skills.length,
+          });
+        } catch {
+          /* skip directories without CREW.md */
+        }
+      }
+    } catch {
+      /* crews directory doesn't exist */
+    }
+    return crews;
+  }
+
+  /** Get detailed crew info with CREW.md content, agents, and skills */
+  async getCrew(id: string): Promise<CrewDetail | null> {
+    const crewDir = join(this.crewsDir, id);
+    try {
+      const dirStat = await statFn(crewDir);
+      if (!dirStat.isDirectory()) return null;
+
+      const content = await readFile(join(crewDir, 'CREW.md'), 'utf-8');
+      const parsed = parseCrewMd(content, id);
+
+      const agents: { name: string; fileName: string }[] = [];
+      try {
+        const agentEntries = await readdir(join(crewDir, 'agents'), { withFileTypes: true });
+        for (const entry of agentEntries) {
+          if (entry.isFile() && entry.name.endsWith('.md')) {
+            agents.push({ name: entry.name.replace('.md', ''), fileName: entry.name });
+          }
+        }
+      } catch {
+        /* no agents directory */
+      }
+
+      const skills: { name: string; dirName: string }[] = [];
+      try {
+        const skillEntries = await readdir(join(crewDir, 'skills'), { withFileTypes: true });
+        for (const entry of skillEntries) {
+          if (entry.isDirectory()) {
+            try {
+              await statFn(join(crewDir, 'skills', entry.name, 'SKILL.md'));
+              skills.push({ name: entry.name, dirName: entry.name });
+            } catch {
+              /* not a valid skill directory */
+            }
+          }
+        }
+      } catch {
+        /* no skills directory */
+      }
+
+      return {
+        id,
+        name: parsed.name,
+        description: parsed.description,
+        primaryAgent: parsed.primaryAgent,
+        path: crewDir,
+        crewMd: content,
+        agents,
+        skills,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Create a new crew with CREW.md */
+  async createCrew(options: CreateCrewOptions): Promise<string> {
+    const crewDir = join(this.crewsDir, options.name);
+    await mkdir(crewDir, { recursive: true });
+    await mkdir(join(crewDir, 'agents'), { recursive: true });
+    await mkdir(join(crewDir, 'skills'), { recursive: true });
+    const primaryLine = options.primaryAgent ? `\nprimary-agent: ${options.primaryAgent}` : '';
+    const descLine = options.description ? `\ndescription: ${options.description}` : '';
+    await writeFile(
+      join(crewDir, 'CREW.md'),
+      `---\nname: ${options.name}${descLine}${primaryLine}\n---\n\n# ${options.name}\n\n${options.instructions ?? ''}\n`,
+      'utf-8'
+    );
+    return options.name;
+  }
+
+  /** Delete a crew by id */
+  async deleteCrew(id: string): Promise<void> {
+    const crewDir = join(this.crewsDir, id);
+    await rm(crewDir, { recursive: true, force: true });
+  }
+
+  /** Helper: list subdirectories */
+  private async listSubDirs(dirPath: string): Promise<string[]> {
+    try {
+      const entries = await readdir(dirPath, { withFileTypes: true });
+      return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    } catch {
+      return [];
+    }
+  }
 }
 
 /** Parse SKILL.md frontmatter for name and description */
@@ -211,6 +331,31 @@ function parseSkillMd(
     return {
       name: (raw.name as string) ?? fallbackName,
       description: raw.description as string | undefined,
+    };
+  } catch {
+    return { name: fallbackName };
+  }
+}
+
+/** Parse CREW.md frontmatter for name, description, and primary-agent */
+function parseCrewMd(
+  content: string,
+  fallbackName: string
+): { name: string; description?: string; primaryAgent?: string } {
+  const trimmed = content.trim();
+  if (!trimmed.startsWith('---')) {
+    return { name: fallbackName };
+  }
+  const secondDash = trimmed.indexOf('---', 4);
+  if (secondDash === -1) return { name: fallbackName };
+
+  try {
+    const yamlStr = trimmed.slice(4, secondDash);
+    const raw = yaml.load(yamlStr, { schema: yaml.DEFAULT_SCHEMA }) as Record<string, unknown>;
+    return {
+      name: (raw.name as string) ?? fallbackName,
+      description: raw.description as string | undefined,
+      primaryAgent: raw['primary-agent'] as string | undefined,
     };
   } catch {
     return { name: fallbackName };
