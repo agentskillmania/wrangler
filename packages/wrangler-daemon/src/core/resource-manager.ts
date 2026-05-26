@@ -22,16 +22,19 @@ import type {
 export class ResourceManager {
   private readonly agentsDir: string;
   private readonly skillsDir: string;
+  private readonly crewsDir: string;
 
-  constructor(agentsDir: string, skillsDir: string) {
+  constructor(agentsDir: string, skillsDir: string, crewsDir: string) {
     this.agentsDir = resolve(agentsDir);
     this.skillsDir = resolve(skillsDir);
+    this.crewsDir = resolve(crewsDir);
   }
 
   /** Ensure resource directories exist */
   async init(): Promise<void> {
     await mkdir(this.agentsDir, { recursive: true });
     await mkdir(this.skillsDir, { recursive: true });
+    await mkdir(this.crewsDir, { recursive: true });
   }
 
   /** List all valid agents (directories with AGENT.md) */

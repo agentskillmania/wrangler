@@ -33,7 +33,11 @@ describe('Integration: Agent File Management (US-C6)', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'daemon-agent-file-mgmt-'));
     agentsDir = join(tempDir, 'agents');
-    const resourceManager = new ResourceManager(agentsDir, join(tempDir, 'skills'));
+    const resourceManager = new ResourceManager(
+      agentsDir,
+      join(tempDir, 'skills'),
+      join(tempDir, 'crews')
+    );
     await resourceManager.init();
 
     fastify = Fastify();

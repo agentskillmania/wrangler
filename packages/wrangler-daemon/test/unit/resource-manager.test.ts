@@ -8,11 +8,13 @@ describe('ResourceManager', () => {
   let tempDir: string;
   let agentsDir: string;
   let skillsDir: string;
+  let crewsDir: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'daemon-resource-test-'));
     agentsDir = join(tempDir, 'agents');
     skillsDir = join(tempDir, 'skills');
+    crewsDir = join(tempDir, 'crews');
   });
 
   afterEach(async () => {
@@ -20,7 +22,7 @@ describe('ResourceManager', () => {
   });
 
   it('init creates agents and skills directories', async () => {
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
 
     const { stat } = await import('node:fs/promises');
@@ -31,7 +33,7 @@ describe('ResourceManager', () => {
   });
 
   it('listAgents returns empty array when no agents', async () => {
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
 
     const agents = await manager.listAgents();
@@ -46,7 +48,7 @@ describe('ResourceManager', () => {
       '# Test Agent\nA helpful test agent.\n'
     );
 
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
 
     const agents = await manager.listAgents();
@@ -59,7 +61,7 @@ describe('ResourceManager', () => {
     await mkdir(agentsDir, { recursive: true });
     await mkdir(join(agentsDir, 'invalid-agent'), { recursive: true });
 
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
 
     const agents = await manager.listAgents();
@@ -67,7 +69,7 @@ describe('ResourceManager', () => {
   });
 
   it('listSkills returns empty array when no skills', async () => {
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
 
     const skills = await manager.listSkills();
@@ -79,7 +81,7 @@ describe('ResourceManager', () => {
     await mkdir(join(skillsDir, 'test-skill'), { recursive: true });
     await writeFile(join(skillsDir, 'test-skill', 'SKILL.md'), '# Test Skill\nA test skill.\n');
 
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
 
     const skills = await manager.listSkills();
@@ -88,7 +90,7 @@ describe('ResourceManager', () => {
   });
 
   it('createAgent creates directory and AGENT.md', async () => {
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
 
     const id = await manager.createAgent({
@@ -105,7 +107,7 @@ describe('ResourceManager', () => {
   });
 
   it('deleteAgent removes agent directory', async () => {
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
     await manager.createAgent({ name: 'to-delete', instructions: 'bye' });
 
@@ -116,7 +118,7 @@ describe('ResourceManager', () => {
   });
 
   it('createSkill creates directory and SKILL.md', async () => {
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
 
     const id = await manager.createSkill({ name: 'my-skill', description: 'A cool skill' });
@@ -129,7 +131,7 @@ describe('ResourceManager', () => {
   });
 
   it('deleteSkill removes skill directory', async () => {
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
     await manager.createSkill({ name: 'to-delete', description: 'bye' });
 
@@ -140,14 +142,14 @@ describe('ResourceManager', () => {
   });
 
   it('listAgents returns empty when agents directory does not exist', async () => {
-    const manager = new ResourceManager(join(tempDir, 'nonexistent-agents'), skillsDir);
+    const manager = new ResourceManager(join(tempDir, 'nonexistent-agents'), skillsDir, crewsDir);
     // Don't call init — directory won't exist
     const agents = await manager.listAgents();
     expect(agents).toEqual([]);
   });
 
   it('listSkills returns empty when skills directory does not exist', async () => {
-    const manager = new ResourceManager(agentsDir, join(tempDir, 'nonexistent-skills'));
+    const manager = new ResourceManager(agentsDir, join(tempDir, 'nonexistent-skills'), crewsDir);
     const skills = await manager.listSkills();
     expect(skills).toEqual([]);
   });
@@ -156,7 +158,7 @@ describe('ResourceManager', () => {
     await mkdir(agentsDir, { recursive: true });
     await writeFile(join(agentsDir, 'not-a-dir.txt'), 'file content');
 
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
 
     const agents = await manager.listAgents();
@@ -167,7 +169,7 @@ describe('ResourceManager', () => {
     await mkdir(skillsDir, { recursive: true });
     await writeFile(join(skillsDir, 'not-a-dir.txt'), 'file content');
 
-    const manager = new ResourceManager(agentsDir, skillsDir);
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
 
     const skills = await manager.listSkills();
@@ -178,7 +180,7 @@ describe('ResourceManager', () => {
 
   describe('getAgent', () => {
     it('returns null for non-existent agent', async () => {
-      const manager = new ResourceManager(agentsDir, skillsDir);
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
       const result = await manager.getAgent('non-existent');
@@ -186,7 +188,7 @@ describe('ResourceManager', () => {
     });
 
     it('returns parsed agent detail for valid agent', async () => {
-      const manager = new ResourceManager(agentsDir, skillsDir);
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
       await manager.createAgent({
@@ -214,7 +216,7 @@ describe('ResourceManager', () => {
         'utf-8'
       );
 
-      const manager = new ResourceManager(agentsDir, skillsDir);
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
       const detail = await manager.getAgent('structured-agent');
@@ -239,7 +241,7 @@ describe('ResourceManager', () => {
       await mkdir(skillSubDir, { recursive: true });
       await writeFile(join(skillSubDir, 'SKILL.md'), '---\nname: search\n---\n', 'utf-8');
 
-      const manager = new ResourceManager(agentsDir, skillsDir);
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
       const detail = await manager.getAgent('agent-with-skills');
@@ -255,7 +257,7 @@ describe('ResourceManager', () => {
       await writeFile(join(agentDir, 'AGENT.md'), '---\nname: MCP\n---\n\nI use MCP.', 'utf-8');
       await writeFile(join(agentDir, 'mcp.json'), '{}', 'utf-8');
 
-      const manager = new ResourceManager(agentsDir, skillsDir);
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
       const detail = await manager.getAgent('agent-mcp');
@@ -268,7 +270,7 @@ describe('ResourceManager', () => {
 
   describe('getSkill', () => {
     it('returns null for non-existent skill', async () => {
-      const manager = new ResourceManager(agentsDir, skillsDir);
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
       const result = await manager.getSkill('non-existent');
@@ -276,7 +278,7 @@ describe('ResourceManager', () => {
     });
 
     it('returns parsed skill detail with file listing', async () => {
-      const manager = new ResourceManager(agentsDir, skillsDir);
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
       await manager.createSkill({
@@ -303,7 +305,7 @@ describe('ResourceManager', () => {
       await writeFile(join(skillDir, 'index.ts'), 'export default {}', 'utf-8');
       await writeFile(join(skillDir, 'utils.js'), 'module.exports = {}', 'utf-8');
 
-      const manager = new ResourceManager(agentsDir, skillsDir);
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
       const detail = await manager.getSkill('files-skill');
@@ -320,7 +322,7 @@ describe('ResourceManager', () => {
       await writeFile(join(skillDir, '.hidden'), 'secret', 'utf-8');
       await writeFile(join(skillDir, 'visible.ts'), '// visible', 'utf-8');
 
-      const manager = new ResourceManager(agentsDir, skillsDir);
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
       const detail = await manager.getSkill('hidden-skill');

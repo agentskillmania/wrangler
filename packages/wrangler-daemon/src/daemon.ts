@@ -18,7 +18,7 @@ import { skillFileRoutes } from './routes/skill-files.js';
 import { agentFileRoutes } from './routes/agent-files.js';
 import { devtoolRoutes } from './routes/devtool.js';
 import { devtoolStreamRoutes } from './routes/devtool-stream.js';
-import { CONFIG_PATH, AGENTS_DIR, SKILLS_DIR, SESSIONS_DIR } from './constants.js';
+import { CONFIG_PATH, AGENTS_DIR, SKILLS_DIR, SESSIONS_DIR, CREWS_DIR } from './constants.js';
 import type { DaemonOptions } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -44,7 +44,7 @@ export class Daemon {
 
     this.fastify = Fastify({ logger: false });
     this.configManager = new ConfigManager(CONFIG_PATH);
-    this.resourceManager = new ResourceManager(AGENTS_DIR, SKILLS_DIR);
+    this.resourceManager = new ResourceManager(AGENTS_DIR, SKILLS_DIR, CREWS_DIR);
     this.sessionManager = new SessionManager(SESSIONS_DIR);
   }
 

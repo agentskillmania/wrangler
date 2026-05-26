@@ -13,6 +13,9 @@ export const AGENTS_DIR = join(APP_DIR, 'agents');
 /** Directory for user-defined skills */
 export const SKILLS_DIR = join(APP_DIR, 'skills');
 
+/** Directory for user-defined crews */
+export const CREWS_DIR = join(APP_DIR, 'crews');
+
 /** Directory for session persistence */
 export const SESSIONS_DIR = join(APP_DIR, 'sessions');
 

@@ -29,7 +29,7 @@ describe('Integration: Agent Resource Management', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'daemon-agent-res-'));
     agentsDir = join(tempDir, 'agents');
-    const manager = new ResourceManager(agentsDir, join(tempDir, 'skills'));
+    const manager = new ResourceManager(agentsDir, join(tempDir, 'skills'), join(tempDir, 'crews'));
     await manager.init();
 
     fastify = Fastify();

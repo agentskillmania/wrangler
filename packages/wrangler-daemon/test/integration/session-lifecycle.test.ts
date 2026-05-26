@@ -31,7 +31,11 @@ describe('Integration: Session Lifecycle', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'daemon-session-lc-'));
     sessionsDir = join(tempDir, 'sessions');
     const sessionManager = new SessionManager(sessionsDir);
-    const resourceManager = new ResourceManager(join(tempDir, 'agents'), join(tempDir, 'skills'));
+    const resourceManager = new ResourceManager(
+      join(tempDir, 'agents'),
+      join(tempDir, 'skills'),
+      join(tempDir, 'crews')
+    );
     await resourceManager.init();
 
     fastify = Fastify();

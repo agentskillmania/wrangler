@@ -29,7 +29,7 @@ describe('Integration: Skill Resource Management', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'daemon-skill-res-'));
     skillsDir = join(tempDir, 'skills');
-    const manager = new ResourceManager(join(tempDir, 'agents'), skillsDir);
+    const manager = new ResourceManager(join(tempDir, 'agents'), skillsDir, join(tempDir, 'crews'));
     await manager.init();
 
     fastify = Fastify();

@@ -93,6 +93,35 @@ export interface CreateSkillOptions {
   description: string;
 }
 
+/** Crew resource metadata returned by list API */
+export interface CrewInfo {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  agentCount: number;
+  skillCount: number;
+}
+
+/** Detailed crew info returned by GET /api/crews/:id */
+export interface CrewDetail {
+  id: string;
+  name: string;
+  description?: string;
+  primaryAgent?: string;
+  path: string;
+  crewMd: string;
+  agents: { name: string; fileName: string }[];
+  skills: { name: string; dirName: string }[];
+}
+
+export interface CreateCrewOptions {
+  name: string;
+  description?: string;
+  primaryAgent?: string;
+  instructions?: string;
+}
+
 /** SSE event payload pushed to frontend */
 export interface SSEEvent {
   event: string;

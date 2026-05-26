@@ -36,7 +36,11 @@ describe('US-C4: Agent Chat Interaction', () => {
     sessionsDir = join(tempDir, 'sessions');
     const sessionManager = new SessionManager(sessionsDir);
     const configManager = new ConfigManager(join(tempDir, 'config.yaml'));
-    const resourceManager = new ResourceManager(join(tempDir, 'agents'), join(tempDir, 'skills'));
+    const resourceManager = new ResourceManager(
+      join(tempDir, 'agents'),
+      join(tempDir, 'skills'),
+      join(tempDir, 'crews')
+    );
     await configManager.init();
     await resourceManager.init();
 

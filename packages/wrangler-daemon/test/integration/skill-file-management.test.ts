@@ -33,7 +33,11 @@ describe('Integration: Skill File Management (US-C7)', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'daemon-skill-file-mgmt-'));
     skillsDir = join(tempDir, 'skills');
-    const resourceManager = new ResourceManager(join(tempDir, 'agents'), skillsDir);
+    const resourceManager = new ResourceManager(
+      join(tempDir, 'agents'),
+      skillsDir,
+      join(tempDir, 'crews')
+    );
     await resourceManager.init();
 
     fastify = Fastify();

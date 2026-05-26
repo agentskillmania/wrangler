@@ -30,7 +30,7 @@ describe('US-C9: Launcher Data', () => {
     skillsDir = join(tempDir, 'skills');
     sessionsDir = join(tempDir, 'sessions');
 
-    const resourceManager = new ResourceManager(agentsDir, skillsDir);
+    const resourceManager = new ResourceManager(agentsDir, skillsDir, join(tempDir, 'crews'));
     await resourceManager.init();
 
     const sessionManager = new SessionManager(sessionsDir);
