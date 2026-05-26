@@ -148,7 +148,19 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post('/api/agents/:name/chat', async (request, reply) => {
     const { name } = request.params as { name: string };
-    const body = request.body as { message?: string; workspacePath?: string };
+    const body = request.body as {
+      message?: string;
+      workspacePath?: string;
+      config?: {
+        builtinTools?: Record<string, boolean>;
+        enableSession?: boolean;
+        enableTodolist?: boolean;
+        enableCommands?: boolean;
+        sandbox?: boolean;
+        thinkingEnabled?: boolean;
+        a2ui?: { enabled: boolean };
+      };
+    };
 
     if (!body.message?.trim()) {
       reply.code(400).send({ error: 'message is required' });
@@ -176,6 +188,14 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       skillDirs: agentDetail.skillDirs,
       mcpConfigPaths: agentDetail.mcpPaths,
       sessionBaseDir: sessionManager().baseDir,
+      // New config fields from request body
+      builtinTools: body.config?.builtinTools as AgentSessionOptions['builtinTools'],
+      enableSession: body.config?.enableSession,
+      enableTodolist: body.config?.enableTodolist,
+      enableCommands: body.config?.enableCommands,
+      sandbox: body.config?.sandbox,
+      thinkingEnabled: body.config?.thinkingEnabled,
+      a2ui: body.config?.a2ui,
     };
 
     const config = configManager().get();
@@ -217,7 +237,18 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post('/api/chat/:sessionId', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
-    const body = request.body as { message?: string };
+    const body = request.body as {
+      message?: string;
+      config?: {
+        builtinTools?: Record<string, boolean>;
+        enableSession?: boolean;
+        enableTodolist?: boolean;
+        enableCommands?: boolean;
+        sandbox?: boolean;
+        thinkingEnabled?: boolean;
+        a2ui?: { enabled: boolean };
+      };
+    };
 
     if (!body.message?.trim()) {
       reply.code(400).send({ error: 'message is required' });
@@ -241,6 +272,14 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         model: info.model,
         sessionStore: store,
         sessionBaseDir: sessionManager().baseDir,
+        // New config fields from request body
+        builtinTools: body.config?.builtinTools as AgentSessionOptions['builtinTools'],
+        enableSession: body.config?.enableSession,
+        enableTodolist: body.config?.enableTodolist,
+        enableCommands: body.config?.enableCommands,
+        sandbox: body.config?.sandbox,
+        thinkingEnabled: body.config?.thinkingEnabled,
+        a2ui: body.config?.a2ui,
       };
       const config = configManager().get();
       agentSession = await AgentSession.create(sessionOptions, config);
