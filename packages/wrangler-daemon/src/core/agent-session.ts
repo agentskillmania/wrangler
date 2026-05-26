@@ -148,12 +148,17 @@ export class AgentSession {
       llmClient,
       model: llmModel,
       workspacePath: options.workspacePath,
-      sandbox: true,
-      askHumanHandler,
-      thinkingEnabled: true,
+      sandbox: options.sandbox ?? true,
+      thinkingEnabled: options.thinkingEnabled ?? true,
+      builtinTools: options.builtinTools,
+      enableSession: options.enableSession ?? true,
+      enableTodolist: options.enableTodolist ?? true,
+      enableCommands: options.enableCommands ?? true,
+      a2ui: options.a2ui,
       skillDirs: options.skillDirs,
       mcpConfigPaths: options.mcpConfigPaths ?? [],
       sessionBaseDir: options.sessionBaseDir,
+      askHumanHandler,
     });
 
     // Resume from previous state if available
