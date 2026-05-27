@@ -638,53 +638,91 @@ body {
   color: var(--text-muted);
 }
 
-.chat-line {
+/* ── Event cards (unified for chat + cockpit) ── */
+.ev-card {
   margin-bottom: 4px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  overflow: hidden;
 }
 
-.chat-line .tag {
-  display: inline-block;
+.ev-card-token {
+  border-left: 3px solid var(--success);
+}
+
+.ev-card-think {
+  border-left: 3px solid var(--text-secondary);
+}
+
+.ev-card-tool {
+  border-left: 3px solid var(--warning);
+}
+
+.ev-card-error {
+  border-left: 3px solid var(--error);
+  background: rgba(248, 81, 73, 0.04);
+}
+
+.ev-card-done {
+  border-left: 3px solid var(--accent);
+}
+
+.ev-card-session {
+  border-left: 3px solid var(--text-secondary);
+}
+
+.ev-card-skill {
+  border-left: 3px solid #a855f7;
+}
+
+.ev-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: default;
+}
+
+.ev-card-tag {
+  flex-shrink: 0;
   font-size: 10px;
   font-weight: 600;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: 3px;
-  margin-right: 6px;
+  font-family: var(--font-mono);
+  margin-top: 1px;
+}
+
+.ev-card-body {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  word-break: break-word;
+  white-space: pre-wrap;
   font-family: var(--font-mono);
 }
 
-.chat-line .tag-token {
-  background: rgba(63, 185, 80, 0.12);
-  color: var(--success);
+.ev-card-body.ev-card-overflow {
+  cursor: pointer;
 }
 
-.chat-line .tag-tool {
-  background: rgba(210, 153, 34, 0.12);
-  color: var(--warning);
-}
-
-.chat-line .tag-think {
-  background: rgba(139, 148, 158, 0.12);
-  color: var(--text-secondary);
-}
-
-.chat-line .tag-error {
-  background: rgba(248, 81, 73, 0.12);
-  color: var(--error);
-}
-
-.chat-line .tag-done {
-  background: rgba(88, 166, 255, 0.12);
+.ev-card-toggle {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-secondary);
   color: var(--accent);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  margin-top: 1px;
 }
 
-.chat-line .tag-session {
-  background: rgba(139, 148, 158, 0.12);
-  color: var(--text-secondary);
-}
-
-.chat-line .tag-skill {
-  background: rgba(168, 85, 247, 0.12);
-  color: #a855f7;
+.ev-card-toggle:hover {
+  background: var(--border);
 }
 
 .chat-bar {
@@ -973,32 +1011,6 @@ body {
 .right-tab.active {
   background: var(--bg-hover);
   color: var(--accent);
-}
-
-/* ── Cockpit event log ── */
-.cockpit-event {
-  display: flex;
-  gap: 6px;
-  padding: 3px 0;
-  font-size: 11px;
-  line-height: 1.4;
-  font-family: var(--font-mono);
-  border-bottom: 1px solid var(--border);
-}
-
-.cockpit-event .ev-tag {
-  flex-shrink: 0;
-  font-size: 10px;
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-weight: 600;
-}
-
-.cockpit-event .ev-data {
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ── Config toggle ── */

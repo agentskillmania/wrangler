@@ -666,22 +666,24 @@ function ChatPage() {
       var p = typeof data === 'string' ? JSON.parse(data) : data;
       if (ev === 'session-start') {
         setSessionId(p.sessionId);
-        appendLine('session', 'Started: ' + p.sessionId);
+        appendLine('session', 'Session started: ' + p.sessionId);
       } else if (ev === 'token') {
         appendLine('token', p.delta || '');
       } else if (ev === 'thinking') {
-        appendLine('think', '[thinking] ' + (p.content || ''));
+        appendLine('think', p.content || '');
       } else if (ev === 'tool-start') {
-        appendLine('tool', p.name + ' ' + JSON.stringify(p.args));
+        var argsStr = p.args ? JSON.stringify(p.args, null, 2) : '{}';
+        appendLine('tool', p.name + '\n' + argsStr);
       } else if (ev === 'tool-end') {
-        appendLine('tool', p.callId + ' -> ' + String(p.result || '').substring(0, 200));
+        var resultStr = p.result != null ? String(p.result) : '(no result)';
+        appendLine('tool', (p.callId || p.name || 'tool') + ' -> result:\n' + resultStr);
       } else if (ev === 'skill-loading') {
-        appendLine('skill', 'Loading: ' + p.name);
+        appendLine('skill', 'Loading skill: ' + p.name);
       } else if (ev === 'skill-loaded') {
-        appendLine('skill', 'Loaded: ' + p.name);
+        appendLine('skill', 'Skill loaded: ' + p.name);
       } else if (ev === 'done') {
         setStreaming(false);
-        appendLine('done', 'Complete' + (p.aborted ? ' (aborted)' : ''));
+        appendLine('done', 'Stream complete' + (p.aborted ? ' (aborted)' : ''));
       } else if (ev === 'error') {
         setStreaming(false);
         appendLine('error', p.message || 'Unknown error');
@@ -861,13 +863,66 @@ function ChatPage() {
     });
   }
 
-  // Event tag colors for cockpit events
-  function evTagClass(type) {
-    if (type === 'token') return 'badge-success';
-    if (type === 'tool-start' || type === 'tool-end') return 'badge-warning';
-    if (type === 'error') return 'badge-error';
-    if (type === 'done') return 'badge-accent';
-    return 'badge-default';
+  // Event card config — unified tag + color map
+  var TAG_COLORS = {
+    token: { label: 'token', bg: 'rgba(63,185,80,0.12)', fg: 'var(--success)' },
+    think: { label: 'thinking', bg: 'rgba(139,148,158,0.12)', fg: 'var(--text-secondary)' },
+    tool: { label: 'tool', bg: 'rgba(210,153,34,0.12)', fg: 'var(--warning)' },
+    error: { label: 'error', bg: 'rgba(248,81,73,0.12)', fg: 'var(--error)' },
+    done: { label: 'done', bg: 'rgba(88,166,255,0.12)', fg: 'var(--accent)' },
+    session: { label: 'session', bg: 'rgba(139,148,158,0.12)', fg: 'var(--text-secondary)' },
+    skill: { label: 'skill', bg: 'rgba(168,85,247,0.12)', fg: '#a855f7' },
+  };
+
+  function tagStyle(tag) {
+    var c = TAG_COLORS[tag];
+    return c
+      ? 'background:' + c.bg + ';color:' + c.fg
+      : 'background:rgba(139,148,158,0.12);color:var(--text-secondary)';
+  }
+
+  function tagLabel(tag) {
+    var c = TAG_COLORS[tag];
+    return c ? c.label : tag;
+  }
+
+  // Expandable card toggle state
+  var _sExp = useState({}),
+    expandedCards = _sExp[0],
+    setExpandedCards = _sExp[1];
+
+  function toggleCard(id) {
+    setExpandedCards(function (prev) {
+      var next = Object.assign({}, prev);
+      next[id] = !prev[id];
+      return next;
+    });
+  }
+
+  function EventCard(props) {
+    var tag = props.tag;
+    var text = props.text;
+    var id = props.id;
+    var isLong = text && text.length > 200;
+    var isExpanded = expandedCards[id];
+    var displayText = isLong && !isExpanded ? text.substring(0, 200) + '...' : text;
+    return html`
+      <div class="ev-card ev-card-${tag}">
+        <div class="ev-card-header" onClick=${isLong ? function () { toggleCard(id); } : null}>
+          <span class="ev-card-tag" style=${tagStyle(tag)}>${tagLabel(tag)}</span>
+          <span class="ev-card-body${isLong ? ' ev-card-overflow' : ''}">${displayText}</span>
+          ${isLong &&
+          html`
+            <button
+              class="ev-card-toggle"
+              onClick=${function (e) { e.stopPropagation(); toggleCard(id); }}
+            >
+              ${isExpanded ? 'Collapse' : '+' + (text.length - 200) + ' chars'}
+            </button>
+          `}
+        </div>
+      </div>
+    `;
   }
 
   return html`
@@ -1166,12 +1221,7 @@ function ChatPage() {
             `}
             ${chatLines.map(
               function (line) {
-                return html`
-                  <div key=${line.id} class="chat-line">
-                    <span class=${'tag tag-' + line.tag}>${line.tag}</span>
-                    <span>${line.text}</span>
-                  </div>
-                `;
+                return html`<${EventCard} key=${line.id} tag=${line.tag} text=${line.text} id=${line.id} />`;
               }
             )}
             <div ref=${messagesEndRef} />
@@ -1249,14 +1299,9 @@ function ChatPage() {
                 ${cockpitEvents.map(
                   function (ev) {
                     var dataStr = typeof ev.data === 'object'
-                      ? JSON.stringify(ev.data).substring(0, 120)
-                      : String(ev.data).substring(0, 120);
-                    return html`
-                      <div key=${ev.id} class="cockpit-event">
-                        <span class=${'ev-tag badge ' + evTagClass(ev.type)}>${ev.type}</span>
-                        <span class="ev-data">${dataStr}</span>
-                      </div>
-                    `;
+                      ? JSON.stringify(ev.data, null, 2)
+                      : String(ev.data);
+                    return html`<${EventCard} key=${ev.id} tag=${ev.type} text=${dataStr} id=${ev.id} />`;
                   }
                 )}
               </div>
