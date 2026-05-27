@@ -33,6 +33,16 @@ export class ResourceManager {
     this.crewsDir = resolve(crewsDir);
   }
 
+  /** Validate resource name: no path traversal, no empty */
+  validateName(name: string): void {
+    if (!name || !name.trim()) {
+      throw new Error('name is required');
+    }
+    if (name.includes('/') || name.includes('\\') || name.includes('..')) {
+      throw new Error('name must not contain path separators or traversal sequences');
+    }
+  }
+
   /** Ensure resource directories exist */
   async init(): Promise<void> {
     await mkdir(this.agentsDir, { recursive: true });
@@ -138,7 +148,7 @@ export class ResourceManager {
           if (fileStat.isFile()) {
             files.push({
               name: entry.name,
-              path: `${id}/${entry.name}`,
+              path: entry.name,
               size: fileStat.size,
             });
           }
@@ -161,6 +171,7 @@ export class ResourceManager {
 
   /** Create a new agent with AGENT.md */
   async createAgent(options: CreateAgentOptions): Promise<string> {
+    this.validateName(options.name);
     const agentDir = join(this.agentsDir, options.name);
     await mkdir(agentDir, { recursive: true });
     await writeFile(
@@ -179,6 +190,7 @@ export class ResourceManager {
 
   /** Create a new skill with SKILL.md */
   async createSkill(options: CreateSkillOptions): Promise<string> {
+    this.validateName(options.name);
     const skillDir = join(this.skillsDir, options.name);
     await mkdir(skillDir, { recursive: true });
     await writeFile(
@@ -282,6 +294,7 @@ export class ResourceManager {
 
   /** Create a new crew with CREW.md */
   async createCrew(options: CreateCrewOptions): Promise<string> {
+    this.validateName(options.name);
     const crewDir = join(this.crewsDir, options.name);
     await mkdir(crewDir, { recursive: true });
     await mkdir(join(crewDir, 'agents'), { recursive: true });
