@@ -89,6 +89,31 @@ describe('ResourceManager', () => {
     expect(skills[0].id).toBe('test-skill');
   });
 
+  // Characterization test: createAgent silently overwrites an existing agent
+  it('createAgent overwrites existing agent', async () => {
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+    await manager.init();
+
+    // Create agent with initial instructions
+    await manager.createAgent({
+      name: 'dup-agent',
+      instructions: 'Original instructions.',
+    });
+
+    // Overwrite with different instructions
+    await manager.createAgent({
+      name: 'dup-agent',
+      instructions: 'Overwritten instructions.',
+    });
+
+    // Verify AGENT.md contains the new instructions
+    const content = await import('node:fs/promises').then((fs) =>
+      fs.readFile(join(agentsDir, 'dup-agent', 'AGENT.md'), 'utf-8')
+    );
+    expect(content).toContain('Overwritten instructions.');
+    expect(content).not.toContain('Original instructions.');
+  });
+
   it('createAgent creates directory and AGENT.md', async () => {
     const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
@@ -458,6 +483,31 @@ describe('ResourceManager', () => {
   });
 
   describe('createCrew', () => {
+    // Characterization test: createCrew silently overwrites an existing crew
+    it('createCrew overwrites existing crew', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      // Create crew with initial description
+      await manager.createCrew({
+        name: 'dup-crew',
+        description: 'Original description.',
+      });
+
+      // Overwrite with different description
+      await manager.createCrew({
+        name: 'dup-crew',
+        description: 'Overwritten description.',
+      });
+
+      // Verify CREW.md contains the new description
+      const content = await import('node:fs/promises').then((fs) =>
+        fs.readFile(join(crewsDir, 'dup-crew', 'CREW.md'), 'utf-8')
+      );
+      expect(content).toContain('Overwritten description.');
+      expect(content).not.toContain('Original description.');
+    });
+
     it('creates directory structure and CREW.md', async () => {
       const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();

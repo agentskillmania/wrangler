@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadMCPTools } from '../../../../src/tools/mcp/mcp-loader.js';
+import { loadMCPTools, _resetCache } from '../../../../src/tools/mcp/mcp-loader.js';
 
 // vi.mock is hoisted before imports. Using var (not const/let) avoids TDZ.
 var mockFns = {
@@ -81,6 +81,7 @@ describe('loadMCPTools', () => {
   });
 
   afterEach(async () => {
+    _resetCache();
     await rm(testDir, { recursive: true, force: true }).catch(() => {});
   });
 

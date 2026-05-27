@@ -21,6 +21,11 @@ export interface MCPLoaderOptions {
 /** Module-level cache singleton. Alive for the process lifetime. */
 const globalCache = new MCPToolCache();
 
+/** @internal Reset cache and runtime for testing. */
+export function _resetCache(): void {
+  globalCache.shutdown();
+}
+
 /**
  * Load MCP tools from one or more mcporter config files.
  *

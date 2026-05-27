@@ -139,8 +139,9 @@ export class MCPToolCache {
     return tools;
   }
 
-  /** Clear the tool cache. Does NOT close the Runtime. */
+  /** Clear the tool cache and discard the Runtime. */
   shutdown(): void {
     this.cache.clear();
+    this.runtime = null;
   }
 }

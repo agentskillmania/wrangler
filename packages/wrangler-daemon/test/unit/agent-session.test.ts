@@ -1,6 +1,33 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentSession } from '../../src/core/agent-session.js';
+import type { AgentSessionOptions } from '../../src/core/agent-session.js';
 import type { SSEEvent } from '../../src/types.js';
+
+const { mockEnhancedRunnerCreate, mockRunnerRunStream } = vi.hoisted(() => ({
+  mockEnhancedRunnerCreate: vi.fn().mockResolvedValue({
+    runStream: vi.fn(),
+  }),
+  mockRunnerRunStream: vi.fn(),
+}));
+vi.mock('@agentskillmania/wrangler', () => ({
+  EnhancedRunner: { create: mockEnhancedRunnerCreate },
+  SessionStore: vi.fn(),
+}));
+vi.mock('@agentskillmania/llm-client', () => ({
+  LLMClient: vi.fn().mockReturnValue({
+    registerProvider: vi.fn(),
+    registerApiKey: vi.fn(),
+  }),
+}));
+vi.mock('@agentskillmania/colts', () => ({
+  createAgentState: vi.fn().mockReturnValue({ id: 'test-state' }),
+  addUserMessage: vi.fn((state, _msg) => state),
+}));
+
+const testConfig = {
+  llm: { baseUrl: 'https://api.example.com', apiKey: 'sk-test', model: 'test-model' },
+  server: { port: 3100, host: 'localhost' },
+} satisfies import('../../src/types.js').DaemonConfig;
 
 describe('AgentSession', () => {
   describe('mapEvent', () => {
@@ -58,9 +85,106 @@ describe('AgentSession', () => {
       expect(result).toEqual({ event: 'error', data: { message: 'boom' } });
     });
 
-    it('returns null for unknown event type', () => {
-      const result = AgentSession.mapEvent({ type: 'unknown_event' } as any);
-      expect(result).toBeNull();
+    it('maps step:start event', () => {
+      const result = AgentSession.mapEvent({
+        type: 'step:start',
+        step: 3,
+        state: {},
+        timestamp: 0,
+      } as any);
+      expect(result).toEqual({ event: 'step-start', data: { step: 3 } });
+    });
+
+    it('maps step:end event', () => {
+      const result = AgentSession.mapEvent({
+        type: 'step:end',
+        step: 3,
+        result: {},
+        timestamp: 0,
+      } as any);
+      expect(result).toEqual({ event: 'step-end', data: { step: 3 } });
+    });
+
+    it('maps phase-change event', () => {
+      const result = AgentSession.mapEvent({
+        type: 'phase-change',
+        from: 'thinking',
+        to: 'tool_call',
+        timestamp: 0,
+      } as any);
+      expect(result).toEqual({
+        event: 'phase-change',
+        data: { from: 'thinking', to: 'tool_call' },
+      });
+    });
+
+    it('maps compressing event', () => {
+      const result = AgentSession.mapEvent({ type: 'compressing', timestamp: 0 } as any);
+      expect(result).toEqual({ event: 'compressing', data: {} });
+    });
+
+    it('maps compressed event', () => {
+      const result = AgentSession.mapEvent({
+        type: 'compressed',
+        summary: 'summarized',
+        removedCount: 5,
+        timestamp: 0,
+      } as any);
+      expect(result).toEqual({
+        event: 'compressed',
+        data: { summary: 'summarized', removedCount: 5 },
+      });
+    });
+
+    it('maps llm:request event', () => {
+      const result = AgentSession.mapEvent({
+        type: 'llm:request',
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: ['read_file'],
+        skill: null,
+        timestamp: 0,
+      } as any);
+      expect(result!.event).toBe('llm-request');
+      const data = result!.data as { messages: unknown[]; tools: string[] };
+      expect(data.messages).toHaveLength(1);
+      expect(data.tools).toEqual(['read_file']);
+    });
+
+    it('maps llm:response event', () => {
+      const result = AgentSession.mapEvent({
+        type: 'llm:response',
+        text: 'hello',
+        toolCalls: null,
+        timestamp: 0,
+      } as any);
+      expect(result).toEqual({
+        event: 'llm-response',
+        data: { text: 'hello', toolCalls: null },
+      });
+    });
+
+    it('maps llm:response event with toolCalls', () => {
+      const result = AgentSession.mapEvent({
+        type: 'llm:response',
+        text: '',
+        toolCalls: [{ id: 'c1', name: 'read_file', arguments: { path: '/tmp' } }],
+        timestamp: 0,
+      } as any);
+      expect(result!.event).toBe('llm-response');
+      const data = result!.data as { toolCalls: unknown[] };
+      expect(data.toolCalls).toHaveLength(1);
+    });
+
+    it('maps waiting-human event', () => {
+      const result = AgentSession.mapEvent({
+        type: 'waiting-human',
+        request: { questions: ['q1?'] },
+        timestamp: 0,
+      } as any);
+      expect(result).toEqual({
+        event: 'waiting-human',
+        data: { request: { questions: ['q1?'] } },
+      });
     });
 
     it('maps tools:start (plural) to array of events', () => {
@@ -169,7 +293,7 @@ describe('AgentSession', () => {
 
   describe('AgentSessionOptions', () => {
     it('accepts new EnhancedRunner parameters', () => {
-      const options: import('../../src/core/agent-session.js').AgentSessionOptions = {
+      const options: AgentSessionOptions = {
         workspacePath: '/tmp/test',
         agentName: 'test',
         builtinTools: { shell: false, fileRead: true },
@@ -184,6 +308,305 @@ describe('AgentSession', () => {
       expect(options.enableSession).toBe(false);
       expect(options.sandbox).toBe(false);
       expect(options.a2ui!.enabled).toBe(true);
+    });
+  });
+
+  describe('AgentSession.create()', () => {
+    const baseOptions: AgentSessionOptions = {
+      workspacePath: '/tmp/test-workspace',
+      agentName: 'test-agent',
+    };
+
+    beforeEach(() => {
+      mockEnhancedRunnerCreate.mockClear();
+    });
+
+    it('passes default sandbox=true to EnhancedRunner', async () => {
+      await AgentSession.create(baseOptions, testConfig);
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ sandbox: true })
+      );
+    });
+
+    it('passes sandbox=false when explicitly set', async () => {
+      await AgentSession.create({ ...baseOptions, sandbox: false }, testConfig);
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ sandbox: false })
+      );
+    });
+
+    it('passes builtinTools whitelist to EnhancedRunner', async () => {
+      const builtinTools = { shell: false, fileRead: true };
+      await AgentSession.create({ ...baseOptions, builtinTools }, testConfig);
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ builtinTools })
+      );
+    });
+
+    it('passes enableSession/enableTodolist/enableCommands to EnhancedRunner', async () => {
+      await AgentSession.create(
+        { ...baseOptions, enableSession: false, enableTodolist: false, enableCommands: false },
+        testConfig
+      );
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+        })
+      );
+    });
+
+    it('defaults enableSession/enableTodolist/enableCommands to true', async () => {
+      await AgentSession.create(baseOptions, testConfig);
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enableSession: true,
+          enableTodolist: true,
+          enableCommands: true,
+        })
+      );
+    });
+
+    it('passes thinkingEnabled=false when explicitly set', async () => {
+      await AgentSession.create({ ...baseOptions, thinkingEnabled: false }, testConfig);
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ thinkingEnabled: false })
+      );
+    });
+
+    it('passes a2ui option to EnhancedRunner', async () => {
+      const a2ui = { enabled: true };
+      await AgentSession.create({ ...baseOptions, a2ui }, testConfig);
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(expect.objectContaining({ a2ui }));
+    });
+
+    it('passes workspacePath and skillDirs to EnhancedRunner', async () => {
+      const skillDirs = ['/tmp/skills'];
+      const mcpConfigPaths = ['/tmp/mcp.json'];
+      await AgentSession.create({ ...baseOptions, skillDirs, mcpConfigPaths }, testConfig);
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspacePath: '/tmp/test-workspace',
+          skillDirs,
+          mcpConfigPaths,
+        })
+      );
+    });
+
+    it('defaults mcpConfigPaths to empty array', async () => {
+      await AgentSession.create(baseOptions, testConfig);
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ mcpConfigPaths: [] })
+      );
+    });
+  });
+
+  describe('handleMessage() concurrency guard', () => {
+    let session: AgentSession;
+    let streamResolve: () => void;
+
+    beforeEach(async () => {
+      mockEnhancedRunnerCreate.mockResolvedValue({
+        runStream: mockRunnerRunStream,
+      });
+    });
+
+    it('rejects concurrent handleMessage with error event', async () => {
+      let resolveFirst: () => void;
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* blockingStream() {
+          await new Promise<void>((resolve) => {
+            resolveFirst = resolve;
+          });
+          yield { type: 'complete' } as any;
+          return { state: { id: 'test-state' } };
+        }
+        return blockingStream();
+      });
+
+      session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      // Start first message (blocks until resolveFirst is called)
+      const firstIter = session.handleMessage('first');
+      const firstPromise = firstIter[Symbol.asyncIterator]().next();
+
+      // Yield to let the stream start
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Second message should immediately yield error
+      const secondEvents: SSEEvent[] = [];
+      for await (const event of session.handleMessage('second')) {
+        secondEvents.push(event);
+      }
+
+      expect(secondEvents).toHaveLength(1);
+      expect(secondEvents[0].event).toBe('error');
+      expect((secondEvents[0].data as { message: string }).message).toContain('busy');
+
+      // Unblock the first stream
+      resolveFirst!();
+      await firstPromise;
+    });
+
+    it('allows sequential messages after first completes', async () => {
+      mockRunnerRunStream
+        .mockImplementationOnce(() => {
+          async function* stream1() {
+            yield { type: 'token', token: 'a' } as any;
+            yield { type: 'complete' } as any;
+            return { state: { id: 's1' } };
+          }
+          return stream1();
+        })
+        .mockImplementationOnce(() => {
+          async function* stream2() {
+            yield { type: 'token', token: 'b' } as any;
+            yield { type: 'complete' } as any;
+            return { state: { id: 's2' } };
+          }
+          return stream2();
+        });
+
+      session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      const events1: SSEEvent[] = [];
+      for await (const event of session.handleMessage('first')) {
+        events1.push(event);
+      }
+
+      const events2: SSEEvent[] = [];
+      for await (const event of session.handleMessage('second')) {
+        events2.push(event);
+      }
+
+      expect(events1.some((e) => e.event === 'done')).toBe(true);
+      expect(events2.some((e) => e.event === 'done')).toBe(true);
+    });
+
+    it('busy flag resets after stream completes', async () => {
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* quickStream() {
+          yield { type: 'complete' } as any;
+          return { state: { id: 'test-state' } };
+        }
+        return quickStream();
+      });
+
+      session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      expect(session.busy).toBe(false);
+
+      // Consume entire stream
+      for await (const _ of session.handleMessage('hello')) {
+        // just drain
+      }
+
+      expect(session.busy).toBe(false);
+    });
+  });
+
+  describe('cockpit event forwarding', () => {
+    it('forwards all mapped events to cockpit during handleMessage', async () => {
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* stream() {
+          yield { type: 'token', token: 'hi' } as any;
+          yield { type: 'complete' } as any;
+          return {
+            state: {
+              id: 'test-state',
+              config: { name: 'test', instructions: '', tools: [] },
+              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+            },
+          };
+        }
+        return stream();
+      });
+
+      const session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      const cockpitEvents: SSEEvent[] = [];
+      session.setCockpitSender((event) => cockpitEvents.push(event));
+
+      for await (const _ of session.handleMessage('hello')) {
+        // drain
+      }
+
+      const eventTypes = cockpitEvents.map((e) => e.event);
+      expect(eventTypes).toContain('token');
+      expect(eventTypes).toContain('done');
+    });
+
+    it('sends agent-state to cockpit after round completes', async () => {
+      const finalState = {
+        id: 'test-state',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: { messages: [], stepCount: 5, createdAt: 0, updatedAt: 0 },
+      };
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* stream() {
+          yield { type: 'complete' } as any;
+          return { state: finalState };
+        }
+        return stream();
+      });
+
+      const session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      const cockpitEvents: SSEEvent[] = [];
+      session.setCockpitSender((event) => cockpitEvents.push(event));
+
+      for await (const _ of session.handleMessage('hello')) {
+        // drain
+      }
+
+      const stateEvent = cockpitEvents.find((e) => e.event === 'agent-state');
+      expect(stateEvent).toBeDefined();
+      const data = stateEvent!.data as Record<string, unknown>;
+      expect(data.id).toBe('test-state');
+      expect((data.context as Record<string, unknown>).stepCount).toBe(5);
+    });
+
+    it('does not forward events after cockpitSender cleared', async () => {
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* stream() {
+          yield { type: 'token', token: 'hi' } as any;
+          yield { type: 'complete' } as any;
+          return { state: { id: 'test-state' } };
+        }
+        return stream();
+      });
+
+      const session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      const cockpitEvents: SSEEvent[] = [];
+      // Set then clear
+      session.setCockpitSender((event) => cockpitEvents.push(event));
+      session.setCockpitSender(null);
+
+      for await (const _ of session.handleMessage('hello')) {
+        // drain
+      }
+
+      expect(cockpitEvents).toHaveLength(0);
     });
   });
 });

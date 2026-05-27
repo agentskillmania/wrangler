@@ -91,6 +91,7 @@ describe('SessionManager', () => {
     manager.setAgentSession('del-id', mockSession);
     await manager.delete('del-id');
 
+    expect(mockSession.stop).toHaveBeenCalled();
     expect(manager.getAgentSession('del-id')).toBeNull();
   });
 
@@ -205,5 +206,144 @@ describe('SessionManager', () => {
     await manager.init();
     const result = await manager.list(join(tempDir, 'nonexistent'));
     expect(result).toHaveLength(0);
+  });
+
+  describe('concurrent access', () => {
+    it('concurrent registerSession calls for same workspace return same store', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+      const wsPath = join(tempDir, 'shared-workspace');
+
+      // Fire 10 concurrent registerSession calls with different IDs but same workspace
+      const ids = Array.from({ length: 10 }, (_, i) => `concurrent-same-${i}`);
+      for (const id of ids) {
+        manager.registerSession(id, wsPath);
+      }
+
+      // All registrations must map to the same SessionStore instance
+      const store = manager.getSessionStore(wsPath);
+      for (const id of ids) {
+        expect(manager.getStatus(id)).toBe('idle');
+      }
+
+      // Verify no duplicate store was created by checking Map consistency
+      const storeAgain = manager.getSessionStore(wsPath);
+      expect(storeAgain).toBe(store);
+    });
+
+    it('concurrent registerSession with different workspaces creates distinct stores', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+
+      const workspacePaths = Array.from({ length: 10 }, (_, i) => join(tempDir, `workspace-${i}`));
+
+      // Register sessions across 10 different workspaces
+      workspacePaths.forEach((wsPath, i) => {
+        manager.registerSession(`diff-ws-${i}`, wsPath);
+      });
+
+      // Each workspace must get its own distinct SessionStore
+      const stores = workspacePaths.map((wsPath) => manager.getSessionStore(wsPath));
+      const uniqueStores = new Set(stores);
+      expect(uniqueStores.size).toBe(10);
+
+      // Verify each session is properly tracked
+      workspacePaths.forEach((_wsPath, i) => {
+        expect(manager.getStatus(`diff-ws-${i}`)).toBe('idle');
+      });
+    });
+
+    it('concurrent delete of same session does not throw and clears state', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+      const wsPath = join(tempDir, 'workspace');
+
+      manager.registerSession('concurrent-del', wsPath);
+      const store = manager.getSessionStore(wsPath);
+      await store.createWithId('concurrent-del', 'deepseek-chat', 'test-agent');
+
+      // Fire 5 concurrent deletes on the same session
+      const deletePromises = Array.from({ length: 5 }, () => manager.delete('concurrent-del'));
+      await Promise.all(deletePromises);
+
+      // Session should be fully removed from both disk and memory
+      expect(await manager.getInfo('concurrent-del')).toBeNull();
+      expect(manager.getStatus('concurrent-del')).toBe('idle');
+    });
+
+    it('concurrent delete of different sessions removes all', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+      const wsPath = join(tempDir, 'workspace');
+
+      // Register 5 sessions and write meta for each
+      const ids = Array.from({ length: 5 }, (_, i) => `multi-del-${i}`);
+      const store = manager.getSessionStore(wsPath);
+      for (const id of ids) {
+        manager.registerSession(id, wsPath);
+        await store.createWithId(id, 'deepseek-chat', 'test-agent');
+      }
+
+      // Delete all 5 concurrently
+      await Promise.all(ids.map((id) => manager.delete(id)));
+
+      // All sessions should be gone
+      for (const id of ids) {
+        expect(await manager.getInfo(id)).toBeNull();
+      }
+      const remaining = await manager.list();
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('concurrent updateStatus on same session leaves a valid final status', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('status-race', wsPath);
+
+      const validStatuses = ['idle', 'running', 'paused', 'stopping', 'completed', 'error'];
+
+      // Fire 20 concurrent status updates
+      const promises = Array.from({ length: 20 }, (_, i) =>
+        Promise.resolve(
+          manager.updateStatus('status-race', validStatuses[i % validStatuses.length])
+        )
+      );
+      await Promise.all(promises);
+
+      // Final status must be one of the valid values (not corrupted)
+      const finalStatus = manager.getStatus('status-race');
+      expect(validStatuses).toContain(finalStatus);
+    });
+
+    it('concurrent list during mutations stays consistent', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+
+      // Start registering 20 sessions while simultaneously calling list()
+      const registerPromises = Array.from({ length: 20 }, (_, i) => {
+        const wsPath = join(tempDir, `ws-list-${i}`);
+        manager.registerSession(`list-race-${i}`, wsPath);
+        return manager.getSessionStore(wsPath).createWithId(`list-race-${i}`, 'model', 'agent');
+      });
+
+      // Interleave list calls with registration
+      const listPromises = Array.from({ length: 10 }, () => manager.list());
+
+      // All operations must complete without error
+      const [listResults] = await Promise.all([
+        Promise.all(listPromises),
+        Promise.all(registerPromises),
+      ]);
+
+      // Every list call should return a valid array (no errors)
+      for (const result of listResults) {
+        expect(Array.isArray(result)).toBe(true);
+      }
+
+      // After all registrations complete, a final list should reflect all sessions
+      const finalList = await manager.list();
+      expect(finalList).toHaveLength(20);
+    });
   });
 });
