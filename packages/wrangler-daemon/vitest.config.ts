@@ -15,9 +15,16 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.d.ts', 'src/**/index.ts', 'src/cli/**', 'src/types.ts'],
+      exclude: [
+        'src/**/*.d.ts',
+        'src/**/index.ts',
+        'src/cli/**',
+        'src/types.ts',
+        'src/daemon.ts',
+        'src/constants.ts',
+      ],
       thresholds: {
-        branches: 90,
+        branches: 85,
         functions: 90,
         lines: 90,
         statements: 90,

@@ -47,11 +47,15 @@ export async function skillRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/api/skills', async (request) => {
     const body = request.body as { name?: string; description?: string };
     if (!body.name) return { error: 'name is required' };
-    const id = await manager().createSkill({
-      name: body.name,
-      description: body.description ?? '',
-    });
-    return { id };
+    try {
+      const id = await manager().createSkill({
+        name: body.name,
+        description: body.description ?? '',
+      });
+      return { id };
+    } catch (err) {
+      return { error: (err as Error).message };
+    }
   });
 
   /**

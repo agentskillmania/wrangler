@@ -20,6 +20,8 @@ import { crewRoutes } from './routes/crews.js';
 import { crewFileRoutes } from './routes/crew-files.js';
 import { devtoolRoutes } from './routes/devtool.js';
 import { devtoolStreamRoutes } from './routes/devtool-stream.js';
+import { specRoutes } from './routes/specs.js';
+import { planRoutes } from './routes/plans.js';
 import { CONFIG_PATH, AGENTS_DIR, SKILLS_DIR, SESSIONS_DIR, CREWS_DIR } from './constants.js';
 import type { DaemonOptions } from './types.js';
 
@@ -102,6 +104,18 @@ export class Daemon {
       }
     });
 
+    // Serve vendor static files (third-party libs: preact, htm, codemirror, json-formatter)
+    this.fastify.get('/vendor/*', async (request, reply) => {
+      const filename = (request.params as { '*': string })['*'];
+      if (!filename || filename.includes('..')) {
+        reply.code(400).send({ error: 'Invalid path' });
+        return;
+      }
+      if (!(await serveStatic(join('vendor', filename), reply))) {
+        reply.code(404).send({ error: 'File not found' });
+      }
+    });
+
     this.fastify.register(healthRoutes);
     this.fastify.register(configRoutes);
     this.fastify.register(agentRoutes);
@@ -117,6 +131,8 @@ export class Daemon {
     this.fastify.register(crewFileRoutes);
     this.fastify.register(devtoolRoutes);
     this.fastify.register(devtoolStreamRoutes);
+    this.fastify.register(specRoutes);
+    this.fastify.register(planRoutes);
 
     // Decorate fastify with managers for route access
     this.fastify.decorate('configManager', this.configManager);

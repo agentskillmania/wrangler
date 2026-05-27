@@ -87,6 +87,7 @@ export class AgentSession {
   private abortController: AbortController | null = null;
   private bridge: AskHumanBridge;
   private sessionStore: SessionStore | undefined;
+  private _busy = false;
 
   /** Async event queue for streaming */
   private eventQueue: SSEEvent[] = [];
@@ -185,6 +186,11 @@ export class AgentSession {
     return new AgentSession(runner, state, bridge, options);
   }
 
+  /** Whether the session is currently processing a message */
+  get busy(): boolean {
+    return this._busy;
+  }
+
   /**
    * Get current agent state.
    *
@@ -210,6 +216,15 @@ export class AgentSession {
    */
   setCockpitSender(sender: ((event: SSEEvent) => void) | null): void {
     this.bridge.cockpitSender = sender;
+  }
+
+  /**
+   * Send current AgentState to cockpit.
+   *
+   * Called after each conversation round completes.
+   */
+  sendStateSnapshot(): void {
+    this.bridge.cockpitSender?.({ event: 'agent-state', data: this.state });
   }
 
   /**
@@ -242,6 +257,11 @@ export class AgentSession {
    * @yields SSEEvent for each event in the agent execution stream
    */
   async *handleMessage(message: string): AsyncIterable<SSEEvent> {
+    if (this._busy) {
+      yield { event: 'error', data: { message: 'Session is busy processing a message' } };
+      return;
+    }
+    this._busy = true;
     this.abortController = new AbortController();
     this.eventQueue = [];
     this.eventWaiters = [];
@@ -259,9 +279,10 @@ export class AgentSession {
         let iterResult = await iterator.next();
         while (!iterResult.done) {
           const mapped = AgentSession.mapEvent(iterResult.value as RunStreamEvent);
-          if (mapped) {
-            const events = Array.isArray(mapped) ? mapped : [mapped];
-            for (const sse of events) this.pushEvent(sse);
+          const events = Array.isArray(mapped) ? mapped : [mapped];
+          for (const sse of events) {
+            this.pushEvent(sse);
+            this.bridge.cockpitSender?.(sse);
           }
           iterResult = await iterator.next();
         }
@@ -277,6 +298,8 @@ export class AgentSession {
         }
       } finally {
         await this.saveState().catch(() => {});
+        this._busy = false;
+        this.sendStateSnapshot();
         this.signalDone();
         this.bridge.sseSender = null;
       }
@@ -334,14 +357,22 @@ export class AgentSession {
    * Map a colts RunStreamEvent to one or more SSEEvents.
    *
    * This is a pure function that translates internal colts event types
-   * to frontend-friendly SSE event payloads. Returns null for
-   * unrecognized event types.
+   * to frontend-friendly SSE event payloads.
    *
    * @param event - A colts RunStreamEvent from the runner stream
-   * @returns Mapped SSEEvent(s), or null if the event type is unknown
+   * @returns Mapped SSEEvent(s)
    */
-  static mapEvent(event: RunStreamEvent): SSEEvent | SSEEvent[] | null {
+  static mapEvent(event: RunStreamEvent): SSEEvent | SSEEvent[] {
     switch (event.type) {
+      case 'step:start':
+        return { event: 'step-start', data: { step: event.step } };
+
+      case 'step:end':
+        return { event: 'step-end', data: { step: event.step } };
+
+      case 'phase-change':
+        return { event: 'phase-change', data: { from: event.from, to: event.to } };
+
       case 'token':
         return { event: 'token', data: { delta: event.token } };
 
@@ -409,14 +440,42 @@ export class AgentSession {
           },
         };
 
+      case 'llm:request':
+        return {
+          event: 'llm-request',
+          data: {
+            messages: event.messages,
+            tools: event.tools,
+            skill: event.skill,
+          },
+        };
+
+      case 'llm:response':
+        return {
+          event: 'llm-response',
+          data: {
+            text: event.text,
+            toolCalls: event.toolCalls,
+          },
+        };
+
+      case 'compressing':
+        return { event: 'compressing', data: {} };
+
+      case 'compressed':
+        return {
+          event: 'compressed',
+          data: { summary: event.summary, removedCount: event.removedCount },
+        };
+
+      case 'waiting-human':
+        return { event: 'waiting-human', data: { request: event.request } };
+
       case 'complete':
         return { event: 'done', data: {} };
 
       case 'error':
         return { event: 'error', data: { message: event.error.message } };
-
-      default:
-        return null;
     }
   }
 }

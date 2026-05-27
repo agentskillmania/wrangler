@@ -43,31 +43,21 @@ export async function agentStateRoutes(fastify: FastifyInstance): Promise<void> 
       Connection: 'keep-alive',
     });
 
-    // Send initial state snapshot
-    writeSSE(reply, 'agent-state', {
-      agentName: info.agentName,
-      model: info.model,
-      status: sessionManager().getStatus(sessionId),
-      tokensIn: 0,
-      tokensOut: 0,
-      tokensTotal: 0,
-      contextLimit: 200000,
-      stepCount: 0,
-      skills: [],
-      tools: [],
-      estimatedContextSize: 0,
-      compressionHistory: [],
-    });
-
-    // If AgentSession is active, wire cockpit event forwarding
+    // If AgentSession is active, send real state and wire event forwarding
     const agentSession = sessionManager().getAgentSession(sessionId);
     if (agentSession) {
+      writeSSE(reply, 'agent-state', agentSession.getState());
       agentSession.setCockpitSender((event) => {
         writeSSE(reply, event.event, event.data);
       });
       request.raw.on('close', () => {
         agentSession.setCockpitSender(null);
       });
+    } else {
+      // No in-memory AgentSession — load persisted state from disk
+      const store = sessionManager().getSessionStore(info.workspacePath);
+      const persistedState = await store.loadState(sessionId);
+      writeSSE(reply, 'agent-state', persistedState ?? { status: 'no-state' });
     }
   });
 }

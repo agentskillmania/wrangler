@@ -47,11 +47,15 @@ export async function agentRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/api/agents', async (request) => {
     const body = request.body as { name?: string; instructions?: string };
     if (!body.name) return { error: 'name is required' };
-    const id = await manager().createAgent({
-      name: body.name,
-      instructions: body.instructions ?? '',
-    });
-    return { id };
+    try {
+      const id = await manager().createAgent({
+        name: body.name,
+        instructions: body.instructions ?? '',
+      });
+      return { id };
+    } catch (err) {
+      return { error: (err as Error).message };
+    }
   });
 
   /**

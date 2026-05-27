@@ -286,6 +286,12 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       sessionManager().setAgentSession(sessionId, agentSession);
     }
 
+    // Reject if session is already processing a message
+    if (agentSession.busy) {
+      reply.code(409).send({ error: 'Session is busy' });
+      return;
+    }
+
     sessionManager().updateStatus(sessionId, 'running');
 
     reply.raw.writeHead(200, {

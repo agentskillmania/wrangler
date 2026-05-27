@@ -53,13 +53,17 @@ export async function crewRoutes(fastify: FastifyInstance): Promise<void> {
       instructions?: string;
     };
     if (!body.name) return { error: 'name is required' };
-    const id = await manager().createCrew({
-      name: body.name,
-      description: body.description,
-      primaryAgent: body.primaryAgent,
-      instructions: body.instructions,
-    });
-    return { id };
+    try {
+      const id = await manager().createCrew({
+        name: body.name,
+        description: body.description,
+        primaryAgent: body.primaryAgent,
+        instructions: body.instructions,
+      });
+      return { id };
+    } catch (err) {
+      return { error: (err as Error).message };
+    }
   });
 
   /**
