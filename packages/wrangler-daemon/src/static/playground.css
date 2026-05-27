@@ -640,42 +640,29 @@ body {
 
 /* ── Event cards (unified for chat + cockpit) ── */
 .ev-card {
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg-primary);
   overflow: hidden;
 }
 
-.ev-card-token {
-  border-left: 3px solid var(--success);
+/* Token cards — clean assistant message look */
+.ev-card-token-stream {
+  border: none;
+  background: transparent;
 }
 
-.ev-card-think {
-  border-left: 3px solid var(--text-secondary);
+.ev-card-token-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 2px 0;
 }
 
-.ev-card-tool {
-  border-left: 3px solid var(--warning);
-}
-
-.ev-card-error {
-  border-left: 3px solid var(--error);
-  background: rgba(248, 81, 73, 0.04);
-}
-
-.ev-card-done {
-  border-left: 3px solid var(--accent);
-}
-
-.ev-card-session {
-  border-left: 3px solid var(--text-secondary);
-}
-
-.ev-card-skill {
-  border-left: 3px solid #a855f7;
-}
-
+/* Structured event cards */
 .ev-card-header {
   display: flex;
   align-items: flex-start;
@@ -692,6 +679,8 @@ body {
   border-radius: 3px;
   font-family: var(--font-mono);
   margin-top: 1px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .ev-card-body {
@@ -704,8 +693,32 @@ body {
   font-family: var(--font-mono);
 }
 
-.ev-card-body.ev-card-overflow {
+.ev-card-truncated {
   cursor: pointer;
+}
+
+/* Color-coded left borders per type */
+.ev-card-session { border-left: 3px solid var(--accent); }
+.ev-card-think { border-left: 3px solid var(--text-secondary); }
+.ev-card-tool { border-left: 3px solid var(--warning); }
+.ev-card-error { border-left: 3px solid var(--error); background: rgba(248,81,73,0.04); }
+.ev-card-done { border-left: 3px solid var(--accent); }
+.ev-card-skill { border-left: 3px solid #a855f7; }
+.ev-card-subagent { border-left: 3px solid #a855f7; }
+
+/* Diagnostic events — subtle, minimal */
+.ev-card-step,
+.ev-card-phase,
+.ev-card-llm {
+  border-left: 2px solid var(--border);
+  opacity: 0.65;
+  font-size: 12px;
+}
+
+.ev-card-step:hover,
+.ev-card-phase:hover,
+.ev-card-llm:hover {
+  opacity: 1;
 }
 
 .ev-card-toggle {
@@ -719,6 +732,7 @@ body {
   cursor: pointer;
   font-family: var(--font-mono);
   margin-top: 1px;
+  white-space: nowrap;
 }
 
 .ev-card-toggle:hover {

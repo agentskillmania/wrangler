@@ -666,30 +666,15 @@ function ChatPage() {
       var p = typeof data === 'string' ? JSON.parse(data) : data;
       if (ev === 'session-start') {
         setSessionId(p.sessionId);
-        appendLine('session', 'Session started: ' + p.sessionId);
-      } else if (ev === 'token') {
-        appendLine('token', p.delta || '');
-      } else if (ev === 'thinking') {
-        appendLine('think', p.content || '');
-      } else if (ev === 'tool-start') {
-        var argsStr = p.args ? JSON.stringify(p.args, null, 2) : '{}';
-        appendLine('tool', p.name + '\n' + argsStr);
-      } else if (ev === 'tool-end') {
-        var resultStr = p.result != null ? String(p.result) : '(no result)';
-        appendLine('tool', (p.callId || p.name || 'tool') + ' -> result:\n' + resultStr);
-      } else if (ev === 'skill-loading') {
-        appendLine('skill', 'Loading skill: ' + p.name);
-      } else if (ev === 'skill-loaded') {
-        appendLine('skill', 'Skill loaded: ' + p.name);
-      } else if (ev === 'done') {
+      }
+      if (ev === 'done') {
         setStreaming(false);
-        appendLine('done', 'Stream complete' + (p.aborted ? ' (aborted)' : ''));
       } else if (ev === 'error') {
         setStreaming(false);
-        appendLine('error', p.message || 'Unknown error');
-      } else {
-        appendLine('session', '[' + ev + '] ' + String(data).substring(0, 200));
       }
+      var tag = eventToTag(ev);
+      var text = formatEventData(ev, p);
+      appendLine(tag, text);
     } catch (_) {
       // Ignore parse errors
     }
@@ -863,22 +848,78 @@ function ChatPage() {
     });
   }
 
-  // Event card config — unified tag + color map
+  // Event card config — unified tag + color map for ALL daemon event types
   var TAG_COLORS = {
-    token: { label: 'token', bg: 'rgba(63,185,80,0.12)', fg: 'var(--success)' },
+    token: { label: 'assistant', bg: 'rgba(63,185,80,0.12)', fg: 'var(--success)' },
     think: { label: 'thinking', bg: 'rgba(139,148,158,0.12)', fg: 'var(--text-secondary)' },
     tool: { label: 'tool', bg: 'rgba(210,153,34,0.12)', fg: 'var(--warning)' },
     error: { label: 'error', bg: 'rgba(248,81,73,0.12)', fg: 'var(--error)' },
     done: { label: 'done', bg: 'rgba(88,166,255,0.12)', fg: 'var(--accent)' },
-    session: { label: 'session', bg: 'rgba(139,148,158,0.12)', fg: 'var(--text-secondary)' },
+    session: { label: 'session', bg: 'rgba(88,166,255,0.12)', fg: 'var(--accent)' },
     skill: { label: 'skill', bg: 'rgba(168,85,247,0.12)', fg: '#a855f7' },
+    step: { label: 'step', bg: 'rgba(139,148,158,0.06)', fg: 'var(--text-muted)' },
+    phase: { label: 'phase', bg: 'rgba(139,148,158,0.06)', fg: 'var(--text-muted)' },
+    llm: { label: 'llm', bg: 'rgba(139,148,158,0.06)', fg: 'var(--text-muted)' },
+    subagent: { label: 'subagent', bg: 'rgba(168,85,247,0.12)', fg: '#a855f7' },
   };
+
+  // Map raw SSE event name to card tag
+  function eventToTag(ev) {
+    if (ev === 'session-start') return 'session';
+    if (ev === 'token') return 'token';
+    if (ev === 'thinking') return 'think';
+    if (ev === 'tool-start' || ev === 'tool-end') return 'tool';
+    if (ev === 'skill-loading' || ev === 'skill-loaded' || ev === 'skill-start' || ev === 'skill-end') return 'skill';
+    if (ev === 'step-start' || ev === 'step-end') return 'step';
+    if (ev === 'phase-change') return 'phase';
+    if (ev === 'llm-request' || ev === 'llm-response') return 'llm';
+    if (ev === 'subagent-start' || ev === 'subagent-end') return 'subagent';
+    if (ev === 'error') return 'error';
+    if (ev === 'done') return 'done';
+    return 'step';
+  }
+
+  // Format event data into human-readable text
+  function formatEventData(ev, p) {
+    if (ev === 'session-start') return 'Session started: ' + (p.sessionId || '');
+    if (ev === 'token') return p.delta || '';
+    if (ev === 'thinking') return p.content || '';
+    if (ev === 'tool-start') {
+      var argsStr = p.args ? JSON.stringify(p.args, null, 2) : '{}';
+      return p.name + '\n' + argsStr;
+    }
+    if (ev === 'tool-end') {
+      var resultStr = p.result != null ? String(p.result) : '(no result)';
+      return (p.callId || 'tool') + ' -> result:\n' + resultStr;
+    }
+    if (ev === 'skill-loading') return 'Loading skill: ' + p.name;
+    if (ev === 'skill-loaded') return 'Skill loaded: ' + p.name + (p.tokenCount ? ' (' + p.tokenCount + ' tokens)' : '');
+    if (ev === 'skill-start') return 'Skill: ' + p.name + (p.task ? '\n' + p.task : '');
+    if (ev === 'skill-end') return 'Skill done: ' + p.name + (p.result ? '\n' + String(p.result) : '');
+    if (ev === 'step-start') return 'Step ' + (p.step != null ? p.step : '?');
+    if (ev === 'step-end') return 'Step ' + (p.step != null ? p.step : '?') + ' complete';
+    if (ev === 'phase-change') {
+      var fromType = p.from && p.from.type ? p.from.type : '?';
+      var toType = p.to && p.to.type ? p.to.type : '?';
+      return fromType + ' -> ' + toType;
+    }
+    if (ev === 'llm-request') {
+      var msgCount = Array.isArray(p.messages) ? p.messages.length : 0;
+      return 'Sending ' + msgCount + ' messages to LLM' + (p.skill ? ' (skill: ' + p.skill + ')' : '');
+    }
+    if (ev === 'llm-response') return 'LLM response received';
+    if (ev === 'subagent-start') return 'Sub-agent: ' + p.name + (p.task ? '\n' + p.task : '');
+    if (ev === 'subagent-end') return 'Sub-agent done: ' + p.name + (p.result ? '\n' + String(p.result) : '');
+    if (ev === 'done') return 'Stream complete' + (p.aborted ? ' (aborted)' : '');
+    if (ev === 'error') return p.message || 'Unknown error';
+    return JSON.stringify(p, null, 2);
+  }
 
   function tagStyle(tag) {
     var c = TAG_COLORS[tag];
     return c
       ? 'background:' + c.bg + ';color:' + c.fg
-      : 'background:rgba(139,148,158,0.12);color:var(--text-secondary)';
+      : 'background:rgba(139,148,158,0.06);color:var(--text-muted)';
   }
 
   function tagLabel(tag) {
@@ -899,28 +940,39 @@ function ChatPage() {
     });
   }
 
+  // Collapse threshold for long content
+  var COLLAPSE_THRESHOLD = 300;
+
   function EventCard(props) {
     var tag = props.tag;
     var text = props.text;
     var id = props.id;
-    var isLong = text && text.length > 200;
+    var isLong = text && text.length > COLLAPSE_THRESHOLD;
     var isExpanded = expandedCards[id];
-    var displayText = isLong && !isExpanded ? text.substring(0, 200) + '...' : text;
+    var displayText = isLong && !isExpanded ? text.substring(0, COLLAPSE_THRESHOLD) : text;
+    var isToken = tag === 'token';
     return html`
-      <div class="ev-card ev-card-${tag}">
-        <div class="ev-card-header" onClick=${isLong ? function () { toggleCard(id); } : null}>
-          <span class="ev-card-tag" style=${tagStyle(tag)}>${tagLabel(tag)}</span>
-          <span class="ev-card-body${isLong ? ' ev-card-overflow' : ''}">${displayText}</span>
-          ${isLong &&
-          html`
-            <button
-              class="ev-card-toggle"
-              onClick=${function (e) { e.stopPropagation(); toggleCard(id); }}
-            >
-              ${isExpanded ? 'Collapse' : '+' + (text.length - 200) + ' chars'}
-            </button>
-          `}
-        </div>
+      <div class=${'ev-card ev-card-' + tag + (isToken ? ' ev-card-token-stream' : '')}>
+        ${!isToken &&
+        html`
+          <div class="ev-card-header" onClick=${isLong ? function () { toggleCard(id); } : null}>
+            <span class="ev-card-tag" style=${tagStyle(tag)}>${tagLabel(tag)}</span>
+            <span class=${'ev-card-body' + (isLong && !isExpanded ? ' ev-card-truncated' : '')}>${displayText}</span>
+            ${isLong &&
+            html`
+              <button
+                class="ev-card-toggle"
+                onClick=${function (e) { e.stopPropagation(); toggleCard(id); }}
+              >
+                ${isExpanded ? 'Collapse' : 'Show all (' + text.length + ' chars)'}
+              </button>
+            `}
+          </div>
+        `}
+        ${isToken &&
+        html`
+          <div class="ev-card-token-body">${displayText}</div>
+        `}
       </div>
     `;
   }
@@ -1298,10 +1350,10 @@ function ChatPage() {
                 }
                 ${cockpitEvents.map(
                   function (ev) {
-                    var dataStr = typeof ev.data === 'object'
-                      ? JSON.stringify(ev.data, null, 2)
-                      : String(ev.data);
-                    return html`<${EventCard} key=${ev.id} tag=${ev.type} text=${dataStr} id=${ev.id} />`;
+                    var tag = eventToTag(ev.type);
+                    var p = typeof ev.data === 'object' ? ev.data : {};
+                    var text = formatEventData(ev.type, p) || JSON.stringify(ev.data, null, 2);
+                    return html`<${EventCard} key=${ev.id} tag=${tag} text=${text} id=${ev.id} />`;
                   }
                 )}
               </div>
