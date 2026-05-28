@@ -152,6 +152,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       message?: string;
       workspacePath?: string;
       config?: {
+        model?: string;
+        skillDirs?: string[];
+        mcpConfigPaths?: string[];
         builtinTools?: Record<string, boolean>;
         enableSession?: boolean;
         enableTodolist?: boolean;
@@ -184,9 +187,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       workspacePath,
       agentName: agentDetail.name,
       agentInstructions: agentDetail.instructions,
-      model: agentDetail.model,
-      skillDirs: agentDetail.skillDirs,
-      mcpConfigPaths: agentDetail.mcpPaths,
+      model: body.config?.model ?? agentDetail.model,
+      skillDirs: body.config?.skillDirs ?? agentDetail.skillDirs,
+      mcpConfigPaths: body.config?.mcpConfigPaths ?? agentDetail.mcpPaths,
       sessionBaseDir: sessionManager().baseDir,
       // New config fields from request body
       builtinTools: body.config?.builtinTools as AgentSessionOptions['builtinTools'],
@@ -215,6 +218,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Send sessionId as first event so client can save it
     writeSSE(reply, 'session-start', { sessionId });
+    agentSession.emitCockpitEvent({ event: 'session-start', data: { sessionId } });
 
     try {
       for await (const sse of agentSession.handleMessage(body.message)) {
@@ -240,6 +244,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const body = request.body as {
       message?: string;
       config?: {
+        model?: string;
+        skillDirs?: string[];
+        mcpConfigPaths?: string[];
         builtinTools?: Record<string, boolean>;
         enableSession?: boolean;
         enableTodolist?: boolean;
@@ -269,7 +276,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         sessionId,
         workspacePath: info.workspacePath,
         agentName: info.agentName,
-        model: info.model,
+        model: body.config?.model ?? info.model,
+        skillDirs: body.config?.skillDirs,
+        mcpConfigPaths: body.config?.mcpConfigPaths,
         sessionStore: store,
         sessionBaseDir: sessionManager().baseDir,
         // New config fields from request body

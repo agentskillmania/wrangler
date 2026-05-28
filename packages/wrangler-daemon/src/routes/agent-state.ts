@@ -13,6 +13,16 @@ function writeSSE(reply: FastifyReply, event: string, data: unknown): void {
 }
 
 /**
+ * Write a generic SSE message (no event name) — caught by onmessage.
+ *
+ * @param reply - Fastify reply with raw writable stream
+ * @param data - Event payload (will be JSON-serialized)
+ */
+function writeGenericSSE(reply: FastifyReply, data: unknown): void {
+  reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+/**
  * Agent state SSE route — streams cockpit events for a session.
  *
  * Opens a long-lived SSE connection that sends an initial state snapshot
@@ -43,12 +53,15 @@ export async function agentStateRoutes(fastify: FastifyInstance): Promise<void> 
       Connection: 'keep-alive',
     });
 
-    // If AgentSession is active, send real state and wire event forwarding
+    // If AgentSession is active, wire event forwarding (history + live events)
     const agentSession = sessionManager().getAgentSession(sessionId);
     if (agentSession) {
-      writeSSE(reply, 'agent-state', agentSession.getState());
       agentSession.setCockpitSender((event) => {
-        writeSSE(reply, event.event, event.data);
+        if (event.event === 'agent-diagnostics') {
+          writeSSE(reply, 'agent-diagnostics', event.data);
+        } else {
+          writeGenericSSE(reply, event);
+        }
       });
       request.raw.on('close', () => {
         agentSession.setCockpitSender(null);
@@ -57,7 +70,11 @@ export async function agentStateRoutes(fastify: FastifyInstance): Promise<void> 
       // No in-memory AgentSession — load persisted state from disk
       const store = sessionManager().getSessionStore(info.workspacePath);
       const persistedState = await store.loadState(sessionId);
-      writeSSE(reply, 'agent-state', persistedState ?? { status: 'no-state' });
+      writeSSE(reply, 'agent-diagnostics', {
+        runner: null,
+        agent: persistedState ?? { status: 'no-state' },
+        llm: null,
+      });
     }
   });
 }

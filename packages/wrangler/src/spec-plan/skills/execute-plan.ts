@@ -4,4 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export const EXECUTE_PLAN_CONTENT = readFileSync(join(__dirname, 'execute-plan.md'), 'utf-8');
+export const EXECUTE_PLAN_CONTENT = readFileSync(
+  join(__dirname, 'execute-plan', 'SKILL.md'),
+  'utf-8'
+);

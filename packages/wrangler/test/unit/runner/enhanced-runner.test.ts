@@ -180,15 +180,15 @@ describe('EnhancedRunner', () => {
     expect(callArgs.systemPrompt).not.toMatch(/You are/);
   });
 
-  it('should create() passes skillDirs to AgentRunner', async () => {
+  it('should create() passes skillDirs to AgentRunner (with built-in skills appended)', async () => {
     await EnhancedRunner.create(makeOptions({ skillDirs: ['/skills/dir1', '/skills/dir2'] }));
 
     const calls = await getAgentRunnerCalls();
-    expect(calls[calls.length - 1][0]).toEqual(
-      expect.objectContaining({
-        skillDirs: ['/skills/dir1', '/skills/dir2'],
-      })
-    );
+    const skillDirs = calls[calls.length - 1][0].skillDirs;
+    // User-provided dirs come first, followed by built-in spec-plan skills
+    expect(skillDirs.slice(0, 2)).toEqual(['/skills/dir1', '/skills/dir2']);
+    expect(skillDirs.length).toBeGreaterThanOrEqual(3);
+    expect(skillDirs[2]).toContain('spec-plan');
   });
 
   it('should create() passes thinkingEnabled to AgentRunner', async () => {

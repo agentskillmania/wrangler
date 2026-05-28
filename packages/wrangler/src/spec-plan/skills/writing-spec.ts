@@ -4,4 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export const WRITING_SPEC_CONTENT = readFileSync(join(__dirname, 'writing-spec.md'), 'utf-8');
+export const WRITING_SPEC_CONTENT = readFileSync(
+  join(__dirname, 'writing-spec', 'SKILL.md'),
+  'utf-8'
+);

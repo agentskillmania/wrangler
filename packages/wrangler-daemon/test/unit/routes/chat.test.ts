@@ -28,6 +28,7 @@ const mockSession = {
   handleMessage: mockHandleMessage,
   stop: vi.fn(),
   respondHumanInput: vi.fn(),
+  emitCockpitEvent: vi.fn(),
 };
 
 // ─── SSE parsing helper ───
@@ -103,6 +104,7 @@ describe('Chat API', () => {
     mockHandleMessage.mockClear();
     mockSession.stop.mockClear();
     mockSession.respondHumanInput.mockClear();
+    mockSession.emitCockpitEvent.mockClear();
   });
 
   afterEach(async () => {
@@ -315,6 +317,78 @@ describe('Chat API', () => {
 
       // AgentSession.create should have been called
       expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes all config fields through to AgentSession.create', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp/test-ws',
+          config: {
+            model: 'gpt-4o',
+            skillDirs: ['./skills'],
+            mcpConfigPaths: ['./mcp.json'],
+            builtinTools: { shell: false, fileRead: true },
+            enableSession: false,
+            enableTodolist: false,
+            enableCommands: false,
+            sandbox: false,
+            thinkingEnabled: false,
+            a2ui: { enabled: true },
+          },
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
+
+      const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArg.model).toBe('gpt-4o');
+      expect(callArg.skillDirs).toEqual(['./skills']);
+      expect(callArg.mcpConfigPaths).toEqual(['./mcp.json']);
+      expect(callArg.builtinTools).toEqual({ shell: false, fileRead: true });
+      expect(callArg.enableSession).toBe(false);
+      expect(callArg.enableTodolist).toBe(false);
+      expect(callArg.enableCommands).toBe(false);
+      expect(callArg.sandbox).toBe(false);
+      expect(callArg.thinkingEnabled).toBe(false);
+      expect(callArg.a2ui).toEqual({ enabled: true });
+    });
+
+    it('uses agent defaults when config fields omitted', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp/test-ws',
+          config: {
+            sandbox: false,
+          },
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
+
+      const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
+      // test agent has no explicit model/skillDirs/mcpPaths, so defaults apply
+      expect(callArg.model).toBeUndefined();
+      expect(callArg.skillDirs).toEqual([]);
+      expect(callArg.mcpConfigPaths).toEqual([]);
+      expect(callArg.sandbox).toBe(false);
     });
   });
 

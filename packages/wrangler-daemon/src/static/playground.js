@@ -78,6 +78,186 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+// ── Shared Component: StatePanel ──
+// Structured display of unified agent diagnostics (runner + agent + llm)
+function StatePanel(props) {
+  var diagnostics = props.diagnostics;
+  var runnerConfig = diagnostics && diagnostics.runner;
+  var agentState = diagnostics && diagnostics.agent;
+  var llmData = diagnostics && diagnostics.llm ? diagnostics.llm : null;
+  var llmContext = llmData ? llmData.messages : null;
+  var llmTools = llmData ? llmData.tools : null;
+  var llmSkill = llmData ? llmData.skill : null;
+  var _sOpen = useState({ raw: false, llm: false, tools: false }),
+    open = _sOpen[0],
+    setOpen = _sOpen[1];
+
+  function toggle(key) {
+    setOpen(function (prev) {
+      var next = {};
+      for (var k in prev) next[k] = prev[k];
+      next[key] = !prev[key];
+      return next;
+    });
+  }
+
+  // Runner settings section
+  function renderRunnerConfig() {
+    if (!runnerConfig || typeof runnerConfig !== 'object') {
+      return html`<div class="state-section"><div class="state-section-title">Runner Settings</div><div class="state-muted">No config received</div></div>`;
+    }
+    var toolList = [];
+    if (runnerConfig.builtinTools && typeof runnerConfig.builtinTools === 'object') {
+      for (var tk in runnerConfig.builtinTools) {
+        if (runnerConfig.builtinTools[tk]) toolList.push(tk);
+      }
+    }
+    var toolsText = toolList.length > 0 ? toolList.join(', ') : 'all enabled';
+    var skillsText = runnerConfig.skillDirs && runnerConfig.skillDirs.length > 0
+      ? runnerConfig.skillDirs.length + ' dirs'
+      : 'none';
+    var mcpText = runnerConfig.mcpConfigPaths && runnerConfig.mcpConfigPaths.length > 0
+      ? runnerConfig.mcpConfigPaths.length + ' configs'
+      : 'none';
+
+    return html`
+      <div class="state-section">
+        <div class="state-section-title">Runner Settings</div>
+        <div class="state-kv-grid">
+          <div class="state-kv"><span class="state-k">Model</span><span class="state-v">${runnerConfig.model || 'default'}</span></div>
+          <div class="state-kv"><span class="state-k">Sandbox</span><span class="state-v">${runnerConfig.sandbox ? 'on' : 'off'}</span></div>
+          <div class="state-kv"><span class="state-k">Session</span><span class="state-v">${runnerConfig.enableSession !== false ? 'on' : 'off'}</span></div>
+          <div class="state-kv"><span class="state-k">Todolist</span><span class="state-v">${runnerConfig.enableTodolist !== false ? 'on' : 'off'}</span></div>
+          <div class="state-kv"><span class="state-k">Commands</span><span class="state-v">${runnerConfig.enableCommands !== false ? 'on' : 'off'}</span></div>
+          <div class="state-kv"><span class="state-k">Thinking</span><span class="state-v">${runnerConfig.thinkingEnabled !== false ? 'on' : 'off'}</span></div>
+          <div class="state-kv"><span class="state-k">A2UI</span><span class="state-v">${runnerConfig.a2ui && runnerConfig.a2ui.enabled ? 'on' : 'off'}</span></div>
+          <div class="state-kv"><span class="state-k">Tools</span><span class="state-v">${toolsText}</span></div>
+          <div class="state-kv"><span class="state-k">Skills</span><span class="state-v">${skillsText}</span></div>
+          <div class="state-kv"><span class="state-k">MCP</span><span class="state-v">${mcpText}</span></div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Agent config section
+  function renderAgentConfig() {
+    if (!agentState || typeof agentState !== 'object') {
+      return html`<div class="state-section"><div class="state-section-title">Agent Config</div><div class="state-muted">No state received</div></div>`;
+    }
+    var name = agentState.name || (agentState.config && agentState.config.name) || 'Untitled';
+    var instructions = agentState.config && agentState.config.instructions
+      ? String(agentState.config.instructions).substring(0, 300)
+      : '';
+    var instructionsFull = agentState.config && agentState.config.instructions
+      ? String(agentState.config.instructions)
+      : '';
+    var instructionsPreview = instructionsFull.length > 300
+      ? instructions + '...'
+      : instructionsFull;
+
+    return html`
+      <div class="state-section">
+        <div class="state-section-title">Agent Config</div>
+        <div class="state-kv"><span class="state-k">Name</span><span class="state-v">${name}</span></div>
+        ${instructionsPreview && html`
+          <div class="state-instructions">
+            <div class="state-instructions-label">Instructions</div>
+            <pre class="state-instructions-body">${instructionsPreview}</pre>
+          </div>
+        `}
+      </div>
+    `;
+  }
+
+  // Context summary section
+  function renderContextSummary() {
+    if (!agentState || typeof agentState !== 'object') return null;
+    var ctx = agentState.context || {};
+    var msgs = ctx.messages || [];
+    var msgCount = msgs.length;
+    var todoItems = ctx.todoList && ctx.todoList.items ? ctx.todoList.items.length : 0;
+    var activeSkill = ctx.skillState && ctx.skillState.current ? ctx.skillState.current : 'none';
+    var compression = ctx.compression;
+    var compressionText = compression && compression.summary
+      ? compression.anchor + ' msgs summarized'
+      : 'none';
+
+    return html`
+      <div class="state-section">
+        <div class="state-section-title">Context</div>
+        <div class="state-kv-grid">
+          <div class="state-kv"><span class="state-k">Messages</span><span class="state-v">${msgCount}</span></div>
+          <div class="state-kv"><span class="state-k">Todo Items</span><span class="state-v">${todoItems}</span></div>
+          <div class="state-kv"><span class="state-k">Active Skill</span><span class="state-v">${activeSkill}</span></div>
+          <div class="state-kv"><span class="state-k">Compression</span><span class="state-v">${compressionText}</span></div>
+        </div>
+      </div>
+    `;
+  }
+
+  // LLM Context — system prompt + messages + tools + skill actually sent to LLM
+  function renderLLMContext() {
+    if (!llmData) {
+      return html`<div class="state-section"><div class="state-section-title">LLM Context</div><div class="state-muted">No LLM call recorded yet</div></div>`;
+    }
+    var msgCount = Array.isArray(llmContext) ? llmContext.length : 0;
+    var toolCount = Array.isArray(llmTools) ? llmTools.length : 0;
+    var systemMsg = Array.isArray(llmContext) && llmContext.length > 0 ? llmContext[0] : null;
+    var systemPrompt = systemMsg && systemMsg.content ? String(systemMsg.content) : '';
+
+    return html`
+      <div class="state-section">
+        <div class="state-section-title">LLM Context</div>
+        <div class="state-kv-grid">
+          <div class="state-kv"><span class="state-k">Messages</span><span class="state-v">${msgCount}</span></div>
+          <div class="state-kv"><span class="state-k">Tools</span><span class="state-v">${toolCount}</span></div>
+          <div class="state-kv"><span class="state-k">Skill</span><span class="state-v">${llmSkill || 'none'}</span></div>
+          ${systemMsg && html`<div class="state-kv"><span class="state-k">System Role</span><span class="state-v">${systemMsg.role || 'user'}</span></div>`}
+        </div>
+        ${systemPrompt && html`
+          <div class="state-instructions" style="margin-top:10px">
+            <div class="state-instructions-label">System Prompt (first message content)</div>
+            <pre class="state-instructions-body" style="max-height:300px">${systemPrompt}</pre>
+          </div>
+        `}
+        ${llmTools && html`
+          <div class="state-section-title state-toggle" style="margin-top:10px;border-bottom:none;padding-bottom:0" onClick=${function () { toggle('tools'); }}>
+            Tools Array ${open.tools ? '▾' : '▸'}
+          </div>
+          ${open.tools && html`<${JsonTree} data=${llmTools} open=${1} />`}
+        `}
+        <div class="state-section-title state-toggle" style="margin-top:10px;border-bottom:none;padding-bottom:0" onClick=${function () { toggle('llm'); }}>
+          Full Message Array ${open.llm ? '▾' : '▸'}
+        </div>
+        ${open.llm && html`<${JsonTree} data=${llmContext} open=${1} />`}
+      </div>
+    `;
+  }
+
+  // Raw state JSON (collapsible)
+  function renderRawState() {
+    if (!agentState) return null;
+    return html`
+      <div class="state-section">
+        <div class="state-section-title state-toggle" onClick=${function () { toggle('raw'); }}>
+          Raw AgentState ${open.raw ? '▾' : '▸'}
+        </div>
+        ${open.raw && html`<${JsonTree} data=${agentState} open=${1} />`}
+      </div>
+    `;
+  }
+
+  return html`
+    <div class="state-panel">
+      ${renderRunnerConfig()}
+      ${renderAgentConfig()}
+      ${renderContextSummary()}
+      ${renderLLMContext()}
+      ${renderRawState()}
+    </div>
+  `;
+}
+
 // ── Shared Component: JsonTree ──
 // Thin wrapper around json-formatter-js. Mounts into a ref'd container.
 function JsonTree(props) {
@@ -453,7 +633,7 @@ function ChatPage() {
   var _sSA = useState(''),
     selectedAgent = _sSA[0],
     setSelectedAgent = _sSA[1];
-  var _sWP = useState(''),
+  var _sWP = useState('/tmp/foobar'),
     workspacePath = _sWP[0],
     setWorkspacePath = _sWP[1];
   var _sMsg = useState(''),
@@ -509,12 +689,39 @@ function ChatPage() {
   var _sBGit = useState(true),
     cfgBGit = _sBGit[0],
     setCfgBGit = _sBGit[1];
+  var _sBFileRead = useState(true),
+    cfgBFileRead = _sBFileRead[0],
+    setCfgBFileRead = _sBFileRead[1];
+  var _sBFileWrite = useState(true),
+    cfgBFileWrite = _sBFileWrite[0],
+    setCfgBFileWrite = _sBFileWrite[1];
+  var _sBFileEdit = useState(true),
+    cfgBFileEdit = _sBFileEdit[0],
+    setCfgBFileEdit = _sBFileEdit[1];
+  var _sBGlob = useState(true),
+    cfgBGlob = _sBGlob[0],
+    setCfgBGlob = _sBGlob[1];
+  var _sBGrep = useState(true),
+    cfgBGrep = _sBGrep[0],
+    setCfgBGrep = _sBGrep[1];
   var _sA2ui = useState(false),
     cfgA2ui = _sA2ui[0],
     setCfgA2ui = _sA2ui[1];
-  var _sCfgOpen = useState(false),
+  var _sModel = useState(''),
+    cfgModel = _sModel[0],
+    setCfgModel = _sModel[1];
+  var _sSkillDirs = useState(''),
+    cfgSkillDirs = _sSkillDirs[0],
+    setCfgSkillDirs = _sSkillDirs[1];
+  var _sMcpPaths = useState(''),
+    cfgMcpPaths = _sMcpPaths[0],
+    setCfgMcpPaths = _sMcpPaths[1];
+  var _sCfgOpen = useState(true),
     configOpen = _sCfgOpen[0],
     setConfigOpen = _sCfgOpen[1];
+  var _sAdvOpen = useState(false),
+    advOpen = _sAdvOpen[0],
+    setAdvOpen = _sAdvOpen[1];
 
   // AskHuman state
   var _sAskId = useState(''),
@@ -531,9 +738,9 @@ function ChatPage() {
   var _sEvts = useState([]),
     cockpitEvents = _sEvts[0],
     setCockpitEvents = _sEvts[1];
-  var _sASt = useState(null),
-    agentStateData = _sASt[0],
-    setAgentStateData = _sASt[1];
+  var _sDiag = useState(null),
+    diagnosticsData = _sDiag[0],
+    setDiagnosticsData = _sDiag[1];
   var _sFT = useState([]),
     rightFileTree = _sFT[0],
     setRightFileTree = _sFT[1];
@@ -589,7 +796,7 @@ function ChatPage() {
 
       if (!sessionId) {
         setCockpitEvents([]);
-        setAgentStateData(null);
+        setDiagnosticsData(null);
         setRightFileTree([]);
         setRightFilePath(null);
         setRightFileContent('');
@@ -598,31 +805,26 @@ function ChatPage() {
 
       // Open new SSE connection for cockpit events
       var es = new EventSource(BASE + '/api/agent/' + sessionId + '/state');
-      es.addEventListener('agent-state', function (e) {
+      es.addEventListener('agent-diagnostics', function (e) {
         try {
-          setAgentStateData(JSON.parse(e.data));
+          setDiagnosticsData(JSON.parse(e.data));
         } catch (_) {
           // Ignore parse errors
         }
       });
       es.onmessage = function (e) {
-        // Generic message handler for all cockpit events
         try {
           var parsed = JSON.parse(e.data);
-          var evtType = parsed.type || parsed.event || 'message';
-          setCockpitEvents(function (prev) {
-            return prev.concat([{
-              type: evtType,
-              data: parsed,
-              id: Date.now() + Math.random(),
-            }]);
-          });
+          // Generic SSE message: payload is { event: string, data: unknown }
+          var evtType = parsed.event || parsed.type || 'message';
+          var data = parsed.data || parsed;
+          var tag = eventToTag(evtType);
+          var text = formatEventData(evtType, data);
+          appendCockpitEvent(evtType, tag, text, data);
         } catch (_) {
           setCockpitEvents(function (prev) {
             return prev.concat([{
-              type: 'raw',
-              data: { raw: e.data },
-              id: Date.now() + Math.random(),
+              type: 'raw', tag: 'step', text: e.data, data: { raw: e.data }, id: Date.now() + Math.random(),
             }]);
           });
         }
@@ -653,11 +855,18 @@ function ChatPage() {
   function appendLine(tag, text) {
     setChatLines(function (prev) {
       if (tag === 'token' && prev.length > 0 && prev[prev.length - 1].tag === 'token') {
-        // Merge token delta into the previous token line
         var last = prev[prev.length - 1];
         return prev.slice(0, -1).concat([{ tag: 'token', text: last.text + text, id: last.id }]);
       }
       return prev.concat([{ tag: tag, text: text, id: Date.now() + Math.random() }]);
+    });
+  }
+
+  function appendCockpitEvent(ev, tag, text, data) {
+    setCockpitEvents(function (prev) {
+      return prev.concat([{
+        type: ev, tag: tag, text: text, data: data, id: Date.now() + Math.random(),
+      }]);
     });
   }
 
@@ -674,7 +883,13 @@ function ChatPage() {
       }
       var tag = eventToTag(ev);
       var text = formatEventData(ev, p);
-      appendLine(tag, text);
+
+      // Only chat-relevant events go to the chat panel
+      if (tag === 'token') {
+        appendLine('token', text);
+      } else if (ev === 'error') {
+        appendLine('error', text);
+      }
     } catch (_) {
       // Ignore parse errors
     }
@@ -682,7 +897,7 @@ function ChatPage() {
 
   // Build the runner config object from checkbox states
   function buildRunnerConfig() {
-    return {
+    var result = {
       sandbox: cfgSandbox,
       thinkingEnabled: cfgThinking,
       enableSession: cfgSession,
@@ -694,11 +909,24 @@ function ChatPage() {
         webFetch: cfgBWebFetch,
         python: cfgBPython,
         git: cfgBGit,
+        fileRead: cfgBFileRead,
+        fileWrite: cfgBFileWrite,
+        fileEdit: cfgBFileEdit,
+        glob: cfgBGlob,
+        grep: cfgBGrep,
       },
       a2ui: {
         enabled: cfgA2ui,
       },
     };
+    if (cfgModel.trim()) result.model = cfgModel.trim();
+    if (cfgSkillDirs.trim()) {
+      result.skillDirs = cfgSkillDirs.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    }
+    if (cfgMcpPaths.trim()) {
+      result.mcpConfigPaths = cfgMcpPaths.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    }
+    return result;
   }
 
   function doStream(url, body) {
@@ -769,10 +997,12 @@ function ChatPage() {
       appendLine('error', 'Agent, workspace path, and message are required.');
       return;
     }
+    var msg = message;
     setSessionId('');
-    setChatLines([]);
+    setChatLines([{ tag: 'user', text: msg, id: Date.now() }]);
+    setCockpitEvents([]);
     doStream('/api/agents/' + selectedAgent + '/chat', {
-      message: message,
+      message: msg,
       workspacePath: workspacePath,
       config: buildRunnerConfig(),
     });
@@ -784,10 +1014,12 @@ function ChatPage() {
       appendLine('error', 'Session ID and message are required.');
       return;
     }
+    var msg = message;
     setSessionId(resumeSessionId);
-    setChatLines([]);
+    setChatLines([{ tag: 'user', text: msg, id: Date.now() }]);
+    setCockpitEvents([]);
     doStream('/api/chat/' + resumeSessionId, {
-      message: message,
+      message: msg,
       config: buildRunnerConfig(),
     });
     setMessage('');
@@ -801,6 +1033,7 @@ function ChatPage() {
 
   function clearChat() {
     setChatLines([]);
+    setCockpitEvents([]);
   }
 
   function sendAskResponse() {
@@ -850,6 +1083,7 @@ function ChatPage() {
 
   // Event card config — unified tag + color map for ALL daemon event types
   var TAG_COLORS = {
+    user: { label: 'you', bg: 'rgba(88,166,255,0.08)', fg: 'var(--accent)' },
     token: { label: 'assistant', bg: 'rgba(63,185,80,0.12)', fg: 'var(--success)' },
     think: { label: 'thinking', bg: 'rgba(139,148,158,0.12)', fg: 'var(--text-secondary)' },
     tool: { label: 'tool', bg: 'rgba(210,153,34,0.12)', fg: 'var(--warning)' },
@@ -876,6 +1110,10 @@ function ChatPage() {
     if (ev === 'subagent-start' || ev === 'subagent-end') return 'subagent';
     if (ev === 'error') return 'error';
     if (ev === 'done') return 'done';
+    if (ev === 'agent-state') return 'session';
+    if (ev === 'runner-config') return 'session';
+    if (ev === 'message' || ev === 'raw') return 'step';
+    console.warn('[playground] Unmapped SSE event type:', ev);
     return 'step';
   }
 
@@ -931,6 +1169,9 @@ function ChatPage() {
   var _sExp = useState({}),
     expandedCards = _sExp[0],
     setExpandedCards = _sExp[1];
+  var _sSelEvt = useState(null),
+    selectedEventId = _sSelEvt[0],
+    setSelectedEventId = _sSelEvt[1];
 
   function toggleCard(id) {
     setExpandedCards(function (prev) {
@@ -947,31 +1188,52 @@ function ChatPage() {
     var tag = props.tag;
     var text = props.text;
     var id = props.id;
+    var data = props.data;
+    var isSelected = selectedEventId === id;
     var isLong = text && text.length > COLLAPSE_THRESHOLD;
     var isExpanded = expandedCards[id];
     var displayText = isLong && !isExpanded ? text.substring(0, COLLAPSE_THRESHOLD) : text;
-    var isToken = tag === 'token';
+
+    function onHeaderClick() {
+      if (isLong) {
+        toggleCard(id);
+      } else {
+        setSelectedEventId(isSelected ? null : id);
+      }
+    }
+
+    function onDetailToggle(e) {
+      e.stopPropagation();
+      setSelectedEventId(isSelected ? null : id);
+    }
+
     return html`
-      <div class=${'ev-card ev-card-' + tag + (isToken ? ' ev-card-token-stream' : '')}>
-        ${!isToken &&
-        html`
-          <div class="ev-card-header" onClick=${isLong ? function () { toggleCard(id); } : null}>
-            <span class="ev-card-tag" style=${tagStyle(tag)}>${tagLabel(tag)}</span>
-            <span class=${'ev-card-body' + (isLong && !isExpanded ? ' ev-card-truncated' : '')}>${displayText}</span>
-            ${isLong &&
-            html`
-              <button
-                class="ev-card-toggle"
-                onClick=${function (e) { e.stopPropagation(); toggleCard(id); }}
-              >
-                ${isExpanded ? 'Collapse' : 'Show all (' + text.length + ' chars)'}
-              </button>
-            `}
+      <div class=${'ev-card ev-card-' + tag + (isSelected ? ' ev-card-selected' : '')}>
+        <div class="ev-card-header" onClick=${onHeaderClick}>
+          <span class="ev-card-tag" style=${tagStyle(tag)}>${tagLabel(tag)}</span>
+          <span class=${'ev-card-body' + (isLong && !isExpanded ? ' ev-card-truncated' : '')}>${displayText}</span>
+          ${isLong &&
+          html`
+            <button
+              class="ev-card-toggle"
+              onClick=${function (e) { e.stopPropagation(); toggleCard(id); }}
+            >
+              ${isExpanded ? 'Collapse' : 'Show all (' + text.length + ' chars)'}
+            </button>
+          `}
+          <button
+            class="ev-card-detail-btn"
+            onClick=${onDetailToggle}
+          >
+            ${isSelected ? 'Hide detail' : 'Detail'}
+          </button>
+        </div>
+        ${isExpanded && isLong && html`<div class="ev-card-full">${text}</div>`}
+        ${isSelected && html`
+          <div class="ev-card-detail">
+            <div class="ev-card-detail-label">Event Data</div>
+            <${JsonTree} data=${data} open=${2} />
           </div>
-        `}
-        ${isToken &&
-        html`
-          <div class="ev-card-token-body">${displayText}</div>
         `}
       </div>
     `;
@@ -1177,40 +1439,113 @@ function ChatPage() {
                   />
                   a2ui
                 </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked=${cfgBFileRead}
+                    onChange=${function (e) {
+                      setCfgBFileRead(e.target.checked);
+                    }}
+                  />
+                  fileRead
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked=${cfgBFileWrite}
+                    onChange=${function (e) {
+                      setCfgBFileWrite(e.target.checked);
+                    }}
+                  />
+                  fileWrite
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked=${cfgBFileEdit}
+                    onChange=${function (e) {
+                      setCfgBFileEdit(e.target.checked);
+                    }}
+                  />
+                  fileEdit
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked=${cfgBGlob}
+                    onChange=${function (e) {
+                      setCfgBGlob(e.target.checked);
+                    }}
+                  />
+                  glob
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked=${cfgBGrep}
+                    onChange=${function (e) {
+                      setCfgBGrep(e.target.checked);
+                    }}
+                  />
+                  grep
+                </label>
               </div>
             `
           }
 
-          <!-- Message textarea -->
-          <div class="field" style="flex:1">
-            <label>Message</label>
-            <textarea
-              class="input"
-              rows="4"
-              placeholder="Type your message..."
-              value=${message}
-              onInput=${function (e) {
-                setMessage(e.target.value);
-              }}
-              style="resize:vertical;min-height:60px"
-            />
+          <!-- Advanced Config -->
+          <div
+            class="config-toggle"
+            style="margin-top:4px;font-size:12px;color:#94a3b8"
+            onClick=${function () {
+              setAdvOpen(!advOpen);
+            }}
+          >
+            <span>Advanced</span>
+            <span>${advOpen ? '▾' : '▸'}</span>
           </div>
-
-          <!-- Action buttons -->
-          <div style="display:flex;gap:6px">
-            <button
-              class="btn btn-primary btn-sm"
-              style="flex:1"
-              disabled=${streaming}
-              onClick=${function () {
-                mode === 'new' ? startNewChat() : resumeChat();
-              }}
-            >
-              Send
-            </button>
-            <button class="btn btn-danger btn-sm" onClick=${stopChat}>Stop</button>
-            <button class="btn btn-secondary btn-sm" onClick=${clearChat}>Clear</button>
-          </div>
+          ${advOpen &&
+            html`
+              <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+                <label style="font-size:12px;color:#94a3b8">
+                  model
+                  <input
+                    type="text"
+                    value=${cfgModel}
+                    placeholder="e.g. gpt-4o (empty = use agent default)"
+                    onChange=${function (e) {
+                      setCfgModel(e.target.value);
+                    }}
+                    style="width:100%;margin-top:2px;padding:4px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:12px"
+                  />
+                </label>
+                <label style="font-size:12px;color:#94a3b8">
+                  skillDirs (comma-separated)
+                  <input
+                    type="text"
+                    value=${cfgSkillDirs}
+                    placeholder="e.g. ./skills, ./custom-skills"
+                    onChange=${function (e) {
+                      setCfgSkillDirs(e.target.value);
+                    }}
+                    style="width:100%;margin-top:2px;padding:4px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:12px"
+                  />
+                </label>
+                <label style="font-size:12px;color:#94a3b8">
+                  mcpConfigPaths (comma-separated)
+                  <input
+                    type="text"
+                    value=${cfgMcpPaths}
+                    placeholder="e.g. ./mcp.json"
+                    onChange=${function (e) {
+                      setCfgMcpPaths(e.target.value);
+                    }}
+                    style="width:100%;margin-top:2px;padding:4px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:12px"
+                  />
+                </label>
+              </div>
+            `
+          }
 
           <!-- Session ID display -->
           ${sessionId &&
@@ -1273,7 +1608,28 @@ function ChatPage() {
             `}
             ${chatLines.map(
               function (line) {
-                return html`<${EventCard} key=${line.id} tag=${line.tag} text=${line.text} id=${line.id} />`;
+                if (line.tag === 'user') {
+                  return html`
+                    <div key=${line.id} class="chat-msg chat-msg-user">
+                      <div class="chat-msg-body">${line.text}</div>
+                    </div>
+                  `;
+                }
+                if (line.tag === 'token') {
+                  return html`
+                    <div key=${line.id} class="chat-msg chat-msg-assistant">
+                      <div class="chat-msg-body">${line.text}</div>
+                    </div>
+                  `;
+                }
+                if (line.tag === 'error') {
+                  return html`
+                    <div key=${line.id} class="chat-msg chat-msg-error">
+                      <div class="chat-msg-body">${line.text}</div>
+                    </div>
+                  `;
+                }
+                return html`<${EventCard} key=${line.id} tag=${line.tag} text=${line.text} id=${line.id} data=${line.data} />`;
               }
             )}
             <div ref=${messagesEndRef} />
@@ -1336,75 +1692,70 @@ function ChatPage() {
               </button>
             </div>
 
-            ${rightTab === 'events' && html`
-              <div
-                ref=${evtLogRef}
-                style="flex:1;overflow-y:auto;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius);padding:8px"
-              >
-                ${cockpitEvents.length === 0 &&
-                  html`
-                    <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px">
-                      No cockpit events yet.
-                    </div>
-                  `
-                }
-                ${cockpitEvents.map(
-                  function (ev) {
-                    var tag = eventToTag(ev.type);
-                    var p = typeof ev.data === 'object' ? ev.data : {};
-                    var text = formatEventData(ev.type, p) || JSON.stringify(ev.data, null, 2);
-                    return html`<${EventCard} key=${ev.id} tag=${tag} text=${text} id=${ev.id} />`;
+            <div class="right-content">
+              ${rightTab === 'events' && html`
+                <div
+                  ref=${evtLogRef}
+                  class="right-scrollable"
+                >
+                  ${cockpitEvents.length === 0 &&
+                    html`
+                      <div class="right-empty">No events yet.</div>
+                    `
                   }
-                )}
-              </div>
-            `}
-
-            ${rightTab === 'state' && html`
-              <div style="flex:1;overflow-y:auto">
-                ${agentStateData !== null
-                  ? html`<${JsonTree} data=${agentStateData} open=${2} />`
-                  : html`
-                    <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px">
-                      Waiting for agent state events...
-                    </div>
-                  `
-                }
-              </div>
-            `}
-
-            ${rightTab === 'files' && html`
-              <div class="file-editor-layout" style="flex:1;min-height:0">
-                <div class="file-tree" style="overflow-y:auto">
-                  <${FileTree}
-                    nodes=${rightFileTree}
-                    selectedPath=${rightFilePath}
-                    onSelect=${openRightFile}
-                  />
+                  ${cockpitEvents.map(
+                    function (ev) {
+                      return html`<${EventCard} key=${ev.id} tag=${ev.tag} text=${ev.text} id=${ev.id} data=${ev.data} />`;
+                    }
+                  )}
                 </div>
-                <div class="editor-area" style="flex:1">
-                  <div class="detail-label">${rightFilePath || 'Select a file'}</div>
-                  <${CodeMirrorWrapper}
-                    value=${rightFileContent}
-                    onChange=${setRightFileContent}
-                    mode=${rightFilePath && rightFilePath.endsWith('.js') ? 'javascript' : 'markdown'}
-                  />
-                  <div style="display:flex;align-items:center;gap:8px">
-                    <button
-                      class="btn btn-primary btn-sm"
-                      disabled=${!rightFilePath}
-                      onClick=${saveRightFile}
-                    >
-                      Save
-                    </button>
-                    ${rightSaveStatus && html`
-                      <span style=${'font-size:11px;color:' + (rightSaveStatus.startsWith('Error') ? 'var(--error)' : rightSaveStatus === 'saving...' ? 'var(--warning)' : 'var(--success)')}>
-                        ${rightSaveStatus}
-                      </span>
-                    `}
+              `}
+
+              ${rightTab === 'state' && html`
+                <div class="right-scrollable">
+                  ${diagnosticsData !== null
+                    ? html`<${StatePanel} diagnostics=${diagnosticsData} />`
+                    : html`<div class="right-empty">Waiting for agent state...</div>`
+                  }
+                </div>
+              `}
+
+              ${rightTab === 'files' && html`
+                <div class="file-editor-layout">
+                  <div class="file-tree" style="overflow-y:auto">
+                    <${FileTree}
+                      nodes=${rightFileTree}
+                      selectedPath=${rightFilePath}
+                      onSelect=${openRightFile}
+                    />
+                  </div>
+                  <div class="editor-area">
+                    <div class="detail-label">${rightFilePath || 'Select a file'}</div>
+                    <div class="editor-wrap">
+                      <${CodeMirrorWrapper}
+                        value=${rightFileContent}
+                        onChange=${setRightFileContent}
+                        mode=${rightFilePath && rightFilePath.endsWith('.js') ? 'javascript' : 'markdown'}
+                      />
+                    </div>
+                    <div class="editor-toolbar">
+                      <button
+                        class="btn btn-primary btn-sm"
+                        disabled=${!rightFilePath}
+                        onClick=${saveRightFile}
+                      >
+                        Save
+                      </button>
+                      ${rightSaveStatus && html`
+                        <span style=${'font-size:11px;color:' + (rightSaveStatus.startsWith('Error') ? 'var(--error)' : rightSaveStatus === 'saving...' ? 'var(--warning)' : 'var(--success)')}>
+                          ${rightSaveStatus}
+                        </span>
+                      `}
+                    </div>
                   </div>
                 </div>
-              </div>
-            `}
+              `}
+            </div>
           ` : html`
             <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:40px 16px">
               Start a chat session to see cockpit events, agent state, and workspace files.

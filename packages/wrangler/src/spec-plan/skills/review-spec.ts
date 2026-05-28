@@ -4,4 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export const REVIEW_SPEC_CONTENT = readFileSync(join(__dirname, 'review-spec.md'), 'utf-8');
+export const REVIEW_SPEC_CONTENT = readFileSync(
+  join(__dirname, 'review-spec', 'SKILL.md'),
+  'utf-8'
+);

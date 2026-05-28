@@ -549,7 +549,7 @@ describe('AgentSession', () => {
       expect(eventTypes).toContain('done');
     });
 
-    it('sends agent-state to cockpit after round completes', async () => {
+    it('sends agent-diagnostics to cockpit after round completes', async () => {
       const finalState = {
         id: 'test-state',
         config: { name: 'test', instructions: '', tools: [] },
@@ -575,11 +575,14 @@ describe('AgentSession', () => {
         // drain
       }
 
-      const stateEvent = cockpitEvents.find((e) => e.event === 'agent-state');
-      expect(stateEvent).toBeDefined();
-      const data = stateEvent!.data as Record<string, unknown>;
-      expect(data.id).toBe('test-state');
-      expect((data.context as Record<string, unknown>).stepCount).toBe(5);
+      // Filter to agent-diagnostics events; the last one is from sendStateSnapshot after round completes
+      const diagEvents = cockpitEvents.filter((e) => e.event === 'agent-diagnostics');
+      expect(diagEvents.length).toBeGreaterThanOrEqual(1);
+      const data = diagEvents[diagEvents.length - 1].data as Record<string, unknown>;
+      expect((data.agent as Record<string, unknown>).id).toBe('test-state');
+      expect(
+        ((data.agent as Record<string, unknown>).context as Record<string, unknown>).stepCount
+      ).toBe(5);
     });
 
     it('does not forward events after cockpitSender cleared', async () => {
@@ -598,7 +601,7 @@ describe('AgentSession', () => {
       );
 
       const cockpitEvents: SSEEvent[] = [];
-      // Set then clear
+      // Set then clear — initial connection event is captured before clear
       session.setCockpitSender((event) => cockpitEvents.push(event));
       session.setCockpitSender(null);
 
@@ -606,7 +609,10 @@ describe('AgentSession', () => {
         // drain
       }
 
-      expect(cockpitEvents).toHaveLength(0);
+      // Only the initial connection diagnostics event remains;
+      // no stream events should have been forwarded after sender was cleared.
+      expect(cockpitEvents.length).toBe(1);
+      expect(cockpitEvents[0].event).toBe('agent-diagnostics');
     });
   });
 });

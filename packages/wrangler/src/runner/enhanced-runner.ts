@@ -160,6 +160,13 @@ export class EnhancedRunner {
       {
         // When a2ui is enabled, automatically include the a2ui-generation skill from @agentskillmania/agenui
         const skillDirs = [...(options.skillDirs ?? [])];
+        // Always include built-in spec-plan skills
+        try {
+          const wranglerRoot = require.resolve('@agentskillmania/wrangler/package.json');
+          skillDirs.push(path.join(path.dirname(wranglerRoot), 'dist', 'spec-plan', 'skills'));
+        } catch {
+          /* package resolution failed — skip built-in skills */
+        }
         if (a2uiEnabled) {
           try {
             const agenuiRoot = require.resolve('@agentskillmania/agenui/package.json');
@@ -237,7 +244,16 @@ export class EnhancedRunner {
         ...a2uiMiddleware,
       ],
       systemPrompt: buildTimeContext(),
-      skillDirs: options.skillDirs,
+      skillDirs: (() => {
+        const dirs = [...(options.skillDirs ?? [])];
+        try {
+          const wranglerRoot = require.resolve('@agentskillmania/wrangler/package.json');
+          dirs.push(path.join(path.dirname(wranglerRoot), 'dist', 'spec-plan', 'skills'));
+        } catch {
+          /* skip */
+        }
+        return dirs;
+      })(),
       thinkingEnabled: options.thinkingEnabled,
       enablePromptThinking: options.enablePromptThinking,
       requestTimeout: options.requestTimeout,

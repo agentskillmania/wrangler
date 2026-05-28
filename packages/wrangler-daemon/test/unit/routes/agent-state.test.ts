@@ -62,11 +62,6 @@ async function fetchSSE(
       if (result.done || !result.value) break;
 
       chunks.push(decoder.decode(result.value, { stream: true }));
-
-      // Once we have at least one complete SSE frame, that is enough
-      if (chunks.join('').includes('\n\n')) {
-        break;
-      }
     }
   } finally {
     reader.cancel().catch(() => {});
@@ -82,7 +77,6 @@ async function fetchSSE(
 
 // ─── Mock AgentSession ───
 
-const mockSetCockpitSender = vi.fn();
 const mockGetState = vi.fn().mockReturnValue({
   id: 'test-session',
   config: { name: 'test-agent', instructions: '', tools: [] },
@@ -95,6 +89,20 @@ const mockGetState = vi.fn().mockReturnValue({
     estimatedContextSize: 2000,
   },
 });
+const mockSetCockpitSender = vi.fn(
+  (sender: ((event: { event: string; data: unknown }) => void) | null) => {
+    if (typeof sender === 'function') {
+      sender({
+        event: 'agent-diagnostics',
+        data: {
+          runner: { model: 'test-model', sandbox: true },
+          agent: mockGetState(),
+          llm: null,
+        },
+      });
+    }
+  }
+);
 const mockAgentSession = {
   setCockpitSender: mockSetCockpitSender,
   getState: mockGetState,
@@ -163,7 +171,7 @@ describe('Agent State SSE route', () => {
       expect(headers.get('cache-control')).toBe('no-cache');
 
       // Verify we got at least one SSE frame
-      expect(body).toContain('event: agent-state');
+      expect(body).toContain('event: agent-diagnostics');
     });
 
     it('sends real AgentState for active session', async () => {
@@ -175,15 +183,16 @@ describe('Agent State SSE route', () => {
       const events = parseSSE(body);
       expect(events.length).toBeGreaterThanOrEqual(1);
 
-      const stateEvent = events.find((e) => e.event === 'agent-state');
-      expect(stateEvent).toBeDefined();
+      const diagEvent = events.find((e) => e.event === 'agent-diagnostics');
+      expect(diagEvent).toBeDefined();
 
-      const data = stateEvent!.data as Record<string, unknown>;
+      const data = diagEvent!.data as Record<string, unknown>;
+      const agent = data.agent as Record<string, unknown>;
       // Should be real AgentState, not hardcoded snapshot
-      expect(data.id).toBe('test-session');
-      expect(data.config).toBeDefined();
-      expect((data.context as Record<string, unknown>).stepCount).toBe(3);
-      expect((data.context as Record<string, unknown>).estimatedContextSize).toBe(2000);
+      expect(agent.id).toBe('test-session');
+      expect(agent.config).toBeDefined();
+      expect((agent.context as Record<string, unknown>).stepCount).toBe(3);
+      expect((agent.context as Record<string, unknown>).estimatedContextSize).toBe(2000);
     });
 
     it('loads persisted state from disk when no active AgentSession', async () => {
@@ -207,12 +216,13 @@ describe('Agent State SSE route', () => {
       const { body } = await fetchSSE(`${getUrl()}/api/agent/persisted-session/state`);
 
       const events = parseSSE(body);
-      const stateEvent = events.find((e) => e.event === 'agent-state');
-      expect(stateEvent).toBeDefined();
+      const diagEvent = events.find((e) => e.event === 'agent-diagnostics');
+      expect(diagEvent).toBeDefined();
 
-      const data = stateEvent!.data as Record<string, unknown>;
-      expect(data.id).toBe('persisted-session');
-      expect((data.context as Record<string, unknown>).stepCount).toBe(7);
+      const data = diagEvent!.data as Record<string, unknown>;
+      const agent = data.agent as Record<string, unknown>;
+      expect(agent.id).toBe('persisted-session');
+      expect((agent.context as Record<string, unknown>).stepCount).toBe(7);
     });
 
     it('sends no-state when disk has no state file', async () => {
@@ -222,9 +232,10 @@ describe('Agent State SSE route', () => {
       const { body } = await fetchSSE(`${getUrl()}/api/agent/empty-session/state`);
 
       const events = parseSSE(body);
-      const stateEvent = events.find((e) => e.event === 'agent-state');
-      expect(stateEvent).toBeDefined();
-      expect((stateEvent!.data as Record<string, unknown>).status).toBe('no-state');
+      const diagEvent = events.find((e) => e.event === 'agent-diagnostics');
+      expect(diagEvent).toBeDefined();
+      const agent = (diagEvent!.data as Record<string, unknown>).agent as Record<string, unknown>;
+      expect(agent.status).toBe('no-state');
     });
 
     it('wires cockpit forwarding for active AgentSession', async () => {
@@ -235,7 +246,7 @@ describe('Agent State SSE route', () => {
 
       expect(status).toBe(200);
       // Ensure the handler ran before asserting mock calls
-      expect(body).toContain('event: agent-state');
+      expect(body).toContain('event: agent-diagnostics');
 
       // setCockpitSender should have been called with a function (not null)
       expect(mockSetCockpitSender).toHaveBeenCalled();
@@ -252,7 +263,7 @@ describe('Agent State SSE route', () => {
       const { status, body } = await fetchSSE(`${getUrl()}/api/agent/close-session/state`);
 
       expect(status).toBe(200);
-      expect(body).toContain('event: agent-state');
+      expect(body).toContain('event: agent-diagnostics');
 
       // fetchSSE aborts the request after reading, which triggers 'close'
       // Allow the close event handler to execute

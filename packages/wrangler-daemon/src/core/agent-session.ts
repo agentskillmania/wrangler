@@ -88,10 +88,22 @@ export class AgentSession {
   private bridge: AskHumanBridge;
   private sessionStore: SessionStore | undefined;
   private _busy = false;
+  private runnerConfig: Record<string, unknown> = {};
+  /** Latest LLM request captured from llm:request stream events */
+  private lastLLMRequest: { messages: unknown[]; tools?: unknown[]; skill?: string } | null = null;
+  /** Tool registry snapshot extracted from llm-request events */
+  private toolRegistrySnapshot: Array<{ name: string; description: string }> = [];
+  /** Skill registry snapshot accumulated from skill stream events */
+  private skillRegistrySnapshot: Array<{ name: string; description: string }> = [];
+  /** Full system prompt extracted from first message of llm-request */
+  private lastSystemPrompt: string | null = null;
 
   /** Async event queue for streaming */
   private eventQueue: SSEEvent[] = [];
   private eventWaiters: Array<(event: SSEEvent | null) => void> = [];
+  /** Event history for cockpit replay — new connections receive full sequence */
+  private eventHistory: SSEEvent[] = [];
+  private readonly MAX_HISTORY = 500;
 
   private constructor(
     runner: EnhancedRunner,
@@ -107,6 +119,18 @@ export class AgentSession {
     this.workspacePath = options.workspacePath;
     this.agentName = options.agentName;
     this.model = options.model ?? 'deepseek-chat';
+    this.runnerConfig = {
+      model: options.model ?? 'deepseek-chat',
+      sandbox: options.sandbox ?? true,
+      builtinTools: options.builtinTools,
+      enableSession: options.enableSession ?? true,
+      enableTodolist: options.enableTodolist ?? true,
+      enableCommands: options.enableCommands ?? true,
+      thinkingEnabled: options.thinkingEnabled ?? true,
+      a2ui: options.a2ui,
+      skillDirs: options.skillDirs,
+      mcpConfigPaths: options.mcpConfigPaths,
+    };
   }
 
   /**
@@ -210,21 +234,63 @@ export class AgentSession {
   }
 
   /**
+   * Build unified diagnostics snapshot combining runner config, agent state,
+   * and latest LLM context.
+   *
+   * @returns Unified AgentDiagnostics payload
+   */
+  private buildDiagnostics(): Record<string, unknown> {
+    return {
+      runner: this.runnerConfig,
+      agent: this.state,
+      llm: this.lastLLMRequest,
+      tools: this.toolRegistrySnapshot,
+      skills: this.skillRegistrySnapshot,
+      systemPrompt: this.lastSystemPrompt,
+    };
+  }
+
+  /**
+   * Emit an event to the cockpit SSE stream and record it in history.
+   *
+   * Used by external callers (e.g. chat route) to inject events that should
+   * appear on the observability stream but are not part of the agent's
+   * internal event stream.
+   *
+   * @param event - SSE event to emit
+   */
+  emitCockpitEvent(event: SSEEvent): void {
+    this.bridge.cockpitSender?.(event);
+    this.eventHistory.push(event);
+    if (this.eventHistory.length > this.MAX_HISTORY) {
+      this.eventHistory.shift();
+    }
+  }
+
+  /**
    * Set cockpit event sender for SSE streaming.
    *
    * @param sender - Callback that receives SSE events, or null to clear
    */
   setCockpitSender(sender: ((event: SSEEvent) => void) | null): void {
     this.bridge.cockpitSender = sender;
+    if (sender) {
+      // Replay recent history so new connections see full event sequence
+      for (const event of this.eventHistory) {
+        sender(event);
+      }
+      // Send unified diagnostics snapshot
+      sender({ event: 'agent-diagnostics', data: this.buildDiagnostics() });
+    }
   }
 
   /**
-   * Send current AgentState to cockpit.
+   * Send unified diagnostics snapshot to cockpit.
    *
    * Called after each conversation round completes.
    */
   sendStateSnapshot(): void {
-    this.bridge.cockpitSender?.({ event: 'agent-state', data: this.state });
+    this.bridge.cockpitSender?.({ event: 'agent-diagnostics', data: this.buildDiagnostics() });
   }
 
   /**
@@ -265,6 +331,10 @@ export class AgentSession {
     this.abortController = new AbortController();
     this.eventQueue = [];
     this.eventWaiters = [];
+    this.eventHistory = [];
+    this.toolRegistrySnapshot = [];
+    this.skillRegistrySnapshot = [];
+    this.lastSystemPrompt = null;
 
     this.bridge.sseSender = (event: SSEEvent) => this.pushEvent(event);
     this.state = addUserMessage(this.state, message);
@@ -283,6 +353,49 @@ export class AgentSession {
           for (const sse of events) {
             this.pushEvent(sse);
             this.bridge.cockpitSender?.(sse);
+            this.eventHistory.push(sse);
+            if (this.eventHistory.length > this.MAX_HISTORY) {
+              this.eventHistory.shift();
+            }
+            // Capture LLM request for diagnostics
+            if (sse.event === 'llm-request' && typeof sse.data === 'object' && sse.data !== null) {
+              const d = sse.data as Record<string, unknown>;
+              if (Array.isArray(d.messages)) {
+                this.lastLLMRequest = {
+                  messages: d.messages,
+                  tools: Array.isArray(d.tools) ? d.tools : undefined,
+                  skill: typeof d.skill === 'string' ? d.skill : undefined,
+                };
+                // Extract system prompt (first message content)
+                const firstMsg = d.messages[0] as Record<string, unknown> | undefined;
+                if (firstMsg && typeof firstMsg.content === 'string') {
+                  this.lastSystemPrompt = firstMsg.content;
+                }
+                // Extract tool registry snapshot
+                if (Array.isArray(d.tools)) {
+                  this.toolRegistrySnapshot = d.tools.map((t: unknown) => {
+                    const tool = t as Record<string, unknown>;
+                    return {
+                      name: typeof tool.name === 'string' ? tool.name : 'unknown',
+                      description: typeof tool.description === 'string' ? tool.description : '',
+                    };
+                  });
+                }
+              }
+            }
+            // Accumulate skill registry from skill-loaded events
+            if (sse.event === 'skill-loaded' && typeof sse.data === 'object' && sse.data !== null) {
+              const d = sse.data as Record<string, unknown>;
+              if (typeof d.name === 'string') {
+                const existing = this.skillRegistrySnapshot.find((s) => s.name === d.name);
+                if (!existing) {
+                  this.skillRegistrySnapshot.push({
+                    name: d.name,
+                    description: typeof d.tokenCount === 'number' ? `${d.tokenCount} tokens` : '',
+                  });
+                }
+              }
+            }
           }
           iterResult = await iterator.next();
         }
