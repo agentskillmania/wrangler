@@ -6,6 +6,8 @@ import type { SSEEvent } from '../../src/types.js';
 const { mockEnhancedRunnerCreate, mockRunnerRunStream } = vi.hoisted(() => ({
   mockEnhancedRunnerCreate: vi.fn().mockResolvedValue({
     runStream: vi.fn(),
+    getToolInfo: vi.fn().mockReturnValue([]),
+    getSkillInfo: vi.fn().mockReturnValue([]),
   }),
   mockRunnerRunStream: vi.fn(),
 }));
@@ -409,6 +411,8 @@ describe('AgentSession', () => {
     beforeEach(async () => {
       mockEnhancedRunnerCreate.mockResolvedValue({
         runStream: mockRunnerRunStream,
+        getToolInfo: vi.fn().mockReturnValue([]),
+        getSkillInfo: vi.fn().mockReturnValue([]),
       });
     });
 

@@ -157,8 +157,11 @@ describe('EnhancedRunner', () => {
     expect(calls[calls.length - 1][0]).toEqual(
       expect.objectContaining({
         workspacePath: '/test/workspace',
-        searchProvider: 'bing',
       })
+    );
+    // searchProvider is resolved from 'bing' string to BingScrapeSearchProvider instance
+    expect(calls[calls.length - 1][0].searchProvider).toBeInstanceOf(
+      (await import('../../../src/tools/builtin/bing-scrape-search.js')).BingScrapeSearchProvider
     );
 
     const runnerCalls = await getAgentRunnerCalls();

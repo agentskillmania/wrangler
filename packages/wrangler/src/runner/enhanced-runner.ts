@@ -20,9 +20,11 @@ import { createSessionSupport } from '../session/support.js';
 import { createTodolistSupport } from '../todolist/support.js';
 import { buildTimeContext } from './system-prompt.js';
 import { MarkdownMessageAssembler } from './markdown-assembler.js';
+import { SogouScrapeSearchProvider } from '../tools/builtin/sogou-scrape-search.js';
 import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js';
+import type { SearchProvider } from '../tools/builtin/index.js';
 import type { Sandbox } from '@agentskillmania/sandbox';
-import type { EnhancedRunnerOptions } from './types.js';
+import type { EnhancedRunnerOptions, ResolvedRunnerConfig } from './types.js';
 import { CommandRegistry } from '../command/registry.js';
 import { createCommandMiddleware } from '../command/command-middleware.js';
 import { createClearHandler } from '../command/handlers/clear.js';
@@ -31,6 +33,15 @@ import { createSkillsHandler } from '../command/handlers/skills.js';
 import { createSkillHandler } from '../command/handlers/skill.js';
 import { createA2UITools, A2UIMiddleware } from '../tools/a2ui/index.js';
 import path from 'node:path';
+import { createRequire } from 'node:module';
+
+const nodeRequire = typeof require === 'function' ? require : createRequire(import.meta.url);
+
+function resolveSearchProvider(provider?: SearchProvider | 'bing' | 'sogou'): SearchProvider {
+  if (!provider || provider === 'sogou') return new SogouScrapeSearchProvider();
+  if (provider === 'bing') return new BingScrapeSearchProvider();
+  return provider;
+}
 
 /**
  * EnhancedRunner — Pre-wired AgentRunner with all wrangler runtime mechanisms
@@ -60,9 +71,42 @@ import path from 'node:path';
  */
 export class EnhancedRunner {
   private readonly innerRunner: AgentRunner;
+  private readonly resolvedConfig: ResolvedRunnerConfig;
 
-  private constructor(runner: AgentRunner) {
+  private constructor(runner: AgentRunner, config: ResolvedRunnerConfig) {
     this.innerRunner = runner;
+    this.resolvedConfig = config;
+  }
+
+  /**
+   * Get tool list with name and description for diagnostics
+   */
+  getToolInfo(): Array<{ name: string; description: string }> {
+    const tools = this.innerRunner.getToolRegistry().getAll?.() ?? [];
+    return tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+    }));
+  }
+
+  /**
+   * Get skill list with name and description for diagnostics
+   */
+  getSkillInfo(): Array<{ name: string; description: string }> {
+    return (
+      this.innerRunner.skillProvider?.listSkills().map((s) => ({
+        name: s.name,
+        description: s.description,
+      })) ?? []
+    );
+  }
+
+  /**
+   * Get resolved runner config for diagnostics.
+   * Frozen snapshot built at create() time.
+   */
+  getConfig(): Readonly<ResolvedRunnerConfig> {
+    return this.resolvedConfig;
   }
 
   /**
@@ -74,12 +118,12 @@ export class EnhancedRunner {
   static async create(options: EnhancedRunnerOptions): Promise<EnhancedRunner> {
     const workspacePath = options.workspacePath ?? process.cwd();
 
-    const searchProvider = options.searchProvider ?? new BingScrapeSearchProvider();
+    const searchProvider = resolveSearchProvider(options.searchProvider);
 
     let sandboxInstance: Sandbox | undefined;
     if (options.sandbox) {
       const { Sandbox } = await import('@agentskillmania/sandbox');
-      sandboxInstance = new Sandbox();
+      sandboxInstance = new Sandbox({ sandboxDir: workspacePath });
     }
 
     const builtinTools = createBuiltinTools({
@@ -162,14 +206,14 @@ export class EnhancedRunner {
         const skillDirs = [...(options.skillDirs ?? [])];
         // Always include built-in spec-plan skills
         try {
-          const wranglerRoot = require.resolve('@agentskillmania/wrangler/package.json');
+          const wranglerRoot = nodeRequire.resolve('@agentskillmania/wrangler/package.json');
           skillDirs.push(path.join(path.dirname(wranglerRoot), 'dist', 'spec-plan', 'skills'));
         } catch {
           /* package resolution failed — skip built-in skills */
         }
         if (a2uiEnabled) {
           try {
-            const agenuiRoot = require.resolve('@agentskillmania/agenui/package.json');
+            const agenuiRoot = nodeRequire.resolve('@agentskillmania/agenui/package.json');
             const agenuiSkillsDir = path.join(path.dirname(agenuiRoot), 'dist', 'skills');
             skillDirs.push(agenuiSkillsDir);
           } catch {
@@ -247,7 +291,7 @@ export class EnhancedRunner {
       skillDirs: (() => {
         const dirs = [...(options.skillDirs ?? [])];
         try {
-          const wranglerRoot = require.resolve('@agentskillmania/wrangler/package.json');
+          const wranglerRoot = nodeRequire.resolve('@agentskillmania/wrangler/package.json');
           dirs.push(path.join(path.dirname(wranglerRoot), 'dist', 'spec-plan', 'skills'));
         } catch {
           /* skip */
@@ -262,7 +306,32 @@ export class EnhancedRunner {
       messageAssembler: new MarkdownMessageAssembler(),
     });
 
-    return new EnhancedRunner(runner);
+    const resolvedConfig: ResolvedRunnerConfig = {
+      model: options.model ?? 'glm-5.1',
+      sandbox: !!sandboxInstance,
+      enableSession: sessionEnabled,
+      enableTodolist: todolistEnabled,
+      enableCommands: commandsEnabled,
+      thinkingEnabled: options.thinkingEnabled ?? false,
+      enablePromptThinking: options.enablePromptThinking ?? false,
+      a2ui: options.a2ui,
+      builtinTools: toolToggles as Record<string, boolean> | undefined,
+      skillDirs: options.skillDirs ?? [],
+      mcpConfigPaths: mcpConfigPaths,
+      builtinToolCount: filteredBuiltinTools.length,
+      mcpToolCount: mcpTools.length,
+      sessionToolCount: sessionSupport.tools.length,
+      todolistToolCount: todolistSupport.tools.length,
+      middlewareNames: [
+        ...(commandMiddleware ? [commandMiddleware.name] : []),
+        ...(sessionEnabled ? [sessionSupport.middleware.name] : []),
+        ...(todolistEnabled ? [todolistSupport.middleware.name] : []),
+        ...a2uiMiddleware.map((m) => (m as { name?: string }).name ?? 'a2ui'),
+      ].filter(Boolean) as string[],
+      compressorEnabled: !!compressorInstance,
+    };
+
+    return new EnhancedRunner(runner, resolvedConfig);
   }
 
   /**

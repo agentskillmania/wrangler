@@ -20,7 +20,8 @@ export interface EnhancedRunnerOptions {
   model?: string;
   workspacePath?: string;
   extraTools?: Tool<ZodTypeAny>[];
-  searchProvider?: SearchProvider;
+  /** Search provider instance or name. Defaults to 'sogou'. */
+  searchProvider?: SearchProvider | 'bing' | 'sogou';
   sandbox?: boolean;
   mcpConfigPaths?: string[];
   sessionBaseDir?: string;
@@ -57,4 +58,45 @@ export interface EnhancedRunnerOptions {
   enableTodolist?: boolean;
   /** Whether to enable command middleware (default: true) */
   enableCommands?: boolean;
+}
+
+/**
+ * Resolved runner config — a frozen snapshot built at create() time.
+ * Single source of truth for all consumers (daemon, playground).
+ */
+export interface ResolvedRunnerConfig {
+  /** LLM model identifier */
+  model: string;
+  /** Whether sandbox mode is active */
+  sandbox: boolean;
+  /** Whether session support is active */
+  enableSession: boolean;
+  /** Whether todolist support is active */
+  enableTodolist: boolean;
+  /** Whether command middleware is active */
+  enableCommands: boolean;
+  /** Whether thinking/reasoning mode is enabled */
+  thinkingEnabled: boolean;
+  /** Whether prompt-level thinking guidance is enabled */
+  enablePromptThinking: boolean;
+  /** A2UI config if enabled */
+  a2ui: { enabled: boolean } | undefined;
+  /** Builtin tool toggle map (undefined = all enabled) */
+  builtinTools: Record<string, boolean> | undefined;
+  /** Resolved skill directories (includes auto-appended built-in dirs) */
+  skillDirs: string[];
+  /** MCP config paths */
+  mcpConfigPaths: string[];
+  /** Number of builtin tools after filtering */
+  builtinToolCount: number;
+  /** Number of MCP tools loaded */
+  mcpToolCount: number;
+  /** Number of session tools */
+  sessionToolCount: number;
+  /** Number of todolist tools */
+  todolistToolCount: number;
+  /** Names of all active middleware */
+  middlewareNames: string[];
+  /** Whether context compression is configured */
+  compressorEnabled: boolean;
 }
