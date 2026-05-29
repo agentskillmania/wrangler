@@ -459,4 +459,79 @@ describe('EnhancedRunner', () => {
     const middlewareNames = callArgs.middleware.map((m: { name: string }) => m.name);
     expect(middlewareNames).toEqual(['todolist']);
   });
+
+  // ── getConfig() observability tests ──────────────────────────────────
+
+  describe('getConfig()', () => {
+    it('returns model from options', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ model: 'test-model-42' }));
+      expect(runner.getConfig().model).toBe('test-model-42');
+    });
+
+    it('returns sandbox=false when not configured', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ sandbox: false }));
+      expect(runner.getConfig().sandbox).toBe(false);
+    });
+
+    it('returns sandbox=true when configured', async () => {
+      // Mock the dynamic import so we don't need a real sandbox runtime
+      vi.doMock('@agentskillmania/sandbox', () => ({
+        Sandbox: vi.fn().mockImplementation(() => ({})),
+      }));
+      const runner = await EnhancedRunner.create(makeOptions({ sandbox: true }));
+      expect(runner.getConfig().sandbox).toBe(true);
+    });
+
+    it('reports tool counts', async () => {
+      const runner = await EnhancedRunner.create(makeOptions());
+      const config = runner.getConfig();
+      expect(config.builtinToolCount).toBeGreaterThanOrEqual(0);
+      expect(config.mcpToolCount).toBe(0);
+      expect(config.sessionToolCount).toBeGreaterThanOrEqual(0);
+      expect(config.todolistToolCount).toBeGreaterThanOrEqual(0);
+    });
+
+    it('includes middleware names', async () => {
+      const runner = await EnhancedRunner.create(makeOptions());
+      const config = runner.getConfig();
+      expect(config.middlewareNames).toContain('session');
+      expect(config.middlewareNames).toContain('todolist');
+    });
+
+    it('returns enableSession=false and excludes session from middlewareNames', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ enableSession: false }));
+      const config = runner.getConfig();
+      expect(config.enableSession).toBe(false);
+      expect(config.middlewareNames).not.toContain('session');
+    });
+
+    it('returns enableTodolist=false and excludes todolist from middlewareNames', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ enableTodolist: false }));
+      const config = runner.getConfig();
+      expect(config.enableTodolist).toBe(false);
+      expect(config.middlewareNames).not.toContain('todolist');
+    });
+
+    it('returns thinkingEnabled reflecting the option (true)', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ thinkingEnabled: true }));
+      expect(runner.getConfig().thinkingEnabled).toBe(true);
+    });
+
+    it('returns thinkingEnabled reflecting the option (false)', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ thinkingEnabled: false }));
+      expect(runner.getConfig().thinkingEnabled).toBe(false);
+    });
+
+    it('returns compressorEnabled=false when no compression configured', async () => {
+      const runner = await EnhancedRunner.create(makeOptions());
+      expect(runner.getConfig().compressorEnabled).toBe(false);
+    });
+
+    it('returns frozen snapshot (same object reference on repeated calls)', async () => {
+      const runner = await EnhancedRunner.create(makeOptions());
+      const first = runner.getConfig();
+      const second = runner.getConfig();
+      expect(first).toBe(second);
+    });
+  });
 });
