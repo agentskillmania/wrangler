@@ -687,6 +687,9 @@ function ChatPage() {
   var _sMsg = useState(''),
     message = _sMsg[0],
     setMessage = _sMsg[1];
+  var _sDT = useState(false),
+    msgThinking = _sDT[0],
+    setMsgThinking = _sDT[1];
   var _sSid = useState(''),
     sessionId = _sSid[0],
     setSessionId = _sSid[1];
@@ -707,9 +710,6 @@ function ChatPage() {
   var _sSB = useState(true),
     cfgSandbox = _sSB[0],
     setCfgSandbox = _sSB[1];
-  var _sTE = useState(true),
-    cfgThinking = _sTE[0],
-    setCfgThinking = _sTE[1];
   var _sES = useState(true),
     cfgSession = _sES[0],
     setCfgSession = _sES[1];
@@ -947,7 +947,6 @@ function ChatPage() {
   function buildRunnerConfig() {
     var result = {
       sandbox: cfgSandbox,
-      thinkingEnabled: cfgThinking,
       enableSession: cfgSession,
       enableTodolist: cfgTodolist,
       enableCommands: cfgCommands,
@@ -1049,6 +1048,7 @@ function ChatPage() {
       appendLine('user', msg);
       doStream('/api/chat/' + sessionId, {
         message: msg,
+        thinkingEnabled: msgThinking,
         config: buildRunnerConfig(),
       });
     } else if (resumeSessionId) {
@@ -1057,6 +1057,7 @@ function ChatPage() {
       appendLine('user', msg);
       doStream('/api/chat/' + resumeSessionId, {
         message: msg,
+        thinkingEnabled: msgThinking,
         config: buildRunnerConfig(),
       });
     } else if (selectedAgent && workspacePath) {
@@ -1066,6 +1067,7 @@ function ChatPage() {
       doStream('/api/agents/' + selectedAgent + '/chat', {
         message: msg,
         workspacePath: workspacePath,
+        thinkingEnabled: msgThinking,
         config: buildRunnerConfig(),
       });
     } else {
@@ -1365,16 +1367,6 @@ function ChatPage() {
                     }}
                   />
                   sandbox
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked=${cfgThinking}
-                    onChange=${function (e) {
-                      setCfgThinking(e.target.checked);
-                    }}
-                  />
-                  thinking
                 </label>
                 <label>
                   <input
@@ -1685,6 +1677,12 @@ function ChatPage() {
                 }
               }}
             />
+            <label style=${{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-secondary)' }}>
+              <input type="checkbox" checked=${msgThinking} onChange=${function (e) {
+                setMsgThinking(e.target.checked);
+              }} />
+              Deep think
+            </label>
             <button
               class="btn btn-primary btn-sm"
               disabled=${streaming}
