@@ -314,6 +314,151 @@ describe('AgentSession', () => {
     });
   });
 
+  describe('handleMessage() options parameter', () => {
+    let session: AgentSession;
+
+    beforeEach(async () => {
+      mockEnhancedRunnerCreate.mockResolvedValue({
+        runStream: mockRunnerRunStream,
+        getToolInfo: vi.fn().mockReturnValue([]),
+        getSkillInfo: vi.fn().mockReturnValue([]),
+        getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
+      });
+      session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+    });
+
+    it('accepts options parameter with thinkingEnabled', async () => {
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* stream() {
+          yield { type: 'complete' } as any;
+          return { state: { id: 'test-state' } };
+        }
+        return stream();
+      });
+
+      const events: SSEEvent[] = [];
+      await expect(
+        (async () => {
+          for await (const event of session.handleMessage('hello', { thinkingEnabled: true })) {
+            events.push(event);
+          }
+        })()
+      ).resolves.not.toThrow();
+
+      expect(events.length).toBeGreaterThan(0);
+    });
+
+    it('accepts options parameter without thinkingEnabled', async () => {
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* stream() {
+          yield { type: 'complete' } as any;
+          return { state: { id: 'test-state' } };
+        }
+        return stream();
+      });
+
+      const events: SSEEvent[] = [];
+      await expect(
+        (async () => {
+          for await (const event of session.handleMessage('hello', {})) {
+            events.push(event);
+          }
+        })()
+      ).resolves.not.toThrow();
+
+      expect(events.length).toBeGreaterThan(0);
+    });
+
+    it('handles undefined options parameter', async () => {
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* stream() {
+          yield { type: 'complete' } as any;
+          return { state: { id: 'test-state' } };
+        }
+        return stream();
+      });
+
+      const events: SSEEvent[] = [];
+      await expect(
+        (async () => {
+          for await (const event of session.handleMessage('hello', undefined)) {
+            events.push(event);
+          }
+        })()
+      ).resolves.not.toThrow();
+
+      expect(events.length).toBeGreaterThan(0);
+    });
+
+    it('passes thinkingEnabled option to runner when provided', async () => {
+      const mockRunStream = vi.fn().mockImplementation(async function* () {
+        yield { type: 'complete' } as any;
+        return { state: { id: 'test-state' } };
+      });
+      mockEnhancedRunnerCreate.mockResolvedValue({
+        runStream: mockRunStream,
+        getToolInfo: vi.fn().mockReturnValue([]),
+        getSkillInfo: vi.fn().mockReturnValue([]),
+        getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
+      });
+
+      const testSession = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      // Consume the stream
+      for await (const _ of testSession.handleMessage('hello', { thinkingEnabled: true })) {
+        // drain
+      }
+
+      // Verify runStream was called with thinkingEnabled
+      expect(mockRunStream).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          thinkingEnabled: true,
+        })
+      );
+    });
+
+    it('omits thinkingEnabled from runner options when not provided', async () => {
+      const mockRunStream = vi.fn().mockImplementation(async function* () {
+        yield { type: 'complete' } as any;
+        return { state: { id: 'test-state' } };
+      });
+      mockEnhancedRunnerCreate.mockResolvedValue({
+        runStream: mockRunStream,
+        getToolInfo: vi.fn().mockReturnValue([]),
+        getSkillInfo: vi.fn().mockReturnValue([]),
+        getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
+      });
+
+      const testSession = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      // Consume the stream without options
+      for await (const _ of testSession.handleMessage('hello')) {
+        // drain
+      }
+
+      // Verify runStream was called without thinkingEnabled
+      expect(mockRunStream).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+        })
+      );
+      const callOptions = mockRunStream.mock.calls[0][1] as Record<string, unknown>;
+      expect(callOptions.thinkingEnabled).toBeUndefined();
+    });
+  });
+
   describe('AgentSession.create()', () => {
     const baseOptions: AgentSessionOptions = {
       workspacePath: '/tmp/test-workspace',

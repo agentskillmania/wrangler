@@ -310,9 +310,14 @@ export class AgentSession {
    * Handles abort and error cases gracefully.
    *
    * @param message - The user's text message
+   * @param options - Optional per-request configuration
+   * @param options.thinkingEnabled - Override thinking mode for this request
    * @yields SSEEvent for each event in the agent execution stream
    */
-  async *handleMessage(message: string): AsyncIterable<SSEEvent> {
+  async *handleMessage(
+    message: string,
+    options?: { thinkingEnabled?: boolean }
+  ): AsyncIterable<SSEEvent> {
     if (this._busy) {
       yield { event: 'error', data: { message: 'Session is busy processing a message' } };
       return;
@@ -329,9 +334,12 @@ export class AgentSession {
 
     const consumeStream = async () => {
       try {
-        const stream = this.runner.runStream(this.state, {
-          signal: this.abortController!.signal,
-        });
+        const stream = this.runner.runStream(
+          this.state,
+          options?.thinkingEnabled !== undefined
+            ? { signal: this.abortController!.signal, thinkingEnabled: options.thinkingEnabled }
+            : { signal: this.abortController!.signal }
+        );
 
         const iterator = stream[Symbol.asyncIterator]();
         let iterResult = await iterator.next();

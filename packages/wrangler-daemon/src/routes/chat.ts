@@ -151,6 +151,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const body = request.body as {
       message?: string;
       workspacePath?: string;
+      thinkingEnabled?: boolean;
       config?: {
         model?: string;
         skillDirs?: string[];
@@ -221,7 +222,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     agentSession.emitCockpitEvent({ event: 'session-start', data: { sessionId } });
 
     try {
-      for await (const sse of agentSession.handleMessage(body.message)) {
+      for await (const sse of agentSession.handleMessage(body.message, {
+        thinkingEnabled: body.thinkingEnabled ?? body.config?.thinkingEnabled,
+      })) {
         writeSSE(reply, sse.event, sse.data);
       }
       sessionManager().updateStatus(sessionId, 'idle');
@@ -243,6 +246,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const { sessionId } = request.params as { sessionId: string };
     const body = request.body as {
       message?: string;
+      thinkingEnabled?: boolean;
       config?: {
         model?: string;
         skillDirs?: string[];
@@ -310,7 +314,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     });
 
     try {
-      for await (const sse of agentSession.handleMessage(body.message)) {
+      for await (const sse of agentSession.handleMessage(body.message, {
+        thinkingEnabled: body.thinkingEnabled ?? body.config?.thinkingEnabled,
+      })) {
         writeSSE(reply, sse.event, sse.data);
       }
       sessionManager().updateStatus(sessionId, 'idle');
