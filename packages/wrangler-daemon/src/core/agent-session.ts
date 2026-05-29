@@ -88,7 +88,6 @@ export class AgentSession {
   private bridge: AskHumanBridge;
   private sessionStore: SessionStore | undefined;
   private _busy = false;
-  private runnerConfig: Record<string, unknown> = {};
   /** Latest LLM request captured from llm:request stream events */
   private lastLLMRequest: { messages: unknown[]; tools?: unknown[]; skill?: string } | null = null;
   /** Tool registry snapshot extracted from llm-request events */
@@ -113,24 +112,15 @@ export class AgentSession {
   ) {
     this.runner = runner;
     this.state = state;
+    // Capture tool and skill info at creation time (static, does not change)
+    this.toolRegistrySnapshot = runner.getToolInfo();
+    this.skillRegistrySnapshot = runner.getSkillInfo();
     this.bridge = bridge;
     this.sessionStore = options.sessionStore;
     this.sessionId = options.sessionId ?? state.id;
     this.workspacePath = options.workspacePath;
     this.agentName = options.agentName;
-    this.model = options.model ?? 'deepseek-chat';
-    this.runnerConfig = {
-      model: options.model ?? 'deepseek-chat',
-      sandbox: options.sandbox ?? true,
-      builtinTools: options.builtinTools,
-      enableSession: options.enableSession ?? true,
-      enableTodolist: options.enableTodolist ?? true,
-      enableCommands: options.enableCommands ?? true,
-      thinkingEnabled: options.thinkingEnabled ?? true,
-      a2ui: options.a2ui,
-      skillDirs: options.skillDirs,
-      mcpConfigPaths: options.mcpConfigPaths,
-    };
+    this.model = runner.getConfig().model;
   }
 
   /**
@@ -241,7 +231,7 @@ export class AgentSession {
    */
   private buildDiagnostics(): Record<string, unknown> {
     return {
-      runner: this.runnerConfig,
+      runner: this.runner.getConfig(),
       agent: this.state,
       llm: this.lastLLMRequest,
       tools: this.toolRegistrySnapshot,
@@ -332,8 +322,6 @@ export class AgentSession {
     this.eventQueue = [];
     this.eventWaiters = [];
     this.eventHistory = [];
-    this.toolRegistrySnapshot = [];
-    this.skillRegistrySnapshot = [];
     this.lastSystemPrompt = null;
 
     this.bridge.sseSender = (event: SSEEvent) => this.pushEvent(event);
@@ -370,29 +358,6 @@ export class AgentSession {
                 const firstMsg = d.messages[0] as Record<string, unknown> | undefined;
                 if (firstMsg && typeof firstMsg.content === 'string') {
                   this.lastSystemPrompt = firstMsg.content;
-                }
-                // Extract tool registry snapshot
-                if (Array.isArray(d.tools)) {
-                  this.toolRegistrySnapshot = d.tools.map((t: unknown) => {
-                    const tool = t as Record<string, unknown>;
-                    return {
-                      name: typeof tool.name === 'string' ? tool.name : 'unknown',
-                      description: typeof tool.description === 'string' ? tool.description : '',
-                    };
-                  });
-                }
-              }
-            }
-            // Accumulate skill registry from skill-loaded events
-            if (sse.event === 'skill-loaded' && typeof sse.data === 'object' && sse.data !== null) {
-              const d = sse.data as Record<string, unknown>;
-              if (typeof d.name === 'string') {
-                const existing = this.skillRegistrySnapshot.find((s) => s.name === d.name);
-                if (!existing) {
-                  this.skillRegistrySnapshot.push({
-                    name: d.name,
-                    description: typeof d.tokenCount === 'number' ? `${d.tokenCount} tokens` : '',
-                  });
                 }
               }
             }

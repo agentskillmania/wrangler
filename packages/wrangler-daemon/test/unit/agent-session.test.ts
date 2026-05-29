@@ -8,6 +8,7 @@ const { mockEnhancedRunnerCreate, mockRunnerRunStream } = vi.hoisted(() => ({
     runStream: vi.fn(),
     getToolInfo: vi.fn().mockReturnValue([]),
     getSkillInfo: vi.fn().mockReturnValue([]),
+    getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
   }),
   mockRunnerRunStream: vi.fn(),
 }));
@@ -413,6 +414,7 @@ describe('AgentSession', () => {
         runStream: mockRunnerRunStream,
         getToolInfo: vi.fn().mockReturnValue([]),
         getSkillInfo: vi.fn().mockReturnValue([]),
+        getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
       });
     });
 
