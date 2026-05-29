@@ -88,7 +88,7 @@ function StatePanel(props) {
   var llmContext = llmData ? llmData.messages : null;
   var llmTools = llmData ? llmData.tools : null;
   var llmSkill = llmData ? llmData.skill : null;
-  var _sOpen = useState({ raw: false, llm: false, tools: false }),
+  var _sOpen = useState({ raw: false, sysprompt: false, llmtools: false, tools: false, skills: false }),
     open = _sOpen[0],
     setOpen = _sOpen[1];
 
@@ -101,78 +101,122 @@ function StatePanel(props) {
     });
   }
 
-  // Runner settings section
-  function renderRunnerConfig() {
-    if (!runnerConfig || typeof runnerConfig !== 'object') {
-      return html`<div class="state-section"><div class="state-section-title">Runner Settings</div><div class="state-muted">No config received</div></div>`;
-    }
-    var toolList = [];
-    if (runnerConfig.builtinTools && typeof runnerConfig.builtinTools === 'object') {
-      for (var tk in runnerConfig.builtinTools) {
-        if (runnerConfig.builtinTools[tk]) toolList.push(tk);
-      }
-    }
-    var toolsText = toolList.length > 0 ? toolList.join(', ') : 'all enabled';
-    var skillsText = runnerConfig.skillDirs && runnerConfig.skillDirs.length > 0
-      ? runnerConfig.skillDirs.length + ' dirs'
-      : 'none';
-    var mcpText = runnerConfig.mcpConfigPaths && runnerConfig.mcpConfigPaths.length > 0
-      ? runnerConfig.mcpConfigPaths.length + ' configs'
-      : 'none';
+  // ── Runner ──
+  function renderRunner() {
+    if (!runnerConfig || typeof runnerConfig !== 'object') return null;
 
     return html`
-      <div class="state-section">
-        <div class="state-section-title">Runner Settings</div>
-        <div class="state-kv-grid">
-          <div class="state-kv"><span class="state-k">Model</span><span class="state-v">${runnerConfig.model || 'default'}</span></div>
-          <div class="state-kv"><span class="state-k">Sandbox</span><span class="state-v">${runnerConfig.sandbox ? 'on' : 'off'}</span></div>
-          <div class="state-kv"><span class="state-k">Session</span><span class="state-v">${runnerConfig.enableSession !== false ? 'on' : 'off'}</span></div>
-          <div class="state-kv"><span class="state-k">Todolist</span><span class="state-v">${runnerConfig.enableTodolist !== false ? 'on' : 'off'}</span></div>
-          <div class="state-kv"><span class="state-k">Commands</span><span class="state-v">${runnerConfig.enableCommands !== false ? 'on' : 'off'}</span></div>
-          <div class="state-kv"><span class="state-k">Thinking</span><span class="state-v">${runnerConfig.thinkingEnabled !== false ? 'on' : 'off'}</span></div>
-          <div class="state-kv"><span class="state-k">A2UI</span><span class="state-v">${runnerConfig.a2ui && runnerConfig.a2ui.enabled ? 'on' : 'off'}</span></div>
-          <div class="state-kv"><span class="state-k">Tools</span><span class="state-v">${toolsText}</span></div>
-          <div class="state-kv"><span class="state-k">Skills</span><span class="state-v">${skillsText}</span></div>
-          <div class="state-kv"><span class="state-k">MCP</span><span class="state-v">${mcpText}</span></div>
+      <div class="sp-card">
+        <div class="sp-head">Runner</div>
+        <div class="sp-row">
+          <div class="sp-label">Model</div>
+          <div class="sp-val">${runnerConfig.model || 'default'}</div>
+        </div>
+        <div class="sp-grid">
+          <div class="sp-cell"><div class="sp-label">Sandbox</div><div class="sp-val">${runnerConfig.sandbox ? 'on' : 'off'}</div></div>
+          <div class="sp-cell"><div class="sp-label">Session</div><div class="sp-val">${runnerConfig.enableSession !== false ? 'on' : 'off'}</div></div>
+          <div class="sp-cell"><div class="sp-label">Todolist</div><div class="sp-val">${runnerConfig.enableTodolist !== false ? 'on' : 'off'}</div></div>
+          <div class="sp-cell"><div class="sp-label">Commands</div><div class="sp-val">${runnerConfig.enableCommands !== false ? 'on' : 'off'}</div></div>
+          <div class="sp-cell"><div class="sp-label">Thinking</div><div class="sp-val">${runnerConfig.thinkingEnabled !== false ? 'on' : 'off'}</div></div>
+          <div class="sp-cell"><div class="sp-label">A2UI</div><div class="sp-val">${runnerConfig.a2ui && runnerConfig.a2ui.enabled ? 'on' : 'off'}</div></div>
+        </div>
+        <div class="sp-row">
+          <div class="sp-label">Builtin Tools</div>
+          <div class="sp-val">${(function () {
+            var t = runnerConfig.builtinTools;
+            if (!t || typeof t !== 'object') return 'all';
+            var on = [];
+            for (var k in t) { if (t[k]) on.push(k); }
+            return on.length ? on.join(', ') : 'all';
+          })()}</div>
+        </div>
+        <div class="sp-row">
+          <div class="sp-label">Skill Dirs</div>
+          <div class="sp-val">${runnerConfig.skillDirs && runnerConfig.skillDirs.length > 0 ? runnerConfig.skillDirs.length + ' dirs' : 'none'}</div>
+        </div>
+        <div class="sp-row">
+          <div class="sp-label">MCP</div>
+          <div class="sp-val">${runnerConfig.mcpConfigPaths && runnerConfig.mcpConfigPaths.length > 0 ? runnerConfig.mcpConfigPaths.length + ' configs' : 'none'}</div>
+        </div>
+        <div class="sp-grid" style="margin-top:8px">
+          <div class="sp-cell"><div class="sp-label">Builtin</div><div class="sp-val">${runnerConfig.builtinToolCount ?? '-'}</div></div>
+          <div class="sp-cell"><div class="sp-label">MCP</div><div class="sp-val">${runnerConfig.mcpToolCount ?? '-'}</div></div>
+          <div class="sp-cell"><div class="sp-label">Session</div><div class="sp-val">${runnerConfig.sessionToolCount ?? '-'}</div></div>
+          <div class="sp-cell"><div class="sp-label">Todolist</div><div class="sp-val">${runnerConfig.todolistToolCount ?? '-'}</div></div>
+          <div class="sp-cell"><div class="sp-label">Compression</div><div class="sp-val">${runnerConfig.compressorEnabled ? 'on' : 'off'}</div></div>
+          <div class="sp-cell"><div class="sp-label">Middleware</div><div class="sp-val">${(runnerConfig.middlewareNames || []).join(', ') || 'none'}</div></div>
         </div>
       </div>
     `;
   }
 
-  // Agent config section
-  function renderAgentConfig() {
-    if (!agentState || typeof agentState !== 'object') {
-      return html`<div class="state-section"><div class="state-section-title">Agent Config</div><div class="state-muted">No state received</div></div>`;
-    }
-    var name = agentState.name || (agentState.config && agentState.config.name) || 'Untitled';
-    var instructions = agentState.config && agentState.config.instructions
-      ? String(agentState.config.instructions).substring(0, 300)
-      : '';
-    var instructionsFull = agentState.config && agentState.config.instructions
-      ? String(agentState.config.instructions)
-      : '';
-    var instructionsPreview = instructionsFull.length > 300
-      ? instructions + '...'
-      : instructionsFull;
+  // ── Tool & Skill Registry ──
+  function renderRegistries() {
+    var tools = diagnostics.tools;
+    var skills = diagnostics.skills;
+    if ((!tools || tools.length === 0) && (!skills || skills.length === 0)) return null;
 
     return html`
-      <div class="state-section">
-        <div class="state-section-title">Agent Config</div>
-        <div class="state-kv"><span class="state-k">Name</span><span class="state-v">${name}</span></div>
-        ${instructionsPreview && html`
-          <div class="state-instructions">
-            <div class="state-instructions-label">Instructions</div>
-            <pre class="state-instructions-body">${instructionsPreview}</pre>
+      <div class="sp-card">
+        ${tools && tools.length > 0 ? html`
+          <div class="sp-head sp-click" onClick=${function () { toggle('tools'); }}>
+            Tools (${tools.length}) ${open.tools ? '▾' : '▸'}
+          </div>
+          ${open.tools && html`<div class="sp-list">
+            ${tools.map(function (t) {
+              return html`<div class="sp-list-item">
+                <div class="sp-list-name">${t.name}</div>
+                <div class="sp-list-desc">${(t.description || '').substring(0, 120)}</div>
+              </div>`;
+            })}
+          </div>`}
+        ` : ''}
+        ${skills && skills.length > 0 ? html`
+          <div class="sp-head sp-click" style="margin-top:6px" onClick=${function () { toggle('skills'); }}>
+            Skills (${skills.length}) ${open.skills ? '▾' : '▸'}
+          </div>
+          ${open.skills && html`<div class="sp-list">
+            ${skills.map(function (s) {
+              return html`<div class="sp-list-item">
+                <div class="sp-list-name">${s.name}</div>
+                <div class="sp-list-desc">${(s.description || '').substring(0, 120)}</div>
+              </div>`;
+            })}
+          </div>`}
+        ` : ''}
+      </div>
+    `;
+  }
+
+  // ── Agent ──
+  function renderAgent() {
+    if (!agentState || typeof agentState !== 'object') return null;
+    var name = agentState.name || (agentState.config && agentState.config.name) || 'Untitled';
+    var instr = agentState.config && agentState.config.instructions
+      ? String(agentState.config.instructions)
+      : '';
+
+    return html`
+      <div class="sp-card">
+        <div class="sp-head">Agent</div>
+        <div class="sp-row">
+          <div class="sp-label">Name</div>
+          <div class="sp-val">${name}</div>
+        </div>
+        ${instr && html`
+          <div class="sp-row">
+            <div class="sp-label">Instructions</div>
+            <div class="sp-pre">${instr}</div>
           </div>
         `}
       </div>
     `;
   }
 
-  // Context summary section
-  function renderContextSummary() {
-    if (!agentState || typeof agentState !== 'object') return null;
-    var ctx = agentState.context || {};
+  // ── Context + LLM (merged) ──
+  function renderContextAndLLM() {
+    // Agent context state
+    var ctx = (agentState && agentState.context) || {};
     var msgs = ctx.messages || [];
     var msgCount = msgs.length;
     var todoItems = ctx.todoList && ctx.todoList.items ? ctx.todoList.items.length : 0;
@@ -182,78 +226,82 @@ function StatePanel(props) {
       ? compression.anchor + ' msgs summarized'
       : 'none';
 
-    return html`
-      <div class="state-section">
-        <div class="state-section-title">Context</div>
-        <div class="state-kv-grid">
-          <div class="state-kv"><span class="state-k">Messages</span><span class="state-v">${msgCount}</span></div>
-          <div class="state-kv"><span class="state-k">Todo Items</span><span class="state-v">${todoItems}</span></div>
-          <div class="state-kv"><span class="state-k">Active Skill</span><span class="state-v">${activeSkill}</span></div>
-          <div class="state-kv"><span class="state-k">Compression</span><span class="state-v">${compressionText}</span></div>
-        </div>
-      </div>
-    `;
-  }
-
-  // LLM Context — system prompt + messages + tools + skill actually sent to LLM
-  function renderLLMContext() {
-    if (!llmData) {
-      return html`<div class="state-section"><div class="state-section-title">LLM Context</div><div class="state-muted">No LLM call recorded yet</div></div>`;
-    }
-    var msgCount = Array.isArray(llmContext) ? llmContext.length : 0;
-    var toolCount = Array.isArray(llmTools) ? llmTools.length : 0;
+    // LLM request snapshot
+    var llmMsgCount = Array.isArray(llmContext) ? llmContext.length : 0;
+    var llmToolCount = Array.isArray(llmTools) ? llmTools.length : 0;
     var systemMsg = Array.isArray(llmContext) && llmContext.length > 0 ? llmContext[0] : null;
     var systemPrompt = systemMsg && systemMsg.content ? String(systemMsg.content) : '';
 
     return html`
-      <div class="state-section">
-        <div class="state-section-title">LLM Context</div>
-        <div class="state-kv-grid">
-          <div class="state-kv"><span class="state-k">Messages</span><span class="state-v">${msgCount}</span></div>
-          <div class="state-kv"><span class="state-k">Tools</span><span class="state-v">${toolCount}</span></div>
-          <div class="state-kv"><span class="state-k">Skill</span><span class="state-v">${llmSkill || 'none'}</span></div>
-          ${systemMsg && html`<div class="state-kv"><span class="state-k">System Role</span><span class="state-v">${systemMsg.role || 'user'}</span></div>`}
-        </div>
-        ${systemPrompt && html`
-          <div class="state-instructions" style="margin-top:10px">
-            <div class="state-instructions-label">System Prompt (first message content)</div>
-            <pre class="state-instructions-body" style="max-height:300px">${systemPrompt}</pre>
-          </div>
-        `}
-        ${llmTools && html`
-          <div class="state-section-title state-toggle" style="margin-top:10px;border-bottom:none;padding-bottom:0" onClick=${function () { toggle('tools'); }}>
-            Tools Array ${open.tools ? '▾' : '▸'}
-          </div>
-          ${open.tools && html`<${JsonTree} data=${llmTools} open=${1} />`}
-        `}
-        <div class="state-section-title state-toggle" style="margin-top:10px;border-bottom:none;padding-bottom:0" onClick=${function () { toggle('llm'); }}>
-          Full Message Array ${open.llm ? '▾' : '▸'}
-        </div>
-        ${open.llm && html`<${JsonTree} data=${llmContext} open=${1} />`}
-      </div>
-    `;
-  }
+      <div class="sp-card">
+        <div class="sp-head">Context</div>
 
-  // Raw state JSON (collapsible)
-  function renderRawState() {
-    if (!agentState) return null;
-    return html`
-      <div class="state-section">
-        <div class="state-section-title state-toggle" onClick=${function () { toggle('raw'); }}>
-          Raw AgentState ${open.raw ? '▾' : '▸'}
+        <div class="sp-grid">
+          <div class="sp-cell">
+            <div class="sp-label">State Msgs</div>
+            <div class="sp-val">${msgCount}</div>
+          </div>
+          <div class="sp-cell">
+            <div class="sp-label">LLM Msgs</div>
+            <div class="sp-val">${llmMsgCount}</div>
+          </div>
+          <div class="sp-cell">
+            <div class="sp-label">Todo</div>
+            <div class="sp-val">${todoItems}</div>
+          </div>
+          <div class="sp-cell">
+            <div class="sp-label">Active Skill</div>
+            <div class="sp-val">${activeSkill}</div>
+          </div>
+          <div class="sp-cell">
+            <div class="sp-label">LLM Tools</div>
+            <div class="sp-val">${llmToolCount}</div>
+          </div>
+          <div class="sp-cell">
+            <div class="sp-label">LLM Skill</div>
+            <div class="sp-val">${llmSkill || 'none'}</div>
+          </div>
+          <div class="sp-cell">
+            <div class="sp-label">Compression</div>
+            <div class="sp-val">${compressionText}</div>
+          </div>
+        </div>
+
+        ${systemPrompt && html`
+          <div class="sp-head sp-click" style="margin-top:8px" onClick=${function () { toggle('sysprompt'); }}>
+            System Prompt ${open.sysprompt ? '▾' : '▸'}
+          </div>
+          ${open.sysprompt && html`<div class="sp-pre">${systemPrompt}</div>`}
+        `}
+
+        ${llmTools && html`
+          <div class="sp-head sp-click" style="margin-top:6px" onClick=${function () { toggle('llmtools'); }}>
+            LLM Tool Schemas ${open.llmtools ? '▾' : '▸'}
+          </div>
+          ${open.llmtools && html`<${JsonTree} data=${llmTools} open=${1} />`}
+        `}
+
+        <div class="sp-head sp-click" style="margin-top:6px" onClick=${function () { toggle('raw'); }}>
+          Raw State ${open.raw ? '▾' : '▸'}
         </div>
         ${open.raw && html`<${JsonTree} data=${agentState} open=${1} />`}
+
+        ${llmContext && html`
+          <div class="sp-head sp-click" style="margin-top:6px" onClick=${function () { toggle('raw'); }}>
+            LLM Messages ${open.raw ? '▾' : '▸'}
+          </div>
+          ${open.raw && html`<${JsonTree} data=${llmContext} open=${1} />`}
+        `}
       </div>
     `;
   }
 
   return html`
     <div class="state-panel">
-      ${renderRunnerConfig()}
-      ${renderAgentConfig()}
-      ${renderContextSummary()}
-      ${renderLLMContext()}
-      ${renderRawState()}
+      ${renderRunner()}
+      ${renderRegistries()}
+      ${renderAgent()}
+      ${renderContextAndLLM()}
     </div>
   `;
 }
@@ -648,9 +696,6 @@ function ChatPage() {
   var _sSt = useState(false),
     streaming = _sSt[0],
     setStreaming = _sSt[1];
-  var _sMode = useState('new'),
-    mode = _sMode[0],
-    setMode = _sMode[1];
   var _sRSid = useState(''),
     resumeSessionId = _sRSid[0],
     setResumeSessionId = _sRSid[1];
@@ -775,12 +820,15 @@ function ChatPage() {
     [chatLines]
   );
 
-  // Auto-scroll cockpit event log to bottom
+  // Auto-scroll cockpit event log to bottom only when new events arrive
+  var prevEvtLenRef = useRef(0);
   useEffect(
     function () {
-      if (evtLogRef.current) {
+      if (!evtLogRef.current) return;
+      if (cockpitEvents.length > prevEvtLenRef.current) {
         evtLogRef.current.scrollTop = evtLogRef.current.scrollHeight;
       }
+      prevEvtLenRef.current = cockpitEvents.length;
     },
     [cockpitEvents]
   );
@@ -992,36 +1040,38 @@ function ChatPage() {
       });
   }
 
-  function startNewChat() {
-    if (!selectedAgent || !workspacePath || !message) {
-      appendLine('error', 'Agent, workspace path, and message are required.');
-      return;
-    }
+  function sendMessage() {
+    if (!message.trim()) return;
     var msg = message;
-    setSessionId('');
-    setChatLines([{ tag: 'user', text: msg, id: Date.now() }]);
-    setCockpitEvents([]);
-    doStream('/api/agents/' + selectedAgent + '/chat', {
-      message: msg,
-      workspacePath: workspacePath,
-      config: buildRunnerConfig(),
-    });
-    setMessage('');
-  }
 
-  function resumeChat() {
-    if (!resumeSessionId || !message) {
-      appendLine('error', 'Session ID and message are required.');
+    if (sessionId) {
+      // Continue existing session — agent remembers conversation history
+      appendLine('user', msg);
+      doStream('/api/chat/' + sessionId, {
+        message: msg,
+        config: buildRunnerConfig(),
+      });
+    } else if (resumeSessionId) {
+      // Resume a previously saved session
+      setSessionId(resumeSessionId);
+      appendLine('user', msg);
+      doStream('/api/chat/' + resumeSessionId, {
+        message: msg,
+        config: buildRunnerConfig(),
+      });
+    } else if (selectedAgent && workspacePath) {
+      // Start new conversation
+      setCockpitEvents([]);
+      appendLine('user', msg);
+      doStream('/api/agents/' + selectedAgent + '/chat', {
+        message: msg,
+        workspacePath: workspacePath,
+        config: buildRunnerConfig(),
+      });
+    } else {
+      appendLine('error', 'Select an agent and set workspace path to start.');
       return;
     }
-    var msg = message;
-    setSessionId(resumeSessionId);
-    setChatLines([{ tag: 'user', text: msg, id: Date.now() }]);
-    setCockpitEvents([]);
-    doStream('/api/chat/' + resumeSessionId, {
-      message: msg,
-      config: buildRunnerConfig(),
-    });
     setMessage('');
   }
 
@@ -1029,11 +1079,6 @@ function ChatPage() {
     if (chatCtrlRef.current) chatCtrlRef.current.abort();
     if (sessionId) api.post('/api/chat/' + sessionId + '/stop');
     setStreaming(false);
-  }
-
-  function clearChat() {
-    setChatLines([]);
-    setCockpitEvents([]);
   }
 
   function sendAskResponse() {
@@ -1247,8 +1292,8 @@ function ChatPage() {
       </div>
 
       <div class="chat-layout">
-        <!-- Left Column: Config panel -->
-        <div class="chat-left">
+        <!-- Left Column: Config panel (disabled during active session) -->
+        <div class="chat-left" style=${sessionId ? 'opacity:0.5;pointer-events:none;' : ''}>
           <div class="field">
             <label>Agent</label>
             <select
@@ -1283,34 +1328,16 @@ function ChatPage() {
             />
           </div>
 
-          <div class="tabs" style="margin-bottom:0">
-            <button
-              class=${'tab' + (mode === 'new' ? ' active' : '')}
-              onClick=${function () {
-                setMode('new');
-              }}
-            >
-              New
-            </button>
-            <button
-              class=${'tab' + (mode === 'resume' ? ' active' : '')}
-              onClick=${function () {
-                setMode('resume');
-              }}
-            >
-              Resume
-            </button>
-          </div>
-
-          ${mode === 'resume' &&
+          ${!sessionId &&
             html`
               <div class="field">
-                <label>Session</label>
+                <label>Resume Session (optional)</label>
                 <${SessionSelector}
                   value=${resumeSessionId}
                   onChange=${function (v) {
                     setResumeSessionId(v);
                   }}
+                  placeholder="Leave empty for new session..."
                 />
               </div>
             `
@@ -1547,15 +1574,6 @@ function ChatPage() {
             `
           }
 
-          <!-- Session ID display -->
-          ${sessionId &&
-            html`
-              <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">
-                Session: ${sessionId.substring(0, 12)}...
-              </div>
-            `
-          }
-
           <!-- AskHuman response area -->
           ${sessionId &&
             html`
@@ -1599,6 +1617,23 @@ function ChatPage() {
 
         <!-- Middle Column: Chat messages + input bar -->
         <div class="chat-middle">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--bg-secondary);">
+            <span style="font-size:12px;color:var(--text-muted);">
+              ${sessionId
+                ? html`<span style="font-family:var(--font-mono);color:var(--accent);">${sessionId.substring(0, 8)}</span>`
+                : 'No active session'}
+            </span>
+            <button
+              class="btn btn-secondary btn-sm"
+              onClick=${function () {
+                setChatLines([]);
+                setCockpitEvents([]);
+                setSessionId('');
+              }}
+            >
+              New Chat
+            </button>
+          </div>
           <div class="chat-messages">
             ${chatLines.length === 0 &&
             html`
@@ -1638,7 +1673,7 @@ function ChatPage() {
             <input
               class="input"
               style="flex:1"
-              placeholder="Type your message..."
+              placeholder=${sessionId ? 'Type your message...' : 'Configure left panel, then send first message...'}
               value=${message}
               onInput=${function (e) {
                 setMessage(e.target.value);
@@ -1646,25 +1681,20 @@ function ChatPage() {
               onKeyPress=${function (e) {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  mode === 'new' ? startNewChat() : resumeChat();
+                  sendMessage();
                 }
               }}
             />
             <button
               class="btn btn-primary btn-sm"
               disabled=${streaming}
-              onClick=${function () {
-                mode === 'new' ? startNewChat() : resumeChat();
-              }}
+              onClick=${sendMessage}
             >
               Send
             </button>
-            <button class="btn btn-danger btn-sm" onClick=${stopChat}>Stop</button>
-            <button class="btn btn-secondary btn-sm" onClick=${clearChat}>Clear</button>
-            ${sessionId &&
-            html`
-              <span class="session-id">Session: ${sessionId.substring(0, 12)}...</span>
-            `}
+            ${streaming &&
+              html`<button class="btn btn-danger btn-sm" onClick=${stopChat}>Stop</button>`
+            }
           </div>
         </div>
 
