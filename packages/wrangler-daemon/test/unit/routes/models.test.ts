@@ -69,5 +69,47 @@ describe('Model metadata endpoint', () => {
       const body = await res.json();
       expect(body.error).toContain('not found');
     });
+
+    it('returns defaults when model has no optional metadata', async () => {
+      // Create a config without contextWindow/maxTokens/reasoning
+      const configPath2 = join(tempDir, 'config2.yaml');
+      await writeFile(
+        configPath2,
+        `llm:\n  baseUrl: ''\n  apiKey: ''\n  model: bare-model\nserver:\n  port: 3100\n  host: localhost\n`
+      );
+      const cm2 = new ConfigManager(configPath2);
+      await cm2.init();
+
+      const f2 = Fastify();
+      const rm2 = new ResourceManager(
+        join(tempDir, 'a2'),
+        join(tempDir, 's2'),
+        join(tempDir, 'c2')
+      );
+      await rm2.init();
+      const sm2 = new SessionManager(join(tempDir, 's2'));
+      await sm2.init();
+
+      f2.decorate('configManager', cm2);
+      f2.decorate('resourceManager', rm2);
+      f2.decorate('sessionManager', sm2);
+      f2.register(modelRoutes);
+      await f2.listen({ port: 0, host: '127.0.0.1' });
+
+      try {
+        const addr = f2.addresses()[0];
+        const url = typeof addr === 'string' ? addr : `http://127.0.0.1:${addr.port}`;
+        const res = await fetch(`${url}/api/models/bare-model/metadata`);
+        expect(res.ok).toBe(true);
+        const body = await res.json();
+        expect(body.modelId).toBe('bare-model');
+        // Defaults when no YAML metadata provided
+        expect(body.contextWindow).toBe(0);
+        expect(body.maxTokens).toBe(0);
+        expect(body.reasoning).toBe(false);
+      } finally {
+        await f2.close();
+      }
+    });
   });
 });

@@ -517,5 +517,50 @@ describe('Chat API', () => {
       // Reset for other tests
       mockSession.busy = false;
     });
+
+    it('passes per-request model and thinkingEnabled to handleMessage on resume', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      const res = await fetch(`${getUrl()}/api/chat/existing-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          model: 'gpt-4o',
+          thinkingEnabled: true,
+        }),
+      });
+
+      expect(res.status).toBe(200);
+
+      // Per-request params should be passed to handleMessage
+      expect(mockHandleMessage).toHaveBeenCalledTimes(1);
+      const msgOpts = mockHandleMessage.mock.calls[0][1] as Record<string, unknown>;
+      expect(msgOpts.model).toBe('gpt-4o');
+      expect(msgOpts.thinkingEnabled).toBe(true);
+    });
+
+    it('uses stored session model for lazy creation on resume', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      const res = await fetch(`${getUrl()}/api/chat/existing-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello' }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
+
+      // Session creation uses stored model from session info, not body config
+      const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArg.model).toBe('test-model'); // from session store, not body
+    });
   });
 });
