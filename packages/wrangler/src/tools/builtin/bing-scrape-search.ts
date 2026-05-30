@@ -1,3 +1,4 @@
+import { JSDOM } from 'jsdom';
 import type { SearchProvider, SearchResult } from './web-search.js';
 
 /**
@@ -30,12 +31,10 @@ export class BingScrapeSearchProvider implements SearchProvider {
       return [];
     }
 
-    return await this.parseResults(html);
+    return this.parseResults(html);
   }
 
-  private async parseResults(html: string): Promise<SearchResult[]> {
-    const jsdom = await import('jsdom');
-    const { JSDOM } = jsdom;
+  private parseResults(html: string): SearchResult[] {
     const dom = new JSDOM(html);
     const doc = dom.window.document;
     const results: SearchResult[] = [];
