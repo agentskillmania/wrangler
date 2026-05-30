@@ -39,6 +39,7 @@
   "dependencies": {
     "@agentskillmania/colts": "link:../../../colts/packages/colts",
     "@agentskillmania/sandbox": "link:../../../sandbox/sandbox/packages/sandbox",
+    "@mariozechner/pi-ai": "^0.73.1",
     "@mozilla/readability": "^0.6.0",
     "diff": "^9.0.0",
     "fast-glob": "^3.3.3",

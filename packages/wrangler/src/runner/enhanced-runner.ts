@@ -9,6 +9,7 @@ import type {
   AgentState,
   RunnerEventMap,
   RunResult,
+  RunOptions,
   IContextCompressor,
   CompressionConfig,
 } from '@agentskillmania/colts';
@@ -341,10 +342,7 @@ export class EnhancedRunner {
    * @param options - Optional run configuration (maxSteps, signal, thinkingEnabled)
    * @returns Final state and run result
    */
-  run(
-    state: AgentState,
-    options?: { maxSteps?: number; signal?: AbortSignal; thinkingEnabled?: boolean }
-  ): Promise<{ state: AgentState; result: RunResult }> {
+  run(state: AgentState, options?: RunOptions): Promise<{ state: AgentState; result: RunResult }> {
     return this.innerRunner.run(state, options);
   }
 
@@ -352,13 +350,10 @@ export class EnhancedRunner {
    * Stream agent execution until completion
    *
    * @param state - Current agent state
-   * @param options - Optional run configuration (maxSteps, signal, thinkingEnabled)
+   * @param options - Optional run configuration (maxSteps, signal, thinkingEnabled, model)
    * @returns Async generator of run stream events
    */
-  runStream(
-    state: AgentState,
-    options?: { maxSteps?: number; signal?: AbortSignal; thinkingEnabled?: boolean }
-  ): AsyncIterable<unknown> {
+  runStream(state: AgentState, options?: RunOptions): AsyncIterable<unknown> {
     return this.innerRunner.runStream(state, options);
   }
 
