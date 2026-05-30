@@ -1,7 +1,11 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { AgentSession } from '../core/agent-session.js';
 import type { AgentSessionOptions } from '../core/agent-session.js';
-import type { DecoratedFastifyInstance } from '../types.js';
+import type {
+  DecoratedFastifyInstance,
+  CreateAndChatRequest,
+  ResumeChatRequest,
+} from '../types.js';
 
 /** Predefined slash commands for the chat input */
 const COMMANDS = [
@@ -148,23 +152,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post('/api/agents/:name/chat', async (request, reply) => {
     const { name } = request.params as { name: string };
-    const body = request.body as {
-      message?: string;
-      workspacePath?: string;
-      thinkingEnabled?: boolean;
-      config?: {
-        model?: string;
-        skillDirs?: string[];
-        mcpConfigPaths?: string[];
-        builtinTools?: Record<string, boolean>;
-        enableSession?: boolean;
-        enableTodolist?: boolean;
-        enableCommands?: boolean;
-        sandbox?: boolean;
-        thinkingEnabled?: boolean;
-        a2ui?: { enabled: boolean };
-      };
-    };
+    const body = request.body as CreateAndChatRequest;
 
     if (!body.message?.trim()) {
       reply.code(400).send({ error: 'message is required' });
@@ -188,7 +176,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       workspacePath,
       agentName: agentDetail.name,
       agentInstructions: agentDetail.instructions,
-      model: body.config?.model ?? agentDetail.model,
+      model: agentDetail.model,
       skillDirs: body.config?.skillDirs ?? agentDetail.skillDirs,
       mcpConfigPaths: body.config?.mcpConfigPaths ?? agentDetail.mcpPaths,
       sessionBaseDir: sessionManager().baseDir,
@@ -198,7 +186,6 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       enableTodolist: body.config?.enableTodolist,
       enableCommands: body.config?.enableCommands,
       sandbox: body.config?.sandbox,
-      thinkingEnabled: body.config?.thinkingEnabled,
       a2ui: body.config?.a2ui,
     };
 
@@ -223,7 +210,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     try {
       for await (const sse of agentSession.handleMessage(body.message, {
-        thinkingEnabled: body.thinkingEnabled ?? body.config?.thinkingEnabled,
+        thinkingEnabled: body.thinkingEnabled,
+        model: body.model,
       })) {
         writeSSE(reply, sse.event, sse.data);
       }
@@ -244,22 +232,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post('/api/chat/:sessionId', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
-    const body = request.body as {
-      message?: string;
-      thinkingEnabled?: boolean;
-      config?: {
-        model?: string;
-        skillDirs?: string[];
-        mcpConfigPaths?: string[];
-        builtinTools?: Record<string, boolean>;
-        enableSession?: boolean;
-        enableTodolist?: boolean;
-        enableCommands?: boolean;
-        sandbox?: boolean;
-        thinkingEnabled?: boolean;
-        a2ui?: { enabled: boolean };
-      };
-    };
+    const body = request.body as ResumeChatRequest;
 
     if (!body.message?.trim()) {
       reply.code(400).send({ error: 'message is required' });
@@ -280,19 +253,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         sessionId,
         workspacePath: info.workspacePath,
         agentName: info.agentName,
-        model: body.config?.model ?? info.model,
-        skillDirs: body.config?.skillDirs,
-        mcpConfigPaths: body.config?.mcpConfigPaths,
+        model: info.model,
         sessionStore: store,
         sessionBaseDir: sessionManager().baseDir,
-        // New config fields from request body
-        builtinTools: body.config?.builtinTools as AgentSessionOptions['builtinTools'],
-        enableSession: body.config?.enableSession,
-        enableTodolist: body.config?.enableTodolist,
-        enableCommands: body.config?.enableCommands,
-        sandbox: body.config?.sandbox,
-        thinkingEnabled: body.config?.thinkingEnabled,
-        a2ui: body.config?.a2ui,
       };
       const config = configManager().get();
       agentSession = await AgentSession.create(sessionOptions, config);
@@ -315,7 +278,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     try {
       for await (const sse of agentSession.handleMessage(body.message, {
-        thinkingEnabled: body.thinkingEnabled ?? body.config?.thinkingEnabled,
+        thinkingEnabled: body.thinkingEnabled,
+        model: body.model,
       })) {
         writeSSE(reply, sse.event, sse.data);
       }

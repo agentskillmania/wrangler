@@ -331,8 +331,9 @@ describe('Chat API', () => {
         body: JSON.stringify({
           message: 'hello',
           workspacePath: '/tmp/test-ws',
+          model: 'gpt-4o',
+          thinkingEnabled: true,
           config: {
-            model: 'gpt-4o',
             skillDirs: ['./skills'],
             mcpConfigPaths: ['./mcp.json'],
             builtinTools: { shell: false, fileRead: true },
@@ -340,7 +341,6 @@ describe('Chat API', () => {
             enableTodolist: false,
             enableCommands: false,
             sandbox: false,
-            thinkingEnabled: false,
             a2ui: { enabled: true },
           },
         }),
@@ -350,7 +350,7 @@ describe('Chat API', () => {
       expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
 
       const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
-      expect(callArg.model).toBe('gpt-4o');
+      // Session-init: model comes from agent default, not per-request model
       expect(callArg.skillDirs).toEqual(['./skills']);
       expect(callArg.mcpConfigPaths).toEqual(['./mcp.json']);
       expect(callArg.builtinTools).toEqual({ shell: false, fileRead: true });
@@ -358,8 +358,13 @@ describe('Chat API', () => {
       expect(callArg.enableTodolist).toBe(false);
       expect(callArg.enableCommands).toBe(false);
       expect(callArg.sandbox).toBe(false);
-      expect(callArg.thinkingEnabled).toBe(false);
       expect(callArg.a2ui).toEqual({ enabled: true });
+
+      // Per-request: model and thinkingEnabled passed to handleMessage
+      expect(mockHandleMessage).toHaveBeenCalledTimes(1);
+      const msgOpts = mockHandleMessage.mock.calls[0][1] as Record<string, unknown>;
+      expect(msgOpts.model).toBe('gpt-4o');
+      expect(msgOpts.thinkingEnabled).toBe(true);
     });
 
     it('uses agent defaults when config fields omitted', async () => {
@@ -389,6 +394,11 @@ describe('Chat API', () => {
       expect(callArg.skillDirs).toEqual([]);
       expect(callArg.mcpConfigPaths).toEqual([]);
       expect(callArg.sandbox).toBe(false);
+
+      // Per-request params not provided, so handleMessage gets undefined
+      const msgOpts = mockHandleMessage.mock.calls[0][1] as Record<string, unknown>;
+      expect(msgOpts.model).toBeUndefined();
+      expect(msgOpts.thinkingEnabled).toBeUndefined();
     });
   });
 
