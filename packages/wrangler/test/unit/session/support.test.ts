@@ -1,18 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+/**
+ * @fileoverview Session support unit tests
+ *
+ * Tests createSessionSupport factory output: middleware, store, tools.
+ * Also tests middleware behavioral contracts via direct hook invocation.
+ */
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createSessionSupport } from '../../../src/session/support.js';
 import { mkdir, rm, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-
-function createMockLLMProvider(response: string = 'test response'): ILLMProvider {
-  return {
-    call: vi.fn().mockResolvedValue({
-      content: response,
-      tokens: { input: 10, output: 20 },
-    }),
-    stream: vi.fn(),
-  };
-}
 
 describe('createSessionSupport', () => {
   let testBaseDir: string;
@@ -70,17 +67,92 @@ describe('createSessionSupport', () => {
     expect(toolNames).not.toContain('ask_human');
   });
 
-  it('should create session files when middleware hooks are invoked', async () => {
+  it('should create session files when store is used directly', async () => {
     const session = createSessionSupport({
       workspacePath: '/test/workspace',
       sessionBaseDir: testBaseDir,
     });
 
-    // Simulate what AgentRunner would do when middleware is integrated
     await session.store.createWithId('test-session-1', 'test-model', 'test-agent');
 
     const entries = await readdir(testBaseDir, { recursive: true });
     const sessionEntries = (entries as string[]).filter((e) => (e as string).includes('meta.yaml'));
     expect(sessionEntries).toHaveLength(1);
+  });
+
+  // ── Middleware behavioral contract tests ────────────────────────────────
+
+  describe('middleware', () => {
+    it('should have correct name', () => {
+      const result = createSessionSupport({
+        workspacePath: '/test',
+        sessionBaseDir: testBaseDir,
+      });
+      expect(result.middleware.name).toBe('session');
+    });
+
+    it('should create session in beforeRun when session does not exist', async () => {
+      const result = createSessionSupport({
+        workspacePath: '/test/workspace',
+        sessionBaseDir: testBaseDir,
+      });
+
+      const sessionId = 'middleware-test-session';
+      const mockState = {
+        id: sessionId,
+        config: { name: 'test-agent' },
+        context: { messages: [] },
+      };
+
+      await result.middleware.beforeRun!({
+        state: mockState as any,
+        runnerOptions: { model: 'gpt-4' },
+      });
+
+      const exists = await result.store.existsAsync(sessionId);
+      expect(exists).toBe(true);
+    });
+
+    it('should not crash when beforeRun is called with empty messages', async () => {
+      const result = createSessionSupport({
+        workspacePath: '/test/workspace',
+        sessionBaseDir: testBaseDir,
+      });
+
+      const mockState = {
+        id: 'empty-msg-session',
+        config: { name: 'test-agent' },
+        context: { messages: [] },
+      };
+
+      // Should resolve without error — no user message to record
+      await expect(
+        result.middleware.beforeRun!({
+          state: mockState as any,
+          runnerOptions: { model: 'gpt-4' },
+        })
+      ).resolves.toBeUndefined();
+    });
+
+    it('should return undefined from beforeRun (no stop signal)', async () => {
+      const result = createSessionSupport({
+        workspacePath: '/test/workspace',
+        sessionBaseDir: testBaseDir,
+      });
+
+      const mockState = {
+        id: 'passthrough-session',
+        config: { name: 'test-agent' },
+        context: { messages: [] },
+      };
+
+      const hookResult = await result.middleware.beforeRun!({
+        state: mockState as any,
+        runnerOptions: { model: 'gpt-4' },
+      });
+
+      // Middleware should not return stop — it's passthrough
+      expect(hookResult).toBeUndefined();
+    });
   });
 });
