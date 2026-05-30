@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 import {
   createCreateTaskTool,
   createSendMessageTool,
@@ -89,6 +90,78 @@ describe('crew tools', () => {
       const result = await tool.execute({ itemId: '1', status: 'completed' });
       expect(onUpdate).toHaveBeenCalledWith('1', 'completed');
       expect(result).toContain('completed');
+    });
+  });
+
+  // ── Tool metadata tests ─────────────────────────────────────────────
+
+  describe('tool metadata', () => {
+    it('create_task should have correct name and description', () => {
+      const tool = createCreateTaskTool({ onCreateTask: vi.fn() });
+      expect(tool.name).toBe('create_task');
+      expect(tool.description).toContain('worker');
+      expect(tool.parameters).toBeInstanceOf(z.ZodObject);
+    });
+
+    it('send_message should have correct name and description', () => {
+      const tool = createSendMessageTool({ onSend: vi.fn() });
+      expect(tool.name).toBe('send_message');
+      expect(tool.description).toContain('message');
+    });
+
+    it('relay_to_primary should have correct name and description', () => {
+      const tool = createRelayToPrimaryTool({ onRelay: vi.fn() });
+      expect(tool.name).toBe('relay_to_primary');
+      expect(tool.description).toContain('primary');
+    });
+
+    it('read_crew_todolist should have correct name', () => {
+      const tool = createReadCrewTodolistTool({ getTodolist: vi.fn().mockReturnValue([]) });
+      expect(tool.name).toBe('read_crew_todolist');
+    });
+
+    it('update_crew_todolist should have correct name', () => {
+      const tool = createUpdateCrewTodolistTool({ onUpdate: vi.fn() });
+      expect(tool.name).toBe('update_crew_todolist');
+    });
+  });
+
+  // ── Zod schema validation tests ─────────────────────────────────────
+
+  describe('schema validation', () => {
+    it('create_task should reject missing workerType', () => {
+      const tool = createCreateTaskTool({ onCreateTask: vi.fn() });
+      const schema = tool.parameters as z.ZodObject<z.ZodRawShape>;
+      const result = schema.safeParse({ task: 'do something' });
+      expect(result.success).toBe(false);
+    });
+
+    it('create_task should reject missing task', () => {
+      const tool = createCreateTaskTool({ onCreateTask: vi.fn() });
+      const schema = tool.parameters as z.ZodObject<z.ZodRawShape>;
+      const result = schema.safeParse({ workerType: 'searcher' });
+      expect(result.success).toBe(false);
+    });
+
+    it('send_message should reject missing to field', () => {
+      const tool = createSendMessageTool({ onSend: vi.fn() });
+      const schema = tool.parameters as z.ZodObject<z.ZodRawShape>;
+      const result = schema.safeParse({ content: 'hello' });
+      expect(result.success).toBe(false);
+    });
+
+    it('send_message should reject missing content field', () => {
+      const tool = createSendMessageTool({ onSend: vi.fn() });
+      const schema = tool.parameters as z.ZodObject<z.ZodRawShape>;
+      const result = schema.safeParse({ to: 'agent-1' });
+      expect(result.success).toBe(false);
+    });
+
+    it('update_crew_todolist should reject invalid status', () => {
+      const tool = createUpdateCrewTodolistTool({ onUpdate: vi.fn() });
+      const schema = tool.parameters as z.ZodObject<z.ZodRawShape>;
+      const result = schema.safeParse({ itemId: '1', status: 'done' });
+      expect(result.success).toBe(false);
     });
   });
 });
