@@ -690,6 +690,12 @@ function ChatPage() {
   var _sDT = useState(false),
     msgThinking = _sDT[0],
     setMsgThinking = _sDT[1];
+  var _sMsgModel = useState(''),
+    msgModel = _sMsgModel[0],
+    setMsgModel = _sMsgModel[1];
+  var _sModelInfo = useState(null),
+    modelInfo = _sModelInfo[0],
+    setModelInfo = _sModelInfo[1];
   var _sSid = useState(''),
     sessionId = _sSid[0],
     setSessionId = _sSid[1];
@@ -800,6 +806,19 @@ function ChatPage() {
     setRightSaveStatus = _sRSS[1];
   var cockpitEsRef = useRef(null);
   var evtLogRef = useRef(null);
+
+  function formatTokens(n) {
+    if (!n) return '—';
+    if (n >= 1000) return Math.round(n / 1000) + 'K';
+    return String(n);
+  }
+
+  function fetchModelInfo(modelId) {
+    if (!modelId || !modelId.trim()) { setModelInfo(null); return; }
+    api.get('/api/models/' + encodeURIComponent(modelId.trim()) + '/metadata')
+      .then(function (info) { setModelInfo(info); })
+      .catch(function () { setModelInfo(null); });
+  }
 
   // Load agents on mount
   useEffect(function () {
@@ -966,7 +985,6 @@ function ChatPage() {
         enabled: cfgA2ui,
       },
     };
-    if (cfgModel.trim()) result.model = cfgModel.trim();
     if (cfgSkillDirs.trim()) {
       result.skillDirs = cfgSkillDirs.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
     }
@@ -1042,32 +1060,34 @@ function ChatPage() {
   function sendMessage() {
     if (!message.trim()) return;
     var msg = message;
+    var perRequestModel = msgModel.trim() || undefined;
 
     if (sessionId) {
-      // Continue existing session — agent remembers conversation history
+      // Continue existing session — per-request params only
       appendLine('user', msg);
       doStream('/api/chat/' + sessionId, {
         message: msg,
         thinkingEnabled: msgThinking,
-        config: buildRunnerConfig(),
+        model: perRequestModel,
       });
     } else if (resumeSessionId) {
-      // Resume a previously saved session
+      // Resume a previously saved session — per-request params only
       setSessionId(resumeSessionId);
       appendLine('user', msg);
       doStream('/api/chat/' + resumeSessionId, {
         message: msg,
         thinkingEnabled: msgThinking,
-        config: buildRunnerConfig(),
+        model: perRequestModel,
       });
     } else if (selectedAgent && workspacePath) {
-      // Start new conversation
+      // Start new conversation — session-init config + per-request params
       setCockpitEvents([]);
       appendLine('user', msg);
       doStream('/api/agents/' + selectedAgent + '/chat', {
         message: msg,
         workspacePath: workspacePath,
         thinkingEnabled: msgThinking,
+        model: perRequestModel,
         config: buildRunnerConfig(),
       });
     } else {
@@ -1346,6 +1366,9 @@ function ChatPage() {
           }
 
           <!-- Collapsible Runner Config -->
+          ${sessionId &&
+            html`<div class="config-lock-banner">🔒 Session active — config locked</div>`
+          }
           <div
             class="config-toggle"
             onClick=${function () {
@@ -1527,18 +1550,6 @@ function ChatPage() {
             html`
               <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
                 <label style="font-size:12px;color:#94a3b8">
-                  model
-                  <input
-                    type="text"
-                    value=${cfgModel}
-                    placeholder="e.g. gpt-4o (empty = use agent default)"
-                    onChange=${function (e) {
-                      setCfgModel(e.target.value);
-                    }}
-                    style="width:100%;margin-top:2px;padding:4px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:12px"
-                  />
-                </label>
-                <label style="font-size:12px;color:#94a3b8">
                   skillDirs (comma-separated)
                   <input
                     type="text"
@@ -1683,6 +1694,19 @@ function ChatPage() {
               }} />
               Deep think
             </label>
+            <input
+              class="input"
+              style="width:140px;font-size:12px;padding:4px 8px"
+              placeholder="model (e.g. gpt-4o)"
+              value=${msgModel}
+              onInput=${function (e) {
+                setMsgModel(e.target.value);
+                fetchModelInfo(e.target.value);
+              }}
+            />
+            ${modelInfo &&
+              html`<span class="model-info-bar">${formatTokens(modelInfo.contextWindow)} ctx · ${formatTokens(modelInfo.maxTokens)} out · reasoning ${modelInfo.reasoning ? '✓' : '✗'}</span>`
+            }
             <button
               class="btn btn-primary btn-sm"
               disabled=${streaming}
