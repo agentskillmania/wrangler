@@ -279,6 +279,46 @@ describe('EnhancedRunner', () => {
     expect(mockRun).toHaveBeenCalledWith(mockState, mockOptions);
   });
 
+  it('should run() pass per-request model and thinkingEnabled to inner runner', async () => {
+    const mockState = { messages: [], steps: [] };
+    const mockOptions = {
+      maxSteps: 5,
+      model: 'gpt-4o',
+      thinkingEnabled: true,
+      signal: new AbortController().signal,
+    };
+
+    const runner = await EnhancedRunner.create(makeOptions());
+    mockRun.mockResolvedValue({
+      state: mockState,
+      result: { type: 'success', answer: 'test', totalSteps: 1 },
+    });
+
+    await runner.run(mockState, mockOptions);
+
+    expect(mockRun).toHaveBeenCalledWith(mockState, mockOptions);
+  });
+
+  it('should runStream() pass per-request model and thinkingEnabled to inner runner', async () => {
+    const mockState = { messages: [], steps: [] };
+    const mockOptions = {
+      maxSteps: 3,
+      model: 'claude-3',
+      thinkingEnabled: false,
+    };
+
+    const mockAsyncGenerator = (async function* () {
+      yield { type: 'step', step: 1 };
+    })();
+
+    const runner = await EnhancedRunner.create(makeOptions());
+    mockRunStream.mockReturnValue(mockAsyncGenerator);
+
+    await runner.runStream(mockState, mockOptions);
+
+    expect(mockRunStream).toHaveBeenCalledWith(mockState, mockOptions);
+  });
+
   it('should on() delegate and return this for chaining', async () => {
     const mockHandler = vi.fn();
 
