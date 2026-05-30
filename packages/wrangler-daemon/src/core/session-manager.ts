@@ -158,6 +158,11 @@ export class SessionManager {
     return this.activeSessions.get(id) ?? null;
   }
 
+  /** Iterate over all active AgentSession entries */
+  getAllAgentSessions(): IterableIterator<[string, AgentSession]> {
+    return this.activeSessions.entries();
+  }
+
   /** Number of sessions with active AgentSession instances */
   get activeCount(): number {
     return this.activeSessions.size;

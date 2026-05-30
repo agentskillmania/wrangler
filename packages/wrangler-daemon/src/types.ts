@@ -169,7 +169,7 @@ export interface SessionInitParams {
 }
 
 /** POST /api/agents/:name/chat — create session + send first message */
-export interface CreateAndChatRequest extends PerRequestParams, SessionInitParams {}
+export type CreateAndChatRequest = PerRequestParams & SessionInitParams;
 
 /** POST /api/chat/:sessionId — send message to existing session */
-export interface ResumeChatRequest extends PerRequestParams {}
+export type ResumeChatRequest = PerRequestParams;

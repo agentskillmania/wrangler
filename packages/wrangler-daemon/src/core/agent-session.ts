@@ -8,7 +8,7 @@
 import { LLMClient } from '@agentskillmania/llm-client';
 import { EnhancedRunner, SessionStore } from '@agentskillmania/wrangler';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
-import type { AgentState, RunStreamEvent } from '@agentskillmania/colts';
+import type { AgentState, RunStreamEvent, RunOptions } from '@agentskillmania/colts';
 import type { AskHumanHandler, HumanResponse } from '@agentskillmania/colts';
 import type { SSEEvent, DaemonConfig } from '../types.js';
 
@@ -346,14 +346,14 @@ export class AgentSession {
 
     const consumeStream = async () => {
       try {
-        const runOpts: Record<string, unknown> = { signal: this.abortController!.signal };
+        const runOpts: RunOptions = { signal: this.abortController!.signal };
         if (options?.thinkingEnabled !== undefined) {
           runOpts.thinkingEnabled = options.thinkingEnabled;
         }
         if (options?.model !== undefined) {
           runOpts.model = options.model;
         }
-        const stream = this.runner.runStream(this.state, runOpts as any);
+        const stream = this.runner.runStream(this.state, runOpts);
 
         const iterator = stream[Symbol.asyncIterator]();
         let iterResult = await iterator.next();

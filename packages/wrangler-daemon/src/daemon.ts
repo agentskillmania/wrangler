@@ -22,6 +22,7 @@ import { devtoolRoutes } from './routes/devtool.js';
 import { devtoolStreamRoutes } from './routes/devtool-stream.js';
 import { specRoutes } from './routes/specs.js';
 import { planRoutes } from './routes/plans.js';
+import { modelRoutes } from './routes/models.js';
 import { CONFIG_PATH, AGENTS_DIR, SKILLS_DIR, SESSIONS_DIR, CREWS_DIR } from './constants.js';
 import type { DaemonOptions } from './types.js';
 
@@ -133,6 +134,7 @@ export class Daemon {
     this.fastify.register(devtoolStreamRoutes);
     this.fastify.register(specRoutes);
     this.fastify.register(planRoutes);
+    this.fastify.register(modelRoutes);
 
     // Decorate fastify with managers for route access
     this.fastify.decorate('configManager', this.configManager);
