@@ -500,6 +500,95 @@ describe('EnhancedRunner', () => {
     expect(middlewareNames).toEqual(['todolist']);
   });
 
+  // ── negative path tests ────────────────────────────────────────────────
+
+  describe('negative paths', () => {
+    it('should propagate error when AgentRunner.run throws', async () => {
+      mockRun.mockRejectedValue(new Error('LLM provider timeout'));
+      const runner = await EnhancedRunner.create(makeOptions());
+
+      await expect(runner.run({} as any)).rejects.toThrow('LLM provider timeout');
+    });
+
+    it('should propagate error when AgentRunner.runStream yields error', async () => {
+      mockRunStream.mockImplementation(() => {
+        throw new Error('Stream init failed');
+      });
+      const runner = await EnhancedRunner.create(makeOptions());
+
+      expect(() => runner.runStream({} as any)).toThrow('Stream init failed');
+    });
+
+    it('should propagate error result type from inner runner', async () => {
+      mockRun.mockResolvedValue({
+        state: {},
+        result: { type: 'error', error: new Error('policy hard stop'), totalSteps: 500 },
+      });
+      const runner = await EnhancedRunner.create(makeOptions());
+
+      const { result } = await runner.run({} as any);
+      expect(result.type).toBe('error');
+    });
+
+    it('should handle create with no extraTools', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ extraTools: undefined }));
+      expect(runner).toBeInstanceOf(EnhancedRunner);
+
+      const calls = await getAgentRunnerCalls();
+      const tools = calls[calls.length - 1][0].tools;
+      // extraTools is undefined → [...(options.extraTools ?? [])] produces []
+      // Tools should not include 'mock-tool' since no extraTools were passed
+      const names = tools.map((t: { name: string }) => t.name);
+      expect(names).not.toContain('mock-tool');
+    });
+
+    it('should return same config snapshot on repeated calls', async () => {
+      const runner = await EnhancedRunner.create(makeOptions());
+      const config1 = runner.getConfig();
+      const config2 = runner.getConfig();
+      // Same object reference — config is a stable snapshot built at create() time
+      expect(config1).toBe(config2);
+    });
+
+    it('should report correct tool counts in config', async () => {
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createBuiltinTools).mockReturnValueOnce([
+        { name: 'file_read' },
+        { name: 'file_write' },
+      ]);
+
+      const runner = await EnhancedRunner.create(makeOptions());
+      const config = runner.getConfig();
+
+      // After filter (no builtinTools toggle → all included)
+      // The mock returns 2 builtin tools for this call
+      expect(config.builtinToolCount).toBeGreaterThanOrEqual(2);
+      expect(config.mcpToolCount).toBe(0); // loadMCPTools mock returns []
+    });
+
+    it('should handle create with empty workspacePath (falls back to cwd)', async () => {
+      const runner = await EnhancedRunner.create(
+        makeOptions({ workspacePath: undefined })
+      );
+      expect(runner).toBeInstanceOf(EnhancedRunner);
+
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      const calls = createBuiltinTools.mock.calls;
+      // workspacePath defaults to process.cwd() when undefined
+      expect(calls[calls.length - 1][0].workspacePath).toBe(process.cwd());
+    });
+
+    it('should not include session/todolist middleware when both disabled', async () => {
+      const runner = await EnhancedRunner.create(
+        makeOptions({ enableSession: false, enableTodolist: false, enableCommands: false })
+      );
+      const config = runner.getConfig();
+      expect(config.middlewareNames).toEqual([]);
+      expect(config.enableSession).toBe(false);
+      expect(config.enableTodolist).toBe(false);
+    });
+  });
+
   // ── getConfig() observability tests ──────────────────────────────────
 
   describe('getConfig()', () => {
