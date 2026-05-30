@@ -4,6 +4,12 @@ export interface DaemonConfig {
     baseUrl: string;
     apiKey: string;
     model: string;
+    /** Model context window in tokens (optional, overrides built-in defaults) */
+    contextWindow?: number;
+    /** Model max output tokens (optional, overrides built-in defaults) */
+    maxTokens?: number;
+    /** Whether model supports native reasoning (optional, overrides auto-detection) */
+    reasoning?: boolean;
   };
   server: {
     port: number;
@@ -139,3 +145,31 @@ export interface DecoratedFastifyInstance {
   resourceManager: import('./core/resource-manager.js').ResourceManager;
   sessionManager: import('./core/session-manager.js').SessionManager;
 }
+
+/** Per-request parameters — both chat endpoints accept these */
+export interface PerRequestParams {
+  message: string;
+  thinkingEnabled?: boolean;
+  model?: string;
+}
+
+/** Session-init parameters — only create endpoint accepts these */
+export interface SessionInitParams {
+  workspacePath: string;
+  config?: {
+    skillDirs?: string[];
+    mcpConfigPaths?: string[];
+    builtinTools?: Record<string, boolean>;
+    enableSession?: boolean;
+    enableTodolist?: boolean;
+    enableCommands?: boolean;
+    sandbox?: boolean;
+    a2ui?: { enabled: boolean };
+  };
+}
+
+/** POST /api/agents/:name/chat — create session + send first message */
+export interface CreateAndChatRequest extends PerRequestParams, SessionInitParams {}
+
+/** POST /api/chat/:sessionId — send message to existing session */
+export interface ResumeChatRequest extends PerRequestParams {}

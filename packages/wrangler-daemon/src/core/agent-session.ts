@@ -84,6 +84,7 @@ export class AgentSession {
 
   private runner: EnhancedRunner;
   private state: AgentState;
+  private _llmClient!: LLMClient;
   private abortController: AbortController | null = null;
   private bridge: AskHumanBridge;
   private sessionStore: SessionStore | undefined;
@@ -147,7 +148,15 @@ export class AgentSession {
       key: config.llm.apiKey,
       provider: 'openai',
       maxConcurrency: 5,
-      models: [{ modelId: llmModel, maxConcurrency: 3 }],
+      models: [
+        {
+          modelId: llmModel,
+          maxConcurrency: 3,
+          contextWindow: config.llm.contextWindow,
+          maxTokens: config.llm.maxTokens,
+          reasoning: config.llm.reasoning,
+        },
+      ],
     });
 
     const askHumanHandler: AskHumanHandler = async ({ questions, context }) => {
@@ -197,7 +206,9 @@ export class AgentSession {
       });
     }
 
-    return new AgentSession(runner, state, bridge, options);
+    const session = new AgentSession(runner, state, bridge, options);
+    session._llmClient = llmClient;
+    return session;
   }
 
   /** Whether the session is currently processing a message */
@@ -312,11 +323,12 @@ export class AgentSession {
    * @param message - The user's text message
    * @param options - Optional per-request configuration
    * @param options.thinkingEnabled - Override thinking mode for this request
+   * @param options.model - Override model for this request
    * @yields SSEEvent for each event in the agent execution stream
    */
   async *handleMessage(
     message: string,
-    options?: { thinkingEnabled?: boolean }
+    options?: { thinkingEnabled?: boolean; model?: string }
   ): AsyncIterable<SSEEvent> {
     if (this._busy) {
       yield { event: 'error', data: { message: 'Session is busy processing a message' } };
@@ -334,12 +346,14 @@ export class AgentSession {
 
     const consumeStream = async () => {
       try {
-        const stream = this.runner.runStream(
-          this.state,
-          options?.thinkingEnabled !== undefined
-            ? { signal: this.abortController!.signal, thinkingEnabled: options.thinkingEnabled }
-            : { signal: this.abortController!.signal }
-        );
+        const runOpts: Record<string, unknown> = { signal: this.abortController!.signal };
+        if (options?.thinkingEnabled !== undefined) {
+          runOpts.thinkingEnabled = options.thinkingEnabled;
+        }
+        if (options?.model !== undefined) {
+          runOpts.model = options.model;
+        }
+        const stream = this.runner.runStream(this.state, runOpts as any);
 
         const iterator = stream[Symbol.asyncIterator]();
         let iterResult = await iterator.next();
@@ -563,5 +577,10 @@ export class AgentSession {
       case 'error':
         return { event: 'error', data: { message: event.error.message } };
     }
+  }
+
+  /** Get the LLMClient instance (for model metadata queries) */
+  get llmClient(): LLMClient {
+    return this._llmClient;
   }
 }
