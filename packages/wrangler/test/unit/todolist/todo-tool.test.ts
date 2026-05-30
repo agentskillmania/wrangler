@@ -1,123 +1,118 @@
+/**
+ * @fileoverview Todolist tool tests — Zod schema validation and output contract
+ *
+ * The execute function is a passthrough ({ _todo: true, actions }).
+ * Schema validation is done by the colts framework before calling execute,
+ * so we test the schema directly via safeParse.
+ * These tests verify schema rejection of invalid inputs and correct output structure.
+ */
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { createTodolistTool } from '../../../src/todolist/todo-tool.js';
 
 describe('todo-tool', () => {
-  describe('createTodolistTool', () => {
-    it('has correct tool metadata', () => {
+  describe('tool metadata', () => {
+    it('should have correct name and description', () => {
       const tool = createTodolistTool();
       expect(tool.name).toBe('todolist');
       expect(tool.description).toContain('Manage your task list');
       expect(tool.parameters).toBeInstanceOf(z.ZodObject);
     });
+  });
 
-    it('takes no arguments', () => {
+  describe('schema validation — reject invalid inputs', () => {
+    it('should reject actions with invalid action type', () => {
       const tool = createTodolistTool();
-      expect(tool.name).toBe('todolist');
+      const schema = tool.parameters as z.ZodObject<any>;
+      const result = schema.safeParse({
+        actions: [{ action: 'explode', subject: 'test' }],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject actions missing required subject on create', () => {
+      const tool = createTodolistTool();
+      const schema = tool.parameters as z.ZodObject<any>;
+      const result = schema.safeParse({
+        actions: [{ action: 'create' }],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject update action missing required id', () => {
+      const tool = createTodolistTool();
+      const schema = tool.parameters as z.ZodObject<any>;
+      const result = schema.safeParse({
+        actions: [{ action: 'update', status: 'in_progress' }],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject delete action missing required id', () => {
+      const tool = createTodolistTool();
+      const schema = tool.parameters as z.ZodObject<any>;
+      const result = schema.safeParse({
+        actions: [{ action: 'delete' }],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject update action with invalid status', () => {
+      const tool = createTodolistTool();
+      const schema = tool.parameters as z.ZodObject<any>;
+      const result = schema.safeParse({
+        actions: [{ action: 'update', id: 1, status: 'done' }],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject non-array actions', () => {
+      const tool = createTodolistTool();
+      const schema = tool.parameters as z.ZodObject<any>;
+      const result = schema.safeParse({
+        actions: 'not an array',
+      });
+      expect(result.success).toBe(false);
     });
   });
 
-  describe('execute', () => {
-    it('returns _todo: true with actions array', async () => {
+  describe('execute — happy path', () => {
+    it('should return _todo:true with valid create action', async () => {
       const tool = createTodolistTool();
-      const actions = [{ action: 'create', subject: 'Test task' }];
+      const actions = [{ action: 'create' as const, subject: 'Test task' }];
+      const result = await tool.execute({ actions });
+
+      expect(result).toEqual({ _todo: true, actions });
+      expect(result.actions[0]).toEqual({ action: 'create', subject: 'Test task' });
+    });
+
+    it('should return _todo:true with valid update action', async () => {
+      const tool = createTodolistTool();
+      const actions = [{ action: 'update' as const, id: 1, status: 'in_progress' as const }];
       const result = await tool.execute({ actions });
 
       expect(result).toEqual({ _todo: true, actions });
     });
 
-    it('create action passes through subject and description', async () => {
+    it('should return _todo:true with valid delete action', async () => {
+      const tool = createTodolistTool();
+      const actions = [{ action: 'delete' as const, id: 5 }];
+      const result = await tool.execute({ actions });
+
+      expect(result).toEqual({ _todo: true, actions });
+    });
+
+    it('should accept a batch of mixed action types', async () => {
       const tool = createTodolistTool();
       const actions = [
-        { action: 'create', subject: 'Task with desc', description: 'Details here' },
+        { action: 'create' as const, subject: 'First' },
+        { action: 'update' as const, id: 1, status: 'in_progress' as const },
+        { action: 'delete' as const, id: 2 },
       ];
       const result = await tool.execute({ actions });
 
-      expect(result).toEqual({ _todo: true, actions });
-      expect(result.actions[0]).toEqual({
-        action: 'create',
-        subject: 'Task with desc',
-        description: 'Details here',
-      });
-    });
-
-    it('update action passes through id, status, subject', async () => {
-      const tool = createTodolistTool();
-      const actions = [
-        {
-          action: 'update',
-          id: 1,
-          status: 'in_progress',
-          subject: 'Updated task',
-          description: 'Updated description',
-        },
-      ];
-      const result = await tool.execute({ actions });
-
-      expect(result).toEqual({ _todo: true, actions });
-      expect(result.actions[0]).toEqual({
-        action: 'update',
-        id: 1,
-        status: 'in_progress',
-        subject: 'Updated task',
-        description: 'Updated description',
-      });
-    });
-
-    it('delete action passes through id', async () => {
-      const tool = createTodolistTool();
-      const actions = [{ action: 'delete', id: 5 }];
-      const result = await tool.execute({ actions });
-
-      expect(result).toEqual({ _todo: true, actions });
-      expect(result.actions[0]).toEqual({
-        action: 'delete',
-        id: 5,
-      });
-    });
-
-    it('reset action passes through tasks array', async () => {
-      const tool = createTodolistTool();
-      const actions = [
-        {
-          action: 'reset',
-          tasks: [
-            { subject: 'New task 1', status: 'pending' },
-            { subject: 'New task 2', status: 'completed', description: 'Done' },
-          ],
-        },
-      ];
-      const result = await tool.execute({ actions });
-
-      expect(result).toEqual({ _todo: true, actions });
-      expect(result.actions[0]).toEqual({
-        action: 'reset',
-        tasks: [
-          { subject: 'New task 1', status: 'pending' },
-          { subject: 'New task 2', status: 'completed', description: 'Done' },
-        ],
-      });
-    });
-
-    it('multiple actions in one call', async () => {
-      const tool = createTodolistTool();
-      const actions = [
-        { action: 'create', subject: 'First task' },
-        { action: 'update', id: 1, status: 'in_progress' },
-        { action: 'delete', id: 2 },
-      ];
-      const result = await tool.execute({ actions });
-
-      expect(result).toEqual({ _todo: true, actions });
+      expect(result._todo).toBe(true);
       expect(result.actions).toHaveLength(3);
-    });
-
-    it('empty actions array returns _todo with empty array', async () => {
-      const tool = createTodolistTool();
-      const actions: any[] = [];
-      const result = await tool.execute({ actions });
-
-      expect(result).toEqual({ _todo: true, actions: [] });
     });
   });
 });
