@@ -142,4 +142,80 @@ describe('CrewLoader', () => {
     const config = await loader.load();
     expect(config.meta.sandbox).toBeUndefined();
   });
+
+  // --- Negative paths (W3-1) ---
+
+  it('rejects malformed YAML in CREW.md frontmatter', async () => {
+    const tmpDir = join(__dirname, '../../fixtures/crew-bad-yaml');
+    try {
+      await mkdir(tmpDir, { recursive: true });
+      await writeFile(join(tmpDir, 'CREW.md'), '---\nname: [broken: yaml: {{\n---\nMemory');
+      const loader = new CrewLoader(tmpDir);
+      await expect(loader.load()).rejects.toThrow();
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
+  });
+
+  it('handles empty skills directory', async () => {
+    const tmpDir = join(__dirname, '../../fixtures/crew-empty-skills');
+    try {
+      await mkdir(tmpDir, { recursive: true });
+      await mkdir(join(tmpDir, 'skills'), { recursive: true });
+      await writeFile(
+        join(tmpDir, 'CREW.md'),
+        '---\nname: test-crew\nprimary-agent: primary\n---\nMemory'
+      );
+      const loader = new CrewLoader(tmpDir);
+      const config = await loader.load();
+      expect(config.skillDirs).toEqual([]);
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
+  });
+
+  it('handles skills directory with non-directory entries', async () => {
+    const tmpDir = join(__dirname, '../../fixtures/crew-skills-files');
+    try {
+      await mkdir(tmpDir, { recursive: true });
+      const skillsDir = join(tmpDir, 'skills');
+      await mkdir(skillsDir, { recursive: true });
+      // Place a plain file in skills/ (not a directory)
+      await writeFile(join(skillsDir, 'README.md'), 'Not a skill directory');
+      await writeFile(
+        join(tmpDir, 'CREW.md'),
+        '---\nname: test-crew\nprimary-agent: primary\n---\nMemory'
+      );
+      const loader = new CrewLoader(tmpDir);
+      const config = await loader.load();
+      // Current implementation adds all entries (files and dirs) — verify the behavior
+      expect(config.skillDirs).toHaveLength(1);
+      expect(config.skillDirs[0]).toContain('README.md');
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
+  });
+
+  it('handles agent MD with no frontmatter — parsed as name-only agent', async () => {
+    const tmpDir = join(__dirname, '../../fixtures/crew-agent-no-frontmatter');
+    try {
+      await mkdir(tmpDir, { recursive: true });
+      const agentsDir = join(tmpDir, 'agents');
+      await mkdir(agentsDir, { recursive: true });
+      // Agent MD without frontmatter — parseAgentMd uses filename as fallback name
+      await writeFile(join(agentsDir, 'plain.md'), 'Just instructions without frontmatter');
+      await writeFile(
+        join(tmpDir, 'CREW.md'),
+        '---\nname: test-crew\nprimary-agent: primary\n---\nMemory'
+      );
+      const loader = new CrewLoader(tmpDir);
+      const config = await loader.load();
+      // parseAgentMd should gracefully handle missing frontmatter
+      expect(config.agentDefs).toHaveProperty('plain');
+      expect(config.agentDefs.plain.name).toBe('plain');
+      expect(config.agentDefs.plain.instructions).toBe('Just instructions without frontmatter');
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
+  });
 });
