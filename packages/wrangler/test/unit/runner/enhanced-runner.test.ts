@@ -567,9 +567,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('should handle create with empty workspacePath (falls back to cwd)', async () => {
-      const runner = await EnhancedRunner.create(
-        makeOptions({ workspacePath: undefined })
-      );
+      const runner = await EnhancedRunner.create(makeOptions({ workspacePath: undefined }));
       expect(runner).toBeInstanceOf(EnhancedRunner);
 
       const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');

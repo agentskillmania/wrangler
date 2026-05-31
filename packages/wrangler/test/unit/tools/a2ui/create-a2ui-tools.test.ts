@@ -94,7 +94,7 @@ describe('createA2UITools', () => {
 
     const tools = createA2UITools();
     for (const tool of tools) {
-      expect(tool.name).toBeTruthy();
+      expect(tool.name).toEqual(expect.any(String));
       expect(typeof tool.description).toBe('string');
       expect(tool.description.length).toBeGreaterThan(0);
       expect(tool.parameters).toBeDefined();

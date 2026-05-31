@@ -113,11 +113,7 @@ describe('Crew', () => {
   describe('createTask', () => {
     it('succeeds with known worker type', () => {
       const crew = new Crew(mockConfig, { llmClient: {} as never });
-      const taskId = asInternal(crew).createTask(
-        'searcher',
-        'search for x',
-        'primary-1'
-      );
+      const taskId = asInternal(crew).createTask('searcher', 'search for x', 'primary-1');
       expect(taskId).toMatch(/^task-\d+$/);
       expect(crew.state.agents.size).toBe(2);
       expect(crew.state.tasks.size).toBe(1);
@@ -126,13 +122,9 @@ describe('Crew', () => {
 
     it('throws for unknown type without instructions', () => {
       const crew = new Crew(mockConfig, { llmClient: {} as never });
-      expect(() =>
-        asInternal(crew).createTask(
-          'nonexistent',
-          'do something',
-          'primary-1'
-        )
-      ).toThrow('Unknown worker type: nonexistent');
+      expect(() => asInternal(crew).createTask('nonexistent', 'do something', 'primary-1')).toThrow(
+        'Unknown worker type: nonexistent'
+      );
     });
 
     it('succeeds with unknown type + instructions (ad-hoc creation)', () => {
@@ -157,11 +149,7 @@ describe('Crew', () => {
       const events: CrewOutputEvent[] = [];
       crew.on('agent_created', (e) => events.push(e));
 
-      asInternal(crew).createTask(
-        'searcher',
-        'search',
-        'primary-1'
-      );
+      asInternal(crew).createTask('searcher', 'search', 'primary-1');
 
       expect(events).toHaveLength(2);
       expect(events[0]).toMatchObject({ type: 'agent_created', role: 'liaison' });
@@ -173,11 +161,7 @@ describe('Crew', () => {
       const events: CrewOutputEvent[] = [];
       crew.on('task_started', (e) => events.push(e));
 
-      asInternal(crew).createTask(
-        'searcher',
-        'search for x',
-        'primary-1'
-      );
+      asInternal(crew).createTask('searcher', 'search for x', 'primary-1');
 
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({
@@ -351,11 +335,7 @@ describe('Crew', () => {
       });
 
       // Create a task to get worker + liaison pair
-      asInternal(crew).createTask(
-        'searcher',
-        'search',
-        'primary-1'
-      );
+      asInternal(crew).createTask('searcher', 'search', 'primary-1');
 
       const routedP = waitForEvent(crew, 'message_routed');
 
@@ -393,11 +373,7 @@ describe('Crew', () => {
         runnerFactory: factory,
       });
 
-      asInternal(crew).createTask(
-        'searcher',
-        'search',
-        'primary-1'
-      );
+      asInternal(crew).createTask('searcher', 'search', 'primary-1');
 
       const liaisons = [...(crew.agents as Map<string, unknown>).values()].filter(
         (a: { role: string }) => a.role === 'liaison'
@@ -444,11 +420,7 @@ describe('Crew', () => {
         runnerFactory: factory,
       });
 
-      asInternal(crew).createTask(
-        'searcher',
-        'search',
-        'primary-1'
-      );
+      asInternal(crew).createTask('searcher', 'search', 'primary-1');
 
       const liaisons = [...(crew.agents as Map<string, unknown>).values()].filter(
         (a: { role: string }) => a.role === 'liaison'
@@ -485,11 +457,7 @@ describe('Crew', () => {
         runnerFactory: factory,
       });
 
-      asInternal(crew).createTask(
-        'searcher',
-        'search',
-        'primary-1'
-      );
+      asInternal(crew).createTask('searcher', 'search', 'primary-1');
 
       const workers = [...(crew.agents as Map<string, unknown>).values()].filter(
         (a: { role: string }) => a.role === 'worker'
