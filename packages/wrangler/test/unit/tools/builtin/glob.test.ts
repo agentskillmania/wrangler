@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createGlobTool } from '../../../../src/tools/builtin/glob.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { createMockToolDeps } from '../../helpers/create-mock-deps.js';
 
 describe('glob', () => {
   let workspace: string;
@@ -95,17 +96,11 @@ describe('glob', () => {
   });
 
   it('handles files outside workspace root gracefully', async () => {
-    const outsideDeps: HostToolDeps = {
+    const outsideDeps = createMockToolDeps({
       workspaceRoot: workspace,
-      maxOutputSize: 1024,
       resolvePath: (p: string) => join(workspace, p),
-      exec: async (cmd: string) => ({ stdout: '', stderr: '', exitCode: 0 }),
-      readFile: async () => '',
-      writeFile: async () => {},
-      editFile: async () => '',
       glob: async () => ['/other/path/file.ts', join(workspace, 'local.ts')],
-      grep: async () => '',
-    } as unknown as HostToolDeps;
+    }) as HostToolDeps;
     const tool = createGlobTool(outsideDeps);
     const result = await tool.execute({ pattern: '**/*.ts' });
     expect(result).toContain('local.ts');

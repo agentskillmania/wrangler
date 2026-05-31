@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createShellTool } from '../../../../src/tools/builtin/shell.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { ToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { createMockToolDeps } from '../../helpers/create-mock-deps.js';
 
 describe('createShellTool', () => {
   let tempDir: string;
@@ -46,21 +47,10 @@ describe('createShellTool', () => {
     });
 
     it('should not include shell info when deps has no shell property', () => {
-      const minimalDeps: ToolDeps = {
+      const minimalDeps = createMockToolDeps({
         workspaceRoot: tempDir,
-        maxOutputSize: 1024,
         resolvePath: (p: string) => join(tempDir, p),
-        exec: async (_cmd: string) => ({
-          stdout: '',
-          stderr: '',
-          exitCode: 0,
-        }),
-        readFile: async (_p: string) => '',
-        writeFile: async () => {},
-        editFile: async () => '',
-        glob: async () => [],
-        grep: async () => '',
-      };
+      });
       const tool = createShellTool(minimalDeps);
       expect(tool.description).not.toContain('Current shell:');
       expect(tool.description).toBe('Execute shell commands in the workspace.');
@@ -68,52 +58,38 @@ describe('createShellTool', () => {
   });
 
   it('should propagate exec errors', async () => {
-    const throwingDeps: ToolDeps = {
+    const throwingDeps = createMockToolDeps({
       workspaceRoot: tempDir,
-      maxOutputSize: 1024,
       resolvePath: (p: string) => join(tempDir, p),
       exec: async () => {
         throw 'string error';
       },
-      readFile: async () => '',
-      writeFile: async () => {},
-      editFile: async () => '',
-      glob: async () => [],
-      grep: async () => '',
-    };
+    });
     const tool = createShellTool(throwingDeps);
     await expect(tool.execute({ command: 'anything' })).rejects.toThrow('string error');
   });
 
   it('should show (no output) when stdout is empty on success', async () => {
-    const depsNoOutput: ToolDeps = {
+    const depsNoOutput = createMockToolDeps({
       workspaceRoot: tempDir,
-      maxOutputSize: 1024,
       resolvePath: (p: string) => join(tempDir, p),
-      exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-      readFile: async () => '',
-      writeFile: async () => {},
-      editFile: async () => '',
-      glob: async () => [],
-      grep: async () => '',
-    };
+      exec: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+    });
     const tool = createShellTool(depsNoOutput);
     const result = await tool.execute({ command: 'true' });
     expect(result).toBe('(no output)');
   });
 
   it('should include stdout in error output', async () => {
-    const depsWithStdout: ToolDeps = {
+    const depsWithStdout = createMockToolDeps({
       workspaceRoot: tempDir,
-      maxOutputSize: 1024,
       resolvePath: (p: string) => join(tempDir, p),
-      exec: async () => ({ stdout: 'partial output', stderr: 'error msg', exitCode: 1 }),
-      readFile: async () => '',
-      writeFile: async () => {},
-      editFile: async () => '',
-      glob: async () => [],
-      grep: async () => '',
-    };
+      exec: vi.fn().mockResolvedValue({
+        stdout: 'partial output',
+        stderr: 'error msg',
+        exitCode: 1,
+      }),
+    });
     const tool = createShellTool(depsWithStdout);
     const result = await tool.execute({ command: 'fail' });
     expect(result).toContain('Exit code: 1');
