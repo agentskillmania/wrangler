@@ -140,6 +140,37 @@ describe('BingScrapeSearchProvider', () => {
     ]);
   });
 
+  it('skips results with empty title or href', async () => {
+    const html = `
+      <html>
+        <body>
+          <li class="b_algo">
+            <h2><a href="">No href</a></h2>
+            <p>Snippet 1</p>
+          </li>
+          <li class="b_algo">
+            <h2><a href="https://example.com/valid">Valid Result</a></h2>
+            <p>Snippet 2</p>
+          </li>
+        </body>
+      </html>
+    `;
+
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      text: async () => html,
+    } as Response);
+
+    const results = await provider.search('test query');
+    expect(results).toEqual([
+      {
+        title: 'Valid Result',
+        url: 'https://example.com/valid',
+        snippet: 'Snippet 2',
+      },
+    ]);
+  });
+
   it('limits results to 10', async () => {
     const html = `
       <html>

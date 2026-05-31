@@ -124,4 +124,21 @@ describe('grep', () => {
     const result = await tool.execute({ pattern: 'some content here' });
     expect(typeof result).toBe('string');
   });
+
+  it('returns no matches when raw output has content but no parseable matches', async () => {
+    const mockDeps = {
+      workspaceRoot: workspace,
+      maxOutputSize: 1024,
+      resolvePath: (p: string) => join(workspace, p),
+      exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      readFile: async () => '',
+      writeFile: async () => {},
+      editFile: async () => '',
+      glob: async () => [],
+      grep: async () => 'header line without colons\nanother bad line',
+    } as unknown as import('../../../../src/tools/builtin/workspace-deps.js').ToolDeps;
+    const tool = createGrepTool(mockDeps);
+    const result = await tool.execute({ pattern: 'test' });
+    expect(result).toContain('No matches found');
+  });
 });

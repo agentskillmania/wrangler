@@ -16,7 +16,7 @@ describe('createA2UITools', () => {
     ]);
   });
 
-  it('a2ui_create_surface should return success message', async () => {
+  it('a2ui_create_surface should return success message with layout', async () => {
     const { createA2UITools } = await import('../../../../src/tools/a2ui/create-a2ui-tools.js');
 
     const tools = createA2UITools();
@@ -27,7 +27,17 @@ describe('createA2UITools', () => {
     expect(result).toContain('vertical');
   });
 
-  it('a2ui_update_components should return success with operation count', async () => {
+  it('a2ui_create_surface should work without layout', async () => {
+    const { createA2UITools } = await import('../../../../src/tools/a2ui/create-a2ui-tools.js');
+
+    const tools = createA2UITools();
+    const tool = tools.find((t) => t.name === 'a2ui_create_surface')!;
+    const result = await tool.execute({ surfaceId: 'bare' });
+
+    expect(result).toBe('Surface created: "bare"');
+  });
+
+  it('a2ui_update_components should return plural for multiple operations', async () => {
     const { createA2UITools } = await import('../../../../src/tools/a2ui/create-a2ui-tools.js');
 
     const tools = createA2UITools();
@@ -53,7 +63,27 @@ describe('createA2UITools', () => {
     expect(result).toContain('2 operations');
   });
 
-  it('a2ui_update_data_model should return success', async () => {
+  it('a2ui_update_components should return singular for single operation', async () => {
+    const { createA2UITools } = await import('../../../../src/tools/a2ui/create-a2ui-tools.js');
+
+    const tools = createA2UITools();
+    const tool = tools.find((t) => t.name === 'a2ui_update_components')!;
+    const result = await tool.execute({
+      surfaceId: 'main',
+      operations: [
+        {
+          op: 'insert' as const,
+          parentId: 'root',
+          component: { id: 'title', type: 'Text', properties: { text: 'Hello' } },
+        },
+      ],
+    });
+
+    expect(result).toContain('1 operation');
+    expect(result).not.toContain('1 operations');
+  });
+
+  it('a2ui_update_data_model should return plural for multiple updates', async () => {
     const { createA2UITools } = await import('../../../../src/tools/a2ui/create-a2ui-tools.js');
 
     const tools = createA2UITools();
@@ -67,6 +97,21 @@ describe('createA2UITools', () => {
     });
 
     expect(result).toContain('form');
+    expect(result).toContain('2 updates');
+  });
+
+  it('a2ui_update_data_model should return singular for single update', async () => {
+    const { createA2UITools } = await import('../../../../src/tools/a2ui/create-a2ui-tools.js');
+
+    const tools = createA2UITools();
+    const tool = tools.find((t) => t.name === 'a2ui_update_data_model')!;
+    const result = await tool.execute({
+      surfaceId: 'form',
+      updates: [{ path: '/form/name', value: '' }],
+    });
+
+    expect(result).toContain('1 update');
+    expect(result).not.toContain('1 updates');
   });
 
   it('a2ui_delete_surface should return success', async () => {
