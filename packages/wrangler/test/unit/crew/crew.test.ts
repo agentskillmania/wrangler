@@ -3,6 +3,22 @@ import { createAgentState } from '@agentskillmania/colts';
 import { Crew } from '../../../src/crew/crew.js';
 import type { CrewConfig, CrewOutputEvent, CrewRunner } from '../../../src/crew/types.js';
 
+/**
+ * Type alias for accessing private Crew methods in tests.
+ * Consolidates 20+ scattered `as unknown as { method }` casts into one place.
+ */
+type InternalCrew = Crew & {
+  emit: (event: CrewOutputEvent) => void;
+  buildAgentCatalog: () => string;
+  createTask: (...args: unknown[]) => string;
+  advanceAgent: (agent: unknown, messages: unknown[]) => Promise<void>;
+};
+
+/** Cast Crew to InternalCrew for private method access in tests */
+function asInternal(crew: Crew): InternalCrew {
+  return crew as unknown as InternalCrew;
+}
+
 const mockConfig: CrewConfig = {
   meta: { name: 'test-crew', description: 'test', primaryAgent: 'primary' },
   memory: 'test memory',
@@ -49,7 +65,7 @@ describe('Crew', () => {
     const events: CrewOutputEvent[] = [];
     crew.on('error', (e) => events.push(e));
 
-    (crew as unknown as { emit: (e: CrewOutputEvent) => void }).emit({
+    asInternal(crew).emit({
       type: 'error',
       error: new Error('test'),
     });
@@ -63,7 +79,7 @@ describe('Crew', () => {
     const unsub = crew.on('error', handler);
     unsub();
 
-    (crew as unknown as { emit: (e: CrewOutputEvent) => void }).emit({
+    asInternal(crew).emit({
       type: 'error',
       error: new Error('test'),
     });
@@ -78,7 +94,7 @@ describe('Crew', () => {
 
   it('buildAgentCatalog lists available agents', () => {
     const crew = new Crew(mockConfig, { llmClient: {} as never });
-    const catalog = (crew as unknown as { buildAgentCatalog: () => string }).buildAgentCatalog();
+    const catalog = asInternal(crew).buildAgentCatalog();
     expect(catalog).toContain('searcher');
     expect(catalog).toContain('Searches the web');
     expect(catalog).toContain('Available worker agents');
@@ -90,14 +106,14 @@ describe('Crew', () => {
       agentDefs: { primary: mockConfig.agentDefs['primary'] },
     };
     const crew = new Crew(emptyConfig, { llmClient: {} as never });
-    const catalog = (crew as unknown as { buildAgentCatalog: () => string }).buildAgentCatalog();
+    const catalog = asInternal(crew).buildAgentCatalog();
     expect(catalog).toContain('No predefined worker agents available');
   });
 
   describe('createTask', () => {
     it('succeeds with known worker type', () => {
       const crew = new Crew(mockConfig, { llmClient: {} as never });
-      const taskId = (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+      const taskId = asInternal(crew).createTask(
         'searcher',
         'search for x',
         'primary-1'
@@ -111,7 +127,7 @@ describe('Crew', () => {
     it('throws for unknown type without instructions', () => {
       const crew = new Crew(mockConfig, { llmClient: {} as never });
       expect(() =>
-        (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+        asInternal(crew).createTask(
           'nonexistent',
           'do something',
           'primary-1'
@@ -121,7 +137,7 @@ describe('Crew', () => {
 
     it('succeeds with unknown type + instructions (ad-hoc creation)', () => {
       const crew = new Crew(mockConfig, { llmClient: {} as never });
-      const taskId = (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+      const taskId = asInternal(crew).createTask(
         'custom-agent',
         'custom task',
         'primary-1',
@@ -141,7 +157,7 @@ describe('Crew', () => {
       const events: CrewOutputEvent[] = [];
       crew.on('agent_created', (e) => events.push(e));
 
-      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+      asInternal(crew).createTask(
         'searcher',
         'search',
         'primary-1'
@@ -157,7 +173,7 @@ describe('Crew', () => {
       const events: CrewOutputEvent[] = [];
       crew.on('task_started', (e) => events.push(e));
 
-      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+      asInternal(crew).createTask(
         'searcher',
         'search for x',
         'primary-1'
@@ -196,9 +212,6 @@ describe('Crew', () => {
       });
     });
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  type InternalCrew = any;
 
   describe('advanceAgent pipeline via runnerFactory', () => {
     it('pushInput user_message creates primary and emits user_response on success', async () => {
@@ -281,7 +294,7 @@ describe('Crew', () => {
       const crew = new Crew(mockConfig, {
         llmClient: {} as never,
         runnerFactory: factory,
-      }) as unknown as InternalCrew;
+      });
 
       crew.pushInput({ type: 'user_message', content: 'Hello' });
       await waitForEvent(crew, 'user_response');
@@ -308,7 +321,7 @@ describe('Crew', () => {
       const crew = new Crew(mockConfig, {
         llmClient: {} as never,
         runnerFactory: factory,
-      }) as unknown as InternalCrew;
+      });
 
       crew.pushInput({ type: 'user_message', content: 'Hello' });
       await waitForEvent(crew, 'user_response');
@@ -321,7 +334,7 @@ describe('Crew', () => {
       // Manually set to 200 — next advance should trigger guard
       primary!.advanceCount = 200;
       const errorP = waitForEvent(crew, 'error');
-      await (crew as any).advanceAgent(primary, []);
+      await asInternal(crew).advanceAgent(primary, []);
 
       const errorEvent = await errorP;
       expect(errorEvent.type).toBe('error');
@@ -335,10 +348,10 @@ describe('Crew', () => {
       const crew = new Crew(mockConfig, {
         llmClient: {} as never,
         runnerFactory: factory,
-      }) as unknown as InternalCrew;
+      });
 
       // Create a task to get worker + liaison pair
-      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+      asInternal(crew).createTask(
         'searcher',
         'search',
         'primary-1'
@@ -378,9 +391,9 @@ describe('Crew', () => {
       const crew = new Crew(mockConfig, {
         llmClient: {} as never,
         runnerFactory: factory,
-      }) as unknown as InternalCrew;
+      });
 
-      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+      asInternal(crew).createTask(
         'searcher',
         'search',
         'primary-1'
@@ -429,9 +442,9 @@ describe('Crew', () => {
       const crew = new Crew(mockConfig, {
         llmClient: {} as never,
         runnerFactory: factory,
-      }) as unknown as InternalCrew;
+      });
 
-      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+      asInternal(crew).createTask(
         'searcher',
         'search',
         'primary-1'
@@ -470,9 +483,9 @@ describe('Crew', () => {
       const crew = new Crew(mockConfig, {
         llmClient: {} as never,
         runnerFactory: factory,
-      }) as unknown as InternalCrew;
+      });
 
-      (crew as unknown as { createTask: (...a: unknown[]) => string }).createTask(
+      asInternal(crew).createTask(
         'searcher',
         'search',
         'primary-1'
