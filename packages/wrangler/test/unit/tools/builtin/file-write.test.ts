@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
-import { mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, rm, stat, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createFileWriteTool } from '../../../../src/tools/builtin/file-write.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { createMockToolDeps } from '../../helpers/create-mock-deps.js';
 
 describe('file_write', () => {
   let workspace: string;
@@ -73,22 +74,40 @@ describe('file_write', () => {
   });
 
   it('throws error for non-traversal write failure', async () => {
-    const failDeps: typeof deps = {
+    const failDeps = createMockToolDeps({
       workspaceRoot: workspace,
-      maxOutputSize: 1024,
       resolvePath: (p: string) => join(workspace, p),
-      exec: async (cmd: string) => ({ stdout: '', stderr: '', exitCode: 0 }),
-      readFile: async () => '',
       writeFile: async () => {
         throw new Error('Disk full');
       },
-      editFile: async () => '',
-      glob: async () => [],
-      grep: async () => '',
-    };
+    });
     const tool = createFileWriteTool(failDeps);
     await expect(tool.execute({ filePath: 'test.txt', content: 'data' })).rejects.toThrow(
       'Disk full'
     );
+  });
+
+  // --- Negative paths (W3-2) ---
+
+  it('verifies disk state after overwrite', async () => {
+    await writeFile(join(workspace, 'data.txt'), 'original content');
+    const tool = createFileWriteTool(deps);
+    await tool.execute({ filePath: 'data.txt', content: 'overwritten content' });
+    // Read back and confirm content matches what was written
+    const diskContent = await readFile(join(workspace, 'data.txt'), 'utf8');
+    expect(diskContent).toBe('overwritten content');
+  });
+
+  it('rejects write to read-only file', async () => {
+    const filePath = join(workspace, 'readonly.txt');
+    await writeFile(filePath, 'original');
+    // Make file read-only
+    await chmod(filePath, 0o444);
+
+    const tool = createFileWriteTool(deps);
+    await expect(tool.execute({ filePath: 'readonly.txt', content: 'new' })).rejects.toThrow();
+
+    // Restore permissions for cleanup
+    await chmod(filePath, 0o644).catch(() => {});
   });
 });

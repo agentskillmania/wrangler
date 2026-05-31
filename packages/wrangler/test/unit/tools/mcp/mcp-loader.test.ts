@@ -470,4 +470,44 @@ describe('loadMCPTools', () => {
     expect(tools1).toHaveLength(1);
     expect(tools2).toBe(tools1);
   });
+
+  // --- Negative paths (W3-3) ---
+
+  it('handles concurrent loadMCPTools calls — all resolve without error', async () => {
+    const configPath = join(testDir, 'mcp.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: { srv: { url: 'http://localhost/mcp' } } })
+    );
+
+    mockFns.listTools = () =>
+      Promise.resolve([
+        { name: 'tool', description: 'Test', inputSchema: { type: 'object', properties: {} } },
+      ]);
+
+    // Fire concurrent calls — should all complete without race condition errors
+    const [tools1, tools2, tools3] = await Promise.all([
+      loadMCPTools({ configPaths: [configPath] }),
+      loadMCPTools({ configPaths: [configPath] }),
+      loadMCPTools({ configPaths: [configPath] }),
+    ]);
+
+    // All should resolve successfully with correct tool count
+    expect(tools1).toHaveLength(1);
+    expect(tools2).toHaveLength(1);
+    expect(tools3).toHaveLength(1);
+    // Tool names should be consistent
+    expect(tools1[0]!.name).toBe('srv__tool');
+    expect(tools2[0]!.name).toBe('srv__tool');
+    expect(tools3[0]!.name).toBe('srv__tool');
+  });
+
+  it('handles malformed server config — missing URL', async () => {
+    const configPath = join(testDir, 'mcp-malformed.json');
+    await writeFile(configPath, JSON.stringify({ mcpServers: { srv: {} } }));
+
+    // loadServerDefinitions returns empty array when parsing fails
+    const tools = await loadMCPTools({ configPaths: [configPath] });
+    expect(tools).toEqual([]);
+  });
 });
