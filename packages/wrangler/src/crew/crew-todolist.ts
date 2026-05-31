@@ -1,16 +1,15 @@
 import type { CrewTodoItem, CrewTodoStatus } from './types.js';
 
-let nextId = 0;
-
 export class CrewTodoList {
   private _items: CrewTodoItem[] = [];
+  private _nextId = 0;
 
   get items(): readonly CrewTodoItem[] {
     return this._items;
   }
 
   add(content: string, assignee?: string): string {
-    const id = `ct-${++nextId}`;
+    const id = `ct-${++this._nextId}`;
     this._items.push({ id, content, status: 'pending', assignee });
     return id;
   }

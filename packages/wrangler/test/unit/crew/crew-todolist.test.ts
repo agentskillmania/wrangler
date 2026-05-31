@@ -48,4 +48,22 @@ describe('CrewTodoList', () => {
     expect(snap).toHaveLength(1);
     expect(Object.isFrozen(snap)).toBe(true);
   });
+
+  it('should maintain independent ID sequences per instance', () => {
+    const tl1 = new CrewTodoList();
+    const tl2 = new CrewTodoList();
+
+    const id1a = tl1.add('task-a');
+    const id2a = tl2.add('task-b');
+    const id1b = tl1.add('task-c');
+
+    // Each instance starts from ct-1 independently
+    expect(id1a).toBe('ct-1');
+    expect(id2a).toBe('ct-1');
+    expect(id1b).toBe('ct-2');
+
+    // Items are isolated per instance
+    expect(tl1.items).toHaveLength(2);
+    expect(tl2.items).toHaveLength(1);
+  });
 });
