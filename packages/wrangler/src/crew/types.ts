@@ -1,11 +1,10 @@
 import type { ParsedAgent } from '../agent/agent-parser.js';
-import type { ILLMProvider, AskHumanHandler, Tool } from '@agentskillmania/colts';
+import type { ILLMProvider, AskHumanHandler } from '@agentskillmania/colts';
 import type { SearchProvider } from '../tools/builtin/web-search.js';
-import type { ZodTypeAny } from 'zod';
 
 // ─── Agent roles ───
 
-export type AgentRole = 'primary' | 'liaison' | 'worker';
+export type AgentRole = 'primary' | 'worker';
 
 export type AgentInstanceStatus = 'idle' | 'running';
 
@@ -30,20 +29,8 @@ export interface TaskInfo {
   readonly status: TaskStatus;
   readonly result?: string;
   readonly workerId: string;
-  readonly liaisonId: string;
   readonly createdAt: number;
   readonly completedAt?: number;
-}
-
-// ─── Shared todolist ───
-
-export type CrewTodoStatus = 'pending' | 'in_progress' | 'completed';
-
-export interface CrewTodoItem {
-  readonly id: string;
-  readonly content: string;
-  readonly status: CrewTodoStatus;
-  readonly assignee?: string;
 }
 
 // ─── Crew state (read-only) ───
@@ -56,7 +43,6 @@ export interface CrewState {
   readonly primaryId: string;
   readonly agents: ReadonlyMap<string, AgentInstanceInfo>;
   readonly tasks: ReadonlyMap<string, TaskInfo>;
-  readonly todolist: readonly CrewTodoItem[];
 }
 
 // ─── External input ───
@@ -89,21 +75,11 @@ export interface CrewTaskFailedEvent {
   readonly error: string;
 }
 
-export interface CrewTodolistUpdatedEvent {
-  readonly type: 'todolist_updated';
-  readonly todolist: readonly CrewTodoItem[];
-}
-
 export interface CrewAgentCreatedEvent {
   readonly type: 'agent_created';
   readonly agentId: string;
   readonly role: AgentRole;
   readonly definitionName: string;
-}
-
-export interface CrewAgentDestroyedEvent {
-  readonly type: 'agent_destroyed';
-  readonly agentId: string;
 }
 
 export interface CrewErrorEvent {
@@ -126,44 +102,15 @@ export interface CrewToolCompletedEvent {
   readonly duration: number;
 }
 
-export interface CrewAgentAdvancedEvent {
-  readonly type: 'agent_advanced';
-  readonly agentId: string;
-  readonly role: AgentRole;
-  readonly duration: number;
-  readonly resultType: string;
-}
-
-export interface CrewMessageRoutedEvent {
-  readonly type: 'message_routed';
-  readonly from: string;
-  readonly to: string;
-  readonly contentPreview: string;
-}
-
 export type CrewOutputEvent =
   | CrewUserResponseEvent
   | CrewTaskStartedEvent
   | CrewTaskCompletedEvent
   | CrewTaskFailedEvent
-  | CrewTodolistUpdatedEvent
   | CrewAgentCreatedEvent
-  | CrewAgentDestroyedEvent
   | CrewErrorEvent
   | CrewToolInvokedEvent
-  | CrewToolCompletedEvent
-  | CrewAgentAdvancedEvent
-  | CrewMessageRoutedEvent
-  | CrewA2UIEvent;
-
-export interface CrewA2UIEvent {
-  readonly type: 'a2ui';
-  readonly agentId: string;
-  readonly operation: string;
-  readonly payload: Record<string, unknown>;
-  readonly surfaceId: string;
-  readonly timestamp: number;
-}
+  | CrewToolCompletedEvent;
 
 export type CrewEventHandler = (event: CrewOutputEvent) => void;
 
@@ -189,27 +136,6 @@ export interface CrewConfig {
   readonly skillDirs: readonly string[];
 }
 
-// ─── Runner factory (testability) ───
-
-export interface CrewRunner {
-  run(
-    state: unknown,
-    options?: { signal?: AbortSignal }
-  ): Promise<{
-    state: unknown;
-    result: { type: string; answer?: string; error?: Error };
-  }>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  on(event: string, handler: (...args: any[]) => void): void;
-}
-
-export type RunnerFactory = (options: {
-  model: string;
-  llmClient: ILLMProvider;
-  tools: Tool<ZodTypeAny>[];
-  systemPrompt: string;
-}) => CrewRunner;
-
 // ─── Crew constructor options ───
 
 export interface CrewOptions {
@@ -219,7 +145,6 @@ export interface CrewOptions {
   readonly workspaceDeps?: { workspacePath: string };
   readonly searchProvider?: SearchProvider;
   readonly sandbox?: boolean;
-  readonly runnerFactory?: RunnerFactory;
   /** Explicit MCP config paths. Empty array = skip MCP loading entirely. Undefined = auto-discover. */
   readonly mcpConfigPaths?: string[];
 }

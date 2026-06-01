@@ -25,7 +25,6 @@ function formatNewsroomEvent(event: CrewOutputEvent): string {
     case 'agent_created': {
       const roles: Record<string, string> = {
         primary: '主编',
-        liaison: '编辑部',
         worker: '记者',
       };
       return `  >> ${roles[event.role] ?? event.role} 加入: ${event.definitionName} (${event.agentId})`;
@@ -41,20 +40,10 @@ function formatNewsroomEvent(event: CrewOutputEvent): string {
       const short = event.result.length > 80 ? event.result.slice(0, 80) + '...' : event.result;
       return `  >> ${event.agentId} ← ${event.toolName} (${event.duration}ms): ${short}`;
     }
-    case 'message_routed':
-      return `  >> 稿件流转: ${event.from} → ${event.to}`;
-    case 'agent_advanced':
-      return `  >> ${event.agentId} 交稿了 (${event.resultType}，耗时 ${event.duration}ms)`;
     case 'task_completed':
       return `  >> 报道完成: [${event.taskId}]`;
     case 'task_failed':
       return `  >> 截稿未完成: [${event.taskId}] — ${event.error}`;
-    case 'todolist_updated': {
-      const items = event.todolist.map(
-        (t) => `${t.status === 'done' ? '✓' : t.status === 'in_progress' ? '►' : '○'} ${t.content}`
-      );
-      return `  >> 编辑部待办: ${items.join(' | ')}`;
-    }
     case 'user_response':
       return '';
     case 'error':
@@ -109,14 +98,11 @@ async function main() {
 
   const eventTypes: CrewOutputEvent['type'][] = [
     'agent_created',
-    'agent_advanced',
     'task_started',
     'task_completed',
     'task_failed',
     'tool_invoked',
     'tool_completed',
-    'message_routed',
-    'todolist_updated',
     'error',
     'user_response',
   ];

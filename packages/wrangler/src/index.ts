@@ -92,38 +92,21 @@ export { EXECUTE_PLAN_CONTENT } from './spec-plan/index.js';
 
 // Crew (Layer 8)
 export { Crew } from './crew/index.js';
-export {
-  AgentInstance,
-  MessageRouter,
-  CrewTodoList,
-  buildLiaisonPrompt,
-  CrewLoader,
-} from './crew/index.js';
-export {
-  createCreateTaskTool,
-  createSendMessageTool,
-  createRelayToPrimaryTool,
-  createReadCrewTodolistTool,
-  createUpdateCrewTodolistTool,
-} from './crew/index.js';
+export { AgentInstance, MessageRouter, CrewLoader } from './crew/index.js';
+export { createCreateTaskTool, createSendMessageTool } from './crew/index.js';
 export type {
   CrewConfig,
   CrewState,
   CrewInput,
   CrewOutputEvent,
   CrewEventHandler,
-  CrewTodoItem,
   AgentRole,
   AgentInstanceInfo,
   TaskStatus,
   TaskInfo,
   CrewOptions,
-  CrewRunner,
-  RunnerFactory,
   CrewToolInvokedEvent,
   CrewToolCompletedEvent,
-  CrewAgentAdvancedEvent,
-  CrewMessageRoutedEvent,
 } from './crew/index.js';
 
 // Loader (Layer 4)

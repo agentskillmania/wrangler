@@ -1,11 +1,6 @@
-import type {
-  AgentRole,
-  AgentInstanceInfo,
-  AgentInstanceStatus,
-  CrewMessage,
-  CrewRunner,
-} from './types.js';
+import type { AgentRole, AgentInstanceInfo, AgentInstanceStatus, CrewMessage } from './types.js';
 import type { AgentState } from '@agentskillmania/colts';
+import type { EnhancedRunner } from '../runner/enhanced-runner.js';
 
 export interface AgentInstanceOptions {
   id: string;
@@ -28,11 +23,9 @@ export class AgentInstance {
   private _queue: CrewMessage[] = [];
 
   /** colts runner — set by Crew when creating the agent */
-  runner?: CrewRunner;
+  runner?: EnhancedRunner;
   /** colts agent state — updated each advance, persisted across turns */
   agentState?: AgentState;
-  /** Set when relay_to_primary is called during current advance; blocks auto-route to Worker */
-  relayFlag = false;
   /** Number of times this agent has been advanced; used to detect infinite routing loops */
   advanceCount = 0;
   /** Last answer from a successful run (used for user_response emission) */

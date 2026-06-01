@@ -34,22 +34,12 @@ function formatEvent(event: CrewOutputEvent): string {
       const short = event.result.length > 60 ? event.result.slice(0, 60) + '...' : event.result;
       return `[${ts()}] 工具完成: ${event.agentId} ← ${event.toolName} (${event.duration}ms): ${short}`;
     }
-    case 'message_routed':
-      return `[${ts()}] 消息路由: ${event.from} → ${event.to} ("${event.contentPreview.slice(0, 50)}...")`;
-    case 'agent_advanced':
-      return `[${ts()}] 智能体推进: ${event.agentId} (${event.role}) — ${event.resultType}，耗时 ${event.duration}ms`;
     case 'task_completed': {
       const short = event.result.length > 80 ? event.result.slice(0, 80) + '...' : event.result;
       return `[${ts()}] 任务完成: [${event.taskId}] 结果: ${short}`;
     }
     case 'task_failed':
       return `[${ts()}] 任务失败: [${event.taskId}] 错误: ${event.error}`;
-    case 'todolist_updated': {
-      const items = event.todolist.map(
-        (t) => `${t.status === 'done' ? '✓' : t.status === 'in_progress' ? '►' : '○'} ${t.content}`
-      );
-      return `[${ts()}] 待办列表: ${items.join(' | ')}`;
-    }
     case 'user_response': {
       const content = event.content;
       if (!content || content.trim().length === 0) return '';
@@ -93,14 +83,11 @@ async function main() {
 
   const eventTypes: CrewOutputEvent['type'][] = [
     'agent_created',
-    'agent_advanced',
     'task_started',
     'task_completed',
     'task_failed',
     'tool_invoked',
     'tool_completed',
-    'message_routed',
-    'todolist_updated',
     'error',
     'user_response',
   ];

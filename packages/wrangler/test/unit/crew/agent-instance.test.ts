@@ -13,7 +13,7 @@ import { AgentInstance } from '../../../src/crew/agent-instance.js';
 function createInstance(overrides?: { role?: string; taskId?: string }) {
   return new AgentInstance({
     id: 'test-1',
-    role: (overrides?.role ?? 'worker') as 'primary' | 'liaison' | 'worker',
+    role: (overrides?.role ?? 'worker') as 'primary' | 'worker',
     definitionName: 'test-agent',
     partnerId: 'partner-1',
     taskId: overrides?.taskId,
@@ -129,21 +129,6 @@ describe('AgentInstance', () => {
       inst.dequeue();
       // The snapshot was taken before dequeue — its queueSize is a number, not a live reference
       expect(info.queueSize).toBe(1);
-    });
-  });
-
-  describe('relayFlag', () => {
-    it('should default to false', () => {
-      const inst = createInstance();
-      expect(inst.relayFlag).toBe(false);
-    });
-
-    it('should be settable and readable', () => {
-      const inst = createInstance();
-      inst.relayFlag = true;
-      expect(inst.relayFlag).toBe(true);
-      inst.relayFlag = false;
-      expect(inst.relayFlag).toBe(false);
     });
   });
 

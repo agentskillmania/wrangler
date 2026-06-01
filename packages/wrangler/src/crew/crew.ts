@@ -9,25 +9,12 @@ import type {
   TaskInfo,
   CrewMessage,
   AgentRole,
-  CrewRunner,
 } from './types.js';
-import type { Tool, AgentState } from '@agentskillmania/colts';
-import type { ZodTypeAny } from 'zod';
-import type { Sandbox } from '@agentskillmania/sandbox';
+import type { AgentState } from '@agentskillmania/colts';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { AgentInstance } from './agent-instance.js';
 import { MessageRouter } from './message-router.js';
-import { CrewTodoList } from './crew-todolist.js';
-import { buildLiaisonPrompt } from './liaison-prompt.js';
-import { buildTimeContext } from '../runner/system-prompt.js';
-import {
-  createCreateTaskTool,
-  createSendMessageTool,
-  createRelayToPrimaryTool,
-  createReadCrewTodolistTool,
-  createUpdateCrewTodolistTool,
-} from './crew-tools.js';
-import { createBuiltinTools } from '../tools/builtin/index.js';
+import { createCreateTaskTool, createSendMessageTool } from './crew-tools.js';
 import { EnhancedRunner } from '../runner/enhanced-runner.js';
 import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
 import { existsSync } from 'node:fs';
@@ -39,7 +26,6 @@ export class Crew {
   private options: CrewOptions;
   private agents = new Map<string, AgentInstance>();
   private tasks = new Map<string, TaskInfo>();
-  private todolist = new CrewTodoList();
   private router = new MessageRouter();
   private handlers = new Map<string, Set<CrewEventHandler>>();
   private _status: CrewState['status'] = 'idle';
@@ -48,7 +34,6 @@ export class Crew {
   private taskIdCounter = 0;
   private agentIdCounter = 0;
   private abortController = new AbortController();
-  private todoIdByTaskId = new Map<string, string>();
 
   constructor(config: CrewConfig, options: CrewOptions) {
     this.config = config;
@@ -67,7 +52,6 @@ export class Crew {
       primaryId: this.primaryId,
       agents,
       tasks: new Map(this.tasks),
-      todolist: this.todolist.snapshot(),
     });
   }
 
@@ -201,9 +185,6 @@ export class Crew {
 
     await this.ensureRunner(agent);
 
-    // Reset relay flag at start of each advance
-    agent.relayFlag = false;
-
     // Inject crew messages into agent state as user messages
     let state = agent.agentState!;
     for (const msg of messages) {
@@ -212,52 +193,26 @@ export class Crew {
     }
 
     // Run the agent (ReAct loop until completion)
-    const startTime = Date.now();
     const runResult = await agent.runner!.run(state, {
       signal: this.abortController.signal,
     });
-    const duration = Date.now() - startTime;
     agent.agentState = runResult.state as AgentState;
-
-    this.emit({
-      type: 'agent_advanced',
-      agentId: agent.id,
-      role: agent.role,
-      duration,
-      resultType: runResult.result.type,
-    });
 
     if (runResult.result.type === 'success') {
       const answer = runResult.result.answer ?? '';
 
-      // Worker → auto-route to Liaison
-      if (agent.role === 'worker' && agent.partnerId) {
-        this.router.enqueue(agent.partnerId, {
+      // Worker → auto-route result directly to Primary
+      if (agent.role === 'worker') {
+        this.router.enqueue(this.primaryId, {
           from: agent.id,
           content: answer,
           timestamp: Date.now(),
         });
-        this.emit({
-          type: 'message_routed',
-          from: agent.id,
-          to: agent.partnerId,
-          contentPreview: answer.slice(0, 100),
-        });
-      }
 
-      // Liaison → auto-route to Worker (unless relay_to_primary was called)
-      if (agent.role === 'liaison' && !agent.relayFlag && agent.partnerId) {
-        this.router.enqueue(agent.partnerId, {
-          from: agent.id,
-          content: answer,
-          timestamp: Date.now(),
-        });
-        this.emit({
-          type: 'message_routed',
-          from: agent.id,
-          to: agent.partnerId,
-          contentPreview: answer.slice(0, 100),
-        });
+        // Mark task as completed with the actual result
+        if (agent.taskId) {
+          this.completeTask(agent.taskId, answer);
+        }
       }
 
       // Save answer for potential user_response emission in .finally()
@@ -279,18 +234,12 @@ export class Crew {
 
       this.failAgentTask(agent, errorMsg);
 
-      // Route error to partner so upstream knows
-      if (agent.partnerId) {
-        this.router.enqueue(agent.partnerId, {
+      // Route error to Primary so upstream knows
+      if (agent.role === 'worker') {
+        this.router.enqueue(this.primaryId, {
           from: agent.id,
           content: `[error] ${errorMsg}`,
           timestamp: Date.now(),
-        });
-        this.emit({
-          type: 'message_routed',
-          from: agent.id,
-          to: agent.partnerId,
-          contentPreview: `[error] ${errorMsg}`,
         });
       }
 
@@ -311,11 +260,6 @@ export class Crew {
 
     // Resolve sandbox: agent-level > crew-level > false
     const useSandbox = agentDef?.sandbox ?? this.config.meta.sandbox ?? false;
-    let sandboxInstance: Sandbox | undefined;
-    if (useSandbox) {
-      const { Sandbox } = await import('@agentskillmania/sandbox');
-      sandboxInstance = new Sandbox();
-    }
 
     // Custom instructions take priority for ad-hoc workers, then catalog definition
     const instructions =
@@ -323,54 +267,25 @@ export class Crew {
       agentDef?.instructions ??
       `You are a ${agent.definitionName} agent.`;
 
-    let systemPrompt =
-      agent.role === 'liaison'
-        ? buildLiaisonPrompt({
-            workerType: agent.partnerId
-              ? (this.agents.get(agent.partnerId)?.definitionName ?? 'worker')
-              : 'worker',
-            memory: this.config.memory,
-          })
-        : instructions;
+    let systemPrompt = instructions;
 
     // Inject agent catalog into Primary context
     if (agent.role === 'primary') {
       systemPrompt += '\n\n' + this.buildAgentCatalog();
     }
 
-    let runner: EnhancedRunner | CrewRunner;
-
-    if (this.options.runnerFactory) {
-      // Legacy path for backward compatibility
-      const searchProvider = this.options.searchProvider ?? new BingScrapeSearchProvider();
-      const commTools = this.createCommTools(agent);
-      const builtinTools = createBuiltinTools({
-        workspacePath: this.options.workspaceDeps?.workspacePath ?? process.cwd(),
-        searchProvider,
-        sandbox: sandboxInstance,
-      });
-      runner = this.options.runnerFactory({
-        model,
-        llmClient: this.options.llmClient,
-        tools: [...commTools, ...builtinTools],
-        systemPrompt: buildTimeContext(),
-      }) as CrewRunner;
-    } else {
-      // New path: use EnhancedRunner
-      const commTools = this.createCommTools(agent);
-      const todolistTools = this.createTodolistTools();
-      runner = await EnhancedRunner.create({
-        llmClient: this.options.llmClient,
-        model,
-        workspacePath: this.options.workspaceDeps?.workspacePath ?? process.cwd(),
-        extraTools: [...commTools, ...todolistTools],
-        mcpConfigPaths: this.buildMCPConfigPaths(),
-        searchProvider: this.options.searchProvider ?? new BingScrapeSearchProvider(),
-        skillDirs: [...this.config.skillDirs],
-        thinkingEnabled: agentDef?.thinking?.enabled,
-        sandbox: useSandbox,
-      });
-    }
+    const commTools = this.createCommTools(agent);
+    const runner = await EnhancedRunner.create({
+      llmClient: this.options.llmClient,
+      model,
+      workspacePath: this.options.workspaceDeps?.workspacePath ?? process.cwd(),
+      extraTools: commTools,
+      mcpConfigPaths: this.buildMCPConfigPaths(),
+      searchProvider: this.options.searchProvider ?? new BingScrapeSearchProvider(),
+      skillDirs: [...this.config.skillDirs],
+      thinkingEnabled: agentDef?.thinking?.enabled,
+      sandbox: useSandbox,
+    });
 
     // Track callId → toolName for tool:end mapping
     const pendingToolNames = new Map<string, string>();
@@ -407,7 +322,9 @@ export class Crew {
     });
   }
 
-  private createCommTools(agent: AgentInstance): Tool<ZodTypeAny>[] {
+  private createCommTools(
+    agent: AgentInstance
+  ): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
     switch (agent.role) {
       case 'primary':
         return [
@@ -422,38 +339,9 @@ export class Crew {
           }),
         ];
 
-      case 'liaison':
-        return [
-          createRelayToPrimaryTool({
-            onRelay: async (content) => {
-              this.router.enqueue(this.primaryId, {
-                from: agent.id,
-                content,
-                timestamp: Date.now(),
-              });
-              agent.relayFlag = true;
-              if (agent.taskId) {
-                this.completeTask(agent.taskId);
-              }
-            },
-          }),
-        ];
-
       case 'worker':
         return [];
     }
-  }
-
-  private createTodolistTools(): Tool<ZodTypeAny>[] {
-    return [
-      createReadCrewTodolistTool({ getTodolist: () => [...this.todolist.items] }),
-      createUpdateCrewTodolistTool({
-        onUpdate: async (itemId, status) => {
-          this.todolist.update(itemId, status);
-          this.emit({ type: 'todolist_updated', todolist: this.todolist.snapshot() });
-        },
-      }),
-    ];
   }
 
   // ─── Task creation ───
@@ -473,25 +361,14 @@ export class Crew {
     }
 
     const taskId = `task-${++this.taskIdCounter}`;
-    const liaisonId = `liaison-${++this.agentIdCounter}`;
-    const workerId = `worker-${this.agentIdCounter}`;
+    const workerId = `worker-${++this.agentIdCounter}`;
 
-    // Create liaison
-    const liaison = this.createAgentInstance('liaison', 'liaison', liaisonId, workerId, taskId);
-    this.agents.set(liaison.id, liaison);
-    this.emit({
-      type: 'agent_created',
-      agentId: liaison.id,
-      role: 'liaison',
-      definitionName: 'liaison',
-    });
-
-    // Create worker (with optional custom instructions for ad-hoc creation)
+    // Create worker with partnerId pointing to Primary
     const worker = this.createAgentInstance(
       'worker',
       workerType,
       workerId,
-      liaisonId,
+      primaryId,
       taskId,
       instructions
     );
@@ -510,22 +387,15 @@ export class Crew {
       description,
       status: 'running',
       workerId,
-      liaisonId,
       createdAt: Date.now(),
     });
 
     this.emit({ type: 'task_started', taskId, workerType, description });
 
-    // Auto-populate todolist so agents can track progress
-    const todoId = this.todolist.add(`${workerType}: ${description}`, workerId);
-    this.todoIdByTaskId.set(taskId, todoId);
-    this.todolist.update(todoId, 'in_progress');
-    this.emit({ type: 'todolist_updated', todolist: this.todolist.snapshot() });
-
-    // Enqueue task description to liaison
-    this.router.enqueue(liaisonId, {
+    // Enqueue task description directly to worker
+    this.router.enqueue(workerId, {
       from: primaryId,
-      content: `新任务：${description}，请传达给 ${workerType}`,
+      content: description,
       timestamp: Date.now(),
     });
 
@@ -561,25 +431,15 @@ export class Crew {
       if (task && task.status === 'running') {
         this.tasks.set(agent.taskId, { ...task, status: 'failed' });
         this.emit({ type: 'task_failed', taskId: agent.taskId, error: reason });
-        this.updateTodoForTask(agent.taskId, 'pending');
       }
     }
   }
 
-  private completeTask(taskId: string): void {
+  private completeTask(taskId: string, result: string): void {
     const task = this.tasks.get(taskId);
     if (task && task.status === 'running') {
-      this.tasks.set(taskId, { ...task, status: 'completed' });
-      this.emit({ type: 'task_completed', taskId, result: '' });
-      this.updateTodoForTask(taskId, 'completed');
-    }
-  }
-
-  private updateTodoForTask(taskId: string, status: 'pending' | 'in_progress' | 'completed'): void {
-    const todoId = this.todoIdByTaskId.get(taskId);
-    if (todoId) {
-      this.todolist.update(todoId, status);
-      this.emit({ type: 'todolist_updated', todolist: this.todolist.snapshot() });
+      this.tasks.set(taskId, { ...task, status: 'completed', result, completedAt: Date.now() });
+      this.emit({ type: 'task_completed', taskId, result });
     }
   }
 
