@@ -93,6 +93,12 @@ export class Daemon {
       }
     });
 
+    this.fastify.get('/playground', async (_request, reply) => {
+      if (!(await serveStatic('playground.html', reply))) {
+        reply.code(404).send({ error: 'Playground page not found' });
+      }
+    });
+
     this.fastify.get('/playground.css', async (_request, reply) => {
       if (!(await serveStatic('playground.css', reply))) {
         reply.code(404).send({ error: 'CSS not found' });
@@ -113,6 +119,17 @@ export class Daemon {
         return;
       }
       if (!(await serveStatic(join('vendor', filename), reply))) {
+        reply.code(404).send({ error: 'File not found' });
+      }
+    });
+
+    this.fastify.get('/js/*', async (request, reply) => {
+      const filename = (request.params as { '*': string })['*'];
+      if (!filename || filename.includes('..')) {
+        reply.code(400).send({ error: 'Invalid path' });
+        return;
+      }
+      if (!(await serveStatic(join('js', filename), reply))) {
         reply.code(404).send({ error: 'File not found' });
       }
     });

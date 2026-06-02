@@ -140,6 +140,12 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
 
     for (let i = startIdx; i < state.context.messages.length; i++) {
       const msg = state.context.messages[i];
+
+      // Skip thought messages — they are internal reasoning, not conversation turns.
+      if (msg.role === 'assistant' && msg.type === 'thought') {
+        continue;
+      }
+
       switch (msg.role) {
         case 'user':
           messages.push({

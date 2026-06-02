@@ -692,6 +692,18 @@ body {
   font-size: 12px;
 }
 
+.chat-msg-thinking {
+  justify-content: flex-start;
+}
+
+.chat-msg-thinking .chat-msg-body {
+  background: rgba(139, 148, 158, 0.08);
+  border-radius: 14px 14px 14px 2px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-style: italic;
+}
+
 /* Structured event cards */
 .ev-card-header {
   display: flex;

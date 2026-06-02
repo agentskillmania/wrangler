@@ -414,6 +414,92 @@ describe('MarkdownMessageAssembler', () => {
     expect(thinkingIdx).toBeGreaterThan(subAgentsIdx);
   });
 
+  describe('Thought message skipping', () => {
+    it('should skip assistant thought messages from conversation history', () => {
+      const assembler = new MarkdownMessageAssembler();
+      const state = makeState({ instructions: 'Be helpful.' });
+      state.context.messages = [
+        { role: 'user', content: 'Hello', timestamp: 1000 },
+        {
+          role: 'assistant',
+          type: 'thought',
+          content: 'Let me think about this...',
+          timestamp: 1001,
+        },
+        { role: 'assistant', content: 'Hi there!', timestamp: 1002 },
+      ] as any;
+      const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
+
+      const messages = assembler.build(state, opts);
+
+      // No thought content should appear in the output
+      const hasThought = messages.some(
+        (m) => typeof m.content === 'string' && m.content.includes('Let me think about this')
+      );
+      expect(hasThought).toBe(false);
+
+      // Non-thought assistant message should still be present
+      const hasReply = messages.some(
+        (m) =>
+          m.role === 'assistant' &&
+          Array.isArray(m.content) &&
+          m.content.some((c: any) => c.type === 'text' && c.text === 'Hi there!')
+      );
+      expect(hasReply).toBe(true);
+    });
+
+    it('should skip multiple consecutive thought messages', () => {
+      const assembler = new MarkdownMessageAssembler();
+      const state = makeState({ instructions: 'Be helpful.' });
+      state.context.messages = [
+        { role: 'user', content: 'Solve this', timestamp: 1000 },
+        {
+          role: 'assistant',
+          type: 'thought',
+          content: 'Thinking step 1...',
+          timestamp: 1001,
+        },
+        {
+          role: 'assistant',
+          type: 'thought',
+          content: 'Thinking step 2...',
+          timestamp: 1002,
+        },
+        { role: 'assistant', content: 'Here is the answer.', timestamp: 1003 },
+      ] as any;
+      const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
+
+      const messages = assembler.build(state, opts);
+
+      const hasThought1 = messages.some(
+        (m) => typeof m.content === 'string' && m.content.includes('Thinking step 1')
+      );
+      const hasThought2 = messages.some(
+        (m) => typeof m.content === 'string' && m.content.includes('Thinking step 2')
+      );
+      expect(hasThought1).toBe(false);
+      expect(hasThought2).toBe(false);
+    });
+
+    it('should preserve regular assistant messages when no thoughts exist', () => {
+      const assembler = new MarkdownMessageAssembler();
+      const state = makeState({ instructions: 'Be helpful.' });
+      state.context.messages = [
+        { role: 'user', content: 'Hello', timestamp: 1000 },
+        { role: 'assistant', content: 'Hi!', timestamp: 1001 },
+        { role: 'user', content: 'How are you?', timestamp: 1002 },
+        { role: 'assistant', content: 'Fine!', timestamp: 1003 },
+      ] as any;
+      const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
+
+      const messages = assembler.build(state, opts);
+
+      // System ack + 2 conversation assistant messages
+      const assistantMsgs = messages.filter((m) => m.role === 'assistant');
+      expect(assistantMsgs).toHaveLength(3); // ack + Hi! + Fine!
+    });
+  });
+
   describe('Current Task List section', () => {
     it('produces ## Current Task List when todoList has items', () => {
       const assembler = new MarkdownMessageAssembler();
