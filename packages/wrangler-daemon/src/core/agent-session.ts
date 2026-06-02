@@ -173,7 +173,7 @@ export class AgentSession {
       model: llmModel,
       workspacePath: options.workspacePath,
       sandbox: options.sandbox ?? true,
-      thinkingEnabled: options.thinkingEnabled ?? true,
+      thinkingEnabled: options.thinkingEnabled ?? false,
       builtinTools: options.builtinTools,
       enableSession: options.enableSession ?? true,
       enableTodolist: options.enableTodolist ?? true,

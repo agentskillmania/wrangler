@@ -11,6 +11,8 @@ var TAG_COLORS = {
   token: { label: 'assistant', bg: 'rgba(63,185,80,0.12)', fg: 'var(--success)' },
   think: { label: 'thinking', bg: 'rgba(139,148,158,0.12)', fg: 'var(--text-secondary)' },
   tool: { label: 'tool', bg: 'rgba(210,153,34,0.12)', fg: 'var(--warning)' },
+  'tool-call': { label: 'tool call', bg: 'rgba(210,153,34,0.12)', fg: 'var(--warning)' },
+  'tool-result': { label: 'tool result', bg: 'rgba(63,185,80,0.10)', fg: 'var(--success)' },
   error: { label: 'error', bg: 'rgba(248,81,73,0.12)', fg: 'var(--error)' },
   done: { label: 'done', bg: 'rgba(88,166,255,0.12)', fg: 'var(--accent)' },
   session: { label: 'session', bg: 'rgba(88,166,255,0.12)', fg: 'var(--accent)' },
@@ -26,7 +28,8 @@ export function eventToTag(ev) {
   if (ev === 'session-start') return 'session';
   if (ev === 'token') return 'token';
   if (ev === 'thinking') return 'think';
-  if (ev === 'tool-start' || ev === 'tool-end') return 'tool';
+  if (ev === 'tool-start') return 'tool-call';
+  if (ev === 'tool-end') return 'tool-result';
   if (ev === 'skill-loading' || ev === 'skill-loaded' || ev === 'skill-start' || ev === 'skill-end') return 'skill';
   if (ev === 'step-start' || ev === 'step-end') return 'step';
   if (ev === 'phase-change') return 'phase';
