@@ -120,7 +120,7 @@ describe('MarkdownMessageAssembler', () => {
     expect(content).not.toContain('## Available Skills');
   });
 
-  it('produces ## Active Skill when a skill is loaded', () => {
+  it('injects active skill in system-reminder when a skill is loaded', () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     (state.context as any).skillState = {
@@ -128,21 +128,22 @@ describe('MarkdownMessageAssembler', () => {
       stack: [],
       loadedInstructions: '# Search\n\n## How to search\n\nUse the tool.',
     };
+    state.context.messages = [
+      { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: 1000 },
+    ] as any;
     const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
     const messages = assembler.build(state, opts);
-    const content = typeof messages[0].content === 'string' ? messages[0].content : '';
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
 
-    expect(content).toContain('## Active Skill');
-    // Shifted headings
-    expect(content).toContain('### Search');
-    expect(content).toContain('#### How to search');
-    // SKILL MODE guide
+    expect(content).toContain('<system-reminder>');
+    expect(content).toContain('## Active Skill: search');
     expect(content).toContain("'search' skill");
     expect(content).toContain('return_skill');
   });
 
-  it('does not produce ## Active Skill when no skill is loaded', () => {
+  it('does not produce ## Active Skill in static prefix regardless of skill state', () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     (state.context as any).skillState = { current: null, stack: [] };
@@ -379,14 +380,9 @@ describe('MarkdownMessageAssembler', () => {
     expect(oldMsg).toBeUndefined();
   });
 
-  it('section order is: Instructions → Skills → Active Skill → Sub-Agents → Thinking', () => {
+  it('section order in static prefix is: Instructions → Skills → Sub-Agents → Thinking', () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
-    (state.context as any).skillState = {
-      current: 'test-skill',
-      stack: [],
-      loadedInstructions: 'Skill content',
-    };
     const subAgentMap = new Map();
     subAgentMap.set('agent1', { name: 'agent1', description: 'An agent' });
     const opts = makeOpts({
@@ -403,14 +399,12 @@ describe('MarkdownMessageAssembler', () => {
 
     const instructionsIdx = content.indexOf('## Instructions');
     const skillsIdx = content.indexOf('## Available Skills');
-    const activeSkillIdx = content.indexOf('## Active Skill');
     const subAgentsIdx = content.indexOf('## Sub-Agents');
     const thinkingIdx = content.indexOf('## Thinking');
 
     expect(instructionsIdx).toBeGreaterThan(-1);
     expect(skillsIdx).toBeGreaterThan(instructionsIdx);
-    expect(activeSkillIdx).toBeGreaterThan(skillsIdx);
-    expect(subAgentsIdx).toBeGreaterThan(activeSkillIdx);
+    expect(subAgentsIdx).toBeGreaterThan(skillsIdx);
     expect(thinkingIdx).toBeGreaterThan(subAgentsIdx);
   });
 
@@ -500,8 +494,52 @@ describe('MarkdownMessageAssembler', () => {
     });
   });
 
-  describe('Current Task List section', () => {
-    it('produces ## Current Task List when todoList has items', () => {
+  describe('Dynamic content extraction to system-reminder', () => {
+    it('should NOT include ## Current Task List in static system doc', () => {
+      const assembler = new MarkdownMessageAssembler();
+      const state = makeState({ instructions: 'Be helpful.' });
+      (state.context as any).todoList = {
+        items: [
+          { id: 1, subject: 'Task A', status: 'pending', description: undefined, blockedBy: [] },
+        ],
+        nextId: 2,
+      };
+      state.context.messages = [
+        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: 1000 },
+      ] as any;
+      const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
+
+      const messages = assembler.build(state, opts);
+      const systemMsg = messages[0];
+      const content = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
+
+      // Static prefix should NOT contain todolist
+      expect(content).not.toContain('## Current Task List');
+      expect(content).not.toContain('Task A');
+    });
+
+    it('should NOT include ## Active Skill in static system doc', () => {
+      const assembler = new MarkdownMessageAssembler();
+      const state = makeState({ instructions: 'Be helpful.' });
+      (state.context as any).skillState = {
+        current: 'search',
+        stack: [],
+        loadedInstructions: '# Search\n\nUse the tool.',
+      };
+      state.context.messages = [
+        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: 1000 },
+      ] as any;
+      const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
+
+      const messages = assembler.build(state, opts);
+      const systemMsg = messages[0];
+      const content = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
+
+      expect(content).not.toContain('## Active Skill');
+      expect(content).not.toContain("'search' skill");
+    });
+
+    it('should inject todolist in system-reminder of last user message', () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
       (state.context as any).todoList = {
@@ -514,53 +552,50 @@ describe('MarkdownMessageAssembler', () => {
             description: undefined,
             blockedBy: [],
           },
-          { id: 3, subject: 'Task C', status: 'completed', description: undefined, blockedBy: [] },
         ],
-        nextId: 4,
+        nextId: 3,
       };
+      state.context.messages = [
+        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: 1000 },
+      ] as any;
       const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
       const messages = assembler.build(state, opts);
-      const content = typeof messages[0].content === 'string' ? messages[0].content : '';
+      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+      const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
 
-      expect(content).toContain('## Current Task List');
-      expect(content).toContain('[ ] 1. Task A');
-      expect(content).toContain('[~] 2. Task B');
-      expect(content).toContain('[x] 3. Task C');
-      expect(content).toContain(
-        'When you complete a task, use the todolist tool to mark it completed.'
-      );
-      expect(content).toContain('If you identify new sub-tasks, add them to the list.');
+      expect(content).toContain('<system-reminder>');
+      expect(content).toContain('## Task List');
+      expect(content).toContain('- [ ] 1. Task A');
+      expect(content).toContain('- [~] 2. Task B');
+      expect(content).toContain('</system-reminder>');
     });
 
-    it('does not produce ## Current Task List when todoList is empty', () => {
+    it('should inject active skill in system-reminder of last user message', () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
-      (state.context as any).todoList = {
-        items: [],
-        nextId: 1,
+      (state.context as any).skillState = {
+        current: 'search',
+        stack: [],
+        loadedInstructions: '# Search\n\nUse the tool.',
       };
+      state.context.messages = [
+        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: 1000 },
+      ] as any;
       const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
       const messages = assembler.build(state, opts);
-      const content = typeof messages[0].content === 'string' ? messages[0].content : '';
+      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+      const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
 
-      expect(content).not.toContain('## Current Task List');
+      expect(content).toContain('<system-reminder>');
+      expect(content).toContain('## Active Skill: search');
+      expect(content).toContain('# Search');
+      expect(content).toContain("'search' skill");
+      expect(content).toContain('</system-reminder>');
     });
 
-    it('does not produce ## Current Task List when todoList is undefined', () => {
-      const assembler = new MarkdownMessageAssembler();
-      const state = makeState({ instructions: 'Be helpful.' });
-      // todoList is undefined
-      const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
-
-      const messages = assembler.build(state, opts);
-      const content = typeof messages[0].content === 'string' ? messages[0].content : '';
-
-      expect(content).not.toContain('## Current Task List');
-    });
-
-    it('Current Task List section appears between Instructions and Available Skills', () => {
+    it('should inject both todolist and active skill in same system-reminder', () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
       (state.context as any).todoList = {
@@ -569,23 +604,21 @@ describe('MarkdownMessageAssembler', () => {
         ],
         nextId: 2,
       };
-      const opts = makeOpts({
-        systemPrompt: '---\ntime: now\n---',
-        skillProvider: {
-          listSkills: () => [{ name: 'test', description: 'A skill' }],
-        } as any,
-      });
+      (state.context as any).skillState = {
+        current: 'search',
+        stack: [],
+      };
+      state.context.messages = [
+        { role: 'user', id: '1', content: 'Hello', type: 'text', timestamp: 1000 },
+      ] as any;
+      const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
       const messages = assembler.build(state, opts);
-      const content = typeof messages[0].content === 'string' ? messages[0].content : '';
+      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+      const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
 
-      const instructionsIdx = content.indexOf('## Instructions');
-      const currentTaskListIdx = content.indexOf('## Current Task List');
-      const availableSkillsIdx = content.indexOf('## Available Skills');
-
-      expect(instructionsIdx).toBeGreaterThan(-1);
-      expect(currentTaskListIdx).toBeGreaterThan(instructionsIdx);
-      expect(availableSkillsIdx).toBeGreaterThan(currentTaskListIdx);
+      expect(content).toContain('## Task List');
+      expect(content).toContain('## Active Skill: search');
     });
   });
 });

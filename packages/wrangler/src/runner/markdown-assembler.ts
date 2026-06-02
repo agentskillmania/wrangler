@@ -5,47 +5,29 @@
  * with proper heading hierarchy. Replaces the flat-text output of
  * colts' DefaultMessageAssembler.
  *
- * Heading structure:
- * - YAML frontmatter at position 0 (from wrangler's buildTimeContext)
- * - ## Instructions — agent instructions (headings shifted down 2 levels)
- * - ## Available Skills — skill catalog
- * - ## Active Skill — loaded skill content + SKILL MODE guide
- * - ## Sub-Agents — sub-agent catalog
- * - ## Thinking — prompt-level thinking guidance
+ * KV-cache design:
+ * - Static prefix: YAML frontmatter + instructions + skill catalog + sub-agents + thinking
+ * - Dynamic content (todolist, active skill): injected as <system-reminder>
+ *   into the last user message, keeping the static prefix stable for caching
  */
 
 import type { Message as PiAIMessage, TextContent } from '@mariozechner/pi-ai';
-import type { AgentState, SkillState } from '@agentskillmania/colts';
+import type { AgentState } from '@agentskillmania/colts';
 import type {
   BuildMessagesOptions,
   IMessageAssembler,
 } from '@agentskillmania/colts/dist/message-assembler/index.js';
 import { shiftHeadings } from './shift-headings.js';
 
-/**
- * Build skill mode guide based on current skill state
- *
- * Tells the agent how to behave while a skill is active.
- */
-function buildSkillGuide(skillState: SkillState | undefined): string | null {
-  if (!skillState || !skillState.current) return null;
-
-  return `You are currently executing the '${skillState.current}' skill.
-
-You may switch to another skill at any time using the \`load_skill\` tool.
-When you COMPLETE your task, you MUST call the \`return_skill\` tool:
-{
-  "result": "Your final answer here (be detailed)",
-  "status": "success"
-}
-
-Rules:
-- ALWAYS use return_skill when done — do NOT just respond with text
-- You may call load_skill to delegate sub-tasks to specialized skills`;
-}
+/** Status-to-checkbox mapping for todolist display */
+const STATUS_CHECK: Record<string, string> = {
+  pending: '[ ]',
+  in_progress: '[~]',
+  completed: '[x]',
+};
 
 /**
- * MarkdownMessageAssembler — structured markdown system prompt
+ * MarkdownMessageAssembler -- structured markdown system prompt
  *
  * Implements IMessageAssembler from colts. Produces the same LLM message
  * array format as DefaultMessageAssembler, but the system prompt section
@@ -56,7 +38,7 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
     const messages: PiAIMessage[] = [];
     const now = Date.now();
 
-    // Build structured markdown system prompt
+    // -- Static prefix --
     const systemDoc = this.buildSystemDocument(state, opts);
 
     if (systemDoc) {
@@ -66,82 +48,27 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
         timestamp: now,
       });
 
-      // Fake assistant acknowledgment to maintain conversation flow
-      messages.push({
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'Understood. I will follow these instructions.',
-          },
-        ],
-        api: 'openai-completions',
-        provider: 'openai',
-        model: opts.model,
-        usage: {
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 0,
-          cost: {
-            input: 0,
-            output: 0,
-            cacheRead: 0,
-            cacheWrite: 0,
-            total: 0,
-          },
-        },
-        stopReason: 'stop',
-        timestamp: now,
-      });
+      messages.push(this.createFakeAck(opts.model, now));
     }
 
-    // Add conversation history (respecting compression boundary)
+    // -- Compression summary --
     const compression = state.context.compression;
     const startIdx = compression ? compression.anchor : 0;
 
-    // If compressed, inject summary as a system-like user message
     if (compression && compression.summary) {
       messages.push({
         role: 'user',
         content: `[Conversation History Summary]\n${compression.summary}`,
         timestamp: now,
       });
-      messages.push({
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'Understood. I have the context from our previous conversation.',
-          },
-        ],
-        api: 'openai-completions',
-        provider: 'openai',
-        model: opts.model,
-        usage: {
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 0,
-          cost: {
-            input: 0,
-            output: 0,
-            cacheRead: 0,
-            cacheWrite: 0,
-            total: 0,
-          },
-        },
-        stopReason: 'stop',
-        timestamp: now,
-      });
+      messages.push(this.createFakeAck(opts.model, now));
     }
 
+    // -- Conversation history --
     for (let i = startIdx; i < state.context.messages.length; i++) {
       const msg = state.context.messages[i];
 
-      // Skip thought messages — they are internal reasoning, not conversation turns.
+      // Skip thought messages -- they are internal reasoning, not conversation turns.
       if (msg.role === 'assistant' && msg.type === 'thought') {
         continue;
       }
@@ -208,14 +135,76 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
       }
     }
 
+    // -- Dynamic context injection --
+    const reminder = this.buildDynamicReminder(state);
+    if (reminder && messages.length > 0) {
+      const lastIdx = messages.length - 1;
+      const last = messages[lastIdx];
+      if (last.role === 'user') {
+        if (typeof last.content === 'string') {
+          messages[lastIdx] = {
+            ...last,
+            content:
+              last.content + '\n\n---\n<system-reminder>\n' + reminder + '\n</system-reminder>',
+          };
+        } else {
+          messages[lastIdx] = {
+            ...last,
+            content: [
+              ...last.content,
+              {
+                type: 'text' as const,
+                text: '\n\n---\n<system-reminder>\n' + reminder + '\n</system-reminder>',
+              },
+            ],
+          };
+        }
+      } else {
+        messages.push({
+          role: 'user',
+          content: '<system-reminder>\n' + reminder + '\n</system-reminder>',
+          timestamp: now,
+        });
+      }
+    }
+
     return messages;
+  }
+
+  /**
+   * Create a fake assistant acknowledgment
+   */
+  private createFakeAck(model: string, timestamp: number): PiAIMessage {
+    return {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Understood. I will follow these instructions.' }],
+      api: 'openai-completions',
+      provider: 'openai',
+      model,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: 'stop',
+      timestamp,
+    };
   }
 
   /**
    * Build the structured markdown system document
    *
-   * Sections appear only when their content exists.
-   * YAML frontmatter is at position 0 (no prefix before it).
+   * Contains ONLY static content for KV-cache friendliness.
+   * Dynamic content (todolist, active skill) is in buildDynamicReminder().
    */
   private buildSystemDocument(state: AgentState, opts: BuildMessagesOptions): string | null {
     const sections: string[] = [];
@@ -225,28 +214,9 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
       sections.push(opts.systemPrompt);
     }
 
-    // Instructions section — headings shifted down 2 levels
+    // Instructions section -- headings shifted down 2 levels
     if (state.config.instructions) {
       sections.push(`## Instructions\n\n${shiftHeadings(state.config.instructions, 2)}`);
-    }
-
-    // Current Task List section — read directly from state
-    const todoList = state.context.todoList;
-    if (todoList && todoList.items.length > 0) {
-      const statusCheck: Record<string, string> = {
-        pending: '[ ]',
-        in_progress: '[~]',
-        completed: '[x]',
-      };
-      const lines = todoList.items.map(
-        (item) => `- ${statusCheck[item.status] ?? '[ ]'} ${item.id}. ${item.subject}`
-      );
-      sections.push(
-        '## Current Task List\n\n' +
-          lines.join('\n') +
-          '\n\nWhen you complete a task, use the todolist tool to mark it completed.\n' +
-          'If you identify new sub-tasks, add them to the list.'
-      );
     }
 
     // Available Skills section
@@ -259,25 +229,6 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
         sections.push(
           `## Available Skills\n\n${skillLines}\n\nUse the load_skill tool to load detailed instructions when needed.`
         );
-      }
-    }
-
-    // Active Skill section
-    const skillState = state.context.skillState;
-    if (skillState?.current) {
-      const parts: string[] = [];
-
-      if (skillState.loadedInstructions) {
-        parts.push(shiftHeadings(skillState.loadedInstructions, 2));
-      }
-
-      const guide = buildSkillGuide(skillState);
-      if (guide) {
-        parts.push(guide);
-      }
-
-      if (parts.length > 0) {
-        sections.push(`## Active Skill\n\n${parts.join('\n\n')}`);
       }
     }
 
@@ -303,5 +254,39 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
 
     if (sections.length === 0) return null;
     return sections.join('\n\n');
+  }
+
+  /**
+   * Build <system-reminder> content from dynamic state
+   *
+   * @returns Formatted reminder text, or null if no dynamic content exists
+   */
+  private buildDynamicReminder(state: AgentState): string | null {
+    const parts: string[] = [];
+
+    const todoList = (state.context as unknown as Record<string, unknown>).todoList as
+      | { items: Array<{ id: number; subject: string; status: string }> }
+      | undefined;
+    if (todoList?.items?.length) {
+      const lines = todoList.items.map(
+        (i) => `- ${STATUS_CHECK[i.status] ?? '[ ]'} ${i.id}. ${i.subject}`
+      );
+      parts.push('## Task List\n' + lines.join('\n'));
+    }
+
+    const skillState = state.context.skillState;
+    if (skillState?.current) {
+      parts.push('## Active Skill: ' + skillState.current);
+      if (skillState.loadedInstructions) {
+        parts.push(shiftHeadings(skillState.loadedInstructions, 2));
+      }
+      parts.push(
+        `You are currently executing the '${skillState.current}' skill.\n\n` +
+          'You may switch to another skill at any time using the `load_skill` tool.\n' +
+          'When you COMPLETE your task, you MUST call the `return_skill` tool.'
+      );
+    }
+
+    return parts.length > 0 ? parts.join('\n\n') : null;
   }
 }
