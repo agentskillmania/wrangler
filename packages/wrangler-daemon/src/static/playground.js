@@ -111,7 +111,7 @@ function renderMessageList(entries, opts) {
     if (entry.role === 'user') {
       return html`
         <div key=${entry.id || idx} class="chat-msg chat-msg-user">
-          <div class="chat-msg-body">${entry.content || ''}</div>
+          <div class="chat-msg-body">${esc(entry.content || '')}</div>
         </div>
       `;
     }
@@ -121,7 +121,7 @@ function renderMessageList(entries, opts) {
       var display = truncated ? content.slice(0, maxLen) + '...[truncated]' : content;
       return html`
         <div key=${entry.id || idx} class="chat-msg chat-msg-assistant">
-          <div class="chat-msg-body"><pre style="white-space:pre-wrap;margin:0">${display}</pre></div>
+          <div class="chat-msg-body"><pre style="white-space:pre-wrap;margin:0">${esc(display)}</pre></div>
         </div>
       `;
     }
@@ -135,9 +135,9 @@ function renderMessageList(entries, opts) {
       return html`
         <div key=${entry.id || idx} class="chat-msg" style="background:rgba(139,148,158,0.06);border-left:3px solid var(--accent-secondary)">
           <div class="chat-msg-body" style="font-size:12px">
-            <div style="font-weight:600;color:var(--accent-secondary)">[tool] ${entry.toolName || 'unknown'}</div>
-            ${argsContent && html`<pre style="white-space:pre-wrap;margin:4px 0;font-size:11px;color:var(--text-muted)">${argsDisplay}</pre>`}
-            <pre style="white-space:pre-wrap;margin:4px 0">${toolDisplay}</pre>
+            <div style="font-weight:600;color:var(--accent-secondary)">[tool] ${esc(entry.toolName || 'unknown')}</div>
+            ${argsContent && html`<pre style="white-space:pre-wrap;margin:4px 0;font-size:11px;color:var(--text-muted)">${esc(argsDisplay)}</pre>`}
+            <pre style="white-space:pre-wrap;margin:4px 0">${esc(toolDisplay)}</pre>
           </div>
         </div>
       `;
@@ -145,14 +145,14 @@ function renderMessageList(entries, opts) {
     if (entry.role === 'error') {
       return html`
         <div key=${entry.id || idx} class="chat-msg chat-msg-error">
-          <div class="chat-msg-body">${entry.errorMessage || entry.content || 'Unknown error'}</div>
+          <div class="chat-msg-body">${esc(entry.errorMessage || entry.content || 'Unknown error')}</div>
         </div>
       `;
     }
     // system or unknown — render as muted system message
     return html`
       <div key=${entry.id || idx} class="chat-msg" style="background:var(--bg-secondary);color:var(--text-muted)">
-        <div class="chat-msg-body" style="font-size:12px">${entry.content || ''}</div>
+        <div class="chat-msg-body" style="font-size:12px">${esc(entry.content || '')}</div>
       </div>
     `;
   });
@@ -2400,6 +2400,13 @@ function SessionsPage() {
   var _sSel = useState(null),
     selected = _sSel[0],
     setSelected = _sSel[1];
+  var _sMsgs = useState([]),
+    sessionMessages = _sMsgs[0],
+    setSessionMessages = _sMsgs[1];
+  var _sMsgLoad = useState(false),
+    messagesLoading = _sMsgLoad[0],
+    setMessagesLoading = _sMsgLoad[1];
+  var lastSelectedId = useRef('');
 
   function loadSessions() {
     var url = '/api/sessions';
@@ -2416,7 +2423,11 @@ function SessionsPage() {
   function handleDelete(id) {
     if (!confirm('Delete this session?')) return;
     api.del('/api/sessions/' + id).then(function () {
-      if (selected && selected.id === id) setSelected(null);
+      if (selected && selected.id === id) {
+        setSelected(null);
+        setSessionMessages([]);
+        setMessagesLoading(false);
+      }
       loadSessions();
     });
   }
@@ -2428,8 +2439,24 @@ function SessionsPage() {
   }
 
   function handleSelect(session) {
+    lastSelectedId.current = session.id;
     api.get('/api/sessions/' + session.id).then(function (detail) {
+      if (lastSelectedId.current !== session.id) return;
       setSelected(detail);
+    }).catch(function () {
+      // Ignore detail fetch errors
+    });
+    // Load messages in parallel
+    setMessagesLoading(true);
+    setSessionMessages([]);
+    api.get('/api/chat/' + session.id + '/messages').then(function (res) {
+      if (lastSelectedId.current !== session.id) return;
+      setSessionMessages(res && res.messages ? res.messages : []);
+      setMessagesLoading(false);
+    }).catch(function () {
+      if (lastSelectedId.current !== session.id) return;
+      setSessionMessages([]);
+      setMessagesLoading(false);
     });
   }
 
@@ -2505,9 +2532,27 @@ function SessionsPage() {
       html`
         <div class="panel" style="margin-top:16px">
           <div class="panel-header">
-            <span class="panel-title">${selected.id}</span>
+            <span class="panel-title">Session ${selected.id}</span>
+            <span style="margin-left:8px;font-size:12px;color:var(--text-muted)">
+              ${selected.agentName || '-'} · ${selected.model || '-'}
+            </span>
           </div>
-          <${JsonTree} data=${selected} open=${1} />
+          <div style="padding:8px 12px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border)">
+            Workspace: ${selected.workspacePath || '-'}
+            · Created: ${selected.createdAt ? new Date(selected.createdAt).toLocaleString() : '-'}
+            · Updated: ${selected.updatedAt ? new Date(selected.updatedAt).toLocaleString() : '-'}
+          </div>
+          <div style="padding:12px">
+            <div style="font-size:13px;font-weight:600;margin-bottom:8px">
+              Messages (${sessionMessages.length})
+            </div>
+            ${messagesLoading
+              ? html`<div style="color:var(--text-muted);padding:16px;text-align:center">Loading messages...</div>`
+              : sessionMessages.length === 0
+                ? html`<div style="color:var(--text-muted);padding:16px;text-align:center">No messages in this session.</div>`
+                : renderMessageList(sessionMessages, { maxLen: 500 })
+            }
+          </div>
         </div>
       `}
     </div>
