@@ -11,8 +11,7 @@ export function Sidebar(props) {
   var _sGr = useState({
     resources: true,
     conversation: true,
-    monitoring: false,
-    devtools: false,
+    devtools: true,
   }),
     groups = _sGr[0],
     setGroups = _sGr[1];
@@ -41,14 +40,6 @@ export function Sidebar(props) {
       items: [
         { id: 'chat', label: 'Chat' },
         { id: 'sessions', label: 'Sessions' },
-      ],
-    },
-    {
-      key: 'monitoring',
-      label: 'Monitoring',
-      items: [
-        { id: 'state', label: 'Agent State' },
-        { id: 'files', label: 'Files' },
       ],
     },
     {

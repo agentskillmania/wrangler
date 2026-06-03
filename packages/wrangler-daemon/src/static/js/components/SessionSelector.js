@@ -51,8 +51,7 @@ export function SessionSelector(props) {
             <optgroup key=${gk} label=${gk}>
               ${groups[gk].map(
                 function (sess) {
-                  var shortId = sess.id ? sess.id.substring(0, 8) + '...' : '-';
-                  var label = (sess.agentName || 'unknown') + ' — ' + shortId;
+                  var label = (sess.agentName || 'unknown') + ' — ' + (sess.id || '-');
                   return html`
                     <option key=${sess.id} value=${sess.id}>
                       ${label}

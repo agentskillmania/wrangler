@@ -27,11 +27,12 @@ export const api = {
   },
 
   post(path, body) {
-    return request(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const opts = { method: 'POST', headers: {} };
+    if (body !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    return request(path, opts);
   },
 
   put(path, body) {

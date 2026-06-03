@@ -4,18 +4,48 @@ import { html } from '../utils.js';
 import { useState } from '../utils.js';
 import { useEffect } from '../utils.js';
 import { api } from '../api.js';
-import { ResourceList } from '../components/ResourceList.js';
-import { DetailDrawer } from '../components/DetailDrawer.js';
-import { InlineEditor } from '../components/InlineEditor.js';
 
 // ── Page: Specs ──
 export function SpecsPage() {
+  var _sWorkspaces = useState([]),
+    workspaces = _sWorkspaces[0],
+    setWorkspaces = _sWorkspaces[1];
   var _sWP = useState(''),
     workspacePath = _sWP[0],
     setWorkspacePath = _sWP[1];
   var _sSp = useState([]),
     specs = _sSp[0],
     setSpecs = _sSp[1];
+
+  // Load all workspaces from sessions
+  useEffect(function () {
+    api.get('/api/sessions').then(function (res) {
+      var sessions = Array.isArray(res) ? res : [];
+      var uniqueWorkspaces = [];
+      var seen = {};
+      for (var i = 0; i < sessions.length; i++) {
+        var wp = sessions[i].workspacePath;
+        if (wp && !seen[wp]) {
+          seen[wp] = true;
+          uniqueWorkspaces.push(wp);
+        }
+      }
+      setWorkspaces(uniqueWorkspaces);
+      // Auto-select first workspace if none selected
+      if (uniqueWorkspaces.length > 0 && !workspacePath) {
+        setWorkspacePath(uniqueWorkspaces[0]);
+      }
+    }).catch(function () {
+      setWorkspaces([]);
+    });
+  }, []);
+
+  // Load specs when workspace changes
+  useEffect(function () {
+    if (workspacePath) {
+      loadSpecs();
+    }
+  }, [workspacePath]);
 
   function loadSpecs() {
     if (!workspacePath.trim()) {
@@ -32,7 +62,7 @@ export function SpecsPage() {
 
   function createSpec() {
     if (!workspacePath.trim()) {
-      alert('Please enter a workspace path first.');
+      alert('Please select a workspace first.');
       return;
     }
     var name = prompt('Spec name:');
@@ -48,16 +78,20 @@ export function SpecsPage() {
       </div>
 
       <div class="page-toolbar">
-        <div class="field" style="min-width:260px;margin-bottom:0">
-          <label>Workspace Path</label>
-          <input
+        <div class="field" style="min-width:300px;margin-bottom:0">
+          <label>Workspace</label>
+          <select
             class="input"
-            placeholder="/path/to/workspace"
             value=${workspacePath}
-            onInput=${function (e) {
+            onChange=${function (e) {
               setWorkspacePath(e.target.value);
             }}
-          />
+          >
+            <option value="">Select a workspace...</option>
+            ${workspaces.map(function (wp) {
+              return html`<option key=${wp} value=${wp}>${wp}</option>`;
+            })}
+          </select>
         </div>
         <button class="btn btn-primary btn-sm" onClick=${createSpec}>+ New Spec</button>
         <button class="btn btn-secondary btn-sm" onClick=${loadSpecs}>Refresh</button>
@@ -67,7 +101,7 @@ export function SpecsPage() {
         ${specs.length === 0 &&
         html`
           <div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:40px 0">
-            ${workspacePath ? 'No specs found.' : 'Enter a workspace path above to load specs.'}
+            ${workspacePath ? 'No specs found.' : 'Select a workspace above to load specs.'}
           </div>
         `}
         ${specs.map(
