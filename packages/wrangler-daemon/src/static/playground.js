@@ -919,6 +919,30 @@ function ChatPage() {
     [chatLines]
   );
 
+  // Load conversation history when resuming a session
+  useEffect(
+    function () {
+      if (!resumeSessionId) return;
+      var cancelled = false;
+      api.get('/api/chat/' + resumeSessionId + '/messages').then(function (res) {
+        if (cancelled) return;
+        if (res && res.messages && res.messages.length > 0) {
+          var historyLines = res.messages.map(function (entry) {
+            return sessionEntryToChatLine(entry);
+          });
+          setChatLines(historyLines);
+          setTimeout(function () {
+            if (messagesEndRef.current) messagesEndRef.current.scrollIntoView();
+          }, 50);
+        }
+      }).catch(function () {
+        // Silently fail — empty chat is acceptable
+      });
+      return function () { cancelled = true; };
+    },
+    [resumeSessionId]
+  );
+
   // Auto-scroll cockpit event log to bottom only when new events arrive
   var prevEvtLenRef = useRef(0);
   useEffect(
@@ -1712,6 +1736,7 @@ function ChatPage() {
                 setChatLines([]);
                 setCockpitEvents([]);
                 setSessionId('');
+                setResumeSessionId('');
               }}
             >
               New Chat
@@ -1729,21 +1754,32 @@ function ChatPage() {
                 if (line.tag === 'user') {
                   return html`
                     <div key=${line.id} class="chat-msg chat-msg-user">
-                      <div class="chat-msg-body">${line.text}</div>
+                      <div class="chat-msg-body">${esc(line.text)}</div>
                     </div>
                   `;
                 }
                 if (line.tag === 'token') {
                   return html`
                     <div key=${line.id} class="chat-msg chat-msg-assistant">
-                      <div class="chat-msg-body">${line.text}</div>
+                      <div class="chat-msg-body">${esc(line.text)}</div>
                     </div>
                   `;
                 }
                 if (line.tag === 'error') {
                   return html`
                     <div key=${line.id} class="chat-msg chat-msg-error">
-                      <div class="chat-msg-body">${line.text}</div>
+                      <div class="chat-msg-body">${esc(line.text)}</div>
+                    </div>
+                  `;
+                }
+                if (line.tag === 'tool') {
+                  var toolLines = (line.text || '').split('\n');
+                  var toolName = toolLines[0] || 'tool';
+                  var toolResult = toolLines.slice(1).join('\n') || '(no result)';
+                  return html`
+                    <div key=${line.id} class="chat-msg" style="background:rgba(139,148,158,0.06);border-left:3px solid var(--accent-secondary);padding:8px 12px;margin:4px 0">
+                      <div style="font-weight:600;color:var(--accent-secondary);font-size:12px">[tool] ${esc(toolName)}</div>
+                      <pre style="white-space:pre-wrap;margin:4px 0 0 0;font-size:12px;opacity:0.85">${esc(toolResult)}</pre>
                     </div>
                   `;
                 }
