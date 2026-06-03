@@ -78,6 +78,86 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * Convert a SessionEntry (from GET /api/chat/:id/messages) to a chatLine object
+ * compatible with ChatPage's chatLines array format: { tag, text, id }.
+ *
+ * @param {object} entry - A SessionEntry object
+ * @returns {{ tag: string, text: string, id: string }}
+ */
+function sessionEntryToChatLine(entry) {
+  var tag = entry.role === 'assistant' ? 'token' : entry.role;
+  var text = entry.content || '';
+  if (entry.role === 'tool') {
+    text = entry.toolName + '\n' + (entry.result || '(no result)');
+  }
+  if (entry.role === 'error') {
+    text = entry.errorMessage || entry.content || 'Unknown error';
+  }
+  return { tag: tag, text: text, id: entry.id || Date.now() + Math.random() };
+}
+
+/**
+ * Render an array of SessionEntry objects into chat message HTML.
+ * Shared by ChatPage (history loading) and SessionsPage (detail panel).
+ *
+ * @param {Array<object>} entries - SessionEntry array from API
+ * @param {object} opts - { maxLen: number } max chars before truncation (default 2000)
+ * @returns {Array} Preact html array
+ */
+function renderMessageList(entries, opts) {
+  var maxLen = (opts && opts.maxLen) || 2000;
+  return entries.map(function (entry, idx) {
+    if (entry.role === 'user') {
+      return html`
+        <div key=${entry.id || idx} class="chat-msg chat-msg-user">
+          <div class="chat-msg-body">${entry.content || ''}</div>
+        </div>
+      `;
+    }
+    if (entry.role === 'assistant') {
+      var content = entry.content || '';
+      var truncated = content.length > maxLen;
+      var display = truncated ? content.slice(0, maxLen) + '...[truncated]' : content;
+      return html`
+        <div key=${entry.id || idx} class="chat-msg chat-msg-assistant">
+          <div class="chat-msg-body"><pre style="white-space:pre-wrap;margin:0">${display}</pre></div>
+        </div>
+      `;
+    }
+    if (entry.role === 'tool') {
+      var toolContent = entry.result || '(no result)';
+      var toolTruncated = toolContent.length > maxLen;
+      var toolDisplay = toolTruncated ? toolContent.slice(0, maxLen) + '...[truncated]' : toolContent;
+      var argsContent = entry.toolArguments || '';
+      var argsTruncated = argsContent.length > maxLen;
+      var argsDisplay = argsTruncated ? argsContent.slice(0, maxLen) + '...[truncated]' : argsContent;
+      return html`
+        <div key=${entry.id || idx} class="chat-msg" style="background:rgba(139,148,158,0.06);border-left:3px solid var(--accent-secondary)">
+          <div class="chat-msg-body" style="font-size:12px">
+            <div style="font-weight:600;color:var(--accent-secondary)">[tool] ${entry.toolName || 'unknown'}</div>
+            ${argsContent && html`<pre style="white-space:pre-wrap;margin:4px 0;font-size:11px;color:var(--text-muted)">${argsDisplay}</pre>`}
+            <pre style="white-space:pre-wrap;margin:4px 0">${toolDisplay}</pre>
+          </div>
+        </div>
+      `;
+    }
+    if (entry.role === 'error') {
+      return html`
+        <div key=${entry.id || idx} class="chat-msg chat-msg-error">
+          <div class="chat-msg-body">${entry.errorMessage || entry.content || 'Unknown error'}</div>
+        </div>
+      `;
+    }
+    // system or unknown — render as muted system message
+    return html`
+      <div key=${entry.id || idx} class="chat-msg" style="background:var(--bg-secondary);color:var(--text-muted)">
+        <div class="chat-msg-body" style="font-size:12px">${entry.content || ''}</div>
+      </div>
+    `;
+  });
+}
+
 // ── Shared Component: StatePanel ──
 // Structured display of unified agent diagnostics (runner + agent + llm)
 function StatePanel(props) {
