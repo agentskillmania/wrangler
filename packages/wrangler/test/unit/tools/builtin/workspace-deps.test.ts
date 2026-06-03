@@ -268,6 +268,47 @@ describe('HostToolDeps', () => {
     });
   });
 
+  describe('statFile', () => {
+    it('should return exists=true and isFile=true for a regular file', async () => {
+      await writeFile(join(tempDir, 'regular.txt'), 'content');
+      const result = await deps.statFile('regular.txt');
+      expect(result).toEqual({ exists: true, isFile: true });
+    });
+
+    it('should return exists=false for non-existent file', async () => {
+      const result = await deps.statFile('nope.txt');
+      expect(result).toEqual({ exists: false, isFile: false });
+    });
+
+    it('should return isFile=false for a directory', async () => {
+      mkdirSync(join(tempDir, 'subdir'), { recursive: true });
+      const result = await deps.statFile('subdir');
+      expect(result).toEqual({ exists: true, isFile: false });
+    });
+
+    it('should throw Permission denied for EACCES', async () => {
+      await expect(deps.statFile('/root/.ssh/id_rsa')).rejects.toThrow();
+    });
+  });
+
+  describe('isBinaryFile (deps method)', () => {
+    it('should detect binary file with null bytes', async () => {
+      const buf = Buffer.alloc(100);
+      for (let i = 0; i < 50; i++) buf[i] = 0;
+      await writeFile(join(tempDir, 'binary.bin'), buf);
+      expect(await deps.isBinaryFile('binary.bin')).toBe(true);
+    });
+
+    it('should return false for text file', async () => {
+      await writeFile(join(tempDir, 'text.txt'), 'hello world');
+      expect(await deps.isBinaryFile('text.txt')).toBe(false);
+    });
+
+    it('should return false for non-existent file', async () => {
+      expect(await deps.isBinaryFile('missing.txt')).toBe(false);
+    });
+  });
+
   describe('shell property', () => {
     it('should auto-detect shell', () => {
       expect(typeof deps.shell.path).toBe('string');

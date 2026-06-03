@@ -166,6 +166,12 @@ export interface ToolDeps {
     path: string,
     options?: { cwd?: string; include?: string }
   ): Promise<string>;
+
+  /** Check if file exists and is a regular file. Throws on permission errors (EACCES). */
+  statFile(filePath: string): Promise<{ exists: boolean; isFile: boolean }>;
+
+  /** Detect binary file by examining content */
+  isBinaryFile(filePath: string): Promise<boolean>;
 }
 
 /**
@@ -285,6 +291,32 @@ export class HostToolDeps implements ToolDeps {
       return result.stdout || 'No matches found';
     } catch {
       return 'No matches found';
+    }
+  }
+
+  async statFile(filePath: string): Promise<{ exists: boolean; isFile: boolean }> {
+    const absolute = this.resolvePath(filePath);
+    try {
+      const s = await fs.stat(absolute);
+      return { exists: true, isFile: s.isFile() };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'EACCES') {
+        throw new Error(`Permission denied: ${filePath}`);
+      }
+      if (code === 'ENOENT') {
+        return { exists: false, isFile: false };
+      }
+      throw new Error(`Failed to access file: ${filePath} (${(error as Error).message})`);
+    }
+  }
+
+  async isBinaryFile(filePath: string): Promise<boolean> {
+    const absolute = this.resolvePath(filePath);
+    try {
+      return await detectBinary(absolute);
+    } catch {
+      return false;
     }
   }
 }
@@ -412,6 +444,25 @@ export class SandboxToolDeps implements ToolDeps {
       return 'No matches found';
     }
     return result.stdout;
+  }
+
+  async statFile(filePath: string): Promise<{ exists: boolean; isFile: boolean }> {
+    const absolute = this.resolvePath(filePath);
+    const statResult = await this.sandbox.run(
+      `test -f ${absolute} && echo FILE || (test -e ${absolute} && echo EXISTS || echo MISSING)`
+    );
+    const output = statResult.stdout.trim();
+    if (output === 'FILE') return { exists: true, isFile: true };
+    if (output === 'EXISTS') return { exists: true, isFile: false };
+    return { exists: false, isFile: false };
+  }
+
+  async isBinaryFile(filePath: string): Promise<boolean> {
+    const absolute = this.resolvePath(filePath);
+    const result = await this.sandbox.run(`grep -c -P '[\\x00]' ${absolute}`);
+    if (result.exitCode !== 0) return false;
+    const count = parseInt(result.stdout.trim(), 10);
+    return !isNaN(count) && count > 0;
   }
 }
 
