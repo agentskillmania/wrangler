@@ -92,6 +92,7 @@ export function ChatPage() {
           setChatLines=${chat.setChatLines}
           setCockpitEvents=${chat.setCockpitEvents}
           setSessionId=${chat.setSessionId}
+          setResumeSessionId=${chat.setResumeSessionId}
         />
 
         <${ChatRightPanel}

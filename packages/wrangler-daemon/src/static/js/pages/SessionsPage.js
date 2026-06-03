@@ -1,10 +1,11 @@
 /* eslint-disable */
 // ── Page: SessionsPage ──
-import { html } from '../utils.js';
-import { useState } from '../utils.js';
-import { useEffect } from '../utils.js';
+import { html, useState, useEffect, useRef } from '../utils.js';
 import { api } from '../api.js';
 import { ResourceList } from '../components/ResourceList.js';
+import { DetailDrawer } from '../components/DetailDrawer.js';
+import { MessageList } from '../components/MessageList.js';
+import { esc } from '../utils.js';
 
 // ── Page: Sessions ──
 export function SessionsPage() {
@@ -17,6 +18,13 @@ export function SessionsPage() {
   var _sSel = useState(null),
     selected = _sSel[0],
     setSelected = _sSel[1];
+  var _sMsgs = useState([]),
+    sessionMessages = _sMsgs[0],
+    setSessionMessages = _sMsgs[1];
+  var _sMsgLoad = useState(false),
+    messagesLoading = _sMsgLoad[0],
+    setMessagesLoading = _sMsgLoad[1];
+  var lastSelectedId = useRef('');
 
   function loadSessions() {
     var url = '/api/sessions';
@@ -33,7 +41,11 @@ export function SessionsPage() {
   function handleDelete(id) {
     if (!confirm('Delete this session?')) return;
     api.del('/api/sessions/' + id).then(function () {
-      if (selected && selected.id === id) setSelected(null);
+      if (selected && selected.id === id) {
+        setSelected(null);
+        setSessionMessages([]);
+        setMessagesLoading(false);
+      }
       loadSessions();
     });
   }
@@ -45,24 +57,39 @@ export function SessionsPage() {
   }
 
   function handleSelect(session) {
+    lastSelectedId.current = session.id;
     api.get('/api/sessions/' + session.id).then(function (detail) {
+      if (lastSelectedId.current !== session.id) return;
       setSelected(detail);
+    }).catch(function () {
+      // Ignore detail fetch errors
+    });
+    // Load messages in parallel
+    setMessagesLoading(true);
+    setSessionMessages([]);
+    api.get('/api/chat/' + session.id + '/messages').then(function (res) {
+      if (lastSelectedId.current !== session.id) return;
+      setSessionMessages(res && res.messages ? res.messages : []);
+      setMessagesLoading(false);
+    }).catch(function () {
+      if (lastSelectedId.current !== session.id) return;
+      setSessionMessages([]);
+      setMessagesLoading(false);
     });
   }
 
   var columns = [
     { key: 'id', label: 'Session ID', render: function (item) {
-      var short = item.id ? item.id.substring(0, 12) + '...' : '-';
       return html`
         <span
           class="name-link"
-          title=${item.id}
+          style="font-family:var(--font-mono)"
           onClick=${function (e) {
             e.stopPropagation();
             handleSelect(item);
           }}
         >
-          ${short}
+          ${item.id || '-'}
         </span>
       `;
     }},
@@ -118,15 +145,30 @@ export function SessionsPage() {
         }}
       />
 
-      ${selected &&
-      html`
-        <div class="panel" style="margin-top:16px">
-          <div class="panel-header">
-            <span class="panel-title">${selected.id}</span>
+      <${DetailDrawer}
+        open=${selected !== null}
+        title=${selected ? selected.id : ''}
+        onClose=${function () { setSelected(null); }}
+      >
+        ${selected && html`
+          <div style="padding:8px 12px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border)">
+            <div style="margin-bottom:4px"><strong>Agent:</strong> ${esc(selected.agentName || '-')} · <strong>Model:</strong> ${esc(selected.model || '-')}</div>
+            <div style="margin-bottom:4px"><strong>Workspace:</strong> ${esc(selected.workspacePath || '-')}</div>
+            <div><strong>Created:</strong> ${selected.createdAt ? new Date(selected.createdAt).toLocaleString() : '-'} · <strong>Updated:</strong> ${selected.updatedAt ? new Date(selected.updatedAt).toLocaleString() : '-'}</div>
           </div>
-          <${JsonTree} data=${selected} open=${1} />
-        </div>
-      `}
+          <div style="padding:12px">
+            <div style="font-size:13px;font-weight:600;margin-bottom:8px">
+              Messages (${sessionMessages.length})
+            </div>
+            ${messagesLoading
+              ? html`<div style="color:var(--text-muted);padding:16px;text-align:center">Loading messages...</div>`
+              : sessionMessages.length === 0
+                ? html`<div style="color:var(--text-muted);padding:16px;text-align:center">No messages in this session.</div>`
+                : html`<${MessageList} entries=${sessionMessages} maxLen=${500} />`
+            }
+          </div>
+        `}
+      </${DetailDrawer}>
     </div>
   `;
 }

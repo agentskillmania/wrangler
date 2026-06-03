@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef } from '../../utils.js';
 import { api } from '../../api.js';
 import { eventToTag, formatEventData } from './EventCard.js';
+import { sessionEntryToChatLine } from '../../helpers/sessionEntryToChatLine.js';
 
 var BASE = location.origin;
 
@@ -189,6 +190,30 @@ export function useChatState() {
       }
     },
     [chatLines]
+  );
+
+  // Load conversation history when resuming a session
+  useEffect(
+    function () {
+      if (!resumeSessionId) return;
+      var cancelled = false;
+      api.get('/api/chat/' + resumeSessionId + '/messages').then(function (res) {
+        if (cancelled) return;
+        if (res && res.messages && res.messages.length > 0) {
+          var historyLines = res.messages.map(function (entry) {
+            return sessionEntryToChatLine(entry);
+          });
+          setChatLines(historyLines);
+          setTimeout(function () {
+            if (messagesEndRef.current) messagesEndRef.current.scrollIntoView();
+          }, 50);
+        }
+      }).catch(function () {
+        // Silently fail — empty chat is acceptable
+      });
+      return function () { cancelled = true; };
+    },
+    [resumeSessionId]
   );
 
   var prevEvtLenRef = useRef(0);

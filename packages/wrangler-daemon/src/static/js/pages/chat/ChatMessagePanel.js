@@ -2,7 +2,7 @@
 // ── Component: ChatMessagePanel ──
 // Middle column: chat messages display + input bar.
 
-import { html } from '../../utils.js';
+import { html, esc } from '../../utils.js';
 import { EventCard } from './EventCard.js';
 
 export function ChatMessagePanel(props) {
@@ -24,6 +24,7 @@ export function ChatMessagePanel(props) {
   var setChatLines = props.setChatLines;
   var setCockpitEvents = props.setCockpitEvents;
   var setSessionId = props.setSessionId;
+  var setResumeSessionId = props.setResumeSessionId;
 
   return html`
     <div class="chat-middle">
@@ -39,6 +40,7 @@ export function ChatMessagePanel(props) {
             setChatLines([]);
             setCockpitEvents([]);
             setSessionId('');
+            if (setResumeSessionId) setResumeSessionId('');
           }}
         >
           New Chat
@@ -56,28 +58,39 @@ export function ChatMessagePanel(props) {
             if (line.tag === 'user') {
               return html`
                 <div key=${line.id} class="chat-msg chat-msg-user">
-                  <div class="chat-msg-body">${line.text}</div>
+                  <div class="chat-msg-body">${esc(line.text)}</div>
                 </div>
               `;
             }
             if (line.tag === 'think') {
               return html`
                 <div key=${line.id} class="chat-msg chat-msg-thinking">
-                  <div class="chat-msg-body">${line.text}</div>
+                  <div class="chat-msg-body">${esc(line.text)}</div>
                 </div>
               `;
             }
             if (line.tag === 'token') {
               return html`
                 <div key=${line.id} class="chat-msg chat-msg-assistant">
-                  <div class="chat-msg-body">${line.text}</div>
+                  <div class="chat-msg-body">${esc(line.text)}</div>
                 </div>
               `;
             }
             if (line.tag === 'error') {
               return html`
                 <div key=${line.id} class="chat-msg chat-msg-error">
-                  <div class="chat-msg-body">${line.text}</div>
+                  <div class="chat-msg-body">${esc(line.text)}</div>
+                </div>
+              `;
+            }
+            if (line.tag === 'tool') {
+              var toolLines = (line.text || '').split('\n');
+              var toolName = toolLines[0] || 'tool';
+              var toolResult = toolLines.slice(1).join('\n') || '(no result)';
+              return html`
+                <div key=${line.id} class="chat-msg" style="background:rgba(139,148,158,0.06);border-left:3px solid var(--accent-secondary);padding:8px 12px;margin:4px 0">
+                  <div style="font-weight:600;color:var(--accent-secondary);font-size:12px">[tool] ${esc(toolName)}</div>
+                  <pre style="white-space:pre-wrap;margin:4px 0 0 0;font-size:12px;opacity:0.85">${esc(toolResult)}</pre>
                 </div>
               `;
             }
