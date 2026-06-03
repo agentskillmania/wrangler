@@ -1,6 +1,7 @@
 import type { AgentMiddleware, IContextCompressor } from '@agentskillmania/colts';
-import type { CommandRegistry } from './registry.js';
+
 import { parseCommand } from './parser.js';
+import type { CommandRegistry } from './registry.js';
 
 export interface CommandMiddlewareDeps {
   compressor?: IContextCompressor;

@@ -1,5 +1,6 @@
-import type { CommandHandler } from '../types.js';
 import { createAgentState } from '@agentskillmania/colts';
+
+import type { CommandHandler } from '../types.js';
 
 /**
  * Create a /clear command handler that resets the agent state

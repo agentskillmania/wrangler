@@ -1,7 +1,8 @@
 import type { Tool, AgentMiddleware } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
-import { createTodolistTool } from './todo-tool.js';
+
 import { createTodolistMiddleware } from './todo-middleware.js';
+import { createTodolistTool } from './todo-tool.js';
 
 /**
  * Create todolist support — returns tools and middleware

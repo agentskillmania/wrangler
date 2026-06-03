@@ -11,9 +11,10 @@
  * Adapted from colts-cli's runner-setup pattern.
  */
 
-import { LLMClient } from '@agentskillmania/llm-client';
 import { createAgentState } from '@agentskillmania/colts';
 import type { AgentState } from '@agentskillmania/colts';
+import { LLMClient } from '@agentskillmania/llm-client';
+
 import type { AppConfig } from './config.js';
 
 /** Default concurrency when not specified in config */

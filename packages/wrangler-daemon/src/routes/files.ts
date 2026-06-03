@@ -1,6 +1,8 @@
-import type { FastifyInstance } from 'fastify';
 import { readFile, writeFile, unlink, mkdir, readdir, stat } from 'node:fs/promises';
 import { resolve, dirname, basename, relative, join } from 'node:path';
+
+import type { FastifyInstance } from 'fastify';
+
 import type { DecoratedFastifyInstance } from '../types.js';
 
 /**

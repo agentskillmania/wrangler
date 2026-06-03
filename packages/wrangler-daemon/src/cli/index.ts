@@ -6,13 +6,14 @@
  * The child process uses `daemon.ts` auto-start logic which
  * writes PID and handles signals.
  */
-import { Daemon } from '../daemon.js';
-import { PID_PATH, APP_DIR } from '../constants.js';
-import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+
+import { PID_PATH, APP_DIR } from '../constants.js';
+import { Daemon } from '../daemon.js';
 
 const command = process.argv[2];
 const args = parseArgs(process.argv.slice(3));

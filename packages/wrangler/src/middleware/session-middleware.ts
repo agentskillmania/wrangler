@@ -1,7 +1,9 @@
 // packages/core/src/middleware/session-middleware.ts
 
 import { randomUUID } from 'node:crypto';
+
 import type { AgentMiddleware } from '@agentskillmania/colts';
+
 import type { SessionStore } from '../session/session-store.js';
 import type { SessionEntry } from '../session/types.js';
 

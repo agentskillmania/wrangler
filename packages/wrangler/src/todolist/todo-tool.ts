@@ -1,6 +1,6 @@
+import type { Tool } from '@agentskillmania/colts';
 import { z } from 'zod';
 import type { ZodTypeAny } from 'zod';
-import type { Tool } from '@agentskillmania/colts';
 
 const ActionSchema = z.union([
   z.object({

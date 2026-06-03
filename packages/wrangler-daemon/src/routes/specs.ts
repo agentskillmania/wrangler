@@ -1,6 +1,7 @@
-import type { FastifyInstance } from 'fastify';
 import { SpecStore } from '@agentskillmania/wrangler';
 import type { SpecStatus } from '@agentskillmania/wrangler';
+import type { FastifyInstance } from 'fastify';
+
 import { SESSIONS_DIR } from '../constants.js';
 
 function getSpecStore(workspacePath: string): SpecStore {

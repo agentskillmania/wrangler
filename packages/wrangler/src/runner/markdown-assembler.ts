@@ -12,12 +12,13 @@
  * - Same-turn thoughts (after last user message) included; cross-turn skipped
  */
 
-import type { Message as PiAIMessage, TextContent } from '@mariozechner/pi-ai';
 import type { AgentState } from '@agentskillmania/colts';
 import type {
   BuildMessagesOptions,
   IMessageAssembler,
 } from '@agentskillmania/colts/dist/message-assembler/index.js';
+import type { Message as PiAIMessage, TextContent } from '@mariozechner/pi-ai';
+
 import { shiftHeadings } from './shift-headings.js';
 
 /** Status-to-checkbox mapping for todolist display */

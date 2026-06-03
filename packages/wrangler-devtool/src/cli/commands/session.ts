@@ -1,8 +1,8 @@
 // packages/wrangler-devtool/src/cli/commands/session.ts
 
+import { listSessions, forkSession } from '../../tools/session-manager.js';
 import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
-import { listSessions, forkSession } from '../../tools/session-manager.js';
 
 export const sessionCommand = defineCommand({
   name: 'session',

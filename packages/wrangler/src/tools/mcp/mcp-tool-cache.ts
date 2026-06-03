@@ -1,7 +1,8 @@
+import type { Tool } from '@agentskillmania/colts';
 import { createRuntime, loadServerDefinitions } from 'mcporter';
 import type { ServerDefinition } from 'mcporter';
 import type { ZodTypeAny } from 'zod';
-import type { Tool } from '@agentskillmania/colts';
+
 import { createMCPTool } from './tool-converter.js';
 
 interface CacheEntry {

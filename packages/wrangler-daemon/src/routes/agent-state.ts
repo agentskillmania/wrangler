@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
+
 import type { DecoratedFastifyInstance } from '../types.js';
 
 /**

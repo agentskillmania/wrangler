@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { createHash } from 'node:crypto';
+
 import yaml from 'js-yaml';
+
 import { formatSpecFileName, parseSpecFileName } from './naming.js';
 import type { SpecDocument, SpecMeta, SpecStatus } from './types.js';
 

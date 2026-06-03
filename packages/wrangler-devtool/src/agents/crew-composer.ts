@@ -1,11 +1,12 @@
 // packages/wrangler-devtool/src/agents/crew-composer.ts
 // Crew Composer — generates or modifies crew definitions
 
-import { runGenerationWithLoop, createGenerationRunner } from './orchestrator.js';
-import type { AgentOutput, AgentRunOptions } from './types.js';
-import type { RunnerConfig } from './orchestrator.js';
-import type { EnhancedRunner } from '@agentskillmania/wrangler';
 import type { AgentState } from '@agentskillmania/colts';
+import type { EnhancedRunner } from '@agentskillmania/wrangler';
+
+import { runGenerationWithLoop, createGenerationRunner } from './orchestrator.js';
+import type { RunnerConfig } from './orchestrator.js';
+import type { AgentOutput, AgentRunOptions } from './types.js';
 
 /**
  * Run the Crew Composer to generate or modify a crew definition.

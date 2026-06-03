@@ -1,11 +1,20 @@
 // packages/wrangler-devtool/src/test-runner/runner.ts
 // Execute test cases sequentially
 
-import { mkdir, copyFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
-import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
+import { mkdir, copyFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve, dirname } from 'node:path';
+
+import { createAgentState, addUserMessage, addAssistantMessage } from '@agentskillmania/colts';
+import type { ILLMProvider } from '@agentskillmania/colts';
+import { AgentLoader, CrewLoader, EnhancedRunner, Crew } from '@agentskillmania/wrangler';
+import type { EnhancedRunnerOptions, CrewOptions } from '@agentskillmania/wrangler';
+
+import { evaluateAssertion } from './assertions.js';
+import { loadTestCases } from './loader.js';
+import { evaluateSoft } from './soft-evaluator.js';
 import type {
   TestCase,
   TestCaseResult,
@@ -16,16 +25,9 @@ import type {
   ToolCallRecord,
   RunTestsDeps,
 } from './types.js';
-import { evaluateAssertion } from './assertions.js';
-import { loadTestCases } from './loader.js';
-import { evaluateSoft } from './soft-evaluator.js';
 import { loadConfig } from '../config.js';
 
 // wrangler imports
-import { AgentLoader, CrewLoader, EnhancedRunner, Crew } from '@agentskillmania/wrangler';
-import type { EnhancedRunnerOptions, CrewOptions } from '@agentskillmania/wrangler';
-import { createAgentState, addUserMessage, addAssistantMessage } from '@agentskillmania/colts';
-import type { ILLMProvider } from '@agentskillmania/colts';
 
 export interface TestRunnerDeps {
   llmClient?: ILLMProvider;

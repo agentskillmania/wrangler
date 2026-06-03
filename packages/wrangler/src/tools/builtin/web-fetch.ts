@@ -1,9 +1,10 @@
-import { z } from 'zod';
-import TurndownService from 'turndown';
-import { JSDOM } from 'jsdom';
-import { Readability } from '@mozilla/readability';
 import type { Tool } from '@agentskillmania/colts';
+import { Readability } from '@mozilla/readability';
+import { JSDOM } from 'jsdom';
+import TurndownService from 'turndown';
+import { z } from 'zod';
 import type { ZodTypeAny } from 'zod';
+
 import type { ToolDeps } from './workspace-deps.js';
 import { truncateOutput } from './workspace-deps.js';
 

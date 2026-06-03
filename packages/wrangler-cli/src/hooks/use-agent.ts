@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
 import type { AgentState } from '@agentskillmania/colts';
 import { addUserMessage } from '@agentskillmania/colts';
 import type { EnhancedRunner } from '@agentskillmania/wrangler';
+import { useState, useRef, useCallback } from 'react';
+
 import type { TimelineEntry, RunStatus } from '../types.js';
 import { StreamConsumer } from './use-stream-consumer.js';
 

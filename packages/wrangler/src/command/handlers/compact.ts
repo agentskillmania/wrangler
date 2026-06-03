@@ -1,5 +1,6 @@
-import type { CommandHandler } from '../types.js';
 import { updateState } from '@agentskillmania/colts';
+
+import type { CommandHandler } from '../types.js';
 
 /**
  * Create a /compact command handler that compresses conversation context

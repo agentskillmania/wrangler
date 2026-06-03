@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+
+import type { AgentState } from '@agentskillmania/colts';
 import { SessionStore } from '@agentskillmania/wrangler';
 import type { SessionMeta } from '@agentskillmania/wrangler';
-import type { AgentState } from '@agentskillmania/colts';
+
 import { findSessionGlobally, getDefaultSessionBaseDir } from './session-utils.js';
 import { CliError, ExitCode } from '../cli/options.js';
 

@@ -3,6 +3,7 @@
 
 import { writeFile, access, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+
 import { CliError, ExitCode } from '../cli/options.js';
 
 function getAgentTemplate(name: string): string {

@@ -1,29 +1,31 @@
-import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
+
+import { CONFIG_PATH, AGENTS_DIR, SKILLS_DIR, SESSIONS_DIR, CREWS_DIR } from './constants.js';
 import { ConfigManager } from './core/config-manager.js';
 import { ResourceManager } from './core/resource-manager.js';
 import { SessionManager } from './core/session-manager.js';
-import { healthRoutes } from './routes/health.js';
-import { configRoutes } from './routes/config.js';
-import { agentRoutes } from './routes/agents.js';
-import { skillRoutes } from './routes/skills.js';
-import { sessionRoutes } from './routes/sessions.js';
-import { launcherRoutes } from './routes/launcher.js';
-import { chatRoutes } from './routes/chat.js';
-import { fileRoutes } from './routes/files.js';
-import { agentStateRoutes } from './routes/agent-state.js';
-import { skillFileRoutes } from './routes/skill-files.js';
 import { agentFileRoutes } from './routes/agent-files.js';
-import { crewRoutes } from './routes/crews.js';
+import { agentStateRoutes } from './routes/agent-state.js';
+import { agentRoutes } from './routes/agents.js';
+import { chatRoutes } from './routes/chat.js';
+import { configRoutes } from './routes/config.js';
 import { crewFileRoutes } from './routes/crew-files.js';
-import { devtoolRoutes } from './routes/devtool.js';
+import { crewRoutes } from './routes/crews.js';
 import { devtoolStreamRoutes } from './routes/devtool-stream.js';
-import { specRoutes } from './routes/specs.js';
-import { planRoutes } from './routes/plans.js';
+import { devtoolRoutes } from './routes/devtool.js';
+import { fileRoutes } from './routes/files.js';
+import { healthRoutes } from './routes/health.js';
+import { launcherRoutes } from './routes/launcher.js';
 import { modelRoutes } from './routes/models.js';
-import { CONFIG_PATH, AGENTS_DIR, SKILLS_DIR, SESSIONS_DIR, CREWS_DIR } from './constants.js';
+import { planRoutes } from './routes/plans.js';
+import { sessionRoutes } from './routes/sessions.js';
+import { skillFileRoutes } from './routes/skill-files.js';
+import { skillRoutes } from './routes/skills.js';
+import { specRoutes } from './routes/specs.js';
 import type { DaemonOptions } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

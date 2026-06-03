@@ -1,13 +1,14 @@
-import { resolve, sep, join, basename, dirname } from 'node:path';
 import { Buffer } from 'node:buffer';
-import * as fs from 'node:fs/promises';
-import { statSync } from 'node:fs';
 import { exec, execSync } from 'node:child_process';
+import { statSync } from 'node:fs';
+import * as fs from 'node:fs/promises';
+import { resolve, sep, join, basename, dirname } from 'node:path';
 import { promisify } from 'node:util';
-import { isBinaryFile as detectBinary } from 'isbinaryfile';
-import fglob from 'fast-glob';
-import { rgPath } from 'ripgrep';
+
 import type { Sandbox } from '@agentskillmania/sandbox';
+import fglob from 'fast-glob';
+import { isBinaryFile as detectBinary } from 'isbinaryfile';
+import { rgPath } from 'ripgrep';
 
 const execAsync = promisify(exec);
 

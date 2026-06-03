@@ -1,4 +1,3 @@
-import type { ZodTypeAny } from 'zod';
 import type {
   ILLMProvider,
   AskHumanHandler,
@@ -7,8 +6,10 @@ import type {
   CompressionConfig,
   IContextCompressor,
 } from '@agentskillmania/colts';
-import type { SearchProvider } from '../tools/builtin/index.js';
+import type { ZodTypeAny } from 'zod';
+
 import type { CommandHandler } from '../command/types.js';
+import type { SearchProvider } from '../tools/builtin/index.js';
 
 export interface A2UIConfig {
   /** Enable A2UI support */

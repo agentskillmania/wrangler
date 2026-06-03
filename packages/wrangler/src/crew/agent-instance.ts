@@ -1,5 +1,6 @@
-import type { AgentRole, AgentInstanceInfo, AgentInstanceStatus, CrewMessage } from './types.js';
 import type { AgentState } from '@agentskillmania/colts';
+
+import type { AgentRole, AgentInstanceInfo, AgentInstanceStatus, CrewMessage } from './types.js';
 import type { EnhancedRunner } from '../runner/enhanced-runner.js';
 
 export interface AgentInstanceOptions {

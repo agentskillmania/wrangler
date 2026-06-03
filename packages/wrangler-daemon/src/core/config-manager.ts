@@ -1,6 +1,8 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+
 import { Settings } from '@agentskillmania/settings-yaml';
+
 import type { DaemonConfig } from '../types.js';
 
 /** Default config as YAML string for settings-yaml initialization */

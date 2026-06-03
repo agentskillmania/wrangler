@@ -1,8 +1,10 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+
 import yaml from 'js-yaml';
-import { parseAgentMd } from '../agent/agent-parser.js';
+
 import type { CrewConfig } from './types.js';
+import { parseAgentMd } from '../agent/agent-parser.js';
 import type { ParsedAgent } from '../agent/agent-parser.js';
 
 interface CrewMeta {

@@ -2,6 +2,7 @@
 // LLM client setup — thin wrapper around @agentskillmania/llm-client
 
 import { LLMClient } from '@agentskillmania/llm-client';
+
 import type { LLMConfig } from './config.js';
 
 /**

@@ -1,3 +1,12 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+import type { AgentState } from '@agentskillmania/colts';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+
+import { AgentInstance } from './agent-instance.js';
+import { createCreateTaskTool, createSendMessageTool } from './crew-tools.js';
+import { MessageRouter } from './message-router.js';
 import type {
   CrewConfig,
   CrewOptions,
@@ -10,16 +19,9 @@ import type {
   CrewMessage,
   AgentRole,
 } from './types.js';
-import type { AgentState } from '@agentskillmania/colts';
-import { createAgentState, addUserMessage } from '@agentskillmania/colts';
-import { AgentInstance } from './agent-instance.js';
-import { MessageRouter } from './message-router.js';
-import { createCreateTaskTool, createSendMessageTool } from './crew-tools.js';
 import { EnhancedRunner } from '../runner/enhanced-runner.js';
-import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js';
+import { discoverGlobalConfigPath } from '../tools/mcp/config-merger.js';
 
 export class Crew {
   private config: CrewConfig;

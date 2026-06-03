@@ -1,6 +1,7 @@
-import type { CommandHandler } from '../types.js';
 import type { FilesystemSkillProvider } from '@agentskillmania/colts';
 import { loadSkill } from '@agentskillmania/colts';
+
+import type { CommandHandler } from '../types.js';
 
 /**
  * Creates a command handler that loads a skill by name into the agent state.

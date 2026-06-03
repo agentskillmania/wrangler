@@ -1,6 +1,7 @@
-import type { FastifyInstance } from 'fastify';
 import { PlanStore } from '@agentskillmania/wrangler';
 import type { PlanStatus } from '@agentskillmania/wrangler';
+import type { FastifyInstance } from 'fastify';
+
 import { SESSIONS_DIR } from '../constants.js';
 
 function getPlanStore(workspacePath: string): PlanStore {

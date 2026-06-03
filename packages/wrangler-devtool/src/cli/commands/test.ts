@@ -1,11 +1,11 @@
 // packages/wrangler-devtool/src/cli/commands/test.ts
 // wrangler-devtool test <path> [options]
 
-import { defineCommand } from '../framework.js';
-import { CliError, ExitCode } from '../options.js';
-import { runTests } from '../../test-runner/runner.js';
 import { printReport } from '../../test-runner/reporters/console.js';
 import { formatJsonReport } from '../../test-runner/reporters/json.js';
+import { runTests } from '../../test-runner/runner.js';
+import { defineCommand } from '../framework.js';
+import { CliError, ExitCode } from '../options.js';
 
 export const testCommand = defineCommand({
   name: 'test',

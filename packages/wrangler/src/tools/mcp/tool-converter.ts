@@ -1,6 +1,6 @@
+import type { Tool } from '@agentskillmania/colts';
 import { z } from 'zod';
 import type { ZodTypeAny } from 'zod';
-import type { Tool } from '@agentskillmania/colts';
 
 /**
  * Converts a JSON Schema type string to corresponding Zod type

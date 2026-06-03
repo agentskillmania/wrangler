@@ -1,6 +1,7 @@
-import { z } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
+import { z } from 'zod';
 import type { ZodTypeAny } from 'zod';
+
 import type { ToolDeps } from './workspace-deps.js';
 
 const ShellSchema = z.object({

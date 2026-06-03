@@ -7,6 +7,7 @@
 
 import { addUserMessage } from '@agentskillmania/colts';
 import type { AgentState } from '@agentskillmania/colts';
+
 import type { A2UIUserResponse } from './types.js';
 
 export function a2uiRespond(state: AgentState, response: A2UIUserResponse): AgentState {

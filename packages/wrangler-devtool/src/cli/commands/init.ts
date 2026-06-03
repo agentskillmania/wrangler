@@ -1,8 +1,8 @@
 // packages/wrangler-devtool/src/cli/commands/init.ts
 
+import { initProject } from '../../tools/init-workspace.js';
 import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
-import { initProject } from '../../tools/init-workspace.js';
 
 export const initCommand = defineCommand({
   name: 'init',

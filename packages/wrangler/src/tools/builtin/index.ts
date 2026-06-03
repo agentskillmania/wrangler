@@ -1,20 +1,21 @@
-import type { ZodTypeAny } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
 import type { Sandbox } from '@agentskillmania/sandbox';
-import type { SearchProvider } from './web-search.js';
-import { HostToolDeps, SandboxToolDeps } from './workspace-deps.js';
-import type { ToolDeps } from './workspace-deps.js';
+import type { ZodTypeAny } from 'zod';
+
+import { BingScrapeSearchProvider } from './bing-scrape-search.js';
+import { createFileEditTool } from './file-edit.js';
 import { createFileReadTool } from './file-read.js';
 import { createFileWriteTool } from './file-write.js';
-import { createFileEditTool } from './file-edit.js';
+import { createGitTool } from './git.js';
 import { createGlobTool } from './glob.js';
 import { createGrepTool } from './grep.js';
-import { createWebFetchTool } from './web-fetch.js';
-import { createWebSearchTool } from './web-search.js';
-import { createShellTool } from './shell.js';
 import { createPythonTool } from './python.js';
-import { createGitTool } from './git.js';
-import { BingScrapeSearchProvider } from './bing-scrape-search.js';
+import { createShellTool } from './shell.js';
+import { createWebFetchTool } from './web-fetch.js';
+import type { SearchProvider } from './web-search.js';
+import { createWebSearchTool } from './web-search.js';
+import { HostToolDeps, SandboxToolDeps } from './workspace-deps.js';
+import type { ToolDeps } from './workspace-deps.js';
 
 export interface BuiltinToolsOptions {
   workspacePath: string;

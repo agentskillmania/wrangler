@@ -6,8 +6,9 @@
  * (tool:start and tool:end events carry the action and result data).
  */
 
-import { z } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
+import { z } from 'zod';
+
 import {
   CreateSurfaceSchema,
   UpdateComponentsSchema,

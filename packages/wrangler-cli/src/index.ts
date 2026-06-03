@@ -6,11 +6,12 @@
  * loadConfig() → detectMode() → render(App)
  */
 
-import React from 'react';
 import { render } from 'ink';
+import React from 'react';
+
 import { App } from './components/app.js';
-import { detectMode } from './detect-mode.js';
 import { loadConfig } from './config.js';
+import { detectMode } from './detect-mode.js';
 
 async function main() {
   const dir = process.argv[2] ?? '.';

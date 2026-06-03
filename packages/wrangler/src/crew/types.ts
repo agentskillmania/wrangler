@@ -1,5 +1,6 @@
-import type { ParsedAgent } from '../agent/agent-parser.js';
 import type { ILLMProvider, AskHumanHandler } from '@agentskillmania/colts';
+
+import type { ParsedAgent } from '../agent/agent-parser.js';
 import type { SearchProvider } from '../tools/builtin/web-search.js';
 
 // ─── Agent roles ───

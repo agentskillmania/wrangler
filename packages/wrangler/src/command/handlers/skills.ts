@@ -1,5 +1,6 @@
-import type { CommandHandler } from '../types.js';
 import type { FilesystemSkillProvider } from '@agentskillmania/colts';
+
+import type { CommandHandler } from '../types.js';
 
 /**
  * Creates a command handler that lists all available skills from the skill provider.

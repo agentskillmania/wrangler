@@ -1,4 +1,5 @@
 import { JSDOM } from 'jsdom';
+
 import type { SearchProvider, SearchResult } from './web-search.js';
 
 /**

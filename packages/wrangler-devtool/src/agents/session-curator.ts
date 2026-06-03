@@ -1,11 +1,12 @@
 // packages/wrangler-devtool/src/agents/session-curator.ts
 // Session Curator — conversation summarizer
 
-import { runCurator, createCuratorRunner } from './orchestrator.js';
-import type { SessionSummary, AgentRunOptions } from './types.js';
-import type { RunnerConfig } from './orchestrator.js';
-import type { EnhancedRunner } from '@agentskillmania/wrangler';
 import type { AgentState } from '@agentskillmania/colts';
+import type { EnhancedRunner } from '@agentskillmania/wrangler';
+
+import { runCurator, createCuratorRunner } from './orchestrator.js';
+import type { RunnerConfig } from './orchestrator.js';
+import type { SessionSummary, AgentRunOptions } from './types.js';
 
 /**
  * Run the Session Curator to summarize conversation text.

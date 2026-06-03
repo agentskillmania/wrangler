@@ -5,8 +5,9 @@ import type {
   BeforeStepContext,
 } from '@agentskillmania/colts';
 import { updateState } from '@agentskillmania/colts';
-import type { TodoList, TodoStatus } from './types.js';
+
 import { createEmptyTodoList, addTodo, updateTodo, deleteTodo } from './todo-state.js';
+import type { TodoList, TodoStatus } from './types.js';
 
 function getTodoList(state: AgentState): TodoList | undefined {
   return state.context.todoList;

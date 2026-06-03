@@ -30,7 +30,7 @@ export default tseslint.config(
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
       'import/order': [
-        'warn',
+        'error',
         {
           groups: [
             'builtin',

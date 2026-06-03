@@ -1,5 +1,6 @@
-import type { ZodTypeAny } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
+import type { ZodTypeAny } from 'zod';
+
 import { MCPToolCache } from './mcp-tool-cache.js';
 
 /**

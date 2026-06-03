@@ -3,12 +3,14 @@
 
 import { readFile, access, readdir, stat } from 'node:fs/promises';
 import { join, resolve, extname } from 'node:path';
-import { defineCommand } from '../framework.js';
-import { CliError, ExitCode } from '../options.js';
+
+import { parseAgentMd, CrewLoader } from '@agentskillmania/wrangler';
+
 import { runReviewer } from '../../agents/reviewer.js';
 import { loadConfig, requireLLMConfig } from '../../config.js';
 import { createLLMClient } from '../../llm.js';
-import { parseAgentMd, CrewLoader } from '@agentskillmania/wrangler';
+import { defineCommand } from '../framework.js';
+import { CliError, ExitCode } from '../options.js';
 
 interface StaticCheckIssue {
   severity: 'minor' | 'major' | 'critical';

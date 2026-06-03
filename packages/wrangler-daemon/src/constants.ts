@@ -1,5 +1,5 @@
-import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 /** Base directory for all skill-studio application data */
 export const APP_DIR = join(homedir(), '.agentskillmania', 'skill-studio');

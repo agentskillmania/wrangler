@@ -2,7 +2,9 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+
 import yaml from 'js-yaml';
+
 import type { SessionMeta } from '../types.js';
 
 /**

@@ -1,6 +1,7 @@
-import type { FastifyInstance } from 'fastify';
-import type { DecoratedFastifyInstance } from '../types.js';
 import { DevTool } from '@agentskillmania/wrangler-devtool';
+import type { FastifyInstance } from 'fastify';
+
+import type { DecoratedFastifyInstance } from '../types.js';
 
 /**
  * Create a DevTool instance from daemon config.
