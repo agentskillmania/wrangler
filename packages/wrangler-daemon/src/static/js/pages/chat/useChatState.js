@@ -192,10 +192,13 @@ export function useChatState() {
     [chatLines]
   );
 
-  // Load conversation history when resuming a session
+  // Load conversation history when resuming a session, clear when switching away
   useEffect(
     function () {
-      if (!resumeSessionId) return;
+      if (!resumeSessionId) {
+        setChatLines([]);
+        return;
+      }
       var cancelled = false;
       api.get('/api/chat/' + resumeSessionId + '/messages').then(function (res) {
         if (cancelled) return;
