@@ -5,16 +5,28 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createFileReadTool } from '../../../../src/tools/builtin/file-read.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import type { ToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
+/**
+ * Create a mock ToolDeps with default implementations.
+ * Individual tests override specific methods as needed.
+ */
+function createMockDeps(overrides?: Partial<ToolDeps>): ToolDeps {
   return {
-    ...actual,
-    stat: vi.fn(actual.stat),
-  };
-});
-
-const { stat } = await import('node:fs/promises');
+    workspaceRoot: '/workspace',
+    maxOutputSize: 1024 * 1024,
+    resolvePath: vi.fn((filePath: string) => `/workspace/${filePath}`),
+    exec: vi.fn(),
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
+    editFile: vi.fn(),
+    glob: vi.fn(),
+    grep: vi.fn(),
+    statFile: vi.fn(async () => ({ exists: true, isFile: true })),
+    isBinaryFile: vi.fn(async () => false),
+    ...overrides,
+  } as unknown as ToolDeps;
+}
 
 describe('file_read', () => {
   let workspace: string;
@@ -29,6 +41,8 @@ describe('file_read', () => {
   afterEach(async () => {
     await rm(workspace, { recursive: true, force: true }).catch(() => {});
   });
+
+  // Real filesystem tests using HostToolDeps
 
   it('reads file with line-numbered output', async () => {
     await writeFile(join(workspace, 'test.txt'), 'hello\nworld\n');
@@ -75,7 +89,6 @@ describe('file_read', () => {
     const tool = createFileReadTool(deps);
     const result = await tool.execute({ filePath: 'long.txt' });
     const line1 = result.split('\n')[0];
-    // "1:" prefix + 2000 chars + "..."
     expect(line1).toContain('...');
     expect(line1.length).toBeLessThan(2100);
   });
@@ -102,17 +115,66 @@ describe('file_read', () => {
     expect(result).toContain('offset 100 exceeds file length');
   });
 
-  it('throws permission denied for EACCES instead of not found', async () => {
-    await writeFile(join(workspace, 'secret.txt'), 'secret');
-    vi.mocked(stat).mockRejectedValueOnce(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
-    const tool = createFileReadTool(deps);
-    await expect(tool.execute({ filePath: 'secret.txt' })).rejects.toThrow('Permission denied');
-  });
-
   it('has correct tool metadata', () => {
     const tool = createFileReadTool(deps);
     expect(tool.name).toBe('file_read');
     expect(tool.description).toContain('Read file contents');
     expect(tool.parameters).toBeInstanceOf(z.ZodObject);
+  });
+
+  // Mock deps tests — verify file_read uses deps, not Node.js APIs
+
+  describe('uses deps methods (not Node.js APIs)', () => {
+    it('calls deps.statFile() to check file existence', async () => {
+      const mockDeps = createMockDeps({
+        statFile: vi.fn(async () => ({ exists: false, isFile: false })),
+      });
+      const tool = createFileReadTool(mockDeps);
+      await expect(tool.execute({ filePath: 'test.txt' })).rejects.toThrow('File not found');
+      expect(mockDeps.statFile).toHaveBeenCalledWith('test.txt');
+    });
+
+    it('calls deps.statFile() and returns error for directory', async () => {
+      const mockDeps = createMockDeps({
+        statFile: vi.fn(async () => ({ exists: true, isFile: false })),
+      });
+      const tool = createFileReadTool(mockDeps);
+      const result = await tool.execute({ filePath: 'somedir' });
+      expect(result).toContain('Error: Not a file');
+    });
+
+    it('calls deps.isBinaryFile() to detect binary', async () => {
+      const mockDeps = createMockDeps({
+        statFile: vi.fn(async () => ({ exists: true, isFile: true })),
+        isBinaryFile: vi.fn(async () => true),
+      });
+      const tool = createFileReadTool(mockDeps);
+      const result = await tool.execute({ filePath: 'image.png' });
+      expect(result).toContain('Error: Cannot read binary file');
+      expect(mockDeps.isBinaryFile).toHaveBeenCalledWith('image.png');
+    });
+
+    it('calls deps.readFile() to get content', async () => {
+      const mockDeps = createMockDeps({
+        statFile: vi.fn(async () => ({ exists: true, isFile: true })),
+        isBinaryFile: vi.fn(async () => false),
+        readFile: vi.fn(async () => 'hello\nworld\n'),
+      });
+      const tool = createFileReadTool(mockDeps);
+      const result = await tool.execute({ filePath: 'test.txt' });
+      expect(result).toContain('1:hello');
+      expect(result).toContain('2:world');
+      expect(mockDeps.readFile).toHaveBeenCalledWith('test.txt');
+    });
+
+    it('throws permission denied from statFile EACCES', async () => {
+      const mockDeps = createMockDeps({
+        statFile: vi.fn(async () => {
+          throw new Error('Permission denied: secret.txt');
+        }),
+      });
+      const tool = createFileReadTool(mockDeps);
+      await expect(tool.execute({ filePath: 'secret.txt' })).rejects.toThrow('Permission denied');
+    });
   });
 });

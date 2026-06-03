@@ -1,11 +1,8 @@
-import { stat } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
-import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import type { Tool } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
 import type { ToolDeps } from './workspace-deps.js';
-import { isBinaryFile, truncateOutput } from './workspace-deps.js';
+import { truncateOutput } from './workspace-deps.js';
 
 const MAX_LINE_LENGTH = 2000;
 const MAX_OUTPUT_BYTES = 50 * 1024; // 50KB
@@ -23,46 +20,43 @@ export function createFileReadTool(deps: ToolDeps): Tool<ZodTypeAny> {
     description: 'Read file contents with line numbers. Supports offset/limit for pagination.',
     parameters: FileReadSchema,
     async execute(args: z.infer<typeof FileReadSchema>) {
-      const absolutePath = deps.resolvePath(args.filePath);
+      // Validate path stays within workspace (resolvePath throws on traversal)
+      deps.resolvePath(args.filePath);
 
-      let fileStat;
-      try {
-        fileStat = await stat(absolutePath);
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === 'ENOENT') {
-          throw new Error(`File not found: ${args.filePath}`);
-        }
-        if (code === 'EACCES') {
-          throw new Error(`Permission denied: ${args.filePath}`);
-        }
-        throw new Error(`Failed to access file: ${args.filePath} (${(error as Error).message})`);
+      // Check file existence and type via deps (no direct Node.js stat)
+      const { exists, isFile } = await deps.statFile(args.filePath);
+      if (!exists) {
+        throw new Error(`File not found: ${args.filePath}`);
       }
-      if (!fileStat.isFile()) {
+      if (!isFile) {
         return `Error: Not a file: ${args.filePath}`;
       }
 
-      if (await isBinaryFile(absolutePath)) {
+      // Check binary via deps (no direct Node.js isbinaryfile)
+      if (await deps.isBinaryFile(args.filePath)) {
         return `Error: Cannot read binary file: ${args.filePath}`;
       }
 
+      // Read content via deps (no direct Node.js createReadStream)
+      const content = await deps.readFile(args.filePath);
+
       const offset = args.offset ?? 1;
       const limit = args.limit ?? DEFAULT_LIMIT;
-      const lines: string[] = [];
-      let totalLines = 0;
 
-      const rl = createInterface({ input: createReadStream(absolutePath, { encoding: 'utf8' }) });
-      try {
-        for await (const line of rl) {
-          totalLines++;
-          if (totalLines < offset) continue;
-          if (lines.length >= limit) continue;
-          const display =
-            line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + '...' : line;
-          lines.push(`${totalLines}:${display}`);
-        }
-      } finally {
-        rl.close();
+      // Split content into lines and apply offset/limit/line-numbering in JS
+      const allLines = content.split('\n');
+      // Remove trailing empty line from trailing newline
+      if (allLines.length > 0 && allLines[allLines.length - 1] === '') {
+        allLines.pop();
+      }
+      const totalLines = allLines.length;
+
+      const lines: string[] = [];
+      for (let i = offset - 1; i < allLines.length && lines.length < limit; i++) {
+        const line = allLines[i];
+        const display =
+          line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + '...' : line;
+        lines.push(`${i + 1}:${display}`);
       }
 
       let output = lines.join('\n');
@@ -77,8 +71,8 @@ export function createFileReadTool(deps: ToolDeps): Tool<ZodTypeAny> {
         output = `Total lines: ${totalLines}`;
       }
 
-      const { content } = truncateOutput(output, MAX_OUTPUT_BYTES);
-      return content;
+      const { content: finalContent } = truncateOutput(output, MAX_OUTPUT_BYTES);
+      return finalContent;
     },
   };
 }
