@@ -448,24 +448,31 @@ export class SandboxToolDeps implements ToolDeps {
 
   async statFile(filePath: string): Promise<{ exists: boolean; isFile: boolean }> {
     const absolute = this.resolvePath(filePath);
-    const statResult = await this.sandbox.run(
-      `test -f ${absolute} && echo FILE || (test -e ${absolute} && echo EXISTS || echo MISSING)`
-    );
-    const output = statResult.stdout.trim();
-    if (output === 'FILE') return { exists: true, isFile: true };
-    if (output === 'EXISTS') return { exists: true, isFile: false };
+    // Use separate test -f and test -d calls for reliable detection across
+    // different sandbox environments (WASM busybox may not support chained
+    // test -e with subshells consistently).
+    const fileResult = await this.sandbox.run(`test -f ${absolute} && echo YES || echo NO`);
+    if (fileResult.stdout.trim() === 'YES') return { exists: true, isFile: true };
+    const dirResult = await this.sandbox.run(`test -d ${absolute} && echo YES || echo NO`);
+    if (dirResult.stdout.trim() === 'YES') return { exists: true, isFile: false };
     return { exists: false, isFile: false };
   }
 
   async isBinaryFile(filePath: string): Promise<boolean> {
     const absolute = this.resolvePath(filePath);
-    // od reads raw bytes as hex, grep counts lines containing " 00 " (null byte)
-    const result = await this.sandbox.run(
-      `od -A n -t x1 -N 512 ${absolute} 2>/dev/null | grep -c " 00 "`
-    );
-    if (result.exitCode !== 0) return false;
-    const count = parseInt(result.stdout.trim(), 10);
-    return !isNaN(count) && count > 0;
+    // Detect null bytes by comparing file size before/after removing null bytes.
+    // Uses tr -d "\000" to strip null bytes and wc -c to count.
+    // This avoids relying on od | grep piping which behaves inconsistently
+    // in busybox/WASM environments (e.g. "(standard input):" prefix, non-zero exit).
+    const sizeResult = await this.sandbox.run(`wc -c < ${absolute}`);
+    if (sizeResult.exitCode !== 0) return false;
+    const originalSize = parseInt(sizeResult.stdout.trim(), 10);
+    if (isNaN(originalSize) || originalSize === 0) return false;
+    const strippedResult = await this.sandbox.run(`tr -d "\\000" < ${absolute} | wc -c`);
+    if (strippedResult.exitCode !== 0) return false;
+    const strippedSize = parseInt(strippedResult.stdout.trim(), 10);
+    // If sizes differ, null bytes were removed → binary file
+    return !isNaN(strippedSize) && strippedSize < originalSize;
   }
 }
 

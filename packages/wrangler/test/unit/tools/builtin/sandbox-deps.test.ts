@@ -174,4 +174,41 @@ describe.skipIf(!ENABLED)('SandboxToolDeps', () => {
       expect(output).toContain('No matches');
     });
   });
+
+  describe('statFile', () => {
+    it('should return exists=true isFile=true for a regular file', async () => {
+      writeFileSync(join(sandboxDir, 'stat-me.txt'), 'hello');
+      const result = await deps.statFile('stat-me.txt');
+      expect(result).toEqual({ exists: true, isFile: true });
+    });
+
+    it('should return exists=false for non-existent file', async () => {
+      const result = await deps.statFile('does-not-exist.txt');
+      expect(result).toEqual({ exists: false, isFile: false });
+    });
+
+    it('should return isFile=false for a subdirectory', async () => {
+      // Create a subdirectory via shell so it exists inside the sandbox
+      await deps.exec('mkdir -p subdir-for-stat');
+      const result = await deps.statFile('subdir-for-stat');
+      expect(result).toEqual({ exists: true, isFile: false });
+    });
+  });
+
+  describe('isBinaryFile', () => {
+    it('should detect binary file with null bytes', async () => {
+      // Use sandbox shell to create a binary file (printf with null bytes)
+      await deps.exec('printf "\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00hello" > binary.bin');
+      expect(await deps.isBinaryFile('binary.bin')).toBe(true);
+    });
+
+    it('should return false for text file', async () => {
+      writeFileSync(join(sandboxDir, 'text-file.txt'), 'hello world');
+      expect(await deps.isBinaryFile('text-file.txt')).toBe(false);
+    });
+
+    it('should return false for non-existent file', async () => {
+      expect(await deps.isBinaryFile('no-such-file.txt')).toBe(false);
+    });
+  });
 });
