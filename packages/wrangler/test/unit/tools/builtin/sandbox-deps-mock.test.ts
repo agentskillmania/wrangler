@@ -232,4 +232,77 @@ describe('SandboxToolDeps (mock sandbox)', () => {
       expect(sandbox.run).toHaveBeenCalledWith('grep -rn "pattern" /workspace --include="*.ts"');
     });
   });
+
+  describe('statFile', () => {
+    it('should return exists=true isFile=true when test -f succeeds', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: 'FILE',
+        stderr: '',
+        exitCode: 0,
+      });
+      const result = await deps.statFile('test.txt');
+      expect(result).toEqual({ exists: true, isFile: true });
+    });
+
+    it('should return exists=true isFile=false for directory', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: 'EXISTS',
+        stderr: '',
+        exitCode: 0,
+      });
+      const result = await deps.statFile('somedir');
+      expect(result).toEqual({ exists: true, isFile: false });
+    });
+
+    it('should return exists=false when item does not exist', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: 'MISSING',
+        stderr: '',
+        exitCode: 0,
+      });
+      const result = await deps.statFile('missing.txt');
+      expect(result).toEqual({ exists: false, isFile: false });
+    });
+  });
+
+  describe('isBinaryFile (deps method)', () => {
+    it('should return true when null bytes detected', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: '3\n',
+        stderr: '',
+        exitCode: 0,
+      });
+      expect(await deps.isBinaryFile('binary.bin')).toBe(true);
+      expect(sandbox.run).toHaveBeenCalledWith(
+        'od -A n -t x1 -N 512 /workspace/binary.bin 2>/dev/null | grep -c " 00 "'
+      );
+    });
+
+    it('should return false when no null bytes', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: '0\n',
+        stderr: '',
+        exitCode: 0,
+      });
+      expect(await deps.isBinaryFile('text.txt')).toBe(false);
+    });
+
+    it('should return false when od command fails', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: '',
+        stderr: 'error',
+        exitCode: 1,
+      });
+      expect(await deps.isBinaryFile('missing.txt')).toBe(false);
+    });
+
+    it('should return false when count is NaN', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: 'not-a-number\n',
+        stderr: '',
+        exitCode: 0,
+      });
+      expect(await deps.isBinaryFile('test.txt')).toBe(false);
+    });
+  });
 });

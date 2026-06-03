@@ -459,7 +459,10 @@ export class SandboxToolDeps implements ToolDeps {
 
   async isBinaryFile(filePath: string): Promise<boolean> {
     const absolute = this.resolvePath(filePath);
-    const result = await this.sandbox.run(`grep -c -P '[\\x00]' ${absolute}`);
+    // od reads raw bytes as hex, grep counts lines containing " 00 " (null byte)
+    const result = await this.sandbox.run(
+      `od -A n -t x1 -N 512 ${absolute} 2>/dev/null | grep -c " 00 "`
+    );
     if (result.exitCode !== 0) return false;
     const count = parseInt(result.stdout.trim(), 10);
     return !isNaN(count) && count > 0;
