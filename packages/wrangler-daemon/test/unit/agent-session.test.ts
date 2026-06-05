@@ -23,7 +23,11 @@ vi.mock('@agentskillmania/llm-client', () => ({
   }),
 }));
 vi.mock('@agentskillmania/colts', () => ({
-  createAgentState: vi.fn().mockReturnValue({ id: 'test-state' }),
+  createAgentState: vi.fn().mockReturnValue({
+    id: 'test-state',
+    config: { name: 'test', instructions: '', tools: [] },
+    context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+  }),
   addUserMessage: vi.fn((state, _msg) => state),
 }));
 
@@ -734,6 +738,63 @@ describe('AgentSession', () => {
       expect(
         ((data.agent as Record<string, unknown>).context as Record<string, unknown>).stepCount
       ).toBe(5);
+    });
+
+    it('includes session.overview and session.info in diagnostics', async () => {
+      const finalState = {
+        id: 'test-state',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [{ role: 'user', content: 'hi' }],
+          stepCount: 3,
+          createdAt: 0,
+          updatedAt: 0,
+          totalTokens: { input: 100, output: 50 },
+        },
+      };
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* stream() {
+          yield { type: 'complete' } as any;
+          return { state: finalState };
+        }
+        return stream();
+      });
+
+      const session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      const cockpitEvents: SSEEvent[] = [];
+      session.setCockpitSender((event) => cockpitEvents.push(event));
+
+      for await (const _ of session.handleMessage('hello')) {
+        // drain
+      }
+
+      const diagEvents = cockpitEvents.filter((e) => e.event === 'agent-diagnostics');
+      const data = diagEvents[diagEvents.length - 1].data as Record<string, unknown>;
+
+      // Verify session.overview
+      const overview = data.session as Record<string, Record<string, unknown>>;
+      expect(overview).toBeDefined();
+      expect(overview.overview).toBeDefined();
+      expect((overview.overview as Record<string, unknown>).agentName).toBe('test');
+      expect((overview.overview as Record<string, unknown>).model).toBe('test-model');
+      expect((overview.overview as Record<string, unknown>).stepCount).toBe(3);
+      expect((overview.overview as Record<string, unknown>).messageCount).toBe(1);
+      expect((overview.overview as Record<string, unknown>).tokensIn).toBe(100);
+      expect((overview.overview as Record<string, unknown>).tokensOut).toBe(50);
+      expect((overview.overview as Record<string, unknown>).tokensTotal).toBe(150);
+      expect((overview.overview as Record<string, unknown>).status).toBe('idle');
+
+      // Verify session.info
+      expect(overview.info).toBeDefined();
+      expect((overview.info as Record<string, unknown>).sessionId).toBe('test-state');
+      expect((overview.info as Record<string, unknown>).agentName).toBe('test');
+      expect((overview.info as Record<string, unknown>).model).toBe('test-model');
+      expect((overview.info as Record<string, unknown>).workspacePath).toBe('/tmp/test');
+      expect((overview.info as Record<string, unknown>).tokensIn).toBe(100);
     });
 
     it('does not forward events after cockpitSender cleared', async () => {

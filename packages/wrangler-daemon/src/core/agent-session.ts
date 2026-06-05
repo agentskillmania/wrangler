@@ -38,6 +38,10 @@ export interface AgentSessionOptions {
   mcpConfigPaths?: string[];
   sessionBaseDir?: string;
   sessionStore?: SessionStore;
+  /** SessionManager instance for reading runtime status. */
+  sessionManager?: { getStatus(id: string): string };
+  /** Agent definition file path. */
+  agentConfigPath?: string;
   // EnhancedRunner options — all optional with defaults matching current behavior
   builtinTools?: {
     fileRead?: boolean;
@@ -89,6 +93,8 @@ export class AgentSession {
   private abortController: AbortController | null = null;
   private bridge: AskHumanBridge;
   private sessionStore: SessionStore | undefined;
+  private readonly sessionManager?: { getStatus(id: string): string };
+  private readonly agentConfigPath?: string;
   private _busy = false;
   /** Latest LLM request captured from llm:request stream events */
   private lastLLMRequest: { messages: unknown[]; tools?: unknown[]; skill?: string } | null = null;
@@ -119,6 +125,8 @@ export class AgentSession {
     this.skillRegistrySnapshot = runner.getSkillInfo();
     this.bridge = bridge;
     this.sessionStore = options.sessionStore;
+    this.sessionManager = options.sessionManager;
+    this.agentConfigPath = options.agentConfigPath;
     this.sessionId = options.sessionId ?? state.id;
     this.workspacePath = options.workspacePath;
     this.agentName = options.agentName;
@@ -237,11 +245,14 @@ export class AgentSession {
 
   /**
    * Build unified diagnostics snapshot combining runner config, agent state,
-   * and latest LLM context.
+   * latest LLM context, and session metadata.
    *
    * @returns Unified AgentDiagnostics payload
    */
-  private buildDiagnostics(): Record<string, unknown> {
+  private async buildDiagnostics(): Promise<Record<string, unknown>> {
+    const sessionOverview = await this.buildSessionOverview();
+    const sessionInfo = this.buildSessionInfo();
+
     return {
       runner: this.runner.getConfig(),
       agent: this.state,
@@ -249,6 +260,65 @@ export class AgentSession {
       tools: this.toolRegistrySnapshot,
       skills: this.skillRegistrySnapshot,
       systemPrompt: this.lastSystemPrompt,
+      session: {
+        overview: sessionOverview,
+        info: sessionInfo,
+      },
+    };
+  }
+
+  /**
+   * Build session overview from SessionStore metadata and agent context.
+   * Reads persisted metadata (title, timestamps) from disk.
+   */
+  private async buildSessionOverview() {
+    const meta = this.sessionStore ? await this.sessionStore.getMeta(this.sessionId) : null;
+    const runnerConfig = this.runner.getConfig();
+    const ctx = this.state?.context;
+
+    return {
+      title: meta?.title,
+      agentName: this.state?.config?.name ?? '',
+      model: this.model,
+      stepCount: ctx?.stepCount ?? 0,
+      messageCount: ctx?.messages?.length ?? 0,
+      tokensIn: ctx?.totalTokens?.input,
+      tokensOut: ctx?.totalTokens?.output,
+      tokensTotal:
+        ctx?.totalTokens?.input != null && ctx?.totalTokens?.output != null
+          ? ctx.totalTokens.input + ctx.totalTokens.output
+          : undefined,
+      estimatedContextSize: ctx?.estimatedContextSize,
+      contextWindow: runnerConfig.contextWindow,
+      status: (this.sessionManager?.getStatus(this.sessionId) ?? 'idle') as string,
+      createdAt: meta?.createdAt ?? new Date().toISOString(),
+      updatedAt: meta?.updatedAt ?? new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Build session info with paths and configuration details.
+   * Synchronous — only reads from in-memory state and config.
+   */
+  private buildSessionInfo() {
+    const runnerConfig = this.runner.getConfig();
+    const ctx = this.state?.context;
+
+    return {
+      sessionId: this.sessionId,
+      agentName: this.state?.config?.name ?? '',
+      agentConfigPath: this.agentConfigPath,
+      model: this.model,
+      tokensIn: ctx?.totalTokens?.input,
+      tokensOut: ctx?.totalTokens?.output,
+      tokensTotal:
+        ctx?.totalTokens?.input != null && ctx?.totalTokens?.output != null
+          ? ctx.totalTokens.input + ctx.totalTokens.output
+          : undefined,
+      workspacePath: this.workspacePath ?? '',
+      sessionPath: this.sessionStore?.getSessionDir?.(this.sessionId),
+      skillDirs: runnerConfig.skillDirs ?? [],
+      mcpConfigPaths: runnerConfig.mcpConfigPaths ?? [],
     };
   }
 
@@ -281,8 +351,10 @@ export class AgentSession {
       for (const event of this.eventHistory) {
         sender(event);
       }
-      // Send unified diagnostics snapshot
-      sender({ event: 'agent-diagnostics', data: this.buildDiagnostics() });
+      // Send unified diagnostics snapshot (async — fire and forget)
+      this.buildDiagnostics().then((data) => {
+        sender({ event: 'agent-diagnostics', data });
+      });
     }
   }
 
@@ -292,7 +364,9 @@ export class AgentSession {
    * Called after each conversation round completes.
    */
   sendStateSnapshot(): void {
-    this.bridge.cockpitSender?.({ event: 'agent-diagnostics', data: this.buildDiagnostics() });
+    this.buildDiagnostics().then((data) => {
+      this.bridge.cockpitSender?.({ event: 'agent-diagnostics', data });
+    });
   }
 
   /**
