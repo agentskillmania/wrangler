@@ -181,6 +181,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       skillDirs: body.config?.skillDirs ?? agentDetail.skillDirs,
       mcpConfigPaths: body.config?.mcpConfigPaths ?? agentDetail.mcpPaths,
       sessionBaseDir: sessionManager().baseDir,
+      sessionManager: sessionManager(),
+      agentConfigPath: agentDetail.path,
       // New config fields from request body
       builtinTools: body.config?.builtinTools as AgentSessionOptions['builtinTools'],
       enableSession: body.config?.enableSession,
@@ -250,6 +252,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     let agentSession = sessionManager().getAgentSession(sessionId);
     if (!agentSession) {
       const store = sessionManager().getSessionStore(info.workspacePath);
+      // Look up agent to get config path for diagnostics
+      const agentDetail = await resourceManager().getAgent(info.agentName);
       const sessionOptions: AgentSessionOptions = {
         sessionId,
         workspacePath: info.workspacePath,
@@ -257,6 +261,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         model: info.model,
         sessionStore: store,
         sessionBaseDir: sessionManager().baseDir,
+        sessionManager: sessionManager(),
+        agentConfigPath: agentDetail?.path,
       };
       const config = configManager().get();
       agentSession = await AgentSession.create(sessionOptions, config);
