@@ -266,6 +266,19 @@ export class EnhancedRunner {
       });
     }
 
+    // Capture context window for diagnostics regardless of compression
+    let contextWindow: number | undefined;
+    try {
+      const meta = (
+        options.llmClient as unknown as {
+          getModelMeta?: (model: string) => { contextWindow: number; maxTokens: number };
+        }
+      ).getModelMeta?.(options.model ?? 'glm-5.1');
+      contextWindow = meta?.contextWindow;
+    } catch {
+      // Model not found in registry
+    }
+
     // Build tool registry and optionally wrap with confirmation
     let finalToolRegistry: import('@agentskillmania/colts').IToolRegistry | undefined;
     if (options.confirmHandler) {
@@ -332,6 +345,7 @@ export class EnhancedRunner {
         ...a2uiMiddleware.map((m) => (m as { name?: string }).name ?? 'a2ui'),
       ].filter(Boolean) as string[],
       compressorEnabled: !!compressorInstance,
+      contextWindow,
     };
 
     return new EnhancedRunner(runner, resolvedConfig);

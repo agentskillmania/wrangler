@@ -100,4 +100,6 @@ export interface ResolvedRunnerConfig {
   middlewareNames: string[];
   /** Whether context compression is configured */
   compressorEnabled: boolean;
+  /** Context window size for the model (from llm-client ModelMeta). Undefined if unknown. */
+  contextWindow?: number;
 }
