@@ -44,7 +44,7 @@ export function createSessionSupport(options: {
 } {
   const sessionBaseDir = options.sessionBaseDir ?? DEFAULT_SESSION_BASE_DIR;
   const store = new SessionStore(sessionBaseDir, options.workspacePath);
-  const middleware = createSessionMiddleware(store);
+  const middleware = createSessionMiddleware({ store });
 
   const tools: Tool<ZodTypeAny>[] = [widenTool(calculatorTool)];
   if (options.askHumanHandler) {

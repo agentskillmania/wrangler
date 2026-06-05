@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -22,7 +22,7 @@ describe('createSessionMiddleware', () => {
     testBaseDir = join(tmpdir(), `wrangler-test-mw-${Date.now()}`);
     await mkdir(testBaseDir, { recursive: true });
     store = new SessionStore(testBaseDir, '/test/workspace');
-    middleware = createSessionMiddleware(store);
+    middleware = createSessionMiddleware({ store });
   });
 
   afterEach(async () => {
@@ -85,6 +85,52 @@ describe('createSessionMiddleware', () => {
       await middleware.beforeRun!({ state, runnerOptions: mockRunnerOptions });
       const entries = await store.readEntries(state.id);
       expect(entries).toHaveLength(0);
+    });
+  });
+
+  describe('Phase 1 — initial title from first user message', () => {
+    it('should set initial title from first user message on new session', async () => {
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, 'How do I build a REST API with Express?');
+      await middleware.beforeRun!({ state, runnerOptions: mockRunnerOptions });
+
+      const meta = await store.getMeta(state.id);
+      expect(meta!.title).toBe('How do I build a REST API with Express?');
+    });
+
+    it('should truncate long user messages for initial title', async () => {
+      const longMsg =
+        'This is a very long message that exceeds the maximum title length limit and should be truncated to fit within the constraints of the title field properly';
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, longMsg);
+      await middleware.beforeRun!({ state, runnerOptions: mockRunnerOptions });
+
+      const meta = await store.getMeta(state.id);
+      expect(meta!.title).toBeDefined();
+      expect(meta!.title!.length).toBeLessThanOrEqual(50);
+    });
+
+    it('should not update title on existing session (subsequent run)', async () => {
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, 'First message');
+      // Pre-create the session so beforeRun skips creation
+      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.updateMeta(state.id, { title: 'Existing Title' });
+
+      await middleware.beforeRun!({ state, runnerOptions: mockRunnerOptions });
+
+      const meta = await store.getMeta(state.id);
+      // Title should remain unchanged because the session already existed
+      expect(meta!.title).toBe('Existing Title');
+    });
+
+    it('should set title to "Untitled" for empty user message', async () => {
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, '');
+      await middleware.beforeRun!({ state, runnerOptions: mockRunnerOptions });
+
+      const meta = await store.getMeta(state.id);
+      expect(meta!.title).toBe('Untitled');
     });
   });
 
@@ -258,6 +304,198 @@ describe('createSessionMiddleware', () => {
       const meta = await store.getMeta(state.id);
       expect(typeof meta!.updatedAt).toBe('string');
       expect(meta!.updatedAt.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Phase 2 — LLM title upgrade', () => {
+    it('should upgrade title via LLM when stepCount <= 1 and title is Untitled', async () => {
+      const execute = vi.fn().mockResolvedValue('REST API Building Guide');
+      const mw = createSessionMiddleware({ store, llmClient: { execute } });
+
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, '');
+      // stepCount defaults to 0 in createAgentState
+      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.updateMeta(state.id, { title: 'Untitled' });
+
+      // Add assistant message so the LLM prompt has content
+      state = addAssistantMessage(state, 'Here is how you build a REST API...');
+
+      await mw.afterRun!({
+        state,
+        result: { type: 'completed', reason: 'done', state } as unknown as never,
+        runnerOptions: mockRunnerOptions,
+      });
+
+      expect(execute).toHaveBeenCalledTimes(1);
+      const meta = await store.getMeta(state.id);
+      expect(meta!.title).toBe('REST API Building Guide');
+    });
+
+    it('should upgrade title via LLM when stepCount <= 1 and title is missing', async () => {
+      const execute = vi.fn().mockResolvedValue('Express Tutorial');
+      const mw = createSessionMiddleware({ store, llmClient: { execute } });
+
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, 'How do I use Express?');
+      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      // Do not set title — it will be undefined
+
+      state = addAssistantMessage(state, 'Express is a web framework...');
+
+      await mw.afterRun!({
+        state,
+        result: { type: 'completed', reason: 'done', state } as unknown as never,
+        runnerOptions: mockRunnerOptions,
+      });
+
+      expect(execute).toHaveBeenCalledTimes(1);
+      const meta = await store.getMeta(state.id);
+      expect(meta!.title).toBe('Express Tutorial');
+    });
+
+    it('should strip quotes from LLM response', async () => {
+      const execute = vi.fn().mockResolvedValue('"REST API Guide"');
+      const mw = createSessionMiddleware({ store, llmClient: { execute } });
+
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, '');
+      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.updateMeta(state.id, { title: 'Untitled' });
+      state = addAssistantMessage(state, 'response');
+
+      await mw.afterRun!({
+        state,
+        result: { type: 'completed', reason: 'done', state } as unknown as never,
+        runnerOptions: mockRunnerOptions,
+      });
+
+      const meta = await store.getMeta(state.id);
+      expect(meta!.title).toBe('REST API Guide');
+    });
+
+    it('should skip Phase 2 when stepCount > 1', async () => {
+      const execute = vi.fn().mockResolvedValue('Should not be called');
+      const mw = createSessionMiddleware({ store, llmClient: { execute } });
+
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, 'Hello');
+      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.updateMeta(state.id, { title: 'Untitled' });
+      state = addAssistantMessage(state, 'Hi there');
+
+      // Manually bump stepCount to simulate multi-step run
+      state = { ...state, context: { ...state.context, stepCount: 5 } };
+
+      await mw.afterRun!({
+        state,
+        result: { type: 'completed', reason: 'done', state } as unknown as never,
+        runnerOptions: mockRunnerOptions,
+      });
+
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('should skip Phase 2 when llmClient is not provided', async () => {
+      // middleware created without llmClient (default behavior)
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, 'Hello');
+      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.updateMeta(state.id, { title: 'Untitled' });
+      state = addAssistantMessage(state, 'Hi there');
+
+      await middleware.afterRun!({
+        state,
+        result: { type: 'completed', reason: 'done', state } as unknown as never,
+        runnerOptions: mockRunnerOptions,
+      });
+
+      // Title should remain Untitled — no LLM upgrade
+      const meta = await store.getMeta(state.id);
+      expect(meta!.title).toBe('Untitled');
+    });
+
+    it('should not crash when LLM execute throws', async () => {
+      const execute = vi.fn().mockRejectedValue(new Error('LLM timeout'));
+      const mw = createSessionMiddleware({ store, llmClient: { execute } });
+
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, 'Hello');
+      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.updateMeta(state.id, { title: 'Untitled' });
+      state = addAssistantMessage(state, 'Hi there');
+
+      // Should not throw
+      await mw.afterRun!({
+        state,
+        result: { type: 'completed', reason: 'done', state } as unknown as never,
+        runnerOptions: mockRunnerOptions,
+      });
+
+      // Title should remain unchanged after error
+      const meta = await store.getMeta(state.id);
+      expect(meta!.title).toBe('Untitled');
+    });
+
+    it('should skip Phase 2 when title is already set and not Untitled', async () => {
+      const execute = vi.fn().mockResolvedValue('Should not be called');
+      const mw = createSessionMiddleware({ store, llmClient: { execute } });
+
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, 'Hello');
+      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.updateMeta(state.id, { title: 'My Custom Title' });
+      state = addAssistantMessage(state, 'Hi there');
+
+      await mw.afterRun!({
+        state,
+        result: { type: 'completed', reason: 'done', state } as unknown as never,
+        runnerOptions: mockRunnerOptions,
+      });
+
+      expect(execute).not.toHaveBeenCalled();
+      const meta = await store.getMeta(state.id);
+      expect(meta!.title).toBe('My Custom Title');
+    });
+
+    it('should skip Phase 2 when no assistant message exists', async () => {
+      const execute = vi.fn().mockResolvedValue('Should not be called');
+      const mw = createSessionMiddleware({ store, llmClient: { execute } });
+
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, 'Hello');
+      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.updateMeta(state.id, { title: 'Untitled' });
+      // No assistant message added
+
+      await mw.afterRun!({
+        state,
+        result: { type: 'completed', reason: 'done', state } as unknown as never,
+        runnerOptions: mockRunnerOptions,
+      });
+
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('should not update title when LLM returns empty string', async () => {
+      const execute = vi.fn().mockResolvedValue('   ');
+      const mw = createSessionMiddleware({ store, llmClient: { execute } });
+
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, 'Hello');
+      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.updateMeta(state.id, { title: 'Untitled' });
+      state = addAssistantMessage(state, 'Hi there');
+
+      await mw.afterRun!({
+        state,
+        result: { type: 'completed', reason: 'done', state } as unknown as never,
+        runnerOptions: mockRunnerOptions,
+      });
+
+      const meta = await store.getMeta(state.id);
+      // Title should remain Untitled because LLM returned whitespace-only
+      expect(meta!.title).toBe('Untitled');
     });
   });
 });

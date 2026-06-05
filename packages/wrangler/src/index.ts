@@ -14,6 +14,7 @@ export { writeMeta, readMeta } from './session/meta.js';
 
 // Middleware (advanced usage)
 export { createSessionMiddleware } from './middleware/session-middleware.js';
+export type { SessionNamingDeps } from './middleware/session-middleware.js';
 
 // Runner (Layer 2)
 export { EnhancedRunner, buildTimeContext } from './runner/index.js';
