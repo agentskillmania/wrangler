@@ -12,6 +12,7 @@ import { LLMClient } from '@agentskillmania/llm-client';
 import { EnhancedRunner, SessionStore } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
+import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
 
 /**
  * Bridge between AskHumanHandler closure and AgentSession instance.
@@ -271,7 +272,7 @@ export class AgentSession {
    * Build session overview from SessionStore metadata and agent context.
    * Reads persisted metadata (title, timestamps) from disk.
    */
-  private async buildSessionOverview() {
+  private async buildSessionOverview(): Promise<SessionOverview> {
     const meta = this.sessionStore ? await this.sessionStore.getMeta(this.sessionId) : null;
     const runnerConfig = this.runner.getConfig();
     const ctx = this.state?.context;
@@ -290,7 +291,7 @@ export class AgentSession {
           : undefined,
       estimatedContextSize: ctx?.estimatedContextSize,
       contextWindow: runnerConfig.contextWindow,
-      status: (this.sessionManager?.getStatus(this.sessionId) ?? 'idle') as string,
+      status: (this.sessionManager?.getStatus(this.sessionId) ?? 'idle') as SessionStatus,
       createdAt: meta?.createdAt ?? new Date().toISOString(),
       updatedAt: meta?.updatedAt ?? new Date().toISOString(),
     };
@@ -300,7 +301,7 @@ export class AgentSession {
    * Build session info with paths and configuration details.
    * Synchronous — only reads from in-memory state and config.
    */
-  private buildSessionInfo() {
+  private buildSessionInfo(): SessionInfo {
     const runnerConfig = this.runner.getConfig();
     const ctx = this.state?.context;
 
