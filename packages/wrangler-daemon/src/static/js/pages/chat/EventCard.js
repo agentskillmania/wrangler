@@ -21,6 +21,7 @@ var TAG_COLORS = {
   phase: { label: 'phase', bg: 'rgba(139,148,158,0.06)', fg: 'var(--text-muted)' },
   llm: { label: 'llm', bg: 'rgba(139,148,158,0.06)', fg: 'var(--text-muted)' },
   subagent: { label: 'subagent', bg: 'rgba(168,85,247,0.12)', fg: '#a855f7' },
+  ask: { label: 'ask', bg: 'rgba(88,166,255,0.12)', fg: 'var(--accent)' },
 };
 
 // Map raw SSE event name to card tag
@@ -35,11 +36,14 @@ export function eventToTag(ev) {
   if (ev === 'phase-change') return 'phase';
   if (ev === 'llm-request' || ev === 'llm-response') return 'llm';
   if (ev === 'subagent-start' || ev === 'subagent-end') return 'subagent';
+  if (ev === 'compressing' || ev === 'compressed') return 'step';
+  if (ev === 'waiting-human' || ev === 'human-input' || ev === 'human-input-resolved') return 'ask';
   if (ev === 'error') return 'error';
   if (ev === 'done') return 'done';
   if (ev === 'agent-state') return 'session';
   if (ev === 'runner-config') return 'session';
   if (ev === 'message' || ev === 'raw') return 'step';
+  if (ev.startsWith('devtool:')) return 'step';
   console.warn('[playground] Unmapped SSE event type:', ev);
   return 'step';
 }
@@ -75,6 +79,27 @@ export function formatEventData(ev, p) {
   if (ev === 'llm-response') return 'LLM response received';
   if (ev === 'subagent-start') return 'Sub-agent: ' + p.name + (p.task ? '\n' + p.task : '');
   if (ev === 'subagent-end') return 'Sub-agent done: ' + p.name + (p.result ? '\n' + String(p.result) : '');
+  if (ev === 'compressing') return 'Compressing context...';
+  if (ev === 'compressed') return 'Context compressed: ' + (p.summary || '') + ' (' + (p.removedCount || 0) + ' removed)';
+  if (ev === 'waiting-human') return 'Waiting for human input: ' + JSON.stringify(p.request || {});
+  if (ev === 'human-input') {
+    var questions = Array.isArray(p.questions) ? p.questions.join('; ') : String(p.questions || '');
+    return 'Human input requested (' + (p.requestId || '') + '): ' + questions;
+  }
+  if (ev === 'human-input-resolved') return 'Human input resolved: ' + (p.requestId || '');
+  if (ev.startsWith('devtool:')) {
+    if (ev === 'devtool:token') return p.delta || '';
+    if (ev === 'devtool:thinking') return p.content || '';
+    if (ev === 'devtool:tool-start') return 'Devtool tool: ' + (p.name || '') + '\n' + JSON.stringify(p.args || {}, null, 2);
+    if (ev === 'devtool:tool-end') return 'Devtool tool done: ' + (p.callId || '') + ' -> ' + String(p.result || '');
+    if (ev === 'devtool:round-start') return 'Round ' + ((p.round || 0) + 1) + ' / ' + (p.maxRounds || '?');
+    if (ev === 'devtool:generation-done') return 'Generation complete';
+    if (ev === 'devtool:review-start') return 'Review starting...';
+    if (ev === 'devtool:review-done') return 'Review done: ' + (p.passed ? 'PASSED' : 'FAILED');
+    if (ev === 'devtool:complete') return 'Devtool complete';
+    if (ev === 'devtool:error') return 'Devtool error: ' + (p.message || '');
+    return 'Devtool: ' + ev;
+  }
   if (ev === 'done') return 'Stream complete' + (p.aborted ? ' (aborted)' : '');
   if (ev === 'error') return p.message || 'Unknown error';
   return JSON.stringify(p, null, 2);
