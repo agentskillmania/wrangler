@@ -7,7 +7,8 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc && node -e \"const fs=require('fs'),path=require('path');function copyRecursive(src,dest){if(!fs.existsSync(src))return;fs.mkdirSync(dest,{recursive:true});for(const e of fs.readdirSync(src,{withFileTypes:true})){const s=path.join(src,e.name);const d=path.join(dest,e.name);if(e.isDirectory()){copyRecursive(s,d)}else if(e.isFile()&&e.name.endsWith('.md')){fs.copyFileSync(s,d)}}}copyRecursive(path.join('src','spec-plan','skills'),path.join('dist','spec-plan','skills'))\"",
