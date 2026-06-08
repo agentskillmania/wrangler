@@ -107,12 +107,6 @@ export class Daemon {
       }
     });
 
-    this.fastify.get('/playground.js', async (_request, reply) => {
-      if (!(await serveStatic('playground.js', reply))) {
-        reply.code(404).send({ error: 'JS not found' });
-      }
-    });
-
     // Serve vendor static files (third-party libs: preact, htm, codemirror, json-formatter)
     this.fastify.get('/vendor/*', async (request, reply) => {
       const filename = (request.params as { '*': string })['*'];
