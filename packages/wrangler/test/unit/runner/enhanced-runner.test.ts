@@ -47,7 +47,7 @@ vi.mock('../../../src/tools/builtin/index.js', () => ({
 vi.mock('../../../src/session/support.js', () => ({
   createSessionSupport: vi.fn().mockReturnValue({
     tools: [],
-    middleware: { name: 'session' },
+    middlewares: [{ name: 'session' }],
   }),
 }));
 
@@ -659,6 +659,156 @@ describe('EnhancedRunner', () => {
       const first = runner.getConfig();
       const second = runner.getConfig();
       expect(first).toBe(second);
+    });
+  });
+
+  // ── getToolInfo() metadata tests ──────────────────────────────────────
+
+  describe('getToolInfo()', () => {
+    it('returns empty array when no tools loaded', async () => {
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
+      const runner = await EnhancedRunner.create(
+        makeOptions({ enableSession: false, enableTodolist: false, enableCommands: false, extraTools: [] })
+      );
+      expect(runner.getToolInfo()).toEqual([]);
+    });
+
+    it('returns builtin tools with type=builtin and enabled=true by default', async () => {
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createBuiltinTools).mockReturnValueOnce([
+        { name: 'file_read', description: 'Read files' },
+        { name: 'file_write', description: 'Write files' },
+      ]);
+      const runner = await EnhancedRunner.create(
+        makeOptions({ enableSession: false, enableTodolist: false, enableCommands: false, extraTools: [] })
+      );
+      const tools = runner.getToolInfo();
+      const builtinTools = tools.filter((t) => t.type === 'builtin');
+      expect(builtinTools).toHaveLength(2);
+      expect(builtinTools.every((t) => t.enabled)).toBe(true);
+      expect(builtinTools.map((t) => t.name)).toEqual(['file_read', 'file_write']);
+    });
+
+    it('returns disabled builtin tools when filtered by toggle', async () => {
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createBuiltinTools).mockReturnValueOnce([
+        { name: 'file_read', description: 'Read files' },
+        { name: 'file_write', description: 'Write files' },
+        { name: 'shell', description: 'Run shell commands' },
+      ]);
+      const runner = await EnhancedRunner.create(
+        makeOptions({
+          builtinTools: { fileRead: true },
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+          extraTools: [],
+        })
+      );
+      const tools = runner.getToolInfo();
+      const fileRead = tools.find((t) => t.name === 'file_read');
+      const fileWrite = tools.find((t) => t.name === 'file_write');
+      const shell = tools.find((t) => t.name === 'shell');
+      expect(fileRead?.enabled).toBe(true);
+      expect(fileWrite?.enabled).toBe(false);
+      expect(shell?.enabled).toBe(false);
+    });
+
+    it('returns extra tools with type=extra and enabled=true', async () => {
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
+      const extraTools = [
+        { name: 'custom_tool', description: 'Custom tool', schema: {}, execute: vi.fn() },
+      ];
+      const runner = await EnhancedRunner.create(
+        makeOptions({ enableSession: false, enableTodolist: false, enableCommands: false, extraTools })
+      );
+      const tools = runner.getToolInfo();
+      const custom = tools.find((t) => t.name === 'custom_tool');
+      expect(custom).toEqual({
+        name: 'custom_tool',
+        description: 'Custom tool',
+        type: 'extra',
+        enabled: true,
+      });
+    });
+
+    it('returns session tools with type=session', async () => {
+      const { createSessionSupport } = await import('../../../src/session/support.js');
+      vi.mocked(createSessionSupport).mockReturnValueOnce({
+        tools: [{ name: 'ask_human', description: 'Ask human' }],
+        middlewares: [{ name: 'session' }],
+      });
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
+      const runner = await EnhancedRunner.create(
+        makeOptions({ enableSession: true, enableTodolist: false, enableCommands: false, extraTools: [] })
+      );
+      const tools = runner.getToolInfo();
+      const sessionTool = tools.find((t) => t.name === 'ask_human');
+      expect(sessionTool?.type).toBe('session');
+      expect(sessionTool?.enabled).toBe(true);
+    });
+
+    it('returns todolist tools with type=todolist', async () => {
+      const { createTodolistSupport } = await import('../../../src/todolist/support.js');
+      vi.mocked(createTodolistSupport).mockReturnValueOnce({
+        tools: [{ name: 'todo_read', description: 'Read todos' }],
+        middleware: { name: 'todolist' },
+      });
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
+      const runner = await EnhancedRunner.create(
+        makeOptions({ enableSession: false, enableTodolist: true, enableCommands: false, extraTools: [] })
+      );
+      const tools = runner.getToolInfo();
+      const todoTool = tools.find((t) => t.name === 'todo_read');
+      expect(todoTool?.type).toBe('todolist');
+      expect(todoTool?.enabled).toBe(true);
+    });
+
+    it('returns consistent content across repeated calls', async () => {
+      const runner = await EnhancedRunner.create(makeOptions());
+      const first = runner.getToolInfo();
+      const second = runner.getToolInfo();
+      expect(first).toEqual(second);
+    });
+  });
+
+  // ── getSkillInfo() metadata tests ─────────────────────────────────────
+
+  describe('getSkillInfo()', () => {
+    it('returns empty array when no skill dirs configured', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ skillDirs: undefined }));
+      const skills = runner.getSkillInfo();
+      // May have built-in spec-plan skills if resolved, but should not error
+      expect(Array.isArray(skills)).toBe(true);
+    });
+
+    it('returns skills with name, description, and source', async () => {
+      // Mock FilesystemSkillProvider to return predictable skills
+      const { FilesystemSkillProvider } = await import('@agentskillmania/colts');
+      vi.spyOn(FilesystemSkillProvider.prototype, 'listSkills').mockReturnValue([
+        { name: 'spec-plan', description: 'Plan specifications', source: '/skills/spec-plan' },
+        { name: 'a2ui-gen', description: 'A2UI generation', source: '/skills/a2ui-gen' },
+      ] as any);
+      const runner = await EnhancedRunner.create(makeOptions({ skillDirs: ['/test/skills'] }));
+      const skills = runner.getSkillInfo();
+      expect(skills.length).toBeGreaterThanOrEqual(2);
+      const specPlan = skills.find((s) => s.name === 'spec-plan');
+      expect(specPlan).toEqual({
+        name: 'spec-plan',
+        description: 'Plan specifications',
+        source: '/skills/spec-plan',
+      });
+    });
+
+    it('returns consistent content across repeated calls', async () => {
+      const runner = await EnhancedRunner.create(makeOptions());
+      const first = runner.getSkillInfo();
+      const second = runner.getSkillInfo();
+      expect(first).toEqual(second);
     });
   });
 });

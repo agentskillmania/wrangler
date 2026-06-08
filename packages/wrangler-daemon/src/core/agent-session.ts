@@ -13,6 +13,7 @@ import { EnhancedRunner, SessionStore } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
+import type { RunnerFeatureFlags } from './session-diagnostics.js';
 
 /**
  * Bridge between AskHumanHandler closure and AgentSession instance.
@@ -99,10 +100,6 @@ export class AgentSession {
   private _busy = false;
   /** Latest LLM request captured from llm:request stream events */
   private lastLLMRequest: { messages: unknown[]; tools?: unknown[]; skill?: string } | null = null;
-  /** Tool registry snapshot extracted from llm-request events */
-  private toolRegistrySnapshot: Array<{ name: string; description: string }> = [];
-  /** Skill registry snapshot accumulated from skill stream events */
-  private skillRegistrySnapshot: Array<{ name: string; description: string }> = [];
   /** Full system prompt extracted from first message of llm-request */
   private lastSystemPrompt: string | null = null;
 
@@ -121,9 +118,6 @@ export class AgentSession {
   ) {
     this.runner = runner;
     this.state = state;
-    // Capture tool and skill info at creation time (static, does not change)
-    this.toolRegistrySnapshot = runner.getToolInfo();
-    this.skillRegistrySnapshot = runner.getSkillInfo();
     this.bridge = bridge;
     this.sessionStore = options.sessionStore;
     this.sessionManager = options.sessionManager;
@@ -245,7 +239,7 @@ export class AgentSession {
   }
 
   /**
-   * Build unified diagnostics snapshot combining runner config, agent state,
+   * Build unified diagnostics snapshot combining runner capabilities, agent state,
    * latest LLM context, and session metadata.
    *
    * @returns Unified AgentDiagnostics payload
@@ -253,13 +247,27 @@ export class AgentSession {
   private async buildDiagnostics(): Promise<Record<string, unknown>> {
     const sessionOverview = await this.buildSessionOverview();
     const sessionInfo = this.buildSessionInfo();
+    const config = this.runner.getConfig();
+
+    const features: RunnerFeatureFlags = {
+      sandbox: config.sandbox,
+      thinkingEnabled: config.thinkingEnabled,
+      enablePromptThinking: config.enablePromptThinking,
+      a2uiEnabled: config.a2ui?.enabled ?? false,
+      compressorEnabled: config.compressorEnabled,
+      enableSession: config.enableSession,
+      enableTodolist: config.enableTodolist,
+      enableCommands: config.enableCommands,
+    };
 
     return {
-      runner: this.runner.getConfig(),
+      runner: {
+        features,
+        tools: this.runner.getToolInfo(),
+        skills: this.runner.getSkillInfo(),
+      },
       agent: this.state,
       llm: this.lastLLMRequest,
-      tools: this.toolRegistrySnapshot,
-      skills: this.skillRegistrySnapshot,
       systemPrompt: this.lastSystemPrompt,
       session: {
         overview: sessionOverview,

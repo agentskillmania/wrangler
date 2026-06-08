@@ -24,13 +24,15 @@ describe('createSessionSupport', () => {
     vi.restoreAllMocks();
   });
 
-  it('should return middleware, store, and tools', () => {
+  it('should return middlewares, store, and tools', () => {
     const result = createSessionSupport({
       workspacePath: '/test',
       sessionBaseDir: testBaseDir,
     });
 
-    expect(result.middleware.name).toBe('session');
+    expect(result.middlewares).toHaveLength(2);
+    expect(result.middlewares[0].name).toBe('session');
+    expect(result.middlewares[1].name).toBe('session-naming');
     expect(typeof result.store.exists).toBe('function');
     expect(result.tools).toHaveLength(1);
   });
@@ -82,13 +84,13 @@ describe('createSessionSupport', () => {
 
   // ── Middleware behavioral contract tests ────────────────────────────────
 
-  describe('middleware', () => {
+  describe('middlewares', () => {
     it('should have correct name', () => {
       const result = createSessionSupport({
         workspacePath: '/test',
         sessionBaseDir: testBaseDir,
       });
-      expect(result.middleware.name).toBe('session');
+      expect(result.middlewares[0].name).toBe('session');
     });
 
     it('should create session in beforeRun when session does not exist', async () => {
@@ -104,7 +106,7 @@ describe('createSessionSupport', () => {
         context: { messages: [] },
       };
 
-      await result.middleware.beforeRun!({
+      await result.middlewares[0].beforeRun!({
         state: mockState as any,
         runnerOptions: { model: 'gpt-4' },
       });
@@ -127,7 +129,7 @@ describe('createSessionSupport', () => {
 
       // Should resolve without error — no user message to record
       await expect(
-        result.middleware.beforeRun!({
+        result.middlewares[0].beforeRun!({
           state: mockState as any,
           runnerOptions: { model: 'gpt-4' },
         })
@@ -146,7 +148,7 @@ describe('createSessionSupport', () => {
         context: { messages: [] },
       };
 
-      const hookResult = await result.middleware.beforeRun!({
+      const hookResult = await result.middlewares[0].beforeRun!({
         state: mockState as any,
         runnerOptions: { model: 'gpt-4' },
       });

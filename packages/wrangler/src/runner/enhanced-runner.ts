@@ -22,7 +22,7 @@ import type { ZodTypeAny } from 'zod';
 
 import { MarkdownMessageAssembler } from './markdown-assembler.js';
 import { buildTimeContext } from './system-prompt.js';
-import type { EnhancedRunnerOptions, ResolvedRunnerConfig } from './types.js';
+import type { EnhancedRunnerOptions, ResolvedRunnerConfig, ToolMetadata, SkillMetadata } from './types.js';
 import { createCommandMiddleware } from '../command/command-middleware.js';
 import { createClearHandler } from '../command/handlers/clear.js';
 import { createCompactHandler } from '../command/handlers/compact.js';
@@ -75,33 +75,38 @@ function resolveSearchProvider(provider?: SearchProvider | 'bing' | 'sogou'): Se
 export class EnhancedRunner {
   private readonly innerRunner: AgentRunner;
   private readonly resolvedConfig: ResolvedRunnerConfig;
+  /** Tool metadata map: tool name → enriched info with type and enabled state. */
+  private readonly toolMetadataMap: Map<string, ToolMetadata>;
+  /** Skill metadata list with source paths. */
+  private readonly skillMetadataList: SkillMetadata[];
 
-  private constructor(runner: AgentRunner, config: ResolvedRunnerConfig) {
+  private constructor(
+    runner: AgentRunner,
+    config: ResolvedRunnerConfig,
+    toolMetadataMap: Map<string, ToolMetadata>,
+    skillMetadataList: SkillMetadata[]
+  ) {
     this.innerRunner = runner;
     this.resolvedConfig = config;
+    this.toolMetadataMap = toolMetadataMap;
+    this.skillMetadataList = skillMetadataList;
   }
 
   /**
-   * Get tool list with name and description for diagnostics
+   * Get tool list with name, description, type, and enabled state for diagnostics.
+   * Built from metadata captured at create() time — reflects the original tool
+   * assembly including disabled builtin tools.
    */
-  getToolInfo(): Array<{ name: string; description: string }> {
-    const tools = this.innerRunner.getToolRegistry().getAll?.() ?? [];
-    return tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-    }));
+  getToolInfo(): ToolMetadata[] {
+    return Array.from(this.toolMetadataMap.values());
   }
 
   /**
-   * Get skill list with name and description for diagnostics
+   * Get skill list with name, description, and source path for diagnostics.
+   * Built from metadata captured at create() time.
    */
-  getSkillInfo(): Array<{ name: string; description: string }> {
-    return (
-      this.innerRunner.skillProvider?.listSkills().map((s) => ({
-        name: s.name,
-        description: s.description,
-      })) ?? []
-    );
+  getSkillInfo(): SkillMetadata[] {
+    return this.skillMetadataList;
   }
 
   /**
@@ -174,8 +179,10 @@ export class EnhancedRunner {
           workspacePath,
           sessionBaseDir: options.sessionBaseDir,
           askHumanHandler: options.askHumanHandler,
+          llmClient: options.llmClient,
+          model: options.model ?? 'glm-5.1',
         })
-      : { tools: [] as Tool<ZodTypeAny>[], middleware: { name: 'session' } };
+      : { tools: [] as Tool<ZodTypeAny>[], middlewares: [{ name: 'session' }] };
 
     const todolistEnabled = options.enableTodolist !== false;
     const todolistSupport = todolistEnabled
@@ -195,6 +202,47 @@ export class EnhancedRunner {
       ...a2uiTools,
       ...(options.extraTools ?? []),
     ];
+
+    // Build tool metadata map — track type and enabled state for diagnostics.
+    // Builtin tools that were filtered out (disabled via toggle) are included
+    // with enabled=false so the UI can show them as disabled.
+    const toolMeta = new Map<string, ToolMetadata>();
+
+    // Add all builtin tools — enabled if they passed the filter, disabled otherwise
+    const filteredNameSet = new Set(filteredBuiltinTools.map((t) => t.name));
+    for (const tool of builtinTools) {
+      toolMeta.set(tool.name, {
+        name: tool.name,
+        description: tool.description,
+        type: 'builtin',
+        enabled: filteredNameSet.has(tool.name),
+      });
+    }
+    // Add session, MCP, todolist, a2ui, extra tools (always enabled if present)
+    for (const tool of sessionSupport.tools) {
+      toolMeta.set(tool.name, { name: tool.name, description: tool.description, type: 'session', enabled: true });
+    }
+    for (const tool of mcpTools) {
+      toolMeta.set(tool.name, { name: tool.name, description: tool.description, type: 'mcp', enabled: true });
+    }
+    for (const tool of todolistSupport.tools) {
+      toolMeta.set(tool.name, { name: tool.name, description: tool.description, type: 'todolist', enabled: true });
+    }
+    for (const tool of a2uiTools) {
+      toolMeta.set(tool.name, { name: tool.name, description: tool.description, type: 'a2ui', enabled: true });
+    }
+    for (const tool of options.extraTools ?? []) {
+      toolMeta.set(tool.name, { name: tool.name, description: tool.description, type: 'extra', enabled: true });
+    }
+
+    // Resolve model metadata once — reused by compression config and diagnostics
+    const resolvedModel = options.model ?? 'glm-5.1';
+    let modelMeta: { contextWindow: number; maxTokens: number } | undefined;
+    try {
+      modelMeta = options.llmClient.getModelMeta(resolvedModel);
+    } catch {
+      // Model not found in registry
+    }
 
     // Build command registry with built-in + custom handlers (conditional)
     const commandsEnabled = options.enableCommands !== false;
@@ -238,20 +286,9 @@ export class EnhancedRunner {
           compressorInstance = options.compression as IContextCompressor;
         } else {
           const compressionConfig = { ...(options.compression as CompressionConfig) };
-          // Auto-detect context window size from llm-client if not explicitly set
-          if (!compressionConfig.contextWindowSize) {
-            try {
-              const meta = (
-                options.llmClient as unknown as {
-                  getModelMeta?: (model: string) => { contextWindow: number; maxTokens: number };
-                }
-              ).getModelMeta?.(options.model ?? 'glm-5.1');
-              if (meta) {
-                compressionConfig.contextWindowSize = meta.contextWindow;
-              }
-            } catch {
-              // Model not found in registry, use message-count fallback
-            }
+          // Auto-detect context window size from pre-resolved model metadata
+          if (!compressionConfig.contextWindowSize && modelMeta) {
+            compressionConfig.contextWindowSize = modelMeta.contextWindow;
           }
           compressorInstance = new DefaultContextCompressor(
             compressionConfig,
@@ -266,18 +303,26 @@ export class EnhancedRunner {
       });
     }
 
-    // Capture context window for diagnostics regardless of compression
-    let contextWindow: number | undefined;
+    // Reuse pre-resolved model metadata for diagnostics
+    const contextWindow = modelMeta?.contextWindow;
+
+    // Build skill metadata from the resolved skill provider (if any).
+    // The AgentRunner's FilesystemSkillProvider is constructed inside AgentRunner
+    // from skillDirs, so we list skills from our own provider to capture source.
+    const resolvedSkillDirs: string[] = [];
+    if (options.skillDirs) resolvedSkillDirs.push(...options.skillDirs);
     try {
-      const meta = (
-        options.llmClient as unknown as {
-          getModelMeta?: (model: string) => { contextWindow: number; maxTokens: number };
-        }
-      ).getModelMeta?.(options.model ?? 'glm-5.1');
-      contextWindow = meta?.contextWindow;
+      const wranglerRoot = nodeRequire.resolve('@agentskillmania/wrangler/package.json');
+      resolvedSkillDirs.push(path.join(path.dirname(wranglerRoot), 'dist', 'spec-plan', 'skills'));
     } catch {
-      // Model not found in registry
+      /* skip */
     }
+    const skillMeta: SkillMetadata[] =
+      resolvedSkillDirs.length > 0
+        ? new FilesystemSkillProvider(resolvedSkillDirs)
+            .listSkills()
+            .map((s) => ({ name: s.name, description: s.description, source: s.source }))
+        : [];
 
     // Build tool registry and optionally wrap with confirmation
     let finalToolRegistry: import('@agentskillmania/colts').IToolRegistry | undefined;
@@ -299,7 +344,7 @@ export class EnhancedRunner {
       toolRegistry: finalToolRegistry,
       middleware: [
         ...(commandMiddleware ? [commandMiddleware] : []),
-        ...(sessionEnabled ? [sessionSupport.middleware] : []),
+        ...(sessionEnabled ? sessionSupport.middlewares : []),
         ...(todolistEnabled ? [todolistSupport.middleware] : []),
         ...a2uiMiddleware,
       ],
@@ -340,7 +385,7 @@ export class EnhancedRunner {
       todolistToolCount: todolistSupport.tools.length,
       middlewareNames: [
         ...(commandMiddleware ? [commandMiddleware.name] : []),
-        ...(sessionEnabled ? [sessionSupport.middleware.name] : []),
+        ...(sessionEnabled ? sessionSupport.middlewares.map((m) => m.name) : []),
         ...(todolistEnabled ? [todolistSupport.middleware.name] : []),
         ...a2uiMiddleware.map((m) => (m as { name?: string }).name ?? 'a2ui'),
       ].filter(Boolean) as string[],
@@ -348,7 +393,7 @@ export class EnhancedRunner {
       contextWindow,
     };
 
-    return new EnhancedRunner(runner, resolvedConfig);
+    return new EnhancedRunner(runner, resolvedConfig, toolMeta, skillMeta);
   }
 
   /**

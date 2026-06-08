@@ -3,12 +3,13 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import type { Tool, AskHumanHandler, AgentMiddleware } from '@agentskillmania/colts';
+import type { Tool, AskHumanHandler, AgentMiddleware, ILLMProvider } from '@agentskillmania/colts';
 import { calculatorTool, createAskHumanTool } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
 
 import { SessionStore } from './session-store.js';
 import { createSessionMiddleware } from '../middleware/session-middleware.js';
+import { createSessionNamingMiddleware } from '../middleware/session-naming-middleware.js';
 
 const DEFAULT_SESSION_BASE_DIR = join(homedir(), '.agentskillmania', 'wrangler', 'sessions');
 
@@ -37,19 +38,29 @@ export function createSessionSupport(options: {
   sessionBaseDir?: string;
   /** 可选，传入则注册 ask_human 工具 */
   askHumanHandler?: AskHumanHandler;
+  /** 可选 LLM provider for Phase 2 title upgrade */
+  llmClient?: ILLMProvider;
+  /** Model to use for Phase 2 title generation */
+  model?: string;
 }): {
-  middleware: AgentMiddleware;
+  middlewares: AgentMiddleware[];
   store: SessionStore;
   tools: Tool<ZodTypeAny>[];
 } {
   const sessionBaseDir = options.sessionBaseDir ?? DEFAULT_SESSION_BASE_DIR;
   const store = new SessionStore(sessionBaseDir, options.workspacePath);
-  const middleware = createSessionMiddleware({ store });
+
+  const sessionMiddleware = createSessionMiddleware(store);
+  const namingMiddleware = createSessionNamingMiddleware({
+    store,
+    llmClient: options.llmClient,
+    model: options.model,
+  });
 
   const tools: Tool<ZodTypeAny>[] = [widenTool(calculatorTool)];
   if (options.askHumanHandler) {
     tools.push(widenTool(createAskHumanTool(options.askHumanHandler)));
   }
 
-  return { middleware, store, tools };
+  return { middlewares: [sessionMiddleware, namingMiddleware], store, tools };
 }

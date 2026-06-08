@@ -826,5 +826,106 @@ describe('AgentSession', () => {
       expect(cockpitEvents.length).toBe(1);
       expect(cockpitEvents[0].event).toBe('agent-diagnostics');
     });
+
+    it('includes runner.features in diagnostics with correct feature flags', async () => {
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* stream() {
+          yield { type: 'complete' } as any;
+          return { state: { id: 'test-state' } };
+        }
+        return stream();
+      });
+
+      // Mock config with feature flags
+      mockEnhancedRunnerCreate.mockResolvedValue({
+        runStream: mockRunnerRunStream,
+        getToolInfo: vi.fn().mockReturnValue([
+          { name: 'file_read', description: 'Read files', type: 'builtin', enabled: true },
+        ]),
+        getSkillInfo: vi.fn().mockReturnValue([
+          { name: 'spec-plan', description: 'Plan specs', source: '/skills/spec-plan' },
+        ]),
+        getConfig: vi.fn().mockReturnValue({
+          model: 'test-model',
+          sandbox: true,
+          thinkingEnabled: false,
+          enablePromptThinking: false,
+          a2ui: { enabled: true },
+          compressorEnabled: true,
+          enableSession: true,
+          enableTodolist: false,
+          enableCommands: true,
+        }),
+      });
+
+      const session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      const cockpitEvents: SSEEvent[] = [];
+      session.setCockpitSender((event) => cockpitEvents.push(event));
+
+      for await (const _ of session.handleMessage('hello')) {
+        // drain
+      }
+
+      const diagEvents = cockpitEvents.filter((e) => e.event === 'agent-diagnostics');
+      const data = diagEvents[diagEvents.length - 1].data as Record<string, unknown>;
+      const runner = data.runner as Record<string, unknown>;
+
+      // Verify features
+      const features = runner.features as Record<string, unknown>;
+      expect(features.sandbox).toBe(true);
+      expect(features.thinkingEnabled).toBe(false);
+      expect(features.enablePromptThinking).toBe(false);
+      expect(features.a2uiEnabled).toBe(true);
+      expect(features.compressorEnabled).toBe(true);
+      expect(features.enableSession).toBe(true);
+      expect(features.enableTodolist).toBe(false);
+      expect(features.enableCommands).toBe(true);
+
+      // Verify tools and skills come from runner methods
+      expect(runner.tools).toEqual([
+        { name: 'file_read', description: 'Read files', type: 'builtin', enabled: true },
+      ]);
+      expect(runner.skills).toEqual([
+        { name: 'spec-plan', description: 'Plan specs', source: '/skills/spec-plan' },
+      ]);
+    });
+
+    it('handles missing a2ui config gracefully in features', async () => {
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* stream() {
+          yield { type: 'complete' } as any;
+          return { state: { id: 'test-state' } };
+        }
+        return stream();
+      });
+
+      mockEnhancedRunnerCreate.mockResolvedValue({
+        runStream: mockRunnerRunStream,
+        getToolInfo: vi.fn().mockReturnValue([]),
+        getSkillInfo: vi.fn().mockReturnValue([]),
+        getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
+      });
+
+      const session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      const cockpitEvents: SSEEvent[] = [];
+      session.setCockpitSender((event) => cockpitEvents.push(event));
+
+      for await (const _ of session.handleMessage('hello')) {
+        // drain
+      }
+
+      const diagEvents = cockpitEvents.filter((e) => e.event === 'agent-diagnostics');
+      const data = diagEvents[diagEvents.length - 1].data as Record<string, unknown>;
+      const features = (data.runner as Record<string, unknown>).features as Record<string, unknown>;
+      expect(features.a2uiEnabled).toBe(false);
+    });
   });
 });

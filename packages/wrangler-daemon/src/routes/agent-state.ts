@@ -72,7 +72,7 @@ export async function agentStateRoutes(fastify: FastifyInstance): Promise<void> 
       const store = sessionManager().getSessionStore(info.workspacePath);
       const persistedState = await store.loadState(sessionId);
       writeSSE(reply, 'agent-diagnostics', {
-        runner: null,
+        runner: { features: null, tools: [], skills: [] },
         agent: persistedState ?? { status: 'no-state' },
         llm: null,
       });

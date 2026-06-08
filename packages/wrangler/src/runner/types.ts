@@ -11,6 +11,26 @@ import type { ZodTypeAny } from 'zod';
 import type { CommandHandler } from '../command/types.js';
 import type { SearchProvider } from '../tools/builtin/index.js';
 
+// ---- Tool & Skill metadata for diagnostics ----
+
+/** Tool type classification — where the tool came from. */
+export type ToolType = 'builtin' | 'mcp' | 'session' | 'todolist' | 'a2ui' | 'extra';
+
+/** Extended tool info for diagnostics, including type and enabled state. */
+export interface ToolMetadata {
+  name: string;
+  description: string;
+  type: ToolType;
+  enabled: boolean;
+}
+
+/** Extended skill info for diagnostics, including source path. */
+export interface SkillMetadata {
+  name: string;
+  description: string;
+  source: string;
+}
+
 export interface A2UIConfig {
   /** Enable A2UI support */
   enabled: boolean;

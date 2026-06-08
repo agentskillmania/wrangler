@@ -71,3 +71,39 @@ export interface SessionDiagnostics {
   overview: SessionOverview;
   info: SessionInfo;
 }
+
+// ---- Runner diagnostics ----
+
+/** Runner feature flags — boolean switches from EnhancedRunner config. */
+export interface RunnerFeatureFlags {
+  sandbox: boolean;
+  thinkingEnabled: boolean;
+  enablePromptThinking: boolean;
+  a2uiEnabled: boolean;
+  compressorEnabled: boolean;
+  enableSession: boolean;
+  enableTodolist: boolean;
+  enableCommands: boolean;
+}
+
+/** Tool info from runner diagnostics. */
+export interface RunnerToolInfo {
+  name: string;
+  description: string;
+  type: string;
+  enabled: boolean;
+}
+
+/** Skill info from runner diagnostics. */
+export interface RunnerSkillInfo {
+  name: string;
+  description: string;
+  source: string;
+}
+
+/** Runner diagnostics — structured runner capability data for the cockpit UI. */
+export interface RunnerDiagnostics {
+  features: RunnerFeatureFlags;
+  tools: RunnerToolInfo[];
+  skills: RunnerSkillInfo[];
+}
