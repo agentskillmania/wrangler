@@ -161,6 +161,7 @@ async function handleStreamGeneration(
     return;
   }
 
+  reply.hijack();
   reply.raw.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -240,6 +241,7 @@ async function handleStreamReview(
   configManager: import('../core/config-manager.js').ConfigManager,
   content: string
 ): Promise<void> {
+  reply.hijack();
   reply.raw.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',

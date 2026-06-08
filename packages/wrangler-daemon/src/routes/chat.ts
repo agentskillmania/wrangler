@@ -201,6 +201,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     sessionManager().setAgentSession(sessionId, agentSession);
     sessionManager().updateStatus(sessionId, 'running');
 
+    reply.hijack();
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -277,6 +278,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     sessionManager().updateStatus(sessionId, 'running');
 
+    reply.hijack();
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
