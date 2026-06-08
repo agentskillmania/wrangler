@@ -74,6 +74,27 @@ export async function planRoutes(fastify: FastifyInstance): Promise<void> {
     return { ok: true, name: body.name, version: 1 };
   });
 
+  /** PUT /api/plans/:name/:specVersion/:version — body: { workspacePath, body } */
+  fastify.put('/api/plans/:name/:specVersion/:version', async (request) => {
+    const { name, specVersion, version } = request.params as {
+      name: string;
+      specVersion: string;
+      version: string;
+    };
+    const body = request.body as { workspacePath?: string; body?: string };
+    if (!body.workspacePath || body.body === undefined) {
+      return { error: 'workspacePath and body are required' };
+    }
+    const store = getPlanStore(body.workspacePath);
+    const existing = await store.get(name, Number(specVersion), Number(version));
+    if (!existing) return { error: 'Plan not found' };
+    await store.save({
+      meta: { ...existing.meta, updatedAt: new Date().toISOString() },
+      body: body.body,
+    });
+    return { ok: true };
+  });
+
   /** PATCH /api/plans/:name/:specVersion/:version/status — body: { workspacePath, status } */
   fastify.patch('/api/plans/:name/:specVersion/:version/status', async (request) => {
     const { name, specVersion, version } = request.params as {

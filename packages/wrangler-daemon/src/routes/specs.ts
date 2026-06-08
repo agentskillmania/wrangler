@@ -60,6 +60,23 @@ export async function specRoutes(fastify: FastifyInstance): Promise<void> {
     return { ok: true, name: body.name, version: 1 };
   });
 
+  /** PUT /api/specs/:name/:version — body: { workspacePath, body } */
+  fastify.put('/api/specs/:name/:version', async (request) => {
+    const { name, version } = request.params as { name: string; version: string };
+    const body = request.body as { workspacePath?: string; body?: string };
+    if (!body.workspacePath || body.body === undefined) {
+      return { error: 'workspacePath and body are required' };
+    }
+    const store = getSpecStore(body.workspacePath);
+    const existing = await store.get(name, Number(version));
+    if (!existing) return { error: 'Spec not found' };
+    await store.save({
+      meta: { ...existing.meta, updatedAt: new Date().toISOString() },
+      body: body.body,
+    });
+    return { ok: true };
+  });
+
   /** PATCH /api/specs/:name/:version/status — body: { workspacePath, status } */
   fastify.patch('/api/specs/:name/:version/status', async (request) => {
     const { name, version } = request.params as { name: string; version: string };
