@@ -15,10 +15,12 @@ import type {
   RunOptions,
   IContextCompressor,
   CompressionConfig,
+  ILLMProvider,
+  IToolRegistry,
 } from '@agentskillmania/colts';
 import type { Tool } from '@agentskillmania/colts';
 import { LLMClient } from '@agentskillmania/llm-client';
-import type { Sandbox } from '@agentskillmania/sandbox';
+import { Sandbox } from '@agentskillmania/sandbox';
 import { produce } from 'immer';
 import type { ZodTypeAny } from 'zod';
 
@@ -57,10 +59,10 @@ function resolveSearchProvider(provider?: SearchProvider | 'bing' | 'sogou'): Se
 }
 
 function resolveLLMClient(options: {
-  llmClient?: import('@agentskillmania/colts').ILLMProvider;
+  llmClient?: ILLMProvider;
   llm?: { apiKey: string; provider?: string; baseUrl?: string; maxConcurrency?: number };
   model?: string;
-}): import('@agentskillmania/colts').ILLMProvider {
+}): ILLMProvider {
   if (options.llmClient && options.llm) {
     throw new Error(
       'Cannot specify both llmClient and llm. Choose one: injection or quick initialization.'
@@ -167,7 +169,6 @@ export class EnhancedRunner {
 
     let sandboxInstance: Sandbox | undefined;
     if (options.sandbox) {
-      const { Sandbox } = await import('@agentskillmania/sandbox');
       sandboxInstance = new Sandbox({ sandboxDir: workspacePath });
     }
 
@@ -399,7 +400,7 @@ export class EnhancedRunner {
         : [];
 
     // Build tool registry and optionally wrap with confirmation
-    let finalToolRegistry: import('@agentskillmania/colts').IToolRegistry | undefined;
+    let finalToolRegistry: IToolRegistry | undefined;
     if (options.confirmHandler) {
       const toolRegistry = new ToolRegistry();
       for (const tool of allTools) {

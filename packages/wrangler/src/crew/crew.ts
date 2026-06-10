@@ -1,8 +1,9 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { AgentState } from '@agentskillmania/colts';
+import type { AgentState, Tool } from '@agentskillmania/colts';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+import type { ZodTypeAny } from 'zod';
 
 import { AgentInstance } from './agent-instance.js';
 import { createCreateTaskTool, createSendMessageTool } from './crew-tools.js';
@@ -326,7 +327,7 @@ export class Crew {
 
   private createCommTools(
     agent: AgentInstance
-  ): import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[] {
+  ): Tool<ZodTypeAny>[] {
     switch (agent.role) {
       case 'primary':
         return [

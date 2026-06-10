@@ -3,7 +3,7 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { AgentState } from '@agentskillmania/colts';
-import { SessionStore } from '@agentskillmania/wrangler';
+import { SessionStore, readMeta } from '@agentskillmania/wrangler';
 import type { SessionMeta } from '@agentskillmania/wrangler';
 
 import { findSessionGlobally, getDefaultSessionBaseDir } from './session-utils.js';
@@ -133,8 +133,6 @@ export async function listSessions(options?: ListOptions): Promise<SessionMeta[]
 }
 
 async function listWorkspaceSessions(wsDir: string): Promise<SessionMeta[]> {
-  const { readdir } = await import('node:fs/promises');
-  const { readMeta } = await import('@agentskillmania/wrangler');
   const metas: SessionMeta[] = [];
   try {
     const entries = await readdir(wsDir, { withFileTypes: true });

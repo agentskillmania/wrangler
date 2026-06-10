@@ -1,3 +1,7 @@
+import type { ConfigManager } from './core/config-manager.js';
+import type { ResourceManager } from './core/resource-manager.js';
+import type { SessionManager } from './core/session-manager.js';
+
 /** Daemon configuration stored in config.yaml */
 export interface DaemonConfig {
   llm: {
@@ -141,9 +145,9 @@ export interface SSEEvent {
  * The Daemon class calls `fastify.decorate()` during startup.
  */
 export interface DecoratedFastifyInstance {
-  configManager: import('./core/config-manager.js').ConfigManager;
-  resourceManager: import('./core/resource-manager.js').ResourceManager;
-  sessionManager: import('./core/session-manager.js').SessionManager;
+  configManager: ConfigManager;
+  resourceManager: ResourceManager;
+  sessionManager: SessionManager;
 }
 
 /** Per-request parameters — both chat endpoints accept these */

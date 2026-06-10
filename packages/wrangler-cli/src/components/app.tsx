@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useApp, Text } from 'ink';
 import { AgentLoader, EnhancedRunner, discoverGlobalConfigPath } from '@agentskillmania/wrangler';
+import type { SessionSource } from '@agentskillmania/wrangler';
 import { existsSync } from 'node:fs';
 import { MainTUI } from './main-tui.js';
 import type { DialogState } from './main-tui.js';
@@ -106,7 +107,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
       let dirs: string[] = [];
       let sandbox: boolean | undefined;
       let mcpConfigPaths: string[] | undefined;
-      let source: import('@agentskillmania/wrangler').SessionSource = { type: 'bare' };
+      let source: SessionSource = { type: 'bare' };
 
       if (mode.mode === 'agent') {
         const loaded = await AgentLoader.loadFrom(mode.agentDir);

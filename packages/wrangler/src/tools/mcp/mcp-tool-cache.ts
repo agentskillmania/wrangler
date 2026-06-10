@@ -1,6 +1,6 @@
 import type { Tool } from '@agentskillmania/colts';
 import { createRuntime, loadServerDefinitions } from 'mcporter';
-import type { ServerDefinition } from 'mcporter';
+import type { ServerDefinition, Runtime } from 'mcporter';
 import type { ZodTypeAny } from 'zod';
 
 import { createMCPTool } from './tool-converter.js';
@@ -43,7 +43,7 @@ async function safeLoadDefinitions(configPath: string): Promise<ServerDefinition
  * No hot-reload — process restart required for config changes.
  */
 export class MCPToolCache {
-  private runtime: import('mcporter').Runtime | null = null;
+  private runtime: Runtime | null = null;
   private cache = new Map<string, CacheEntry>();
 
   /**

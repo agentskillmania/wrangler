@@ -140,7 +140,7 @@ export interface ResolvedRunnerConfig {
  */
 export interface ResumeOptions {
   /** LLM provider instance (injection mode) */
-  llmClient?: import('@agentskillmania/colts').ILLMProvider;
+  llmClient?: ILLMProvider;
   /** LLM quick initialization config */
   llm?: {
     apiKey: string;
@@ -153,5 +153,5 @@ export interface ResumeOptions {
   /** Optional thinking mode override */
   thinkingEnabled?: boolean;
   /** AskHuman handler for human-in-the-loop */
-  askHumanHandler?: import('@agentskillmania/colts').AskHumanHandler;
+  askHumanHandler?: AskHumanHandler;
 }

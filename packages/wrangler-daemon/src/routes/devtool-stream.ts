@@ -6,6 +6,7 @@ import { DevTool, parseAgentOutput, parseReviewReport } from '@agentskillmania/w
 import type { AgentOutput, ReviewReport } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
+import type { ConfigManager } from '../core/config-manager.js';
 import type { DecoratedFastifyInstance, SSEEvent } from '../types.js';
 
 /**
@@ -55,7 +56,7 @@ function getLastAssistantContent(state: AgentState): string {
   return '';
 }
 
-function createDevTool(configManager: import('../core/config-manager.js').ConfigManager): DevTool {
+function createDevTool(configManager: ConfigManager): DevTool {
   const config = configManager.get();
   return new DevTool({
     llm: {
@@ -152,7 +153,7 @@ export async function devtoolStreamRoutes(fastify: FastifyInstance): Promise<voi
 
 async function handleStreamGeneration(
   reply: FastifyReply,
-  configManager: import('../core/config-manager.js').ConfigManager,
+  configManager: ConfigManager,
   promptName: string,
   body: StreamGenerateBody
 ): Promise<void> {
@@ -238,7 +239,7 @@ async function handleStreamGeneration(
 
 async function handleStreamReview(
   reply: FastifyReply,
-  configManager: import('../core/config-manager.js').ConfigManager,
+  configManager: ConfigManager,
   content: string
 ): Promise<void> {
   reply.hijack();

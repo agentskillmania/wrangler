@@ -1,12 +1,14 @@
 import { DevTool } from '@agentskillmania/wrangler-devtool';
+import type { FileChange } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance } from 'fastify';
 
+import type { ConfigManager } from '../core/config-manager.js';
 import type { DecoratedFastifyInstance } from '../types.js';
 
 /**
  * Create a DevTool instance from daemon config.
  */
-function createDevTool(configManager: import('../core/config-manager.js').ConfigManager): DevTool {
+function createDevTool(configManager: ConfigManager): DevTool {
   const config = configManager.get();
   return new DevTool({
     llm: {
@@ -208,7 +210,7 @@ export async function devtoolRoutes(fastify: FastifyInstance): Promise<void> {
       if (body.cwd) options.cwd = body.cwd;
       if (body.dryRun) options.dryRun = body.dryRun;
       const result = await devtool.applyChanges(
-        body.changes as import('@agentskillmania/wrangler-devtool').FileChange[],
+        body.changes as FileChange[],
         Object.keys(options).length > 0 ? options : undefined
       );
       return result;
