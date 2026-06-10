@@ -17,7 +17,7 @@ import type {
   BuildMessagesOptions,
   IMessageAssembler,
 } from '@agentskillmania/colts/dist/message-assembler/index.js';
-import type { Message as PiAIMessage, TextContent } from '@mariozechner/pi-ai';
+import type { Message as PiAIMessage, TextContent, ToolCall } from '@mariozechner/pi-ai';
 
 import { shiftHeadings } from './shift-headings.js';
 
@@ -100,7 +100,7 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
           break;
 
         case 'assistant': {
-          const content: (TextContent | import('@mariozechner/pi-ai').ToolCall)[] = [
+          const content: (TextContent | ToolCall)[] = [
             { type: 'text', text: msg.content },
           ];
           if (msg.toolCalls && msg.toolCalls.length > 0) {
