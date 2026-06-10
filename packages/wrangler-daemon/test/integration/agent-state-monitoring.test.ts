@@ -52,7 +52,7 @@ describe('US-C10: Agent State Monitoring', () => {
   ): Promise<void> {
     const manager = (fastify as any).sessionManager as SessionManager;
     const store = new SessionStore(sessionsDir, workspacePath);
-    await store.createWithId(sessionId, model ?? 'deepseek-chat', agentName);
+    await store.createWithId(sessionId, agentName);
     manager.registerSession(sessionId, workspacePath);
   }
 

@@ -6,6 +6,7 @@ import type { AgentMiddleware } from '@agentskillmania/colts';
 
 import type { SessionStore } from '../session/session-store.js';
 import type { SessionEntry } from '../session/types.js';
+import type { RunnerConfigSnapshot, SessionSource } from '../types.js';
 
 /**
  * Create session management middleware.
@@ -14,16 +15,27 @@ import type { SessionEntry } from '../session/types.js';
  * - afterStep: write SessionEntry (tool/assistant/error) to session.jsonl
  * - afterRun: save state + update meta
  */
-export function createSessionMiddleware(store: SessionStore): AgentMiddleware {
+export function createSessionMiddleware(
+  store: SessionStore,
+  options?: {
+    runnerConfigSnapshot?: RunnerConfigSnapshot;
+    source?: SessionSource;
+  }
+): AgentMiddleware {
   return {
     name: 'session',
 
     beforeRun: async (ctx) => {
       const sessionId = ctx.state.id;
-      const model = ctx.runnerOptions.model;
 
       if (!(await store.existsAsync(sessionId))) {
-        await store.createWithId(sessionId, model, ctx.state.config.name);
+        await store.createWithId(sessionId, ctx.state.config.name);
+        if (options?.runnerConfigSnapshot || options?.source) {
+          await store.updateMeta(sessionId, {
+            runnerConfig: options.runnerConfigSnapshot,
+            source: options.source,
+          });
+        }
       }
 
       // Record the last user message as a SessionEntry

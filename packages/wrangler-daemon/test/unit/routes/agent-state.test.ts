@@ -146,7 +146,7 @@ describe('Agent State SSE route', () => {
   /** Create a session on disk and register it with the session manager. */
   async function createSession(sessionId: string): Promise<void> {
     const store = sessionManager.getSessionStore(workspacePath);
-    await store.createWithId(sessionId, 'test-model', 'test-agent');
+    await store.createWithId(sessionId, 'test-agent');
     sessionManager.registerSession(sessionId, workspacePath);
   }
 

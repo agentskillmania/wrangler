@@ -68,6 +68,9 @@ importers:
       '@agentskillmania/colts':
         specifier: link:../../../colts/packages/colts
         version: link:../../../colts/packages/colts
+      '@agentskillmania/llm-client':
+        specifier: link:../../../colts/packages/llm-client
+        version: link:../../../colts/packages/llm-client
       '@agentskillmania/sandbox':
         specifier: link:../../../sandbox/sandbox/packages/sandbox
         version: link:../../../sandbox/sandbox/packages/sandbox

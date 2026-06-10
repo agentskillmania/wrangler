@@ -56,7 +56,7 @@ describe('US-C5: Workspace File Operations', () => {
     const sessionManager = new SessionManager(sessionsDir);
     sessionId = 'us-c5-session';
     const store = new SessionStore(sessionsDir, workspacePath);
-    await store.createWithId(sessionId, 'deepseek-chat', 'test-agent');
+    await store.createWithId(sessionId, 'test-agent');
     sessionManager.registerSession(sessionId, workspacePath);
 
     // Boot a throw-away Fastify with only file routes

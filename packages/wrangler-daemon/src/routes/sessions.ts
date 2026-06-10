@@ -43,7 +43,7 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Generate a new session ID and create the session
     const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
-    await store.createWithId(newId, info.model, info.agentName);
+    await store.createWithId(newId, info.agentName);
 
     // Copy state with new ID
     const forkedState = { ...state, id: newId };

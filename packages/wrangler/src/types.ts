@@ -8,6 +8,37 @@ export type { SessionEntry } from './session/types.js';
 /** Title origin — how the session title was set. */
 export type TitleSource = 'auto' | 'generated' | 'manual';
 
+/**
+ * Snapshot of runner configuration at session creation time.
+ * Used to reconstruct the exact runner environment on resume.
+ */
+export interface RunnerConfigSnapshot {
+  /** Model used for this session */
+  model: string;
+  /** Skill directories */
+  skillDirs?: string[];
+  /** MCP configuration file paths */
+  mcpConfigPaths?: string[];
+  /** Builtin tool toggles */
+  builtinTools?: Record<string, boolean>;
+  /** Sandbox enabled */
+  sandbox?: boolean;
+  /** Session support enabled */
+  enableSession?: boolean;
+  /** Todolist support enabled */
+  enableTodolist?: boolean;
+  /** Commands enabled */
+  enableCommands?: boolean;
+  /** A2UI support */
+  a2ui?: { enabled: boolean };
+}
+
+/** Source of session creation — how the runner was initialized */
+export type SessionSource =
+  | { type: 'agent'; configPath: string }
+  | { type: 'bare' }
+  | { type: 'code' };
+
 export interface SessionMeta {
   /** Session ID (= state.id) */
   id: string;
@@ -21,8 +52,12 @@ export interface SessionMeta {
   createdAt: string;
   /** Last update time (ISO string) */
   updatedAt: string;
-  /** Model used for this session */
-  model: string;
   /** Agent name for this session */
   agentName: string;
+  /** Runner configuration snapshot */
+  runnerConfig: RunnerConfigSnapshot;
+  /** Source of session creation */
+  source?: SessionSource;
+  /** Application-level metadata extension */
+  metadata?: Record<string, unknown>;
 }

@@ -17,18 +17,28 @@ import type {
   CompressionConfig,
 } from '@agentskillmania/colts';
 import type { Tool } from '@agentskillmania/colts';
+import { LLMClient } from '@agentskillmania/llm-client';
 import type { Sandbox } from '@agentskillmania/sandbox';
+import { produce } from 'immer';
 import type { ZodTypeAny } from 'zod';
 
 import { MarkdownMessageAssembler } from './markdown-assembler.js';
 import { buildTimeContext } from './system-prompt.js';
-import type { EnhancedRunnerOptions, ResolvedRunnerConfig, ToolMetadata, SkillMetadata } from './types.js';
+import type {
+  EnhancedRunnerOptions,
+  ResolvedRunnerConfig,
+  ToolMetadata,
+  SkillMetadata,
+  ResumeOptions,
+} from './types.js';
 import { createCommandMiddleware } from '../command/command-middleware.js';
 import { createClearHandler } from '../command/handlers/clear.js';
 import { createCompactHandler } from '../command/handlers/compact.js';
 import { createSkillHandler } from '../command/handlers/skill.js';
 import { createSkillsHandler } from '../command/handlers/skills.js';
 import { CommandRegistry } from '../command/registry.js';
+import { SessionNotFoundError } from '../session/errors.js';
+import { SessionStore } from '../session/session-store.js';
 import { createSessionSupport } from '../session/support.js';
 import { createTodolistSupport } from '../todolist/support.js';
 import { createA2UITools, A2UIMiddleware } from '../tools/a2ui/index.js';
@@ -44,6 +54,32 @@ function resolveSearchProvider(provider?: SearchProvider | 'bing' | 'sogou'): Se
   if (!provider || provider === 'sogou') return new SogouScrapeSearchProvider();
   if (provider === 'bing') return new BingScrapeSearchProvider();
   return provider;
+}
+
+function resolveLLMClient(options: {
+  llmClient?: import('@agentskillmania/colts').ILLMProvider;
+  llm?: { apiKey: string; provider?: string; baseUrl?: string; maxConcurrency?: number };
+  model?: string;
+}): import('@agentskillmania/colts').ILLMProvider {
+  if (options.llmClient && options.llm) {
+    throw new Error(
+      'Cannot specify both llmClient and llm. Choose one: injection or quick initialization.'
+    );
+  }
+  if (options.llmClient) return options.llmClient;
+  if (options.llm) {
+    const { apiKey, provider = 'openai', baseUrl, maxConcurrency = 5 } = options.llm;
+    const client = new LLMClient({ baseUrl });
+    client.registerProvider({ name: provider, maxConcurrency });
+    client.registerApiKey({
+      key: apiKey,
+      provider,
+      maxConcurrency,
+      models: [{ modelId: options.model ?? 'glm-5.1', maxConcurrency }],
+    });
+    return client;
+  }
+  throw new Error('Must specify either llmClient or llm.');
 }
 
 /**
@@ -125,6 +161,7 @@ export class EnhancedRunner {
    */
   static async create(options: EnhancedRunnerOptions): Promise<EnhancedRunner> {
     const workspacePath = options.workspacePath ?? process.cwd();
+    const llmClient = resolveLLMClient(options);
 
     const searchProvider = resolveSearchProvider(options.searchProvider);
 
@@ -179,8 +216,20 @@ export class EnhancedRunner {
           workspacePath,
           sessionBaseDir: options.sessionBaseDir,
           askHumanHandler: options.askHumanHandler,
-          llmClient: options.llmClient,
+          llmClient,
           model: options.model ?? 'glm-5.1',
+          runnerConfigSnapshot: {
+            model: options.model ?? 'glm-5.1',
+            skillDirs: options.skillDirs,
+            mcpConfigPaths,
+            builtinTools: options.builtinTools,
+            sandbox: options.sandbox,
+            enableSession: options.enableSession,
+            enableTodolist: options.enableTodolist,
+            enableCommands: options.enableCommands,
+            a2ui: options.a2ui,
+          },
+          source: options.source,
         })
       : { tools: [] as Tool<ZodTypeAny>[], middlewares: [{ name: 'session' }] };
 
@@ -220,26 +269,51 @@ export class EnhancedRunner {
     }
     // Add session, MCP, todolist, a2ui, extra tools (always enabled if present)
     for (const tool of sessionSupport.tools) {
-      toolMeta.set(tool.name, { name: tool.name, description: tool.description, type: 'session', enabled: true });
+      toolMeta.set(tool.name, {
+        name: tool.name,
+        description: tool.description,
+        type: 'session',
+        enabled: true,
+      });
     }
     for (const tool of mcpTools) {
-      toolMeta.set(tool.name, { name: tool.name, description: tool.description, type: 'mcp', enabled: true });
+      toolMeta.set(tool.name, {
+        name: tool.name,
+        description: tool.description,
+        type: 'mcp',
+        enabled: true,
+      });
     }
     for (const tool of todolistSupport.tools) {
-      toolMeta.set(tool.name, { name: tool.name, description: tool.description, type: 'todolist', enabled: true });
+      toolMeta.set(tool.name, {
+        name: tool.name,
+        description: tool.description,
+        type: 'todolist',
+        enabled: true,
+      });
     }
     for (const tool of a2uiTools) {
-      toolMeta.set(tool.name, { name: tool.name, description: tool.description, type: 'a2ui', enabled: true });
+      toolMeta.set(tool.name, {
+        name: tool.name,
+        description: tool.description,
+        type: 'a2ui',
+        enabled: true,
+      });
     }
     for (const tool of options.extraTools ?? []) {
-      toolMeta.set(tool.name, { name: tool.name, description: tool.description, type: 'extra', enabled: true });
+      toolMeta.set(tool.name, {
+        name: tool.name,
+        description: tool.description,
+        type: 'extra',
+        enabled: true,
+      });
     }
 
     // Resolve model metadata once — reused by compression config and diagnostics
     const resolvedModel = options.model ?? 'glm-5.1';
     let modelMeta: { contextWindow: number; maxTokens: number } | undefined;
     try {
-      modelMeta = options.llmClient.getModelMeta(resolvedModel);
+      modelMeta = llmClient.getModelMeta(resolvedModel);
     } catch {
       // Model not found in registry
     }
@@ -292,7 +366,7 @@ export class EnhancedRunner {
           }
           compressorInstance = new DefaultContextCompressor(
             compressionConfig,
-            options.llmClient,
+            llmClient,
             options.model
           );
         }
@@ -339,7 +413,7 @@ export class EnhancedRunner {
 
     const runner = new AgentRunner({
       model: options.model ?? 'glm-5.1',
-      llmClient: options.llmClient,
+      llmClient,
       tools: finalToolRegistry ? undefined : allTools,
       toolRegistry: finalToolRegistry,
       middleware: [
@@ -394,6 +468,57 @@ export class EnhancedRunner {
     };
 
     return new EnhancedRunner(runner, resolvedConfig, toolMeta, skillMeta);
+  }
+
+  /**
+   * Resume an existing session from its directory.
+   *
+   * @param sessionDir - Absolute path to the session directory
+   * @param options - Resume configuration (llm/llmClient + optional overrides)
+   * @returns Reconstructed runner and restored state
+   */
+  static async resume(
+    sessionDir: string,
+    options: ResumeOptions
+  ): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+    const store = SessionStore.fromDir(sessionDir);
+
+    const meta = await store.getMeta();
+    if (!meta) {
+      throw new SessionNotFoundError(sessionDir);
+    }
+    if (!meta.runnerConfig) {
+      throw new SessionNotFoundError(sessionDir);
+    }
+
+    const state = await store.loadState();
+    if (!state) {
+      throw new SessionNotFoundError(sessionDir);
+    }
+
+    const rc = meta.runnerConfig;
+    const runner = await EnhancedRunner.create({
+      llmClient: resolveLLMClient(options),
+      model: options.model ?? rc.model,
+      thinkingEnabled: options.thinkingEnabled,
+      workspacePath: meta.workspacePath,
+      skillDirs: rc.skillDirs,
+      mcpConfigPaths: rc.mcpConfigPaths,
+      builtinTools: rc.builtinTools,
+      sandbox: rc.sandbox,
+      enableSession: rc.enableSession,
+      enableTodolist: rc.enableTodolist,
+      enableCommands: rc.enableCommands,
+      a2ui: rc.a2ui,
+      sessionBaseDir: path.dirname(path.dirname(sessionDir)),
+      source: meta.source,
+    });
+
+    const newState = produce(state, (draft) => {
+      draft.config.tools = runner.getToolInfo();
+    });
+
+    return { runner, state: newState };
   }
 
   /**

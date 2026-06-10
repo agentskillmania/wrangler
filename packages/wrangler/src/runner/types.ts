@@ -10,6 +10,7 @@ import type { ZodTypeAny } from 'zod';
 
 import type { CommandHandler } from '../command/types.js';
 import type { SearchProvider } from '../tools/builtin/index.js';
+import type { SessionSource } from '../types.js';
 
 // ---- Tool & Skill metadata for diagnostics ----
 
@@ -37,7 +38,15 @@ export interface A2UIConfig {
 }
 
 export interface EnhancedRunnerOptions {
-  llmClient: ILLMProvider;
+  /** LLM provider instance (injection mode) */
+  llmClient?: ILLMProvider;
+  /** LLM quick initialization config */
+  llm?: {
+    apiKey: string;
+    provider?: string;
+    baseUrl?: string;
+    maxConcurrency?: number;
+  };
   model?: string;
   workspacePath?: string;
   extraTools?: Tool<ZodTypeAny>[];
@@ -79,6 +88,8 @@ export interface EnhancedRunnerOptions {
   enableTodolist?: boolean;
   /** Whether to enable command middleware (default: true) */
   enableCommands?: boolean;
+  /** Source of session creation — automatically set by AgentLoader when loading from agent directory */
+  source?: SessionSource;
 }
 
 /**
@@ -122,4 +133,23 @@ export interface ResolvedRunnerConfig {
   compressorEnabled: boolean;
   /** Context window size for the model (from llm-client ModelMeta). Undefined if unknown. */
   contextWindow?: number;
+}
+
+/**
+ * Options for EnhancedRunner.resume() — from session directory.
+ */
+export interface ResumeOptions {
+  /** LLM provider instance (injection mode) */
+  llmClient?: import('@agentskillmania/colts').ILLMProvider;
+  /** LLM quick initialization config */
+  llm?: {
+    apiKey: string;
+    provider?: string;
+    baseUrl?: string;
+    maxConcurrency?: number;
+  };
+  /** Optional model override */
+  model?: string;
+  /** Optional thinking mode override */
+  thinkingEnabled?: boolean;
 }

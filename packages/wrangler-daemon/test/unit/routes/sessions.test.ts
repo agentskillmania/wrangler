@@ -53,7 +53,7 @@ describe('Unit: Session Routes', () => {
     sessionManager.registerSession(sessionId, wsPath);
 
     const store = sessionManager.getSessionStore(wsPath);
-    await store.createWithId(sessionId, 'test-model', 'test-agent');
+    await store.createWithId(sessionId, 'test-agent');
 
     // Save a minimal AgentState
     const state = {
@@ -97,7 +97,7 @@ describe('Unit: Session Routes', () => {
     const wsPath = join(tempDir, 'workspace');
     sessionManager.registerSession('s1', wsPath);
     const store = sessionManager.getSessionStore(wsPath);
-    await store.createWithId('s1', 'test-model', 'test-agent');
+    await store.createWithId('s1', 'test-agent');
 
     const res = await fetch(`${getUrl()}/api/sessions`);
     expect(res.ok).toBe(true);
@@ -112,13 +112,14 @@ describe('Unit: Session Routes', () => {
     const wsPath = join(tempDir, 'workspace');
     sessionManager.registerSession('detail-id', wsPath);
     const store = sessionManager.getSessionStore(wsPath);
-    await store.createWithId('detail-id', 'gpt-4', 'my-agent');
+    await store.createWithId('detail-id', 'my-agent');
+    await store.updateMeta('detail-id', { runnerConfig: { model: 'gpt-4' } });
 
     const res = await fetch(`${getUrl()}/api/sessions/detail-id`);
     expect(res.ok).toBe(true);
     const body = await res.json();
     expect(body.id).toBe('detail-id');
-    expect(body.model).toBe('gpt-4');
+    expect(body.runnerConfig?.model).toBe('gpt-4');
     expect(body.agentName).toBe('my-agent');
     expect(body.workspacePath).toBe(wsPath);
   });
@@ -166,7 +167,7 @@ describe('Unit: Session Routes', () => {
     const wsPath = join(tempDir, 'workspace2');
     sessionManager.registerSession('no-state-id', wsPath);
     const store = sessionManager.getSessionStore(wsPath);
-    await store.createWithId('no-state-id', 'test-model', 'test-agent');
+    await store.createWithId('no-state-id', 'test-agent');
 
     const res = await fetch(`${getUrl()}/api/sessions/no-state-id/fork`, {
       method: 'POST',
@@ -181,7 +182,7 @@ describe('Unit: Session Routes', () => {
     const wsPath = join(tempDir, 'workspace');
     sessionManager.registerSession('del-id', wsPath);
     const store = sessionManager.getSessionStore(wsPath);
-    await store.createWithId('del-id', 'test-model', 'test-agent');
+    await store.createWithId('del-id', 'test-agent');
 
     const res = await fetch(`${getUrl()}/api/sessions/del-id`, { method: 'DELETE' });
     expect(res.ok).toBe(true);
@@ -204,9 +205,9 @@ describe('Unit: Session Routes', () => {
 
     const store1 = sessionManager.getSessionStore(ws1);
     const store2 = sessionManager.getSessionStore(ws2);
-    await store1.createWithId('ws1-s1', 'model', 'agent');
-    await store1.createWithId('ws1-s2', 'model', 'agent');
-    await store2.createWithId('ws2-s1', 'model', 'agent');
+    await store1.createWithId('ws1-s1', 'agent');
+    await store1.createWithId('ws1-s2', 'agent');
+    await store2.createWithId('ws2-s1', 'agent');
 
     // Filter by ws1
     const res1 = await fetch(`${getUrl()}/api/sessions?workspacePath=${encodeURIComponent(ws1)}`);

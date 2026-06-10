@@ -4,10 +4,12 @@ import { join, resolve } from 'node:path';
 
 import { parseAgentMd } from '../agent/agent-parser.js';
 import type { ParsedAgent } from '../agent/agent-parser.js';
+import type { SessionSource } from '../types.js';
 
 export interface AgentLoadResult extends ParsedAgent {
   skillDirs: string[];
   mcpPaths: string[];
+  source: SessionSource;
 }
 
 export class AgentLoader {
@@ -28,7 +30,7 @@ export class AgentLoader {
     const localMcp = join(absDir, 'mcp.json');
     if (existsSync(localMcp)) mcpPaths.push(localMcp);
 
-    return { ...parsed, skillDirs, mcpPaths };
+    return { ...parsed, skillDirs, mcpPaths, source: { type: 'agent', configPath: absDir } };
   }
 
   private static async scanSkillsDir(absDir: string): Promise<string[]> {

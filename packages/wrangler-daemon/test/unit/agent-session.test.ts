@@ -839,12 +839,16 @@ describe('AgentSession', () => {
       // Mock config with feature flags
       mockEnhancedRunnerCreate.mockResolvedValue({
         runStream: mockRunnerRunStream,
-        getToolInfo: vi.fn().mockReturnValue([
-          { name: 'file_read', description: 'Read files', type: 'builtin', enabled: true },
-        ]),
-        getSkillInfo: vi.fn().mockReturnValue([
-          { name: 'spec-plan', description: 'Plan specs', source: '/skills/spec-plan' },
-        ]),
+        getToolInfo: vi
+          .fn()
+          .mockReturnValue([
+            { name: 'file_read', description: 'Read files', type: 'builtin', enabled: true },
+          ]),
+        getSkillInfo: vi
+          .fn()
+          .mockReturnValue([
+            { name: 'spec-plan', description: 'Plan specs', source: '/skills/spec-plan' },
+          ]),
         getConfig: vi.fn().mockReturnValue({
           model: 'test-model',
           sandbox: true,

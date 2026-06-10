@@ -51,7 +51,8 @@
     "mcporter": "^0.10.2",
     "ripgrep": "^0.3.1",
     "turndown": "^7.2.4",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "@agentskillmania/llm-client": "link:../../../colts/packages/llm-client"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

@@ -65,7 +65,7 @@ describe('Integration: Session Lifecycle', () => {
     agentName: string
   ): Promise<void> {
     const store = new SessionStore(sessionsDir, workspacePath);
-    await store.createWithId(sessionId, 'deepseek-chat', agentName);
+    await store.createWithId(sessionId, agentName);
     getManager().registerSession(sessionId, workspacePath);
   }
 
@@ -152,7 +152,7 @@ describe('Integration: Session Lifecycle', () => {
   it('returns error when forking session without state', async () => {
     const wsPath = join(tempDir, 'ws');
     const store = getManager().getSessionStore(wsPath);
-    await store.createWithId('no-state', 'deepseek-chat', 'test');
+    await store.createWithId('no-state', 'test');
     getManager().registerSession('no-state', wsPath);
 
     const res = await fetch(`${getUrl()}/api/sessions/no-state/fork`, { method: 'POST' });

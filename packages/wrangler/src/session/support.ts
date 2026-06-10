@@ -10,6 +10,7 @@ import type { ZodTypeAny } from 'zod';
 import { SessionStore } from './session-store.js';
 import { createSessionMiddleware } from '../middleware/session-middleware.js';
 import { createSessionNamingMiddleware } from '../middleware/session-naming-middleware.js';
+import type { RunnerConfigSnapshot, SessionSource } from '../types.js';
 
 const DEFAULT_SESSION_BASE_DIR = join(homedir(), '.agentskillmania', 'wrangler', 'sessions');
 
@@ -42,6 +43,10 @@ export function createSessionSupport(options: {
   llmClient?: ILLMProvider;
   /** Model to use for Phase 2 title generation */
   model?: string;
+  /** Runner configuration snapshot to persist on session creation */
+  runnerConfigSnapshot?: RunnerConfigSnapshot;
+  /** Source of session creation */
+  source?: SessionSource;
 }): {
   middlewares: AgentMiddleware[];
   store: SessionStore;
@@ -50,7 +55,10 @@ export function createSessionSupport(options: {
   const sessionBaseDir = options.sessionBaseDir ?? DEFAULT_SESSION_BASE_DIR;
   const store = new SessionStore(sessionBaseDir, options.workspacePath);
 
-  const sessionMiddleware = createSessionMiddleware(store);
+  const sessionMiddleware = createSessionMiddleware(store, {
+    runnerConfigSnapshot: options.runnerConfigSnapshot,
+    source: options.source,
+  });
   const namingMiddleware = createSessionNamingMiddleware({
     store,
     llmClient: options.llmClient,

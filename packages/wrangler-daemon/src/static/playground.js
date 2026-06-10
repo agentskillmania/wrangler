@@ -2534,7 +2534,7 @@ function SessionsPage() {
           <div class="panel-header">
             <span class="panel-title">Session ${selected.id}</span>
             <span style="margin-left:8px;font-size:12px;color:var(--text-muted)">
-              ${selected.agentName || '-'} · ${selected.model || '-'}
+              ${selected.agentName || '-'} · ${selected.runnerConfig?.model || '-'}
             </span>
           </div>
           <div style="padding:8px 12px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border)">

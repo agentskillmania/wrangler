@@ -34,7 +34,7 @@ describe('workspace file routes', () => {
     await sessionManager.init();
 
     const store = sessionManager.getSessionStore(workspacePath);
-    await store.createWithId('test-session', 'test-model', 'test-agent');
+    await store.createWithId('test-session', 'test-agent');
     sessionManager.registerSession('test-session', workspacePath);
 
     // Seed workspace with test files

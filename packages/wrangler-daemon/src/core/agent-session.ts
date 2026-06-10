@@ -5,7 +5,7 @@
  * Bridges colts AskHuman tool -> SSE -> frontend for human-in-the-loop interaction.
  */
 
-import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+import { createAgentState, addUserMessage, updateState } from '@agentskillmania/colts';
 import type { AgentState, RunStreamEvent, RunOptions } from '@agentskillmania/colts';
 import type { AskHumanHandler, HumanResponse } from '@agentskillmania/colts';
 import { LLMClient } from '@agentskillmania/llm-client';
@@ -189,23 +189,34 @@ export class AgentSession {
       askHumanHandler,
     });
 
+    // Build tool definitions from runner for state synchronization
+    const runnerTools = runner.getToolInfo().map((t) => ({
+      name: t.name,
+      description: t.description,
+    }));
+
     // Resume from previous state if available
     let state: AgentState;
     if (options.sessionStore && options.sessionId) {
       const previousState = await options.sessionStore.loadState(options.sessionId);
       if (previousState) {
-        state = previousState;
+        // Synchronize config with current runner settings
+        state = updateState(previousState, (draft) => {
+          draft.config.name = options.agentName;
+          draft.config.instructions = options.agentInstructions ?? draft.config.instructions;
+          draft.config.tools = runnerTools;
+        });
       } else {
         state = createAgentState({
           name: options.agentName,
-          tools: [],
+          tools: runnerTools,
           instructions: options.agentInstructions ?? DEFAULT_INSTRUCTIONS,
         });
       }
     } else {
       state = createAgentState({
         name: options.agentName,
-        tools: [],
+        tools: runnerTools,
         instructions: options.agentInstructions ?? DEFAULT_INSTRUCTIONS,
       });
     }

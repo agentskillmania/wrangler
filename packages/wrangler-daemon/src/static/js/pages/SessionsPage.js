@@ -152,7 +152,7 @@ export function SessionsPage() {
       >
         ${selected && html`
           <div style="padding:8px 12px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border)">
-            <div style="margin-bottom:4px"><strong>Agent:</strong> ${esc(selected.agentName || '-')} · <strong>Model:</strong> ${esc(selected.model || '-')}</div>
+            <div style="margin-bottom:4px"><strong>Agent:</strong> ${esc(selected.agentName || '-')} · <strong>Model:</strong> ${esc(selected.runnerConfig?.model || '-')}</div>
             <div style="margin-bottom:4px"><strong>Workspace:</strong> ${esc(selected.workspacePath || '-')}</div>
             <div><strong>Created:</strong> ${selected.createdAt ? new Date(selected.createdAt).toLocaleString() : '-'} · <strong>Updated:</strong> ${selected.updatedAt ? new Date(selected.updatedAt).toLocaleString() : '-'}</div>
           </div>

@@ -89,7 +89,10 @@ export async function forkSession(sessionId: string, options: ForkOptions): Prom
   const workspacePath = options.workspace ?? sourceMeta.workspacePath;
   const targetStore = new SessionStore(baseDir, workspacePath);
 
-  await targetStore.createWithId(newId, sourceMeta.model, sourceMeta.agentName);
+  await targetStore.createWithId(newId, sourceMeta.agentName);
+  if (sourceMeta.runnerConfig) {
+    await targetStore.updateMeta(newId, { runnerConfig: sourceMeta.runnerConfig });
+  }
   await targetStore.saveState(newId, truncatedState);
 
   for (const entry of truncatedEntries) {

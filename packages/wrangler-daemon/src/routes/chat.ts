@@ -249,17 +249,32 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       return;
     }
 
+    // Reject old sessions without runnerConfig snapshot
+    if (!info.runnerConfig) {
+      reply.code(410).send({ error: 'Session expired, please start a new conversation' });
+      return;
+    }
+
     // Lazily create AgentSession on first resume chat
     let agentSession = sessionManager().getAgentSession(sessionId);
     if (!agentSession) {
       const store = sessionManager().getSessionStore(info.workspacePath);
       // Look up agent to get config path for diagnostics
       const agentDetail = await resourceManager().getAgent(info.agentName);
+      const rc = info.runnerConfig;
       const sessionOptions: AgentSessionOptions = {
         sessionId,
         workspacePath: info.workspacePath,
         agentName: info.agentName,
-        model: info.model,
+        model: rc.model,
+        skillDirs: rc.skillDirs,
+        mcpConfigPaths: rc.mcpConfigPaths,
+        builtinTools: rc.builtinTools,
+        sandbox: rc.sandbox,
+        enableSession: rc.enableSession,
+        enableTodolist: rc.enableTodolist,
+        enableCommands: rc.enableCommands,
+        a2ui: rc.a2ui,
         sessionStore: store,
         sessionBaseDir: sessionManager().baseDir,
         sessionManager: sessionManager(),

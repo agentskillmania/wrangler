@@ -43,18 +43,22 @@ describe('createSessionMiddleware', () => {
 
     it('should not recreate session if it already exists', async () => {
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       const meta1 = await store.getMeta(state.id);
       await middleware.beforeRun!({ state, runnerOptions: mockRunnerOptions });
       const meta2 = await store.getMeta(state.id);
       expect(meta1!.createdAt).toBe(meta2!.createdAt);
     });
 
-    it('should use model from runnerOptions for meta', async () => {
+    it('should persist runnerConfig snapshot to meta', async () => {
+      const mw = createSessionMiddleware(store, {
+        runnerConfigSnapshot: { model: 'GLM-4.7', skillDirs: ['/test/skills'] },
+      });
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await middleware.beforeRun!({ state, runnerOptions: mockRunnerOptions });
+      await mw.beforeRun!({ state, runnerOptions: mockRunnerOptions });
       const meta = await store.getMeta(state.id);
-      expect(meta!.model).toBe('GLM-4.7');
+      expect(meta!.runnerConfig.model).toBe('GLM-4.7');
+      expect(meta!.runnerConfig.skillDirs).toEqual(['/test/skills']);
     });
 
     it('should create session and record user message with colts id', async () => {
@@ -91,7 +95,7 @@ describe('createSessionMiddleware', () => {
   describe('afterStep', () => {
     it('should write tool SessionEntry for continue result', async () => {
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       const stepResult: StepResult = {
         type: 'continue',
         toolResult: 'file content here',
@@ -115,7 +119,7 @@ describe('createSessionMiddleware', () => {
 
     it('should write assistant SessionEntry for done result', async () => {
       let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       state = addAssistantMessage(state, 'previous response');
       const stepResult: StepResult = {
         type: 'done',
@@ -138,7 +142,7 @@ describe('createSessionMiddleware', () => {
 
     it('should write assistant entry with random UUID when no assistant message in state', async () => {
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       const stepResult: StepResult = {
         type: 'done',
         answer: 'Short answer.',
@@ -158,7 +162,7 @@ describe('createSessionMiddleware', () => {
 
     it('should write error SessionEntry for error result', async () => {
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       const stepResult: StepResult = {
         type: 'error',
         error: new Error('LLM call failed'),
@@ -180,7 +184,7 @@ describe('createSessionMiddleware', () => {
 
     it('should stringify non-string toolResult in continue result', async () => {
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       const stepResult: StepResult = {
         type: 'continue',
         toolResult: { files: ['a.ts', 'b.ts'] },
@@ -199,7 +203,7 @@ describe('createSessionMiddleware', () => {
 
     it('should handle null toolResult in continue result', async () => {
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       const stepResult: StepResult = {
         type: 'continue',
         toolResult: null as unknown as string,
@@ -218,7 +222,7 @@ describe('createSessionMiddleware', () => {
 
     it('should write multiple entries for multiple actions', async () => {
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       const stepResult: StepResult = {
         type: 'continue',
         toolResult: 'ok',
@@ -247,7 +251,7 @@ describe('createSessionMiddleware', () => {
         createAgentState({ name: 'test', instructions: 'test', tools: [] }),
         'Hello'
       );
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await middleware.afterRun!({
         state,
         result: { type: 'completed', reason: 'done', state } as unknown as never,

@@ -28,7 +28,7 @@ describe('SessionStore', () => {
     });
 
     it('should return true after createWithId', async () => {
-      const sessionId = await store.createWithId('1745800000-test', 'GLM-4.7', 'test-agent');
+      const sessionId = await store.createWithId('1745800000-test', 'test-agent');
       expect(store.exists(sessionId)).toBe(true);
     });
   });
@@ -36,7 +36,7 @@ describe('SessionStore', () => {
   describe('createWithId', () => {
     it('should create session directory with meta.yaml', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
       const dirPath = store.getSessionDir(sessionId);
       const dirStat = await stat(dirPath);
       expect(dirStat.isDirectory()).toBe(true);
@@ -47,11 +47,11 @@ describe('SessionStore', () => {
 
     it('should write correct metadata including agentName', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'my-agent');
+      await store.createWithId(sessionId, 'my-agent');
       const meta = await store.getMeta(sessionId);
       expect(meta!.id).toBe(sessionId);
       expect(meta!.workspacePath).toBe(workspacePath);
-      expect(meta!.model).toBe('GLM-4.7');
+      expect(meta!.runnerConfig).toBeDefined();
       expect(meta!.agentName).toBe('my-agent');
     });
   });
@@ -59,7 +59,7 @@ describe('SessionStore', () => {
   describe('saveState / loadState', () => {
     it('should save and restore AgentState via snapshot', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
 
       const state = createAgentState({
         name: 'test-agent',
@@ -83,7 +83,7 @@ describe('SessionStore', () => {
 
     it('should survive concurrent saveState calls without corrupting state.json', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
 
       const states = Array.from({ length: 10 }, (_, i) => {
         const state = createAgentState({ name: `agent-${i}`, instructions: `msg-${i}`, tools: [] });
@@ -104,7 +104,7 @@ describe('SessionStore', () => {
 
     it('should persist AgentState as plain JSON without snapshot wrapper', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
       const state = createAgentState({
         name: 'test-agent',
         instructions: 'You are a test agent.',
@@ -128,7 +128,7 @@ describe('SessionStore', () => {
   describe('updateMeta', () => {
     it('should update metadata fields', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
       await store.updateMeta(sessionId, { updatedAt: '2026-04-28T15:00:00.000Z' });
 
       const meta = await store.getMeta(sessionId);
@@ -154,15 +154,15 @@ describe('SessionStore', () => {
     });
 
     it('should list sessions for the workspace', async () => {
-      await store.createWithId('1745800001-test1', 'GLM-4.7', 'agent-1');
-      await store.createWithId('1745800002-test2', 'GLM-4.7', 'agent-2');
+      await store.createWithId('1745800001-test1', 'agent-1');
+      await store.createWithId('1745800002-test2', 'agent-2');
 
       const sessions = await store.listSessions();
       expect(sessions).toHaveLength(2);
     });
 
     it('should not list sessions from different workspace', async () => {
-      await store.createWithId('1745800001-test1', 'GLM-4.7', 'test-agent');
+      await store.createWithId('1745800001-test1', 'test-agent');
 
       const otherStore = new SessionStore(testBaseDir, '/other/workspace');
       const sessions = await otherStore.listSessions();
@@ -170,7 +170,7 @@ describe('SessionStore', () => {
     });
 
     it('should skip non-directory entries in workspace dir', async () => {
-      await store.createWithId('1745800001-test1', 'GLM-4.7', 'test-agent');
+      await store.createWithId('1745800001-test1', 'test-agent');
       // Create a file in the workspace dir (not a directory)
       const { writeFile } = await import('node:fs/promises');
       const wsDir = store.getSessionDir('').replace(/\/$/, '');
@@ -182,7 +182,7 @@ describe('SessionStore', () => {
     });
 
     it('should skip sessions with missing or corrupt meta', async () => {
-      await store.createWithId('1745800001-test1', 'GLM-4.7', 'test-agent');
+      await store.createWithId('1745800001-test1', 'test-agent');
       // Create a directory without meta.yaml
       const { mkdir: mkdirFn } = await import('node:fs/promises');
       const wsDir = store.getSessionDir('').replace(/\/$/, '');
@@ -215,7 +215,7 @@ describe('SessionStore', () => {
   describe('deleteSession', () => {
     it('should remove session directory', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
       expect(store.exists(sessionId)).toBe(true);
 
       await store.deleteSession(sessionId);
@@ -226,7 +226,7 @@ describe('SessionStore', () => {
   describe('appendEntry', () => {
     it('should append a SessionEntry to session.jsonl', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
 
       const entry: SessionEntry = {
         id: randomUUID(),
@@ -247,7 +247,7 @@ describe('SessionStore', () => {
 
     it('should append multiple entries in order', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
 
       await store.appendEntry(sessionId, {
         id: randomUUID(),
@@ -280,7 +280,7 @@ describe('SessionStore', () => {
 
     it('should write one JSON per line (JSONL format)', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
 
       await store.appendEntry(sessionId, {
         id: randomUUID(),
@@ -308,7 +308,7 @@ describe('SessionStore', () => {
 
     it('should handle entries with optional fields', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
 
       const errorEntry: SessionEntry = {
         id: randomUUID(),
@@ -326,7 +326,7 @@ describe('SessionStore', () => {
 
     it('should handle entries with exitCode and toolArguments', async () => {
       const sessionId = '1745800000-test';
-      await store.createWithId(sessionId, 'GLM-4.7', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
 
       const toolEntry: SessionEntry = {
         id: randomUUID(),
@@ -351,7 +351,7 @@ describe('SessionStore', () => {
     const sessionId = '1745800000-read-test';
 
     it('reads SessionEntry objects from session.jsonl', async () => {
-      await store.createWithId(sessionId, 'test-model', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
       const entry: SessionEntry = {
         id: randomUUID(),
         role: 'user',
@@ -367,7 +367,7 @@ describe('SessionStore', () => {
     });
 
     it('returns empty array when session.jsonl does not exist', async () => {
-      await store.createWithId(sessionId, 'test-model', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
       const entries = await store.readEntries(sessionId);
       expect(entries).toEqual([]);
     });
@@ -381,7 +381,7 @@ describe('SessionStore', () => {
   describe('resume', () => {
     it('returns state, meta, and entries for existing session', async () => {
       const sessionId = '1745800000-resume-test';
-      await store.createWithId(sessionId, 'test-model', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
       await store.appendEntry(sessionId, {
         id: randomUUID(),
         role: 'user',
@@ -413,9 +413,85 @@ describe('SessionStore', () => {
 
     it('returns null when state.json missing', async () => {
       const sessionId = '1745800000-resume-nostate';
-      await store.createWithId(sessionId, 'test-model', 'test-agent');
+      await store.createWithId(sessionId, 'test-agent');
       const result = await store.resume(sessionId);
       expect(result).toBeNull();
+    });
+  });
+
+  describe('fromDir', () => {
+    it('getMeta() does not require sessionId', async () => {
+      const sessionId = '1745800000-fromdir-test';
+      await store.createWithId(sessionId, 'test-agent');
+      const dir = store.getSessionDir(sessionId);
+
+      const boundStore = SessionStore.fromDir(dir);
+      const meta = await boundStore.getMeta();
+      expect(meta).not.toBeNull();
+      expect(meta!.id).toBe(sessionId);
+      expect(meta!.agentName).toBe('test-agent');
+    });
+
+    it('loadState() does not require sessionId', async () => {
+      const sessionId = '1745800000-fromdir-state';
+      await store.createWithId(sessionId, 'test-agent');
+      const agentState = createAgentState({ name: 'test-agent', tools: [] });
+      await store.saveState(sessionId, agentState);
+      const dir = store.getSessionDir(sessionId);
+
+      const boundStore = SessionStore.fromDir(dir);
+      const loaded = await boundStore.loadState();
+      expect(loaded).not.toBeNull();
+      expect(loaded!.id).toBe(agentState.id);
+    });
+
+    it('saveState() does not require sessionId', async () => {
+      const sessionId = '1745800000-fromdir-save';
+      await store.createWithId(sessionId, 'test-agent');
+      const dir = store.getSessionDir(sessionId);
+
+      const boundStore = SessionStore.fromDir(dir);
+      const newState = createAgentState({ name: 'updated-agent', tools: [] });
+      await boundStore.saveState(undefined, newState);
+
+      const loaded = await boundStore.loadState();
+      expect(loaded).not.toBeNull();
+      expect(loaded!.config.name).toBe('updated-agent');
+    });
+
+    it('throws when sessionId is passed to a bound store', async () => {
+      const sessionId = '1745800000-fromdir-bound';
+      await store.createWithId(sessionId, 'test-agent');
+      const dir = store.getSessionDir(sessionId);
+
+      const boundStore = SessionStore.fromDir(dir);
+      await expect(boundStore.getMeta(sessionId)).rejects.toThrow(
+        'Directory-bound SessionStore does not accept sessionId'
+      );
+    });
+
+    it('throws when sessionId is omitted for a workspace-based store', async () => {
+      await expect(store.getMeta()).rejects.toThrow(
+        'sessionId is required for workspace-based SessionStore'
+      );
+    });
+
+    it('readEntries() does not require sessionId', async () => {
+      const sessionId = '1745800000-fromdir-entries';
+      await store.createWithId(sessionId, 'test-agent');
+      const entry: SessionEntry = {
+        id: randomUUID(),
+        role: 'user',
+        content: 'hello',
+        timestamp: Date.now(),
+      };
+      await store.appendEntry(sessionId, entry);
+      const dir = store.getSessionDir(sessionId);
+
+      const boundStore = SessionStore.fromDir(dir);
+      const entries = await boundStore.readEntries();
+      expect(entries).toHaveLength(1);
+      expect(entries[0].content).toBe('hello');
     });
   });
 });

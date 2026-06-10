@@ -89,7 +89,8 @@ describe('Chat API', () => {
 
     // Create a session on disk for resume / history tests
     const store = sessionManager.getSessionStore(join(tempDir, 'workspace'));
-    await store.createWithId('existing-session', 'test-model', 'test-agent');
+    await store.createWithId('existing-session', 'test-agent');
+    await store.updateMeta('existing-session', { runnerConfig: { model: 'test-model' } });
     sessionManager.registerSession('existing-session', join(tempDir, 'workspace'));
 
     // Fastify with decorators

@@ -70,7 +70,7 @@ describe('SessionManager', () => {
     manager.registerSession('del-id', wsPath);
     // Write session meta so getInfo and delete can find it
     const store = manager.getSessionStore(wsPath);
-    await store.createWithId('del-id', 'deepseek-chat', 'test-agent');
+    await store.createWithId('del-id', 'test-agent');
 
     await manager.delete('del-id');
 
@@ -85,7 +85,7 @@ describe('SessionManager', () => {
 
     manager.registerSession('del-id', wsPath);
     const store = manager.getSessionStore(wsPath);
-    await store.createWithId('del-id', 'deepseek-chat', 'test');
+    await store.createWithId('del-id', 'test');
 
     const mockSession = { stop: vi.fn() } as any;
     manager.setAgentSession('del-id', mockSession);
@@ -118,7 +118,7 @@ describe('SessionManager', () => {
     const wsPath = join(tempDir, 'workspace');
 
     const store = new SessionStore(sessionsDir, wsPath);
-    await store.createWithId('discover-1', 'deepseek-chat', 'existing-agent');
+    await store.createWithId('discover-1', 'existing-agent');
 
     // New manager should discover it
     const manager = new SessionManager(sessionsDir);
@@ -182,9 +182,9 @@ describe('SessionManager', () => {
 
     const store1 = new SessionStore(sessionsDir, ws1);
     const store2 = new SessionStore(sessionsDir, ws2);
-    await store1.createWithId('ws1-s1', 'deepseek-chat', 'a1');
-    await store1.createWithId('ws1-s2', 'deepseek-chat', 'a2');
-    await store2.createWithId('ws2-s1', 'deepseek-chat', 'b1');
+    await store1.createWithId('ws1-s1', 'a1');
+    await store1.createWithId('ws1-s2', 'a2');
+    await store2.createWithId('ws2-s1', 'b1');
 
     const manager = new SessionManager(sessionsDir);
     await manager.init();
@@ -260,7 +260,7 @@ describe('SessionManager', () => {
 
       manager.registerSession('concurrent-del', wsPath);
       const store = manager.getSessionStore(wsPath);
-      await store.createWithId('concurrent-del', 'deepseek-chat', 'test-agent');
+      await store.createWithId('concurrent-del', 'test-agent');
 
       // Fire 5 concurrent deletes on the same session
       const deletePromises = Array.from({ length: 5 }, () => manager.delete('concurrent-del'));
@@ -281,7 +281,7 @@ describe('SessionManager', () => {
       const store = manager.getSessionStore(wsPath);
       for (const id of ids) {
         manager.registerSession(id, wsPath);
-        await store.createWithId(id, 'deepseek-chat', 'test-agent');
+        await store.createWithId(id, 'test-agent');
       }
 
       // Delete all 5 concurrently
@@ -324,7 +324,7 @@ describe('SessionManager', () => {
       const registerPromises = Array.from({ length: 20 }, (_, i) => {
         const wsPath = join(tempDir, `ws-list-${i}`);
         manager.registerSession(`list-race-${i}`, wsPath);
-        return manager.getSessionStore(wsPath).createWithId(`list-race-${i}`, 'model', 'agent');
+        return manager.getSessionStore(wsPath).createWithId(`list-race-${i}`, 'agent');
       });
 
       // Interleave list calls with registration

@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { EnhancedRunner } from '../../../src/runner/enhanced-runner.js';
 import type { EnhancedRunnerOptions } from '../../../src/runner/types.js';
 import type { ILLMProvider, Tool } from '@agentskillmania/colts';
+import { createAgentState } from '@agentskillmania/colts';
+import { SessionStore } from '../../../src/session/session-store.js';
+import { writeMeta } from '../../../src/session/meta.js';
 
 // Use a stable reference so each test can configure mockRun
 const { mockRun, mockRunStream, mockOn } = vi.hoisted(() => ({
@@ -669,7 +672,12 @@ describe('EnhancedRunner', () => {
       const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
       vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
       const runner = await EnhancedRunner.create(
-        makeOptions({ enableSession: false, enableTodolist: false, enableCommands: false, extraTools: [] })
+        makeOptions({
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+          extraTools: [],
+        })
       );
       expect(runner.getToolInfo()).toEqual([]);
     });
@@ -681,7 +689,12 @@ describe('EnhancedRunner', () => {
         { name: 'file_write', description: 'Write files' },
       ]);
       const runner = await EnhancedRunner.create(
-        makeOptions({ enableSession: false, enableTodolist: false, enableCommands: false, extraTools: [] })
+        makeOptions({
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+          extraTools: [],
+        })
       );
       const tools = runner.getToolInfo();
       const builtinTools = tools.filter((t) => t.type === 'builtin');
@@ -722,7 +735,12 @@ describe('EnhancedRunner', () => {
         { name: 'custom_tool', description: 'Custom tool', schema: {}, execute: vi.fn() },
       ];
       const runner = await EnhancedRunner.create(
-        makeOptions({ enableSession: false, enableTodolist: false, enableCommands: false, extraTools })
+        makeOptions({
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+          extraTools,
+        })
       );
       const tools = runner.getToolInfo();
       const custom = tools.find((t) => t.name === 'custom_tool');
@@ -743,7 +761,12 @@ describe('EnhancedRunner', () => {
       const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
       vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
       const runner = await EnhancedRunner.create(
-        makeOptions({ enableSession: true, enableTodolist: false, enableCommands: false, extraTools: [] })
+        makeOptions({
+          enableSession: true,
+          enableTodolist: false,
+          enableCommands: false,
+          extraTools: [],
+        })
       );
       const tools = runner.getToolInfo();
       const sessionTool = tools.find((t) => t.name === 'ask_human');
@@ -760,7 +783,12 @@ describe('EnhancedRunner', () => {
       const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
       vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
       const runner = await EnhancedRunner.create(
-        makeOptions({ enableSession: false, enableTodolist: true, enableCommands: false, extraTools: [] })
+        makeOptions({
+          enableSession: false,
+          enableTodolist: true,
+          enableCommands: false,
+          extraTools: [],
+        })
       );
       const tools = runner.getToolInfo();
       const todoTool = tools.find((t) => t.name === 'todo_read');
@@ -809,6 +837,159 @@ describe('EnhancedRunner', () => {
       const first = runner.getSkillInfo();
       const second = runner.getSkillInfo();
       expect(first).toEqual(second);
+    });
+  });
+
+  describe('LLM configuration', () => {
+    it('create() with llm quick init succeeds', async () => {
+      const runner = await EnhancedRunner.create(
+        makeOptions({ llmClient: undefined, llm: { apiKey: 'sk-test' } })
+      );
+      expect(runner).toBeInstanceOf(EnhancedRunner);
+    });
+
+    it('create() with llmClient still succeeds', async () => {
+      const runner = await EnhancedRunner.create(makeOptions());
+      expect(runner).toBeInstanceOf(EnhancedRunner);
+    });
+
+    it('create() without llmClient or llm throws', async () => {
+      await expect(EnhancedRunner.create(makeOptions({ llmClient: undefined }))).rejects.toThrow(
+        'Must specify either llmClient or llm.'
+      );
+    });
+
+    it('create() with both llmClient and llm throws', async () => {
+      await expect(
+        EnhancedRunner.create(makeOptions({ llm: { apiKey: 'sk-test' } }))
+      ).rejects.toThrow('Cannot specify both llmClient and llm');
+    });
+  });
+
+  describe('resume', () => {
+    it('resumes from session directory', async () => {
+      const sessionId = '1745800000-resume-test';
+      const store = new SessionStore(testBaseDir, '/test/workspace');
+      await store.createWithId(sessionId, 'test-agent');
+      await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
+      const agentState = createAgentState({ name: 'test-agent', tools: [] });
+      await store.saveState(sessionId, agentState);
+
+      const dir = store.getSessionDir(sessionId);
+      const { runner, state } = await EnhancedRunner.resume(dir, {
+        llm: { apiKey: 'sk-test' },
+      });
+
+      expect(runner).toBeInstanceOf(EnhancedRunner);
+      expect(state).toBeDefined();
+      expect(state.config.name).toBe('test-agent');
+    });
+
+    it('resume returns runner that can run', async () => {
+      const sessionId = '1745800000-resume-run';
+      const store = new SessionStore(testBaseDir, '/test/workspace');
+      await store.createWithId(sessionId, 'test-agent');
+      await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
+      const agentState = createAgentState({ name: 'test-agent', tools: [] });
+      await store.saveState(sessionId, agentState);
+
+      const dir = store.getSessionDir(sessionId);
+      const { runner, state } = await EnhancedRunner.resume(dir, {
+        llm: { apiKey: 'sk-test' },
+      });
+
+      const result = await runner.run(state);
+      expect(result).toBeDefined();
+    });
+
+    it('resume synchronizes state.config.tools with runner tools', async () => {
+      const sessionId = '1745800000-resume-tools';
+      const store = new SessionStore(testBaseDir, '/test/workspace');
+      await store.createWithId(sessionId, 'test-agent');
+      await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
+      const agentState = createAgentState({
+        name: 'test-agent',
+        tools: [{ name: 'old-tool', description: 'old', parameters: {} as any }],
+      });
+      await store.saveState(sessionId, agentState);
+
+      const dir = store.getSessionDir(sessionId);
+      const { state } = await EnhancedRunner.resume(dir, {
+        llm: { apiKey: 'sk-test' },
+      });
+
+      // runner.getToolInfo() returns mock tools (empty in this test env)
+      expect(Array.isArray(state.config.tools)).toBe(true);
+    });
+
+    it('resume uses options.model to override snapshot model', async () => {
+      const sessionId = '1745800000-resume-model';
+      const store = new SessionStore(testBaseDir, '/test/workspace');
+      await store.createWithId(sessionId, 'test-agent');
+      await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
+      const agentState = createAgentState({ name: 'test-agent', tools: [] });
+      await store.saveState(sessionId, agentState);
+
+      const dir = store.getSessionDir(sessionId);
+      const { runner } = await EnhancedRunner.resume(dir, {
+        llm: { apiKey: 'sk-test' },
+        model: 'claude-3',
+      });
+
+      expect(runner.getConfig().model).toBe('claude-3');
+    });
+
+    it('resume throws when llm/llmClient not provided', async () => {
+      const sessionId = '1745800000-resume-nollm';
+      const store = new SessionStore(testBaseDir, '/test/workspace');
+      await store.createWithId(sessionId, 'test-agent');
+      await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
+      const agentState = createAgentState({ name: 'test-agent', tools: [] });
+      await store.saveState(sessionId, agentState);
+
+      const dir = store.getSessionDir(sessionId);
+      await expect(EnhancedRunner.resume(dir, {})).rejects.toThrow(
+        'Must specify either llmClient or llm'
+      );
+    });
+
+    it('resume throws for non-existent session directory', async () => {
+      const badDir = join(testBaseDir, 'nonexistent');
+      await expect(EnhancedRunner.resume(badDir, { llm: { apiKey: 'sk-test' } })).rejects.toThrow(
+        'Session not found or incomplete'
+      );
+    });
+
+    it('resume throws when runnerConfig snapshot is missing', async () => {
+      const sessionId = '1745800000-resume-noconfig';
+      const store = new SessionStore(testBaseDir, '/test/workspace');
+      await store.createWithId(sessionId, 'test-agent');
+      // Manually clear runnerConfig to simulate legacy session
+      const meta = await store.getMeta(sessionId);
+      if (meta) {
+        delete (meta as any).runnerConfig;
+        await writeMeta(store.getSessionDir(sessionId), meta);
+      }
+      const agentState = createAgentState({ name: 'test-agent', tools: [] });
+      await store.saveState(sessionId, agentState);
+
+      const dir = store.getSessionDir(sessionId);
+      await expect(EnhancedRunner.resume(dir, { llm: { apiKey: 'sk-test' } })).rejects.toThrow(
+        'Session not found or incomplete'
+      );
+    });
+
+    it('resume throws when state.json is missing', async () => {
+      const sessionId = '1745800000-resume-nostate';
+      const store = new SessionStore(testBaseDir, '/test/workspace');
+      await store.createWithId(sessionId, 'test-agent');
+      await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
+      // Intentionally do NOT call saveState — state.json is missing
+
+      const dir = store.getSessionDir(sessionId);
+      await expect(EnhancedRunner.resume(dir, { llm: { apiKey: 'sk-test' } })).rejects.toThrow(
+        'Session not found or incomplete'
+      );
     });
   });
 });

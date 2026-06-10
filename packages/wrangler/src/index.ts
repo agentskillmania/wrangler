@@ -5,16 +5,17 @@
 import './types/colts-augmentation.js';
 
 // Types
-export type { SessionMeta, SessionEntry } from './types.js';
+export type { SessionMeta, SessionEntry, SessionSource, RunnerConfigSnapshot } from './types.js';
 
 // Session support
 export { createSessionSupport } from './session/support.js';
 export { SessionStore } from './session/session-store.js';
 export { writeMeta, readMeta } from './session/meta.js';
+export { SessionNotFoundError } from './session/errors.js';
 
 // Middleware (advanced usage)
 export { createSessionMiddleware } from './middleware/session-middleware.js';
-export type { SessionNamingDeps } from './middleware/session-middleware.js';
+export type { SessionNamingDeps } from './middleware/session-naming-middleware.js';
 
 // Runner (Layer 2)
 export { EnhancedRunner, buildTimeContext } from './runner/index.js';

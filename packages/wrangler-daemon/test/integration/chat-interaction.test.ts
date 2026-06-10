@@ -71,7 +71,7 @@ describe('US-C4: Agent Chat Interaction', () => {
   async function createTestSession(wsPath: string, id: string, agentName: string): Promise<void> {
     const manager = (fastify as any).sessionManager as SessionManager;
     const store = new SessionStore(sessionsDir, wsPath);
-    await store.createWithId(id, 'deepseek-chat', agentName);
+    await store.createWithId(id, agentName);
     manager.registerSession(id, wsPath);
   }
 

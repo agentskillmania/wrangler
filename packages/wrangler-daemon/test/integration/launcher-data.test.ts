@@ -129,8 +129,8 @@ describe('US-C9: Launcher Data', () => {
 
     const store1 = new SessionStore(sessionsDir, ws1);
     const store2 = new SessionStore(sessionsDir, ws2);
-    await store1.createWithId('session-alpha', 'deepseek-chat', 'agent-a');
-    await store2.createWithId('session-beta', 'gpt-4o', 'agent-b');
+    await store1.createWithId('session-alpha', 'agent-a');
+    await store2.createWithId('session-beta', 'agent-b');
 
     sessionManager.registerSession('session-alpha', ws1);
     sessionManager.registerSession('session-beta', ws2);
@@ -177,7 +177,7 @@ describe('US-C9: Launcher Data', () => {
 
     const ws = join(tempDir, 'ws-combined');
     const store = new SessionStore(sessionsDir, ws);
-    await store.createWithId('combined-session', 'deepseek-chat', 'combined-agent');
+    await store.createWithId('combined-session', 'combined-agent');
     sessionManager.registerSession('combined-session', ws);
 
     const res = await fetch(`${getUrl()}/api/launcher`);

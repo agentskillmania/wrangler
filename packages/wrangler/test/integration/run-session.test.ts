@@ -219,14 +219,14 @@ describe('US3: Session management operations', () => {
       sessionBaseDir: testBaseDir,
     });
 
-    await store.createWithId('1745800001-session-a', 'GLM-4.7', 'agent-a');
-    await store.createWithId('1745800002-session-b', 'GLM-4.7', 'agent-b');
+    await store.createWithId('1745800001-session-a', 'agent-a');
+    await store.createWithId('1745800002-session-b', 'agent-b');
 
     const sessions = await store.listSessions();
     expect(sessions).toHaveLength(2);
 
     const meta = await store.getMeta('1745800001-session-a');
-    expect(meta!.model).toBe('GLM-4.7');
+    expect(meta!.runnerConfig).toBeDefined();
     expect(meta!.agentName).toBe('agent-a');
 
     await store.deleteSession('1745800001-session-a');
@@ -262,7 +262,7 @@ describe('US3: Session management operations', () => {
       sessionBaseDir: testBaseDir,
     });
 
-    await store.createWithId('1745800000-count-test', 'GLM-4.7', 'test-agent');
+    await store.createWithId('1745800000-count-test', 'test-agent');
 
     const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
     const stateWithMsg = addUserMessage(state, 'Hello');

@@ -72,9 +72,7 @@ export function createSessionNamingMiddleware(deps: SessionNamingDeps): AgentMid
                 const userContent =
                   typeof firstUserMsg.content === 'string' ? firstUserMsg.content : '';
                 const assistantContent =
-                  typeof firstAssistantMsg.content === 'string'
-                    ? firstAssistantMsg.content
-                    : '';
+                  typeof firstAssistantMsg.content === 'string' ? firstAssistantMsg.content : '';
 
                 const prompt = generateTitlePrompt(userContent, assistantContent);
                 const res = await capturedLLM.call({

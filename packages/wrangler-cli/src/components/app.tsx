@@ -106,6 +106,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
       let dirs: string[] = [];
       let sandbox: boolean | undefined;
       let mcpConfigPaths: string[] | undefined;
+      let source: import('@agentskillmania/wrangler').SessionSource = { type: 'bare' };
 
       if (mode.mode === 'agent') {
         const loaded = await AgentLoader.loadFrom(mode.agentDir);
@@ -113,6 +114,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
         instr = loaded.instructions || instr;
         dirs = loaded.skillDirs;
         sandbox = loaded.sandbox;
+        source = loaded.source;
 
         const globalPath = discoverGlobalConfigPath();
         mcpConfigPaths = [globalPath, ...loaded.mcpPaths].filter((p) => existsSync(p));
@@ -136,6 +138,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
         confirmHandler,
         confirmTools: DEFAULT_CONFIRM_TOOLS,
         askHumanHandler,
+        source,
       });
 
       setRunner(r);

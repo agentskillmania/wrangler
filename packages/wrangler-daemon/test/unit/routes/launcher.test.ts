@@ -75,7 +75,7 @@ describe('Unit: Launcher Routes', () => {
     const wsPath = join(tempDir, 'workspace');
     sessionManager.registerSession('launcher-session', wsPath);
     const store = sessionManager.getSessionStore(wsPath);
-    await store.createWithId('launcher-session', 'test-model', 'test-agent');
+    await store.createWithId('launcher-session', 'test-agent');
 
     const res = await fetch(`${getUrl()}/api/launcher`);
     expect(res.ok).toBe(true);

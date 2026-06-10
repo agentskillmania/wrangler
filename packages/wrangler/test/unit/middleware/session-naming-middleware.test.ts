@@ -5,7 +5,12 @@ import { tmpdir } from 'node:os';
 import { createSessionNamingMiddleware } from '../../../src/middleware/session-naming-middleware.js';
 import { SessionStore } from '../../../src/session/session-store.js';
 import { createAgentState, addUserMessage, addAssistantMessage } from '@agentskillmania/colts';
-import type { AgentMiddleware, StepResult, RunnerOptions, ILLMProvider } from '@agentskillmania/colts';
+import type {
+  AgentMiddleware,
+  StepResult,
+  RunnerOptions,
+  ILLMProvider,
+} from '@agentskillmania/colts';
 
 const mockRunnerOptions: Readonly<RunnerOptions> = {
   model: 'GLM-4.7',
@@ -45,7 +50,7 @@ describe('createSessionNamingMiddleware', () => {
       let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
       state = addUserMessage(state, 'Write a hello world program in TypeScript');
 
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await mw.beforeRun!({ state, runnerOptions: mockRunnerOptions });
 
       const meta = await store.getMeta(state.id);
@@ -58,7 +63,7 @@ describe('createSessionNamingMiddleware', () => {
       let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
       state = addUserMessage(state, 'a'.repeat(200));
 
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await mw.beforeRun!({ state, runnerOptions: mockRunnerOptions });
 
       const meta = await store.getMeta(state.id);
@@ -71,7 +76,7 @@ describe('createSessionNamingMiddleware', () => {
       let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
       state = addUserMessage(state, 'Second message');
 
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await store.updateMeta(state.id, { title: 'First Title', titleSource: 'auto' });
 
       await mw.beforeRun!({ state, runnerOptions: mockRunnerOptions });
@@ -84,7 +89,7 @@ describe('createSessionNamingMiddleware', () => {
       const mw = createSessionNamingMiddleware({ store });
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
 
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await mw.beforeRun!({ state, runnerOptions: mockRunnerOptions });
 
       const meta = await store.getMeta(state.id);
@@ -113,7 +118,7 @@ describe('createSessionNamingMiddleware', () => {
       state = addUserMessage(state, 'Write hello world');
       state = addAssistantMessage(state, 'Here is the hello world program');
 
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await store.updateMeta(state.id, { title: 'Write hello world', titleSource: 'auto' });
 
       const stepResult: StepResult = {
@@ -144,7 +149,7 @@ describe('createSessionNamingMiddleware', () => {
       state = addUserMessage(state, 'Write hello world');
       state = addAssistantMessage(state, 'Here is the program');
 
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await store.updateMeta(state.id, { title: 'Already Good', titleSource: 'generated' });
 
       const stepResult: StepResult = {
@@ -175,7 +180,7 @@ describe('createSessionNamingMiddleware', () => {
       state = addUserMessage(state, 'Write hello world');
       state = addAssistantMessage(state, 'Here is the program');
 
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await store.updateMeta(state.id, { title: 'User Set', titleSource: 'manual' });
 
       const stepResult: StepResult = {
@@ -205,7 +210,7 @@ describe('createSessionNamingMiddleware', () => {
       state = addUserMessage(state, 'Write hello world');
       state = addAssistantMessage(state, 'Here is the program');
 
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await store.updateMeta(state.id, { title: 'Write hello world', titleSource: 'auto' });
 
       const stepResult: StepResult = {
@@ -238,7 +243,7 @@ describe('createSessionNamingMiddleware', () => {
       state = addUserMessage(state, 'Write hello world');
       state = addAssistantMessage(state, 'Here is the program');
 
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await store.updateMeta(state.id, { title: 'Write hello world', titleSource: 'auto' });
 
       const stepResult: StepResult = {
@@ -265,7 +270,7 @@ describe('createSessionNamingMiddleware', () => {
       const mw = createSessionNamingMiddleware({ store, llmClient: mockLLM, model: 'GLM-5.1' });
 
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await store.updateMeta(state.id, { title: 'Write hello world', titleSource: 'auto' });
 
       const stepResult: StepResult = {
@@ -289,7 +294,7 @@ describe('createSessionNamingMiddleware', () => {
       const mw = createSessionNamingMiddleware({ store, llmClient: mockLLM, model: 'GLM-5.1' });
 
       const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'GLM-4.7', 'test');
+      await store.createWithId(state.id, 'test');
       await store.updateMeta(state.id, { title: 'Write hello world', titleSource: 'auto' });
 
       const stepResult: StepResult = {

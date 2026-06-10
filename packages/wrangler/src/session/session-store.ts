@@ -36,6 +36,7 @@ export class SessionStore {
   private readonly workspaceHash: string;
   /** Per-session write queue to prevent concurrent file corruption */
   private readonly writeQueues = new Map<string, Promise<unknown>>();
+  private _sessionDir?: string;
 
   constructor(
     private readonly baseDir: string,
@@ -45,19 +46,29 @@ export class SessionStore {
   }
 
   /**
+   * Create a SessionStore directly bound to a session directory.
+   * All operations target this directory without requiring sessionId.
+   */
+  static fromDir(sessionDir: string): SessionStore {
+    const store = new SessionStore('', '');
+    store._sessionDir = sessionDir;
+    return store;
+  }
+
+  /**
    * Serialize all writes for a given session to prevent race conditions.
    * Concurrent writes to state.json / session.jsonl / meta.yaml
    * can corrupt files or lose updates.
    */
-  private async serialize<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
-    const previous = this.writeQueues.get(sessionId) ?? Promise.resolve();
+  private async serialize<T>(key: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.writeQueues.get(key) ?? Promise.resolve();
     const next = previous.then(() => operation());
-    this.writeQueues.set(sessionId, next);
+    this.writeQueues.set(key, next);
     try {
       return await next;
     } finally {
-      if (this.writeQueues.get(sessionId) === next) {
-        this.writeQueues.delete(sessionId);
+      if (this.writeQueues.get(key) === next) {
+        this.writeQueues.delete(key);
       }
     }
   }
@@ -68,17 +79,26 @@ export class SessionStore {
   }
 
   /** Get full path to session directory */
-  getSessionDir(sessionId: string): string {
+  getSessionDir(sessionId?: string): string {
+    if (this._sessionDir) {
+      if (sessionId) {
+        throw new Error('Directory-bound SessionStore does not accept sessionId');
+      }
+      return this._sessionDir;
+    }
+    if (sessionId === undefined) {
+      throw new Error('sessionId is required for workspace-based SessionStore');
+    }
     return join(this.getWorkspaceDir(), sessionId);
   }
 
   /** Check if session exists (synchronous) */
-  exists(sessionId: string): boolean {
+  exists(sessionId?: string): boolean {
     return existsSync(this.getSessionDir(sessionId));
   }
 
   /** Check if session directory exists (async) */
-  async existsAsync(sessionId: string): Promise<boolean> {
+  async existsAsync(sessionId?: string): Promise<boolean> {
     try {
       await stat(this.getSessionDir(sessionId));
       return true;
@@ -87,8 +107,12 @@ export class SessionStore {
     }
   }
 
-  /** Create session with specified ID, model, and agent name */
-  async createWithId(sessionId: string, model: string, agentName: string): Promise<string> {
+  private getQueueKey(sessionId?: string): string {
+    return this._sessionDir ?? sessionId ?? '_unknown_';
+  }
+
+  /** Create session with specified ID and agent name */
+  async createWithId(sessionId: string, agentName: string): Promise<string> {
     const dir = this.getSessionDir(sessionId);
     await mkdir(dir, { recursive: true });
 
@@ -98,8 +122,8 @@ export class SessionStore {
       workspacePath: this.workspacePath,
       createdAt: now,
       updatedAt: now,
-      model,
       agentName,
+      runnerConfig: { model: '' },
     };
     await writeMeta(dir, meta);
 
@@ -107,8 +131,8 @@ export class SessionStore {
   }
 
   /** Save AgentState to state.json (snapshot format) */
-  async saveState(sessionId: string, state: AgentState): Promise<void> {
-    return this.serialize(sessionId, async () => {
+  async saveState(sessionId: string | undefined, state: AgentState): Promise<void> {
+    return this.serialize(this.getQueueKey(sessionId), async () => {
       const dir = this.getSessionDir(sessionId);
       const json = serializeState(state);
       await writeFile(join(dir, 'state.json'), json, 'utf-8');
@@ -116,7 +140,7 @@ export class SessionStore {
   }
 
   /** Load AgentState from state.json */
-  async loadState(sessionId: string): Promise<AgentState | null> {
+  async loadState(sessionId?: string): Promise<AgentState | null> {
     try {
       const dir = this.getSessionDir(sessionId);
       const raw = await readFile(join(dir, 'state.json'), 'utf-8');
@@ -127,8 +151,8 @@ export class SessionStore {
   }
 
   /** Append a SessionEntry to session.jsonl */
-  async appendEntry(sessionId: string, entry: SessionEntry): Promise<void> {
-    return this.serialize(sessionId, async () => {
+  async appendEntry(sessionId: string | undefined, entry: SessionEntry): Promise<void> {
+    return this.serialize(this.getQueueKey(sessionId), async () => {
       const dir = this.getSessionDir(sessionId);
       const line = JSON.stringify(entry) + '\n';
       await writeFile(join(dir, 'session.jsonl'), line, { flag: 'a', encoding: 'utf-8' });
@@ -136,7 +160,7 @@ export class SessionStore {
   }
 
   /** Read all SessionEntries from session.jsonl */
-  async readEntries(sessionId: string): Promise<SessionEntry[]> {
+  async readEntries(sessionId?: string): Promise<SessionEntry[]> {
     try {
       const dir = this.getSessionDir(sessionId);
       const content = await readFile(join(dir, 'session.jsonl'), 'utf-8');
@@ -151,8 +175,8 @@ export class SessionStore {
   }
 
   /** Update partial fields of session metadata */
-  async updateMeta(sessionId: string, updates: Partial<SessionMeta>): Promise<void> {
-    return this.serialize(sessionId, async () => {
+  async updateMeta(sessionId: string | undefined, updates: Partial<SessionMeta>): Promise<void> {
+    return this.serialize(this.getQueueKey(sessionId), async () => {
       const dir = this.getSessionDir(sessionId);
       const existing = await readMeta(dir);
       if (!existing) return;
@@ -162,7 +186,7 @@ export class SessionStore {
   }
 
   /** Get session metadata */
-  async getMeta(sessionId: string): Promise<SessionMeta | null> {
+  async getMeta(sessionId?: string): Promise<SessionMeta | null> {
     const dir = this.getSessionDir(sessionId);
     return readMeta(dir);
   }
@@ -189,7 +213,7 @@ export class SessionStore {
   }
 
   /** Delete session */
-  async deleteSession(sessionId: string): Promise<void> {
+  async deleteSession(sessionId?: string): Promise<void> {
     const dir = this.getSessionDir(sessionId);
     await rm(dir, { recursive: true, force: true });
   }
