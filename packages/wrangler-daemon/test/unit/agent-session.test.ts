@@ -3,17 +3,32 @@ import { AgentSession } from '../../src/core/agent-session.js';
 import type { AgentSessionOptions } from '../../src/core/agent-session.js';
 import type { SSEEvent } from '../../src/types.js';
 
-const { mockEnhancedRunnerCreate, mockRunnerRunStream } = vi.hoisted(() => ({
-  mockEnhancedRunnerCreate: vi.fn().mockResolvedValue({
-    runStream: vi.fn(),
-    getToolInfo: vi.fn().mockReturnValue([]),
-    getSkillInfo: vi.fn().mockReturnValue([]),
-    getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
-  }),
-  mockRunnerRunStream: vi.fn(),
-}));
+const { mockEnhancedRunnerCreate, mockEnhancedRunnerResume, mockRunnerRunStream } = vi.hoisted(
+  () => ({
+    mockEnhancedRunnerCreate: vi.fn().mockResolvedValue({
+      runStream: vi.fn(),
+      getToolInfo: vi.fn().mockReturnValue([]),
+      getSkillInfo: vi.fn().mockReturnValue([]),
+      getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
+    }),
+    mockEnhancedRunnerResume: vi.fn().mockResolvedValue({
+      runner: {
+        runStream: vi.fn(),
+        getToolInfo: vi.fn().mockReturnValue([]),
+        getSkillInfo: vi.fn().mockReturnValue([]),
+        getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
+      },
+      state: {
+        id: 'resumed-state-id',
+        config: { name: 'resumed-agent', instructions: '', tools: [] },
+        context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+      },
+    }),
+    mockRunnerRunStream: vi.fn(),
+  })
+);
 vi.mock('@agentskillmania/wrangler', () => ({
-  EnhancedRunner: { create: mockEnhancedRunnerCreate },
+  EnhancedRunner: { create: mockEnhancedRunnerCreate, resume: mockEnhancedRunnerResume },
   SessionStore: vi.fn(),
 }));
 vi.mock('@agentskillmania/llm-client', () => ({
@@ -930,6 +945,48 @@ describe('AgentSession', () => {
       const data = diagEvents[diagEvents.length - 1].data as Record<string, unknown>;
       const features = (data.runner as Record<string, unknown>).features as Record<string, unknown>;
       expect(features.a2uiEnabled).toBe(false);
+    });
+  });
+
+  describe('AgentSession.resume()', () => {
+    it('returns an AgentSession with runner and state from EnhancedRunner.resume()', async () => {
+      const session = await AgentSession.resume(
+        '/tmp/session-123',
+        {
+          sessionId: 'session-123',
+          workspacePath: '/tmp/workspace',
+          agentName: 'resumed-agent',
+        },
+        testConfig
+      );
+
+      expect(session).toBeInstanceOf(AgentSession);
+      expect(session.sessionId).toBe('session-123');
+      expect(session.agentName).toBe('resumed-agent');
+      expect(session.getState().id).toBe('resumed-state-id');
+      expect(mockEnhancedRunnerResume).toHaveBeenCalledWith(
+        '/tmp/session-123',
+        expect.objectContaining({
+          llmClient: expect.any(Object),
+          askHumanHandler: expect.any(Function),
+        })
+      );
+    });
+
+    it('re-throws errors from EnhancedRunner.resume()', async () => {
+      mockEnhancedRunnerResume.mockRejectedValueOnce(new Error('Session not found'));
+
+      await expect(
+        AgentSession.resume(
+          '/tmp/missing',
+          {
+            sessionId: 'missing',
+            workspacePath: '/tmp/workspace',
+            agentName: 'test',
+          },
+          testConfig
+        )
+      ).rejects.toThrow('Session not found');
     });
   });
 });

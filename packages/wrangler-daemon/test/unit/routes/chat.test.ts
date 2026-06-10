@@ -5,19 +5,22 @@ import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ConfigManager } from '../../../src/core/config-manager.js';
 import { ResourceManager } from '../../../src/core/resource-manager.js';
+import { SessionNotFoundError } from '@agentskillmania/wrangler';
 import { SessionManager } from '../../../src/core/session-manager.js';
 import { chatRoutes } from '../../../src/routes/chat.js';
 
 // ─── Mock setup ───
 
-const { mockAgentSessionCreate, mockHandleMessage } = vi.hoisted(() => ({
+const { mockAgentSessionCreate, mockAgentSessionResume, mockHandleMessage } = vi.hoisted(() => ({
   mockAgentSessionCreate: vi.fn(),
+  mockAgentSessionResume: vi.fn(),
   mockHandleMessage: vi.fn(),
 }));
 
 vi.mock('../../../src/core/agent-session.js', () => ({
   AgentSession: {
     create: mockAgentSessionCreate,
+    resume: mockAgentSessionResume,
   },
 }));
 
@@ -102,6 +105,7 @@ describe('Chat API', () => {
     await fastify.listen({ port: 0, host: '127.0.0.1' });
 
     mockAgentSessionCreate.mockClear();
+    mockAgentSessionResume.mockClear();
     mockHandleMessage.mockClear();
     mockSession.stop.mockClear();
     mockSession.respondHumanInput.mockClear();
@@ -429,7 +433,7 @@ describe('Chat API', () => {
     });
 
     it('streams SSE events for valid resume', async () => {
-      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockAgentSessionResume.mockResolvedValue(mockSession);
       mockHandleMessage.mockImplementation(async function* () {
         yield { event: 'token', data: { delta: 'world' } };
         yield { event: 'done', data: {} };
@@ -480,7 +484,7 @@ describe('Chat API', () => {
     });
 
     it('streams error event on handleMessage exception', async () => {
-      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockAgentSessionResume.mockResolvedValue(mockSession);
       mockHandleMessage.mockImplementation(async function* () {
         yield { event: 'token', data: { delta: 'partial' } };
         throw new Error('stream blew up');
@@ -519,8 +523,22 @@ describe('Chat API', () => {
       mockSession.busy = false;
     });
 
+    it('returns 410 when AgentSession.resume throws SessionNotFoundError', async () => {
+      mockAgentSessionResume.mockRejectedValue(new SessionNotFoundError('/tmp/missing'));
+
+      const res = await fetch(`${getUrl()}/api/chat/existing-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello' }),
+      });
+
+      expect(res.status).toBe(410);
+      const body = await res.json();
+      expect(body.error).toBe('Session expired, please start a new conversation');
+    });
+
     it('passes per-request model and thinkingEnabled to handleMessage on resume', async () => {
-      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockAgentSessionResume.mockResolvedValue(mockSession);
       mockHandleMessage.mockImplementation(async function* () {
         yield { event: 'done', data: {} };
       });
@@ -545,7 +563,7 @@ describe('Chat API', () => {
     });
 
     it('uses stored session model for lazy creation on resume', async () => {
-      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockAgentSessionResume.mockResolvedValue(mockSession);
       mockHandleMessage.mockImplementation(async function* () {
         yield { event: 'done', data: {} };
       });
@@ -557,11 +575,11 @@ describe('Chat API', () => {
       });
 
       expect(res.status).toBe(200);
-      expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
+      expect(mockAgentSessionResume).toHaveBeenCalledTimes(1);
 
-      // Session creation uses stored model from session info, not body config
-      const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
-      expect(callArg.model).toBe('test-model'); // from session store, not body
+      // Session resume receives sessionDir as first arg
+      const callArg = mockAgentSessionResume.mock.calls[0][0] as string;
+      expect(callArg).toContain('existing-session');
     });
   });
 });

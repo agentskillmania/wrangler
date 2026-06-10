@@ -29,6 +29,17 @@ interface AskHumanBridge {
   >;
 }
 
+/** Options for resuming an AgentSession from disk */
+export interface AgentSessionResumeOptions {
+  sessionId: string;
+  workspacePath: string;
+  agentName: string;
+  agentInstructions?: string;
+  agentConfigPath?: string;
+  sessionStore?: SessionStore;
+  sessionManager?: { getStatus(id: string): string };
+}
+
 /** Options for creating an AgentSession */
 export interface AgentSessionOptions {
   sessionId?: string;
@@ -139,38 +150,11 @@ export class AgentSession {
    * @returns Initialized AgentSession ready to handle messages
    */
   static async create(options: AgentSessionOptions, config: DaemonConfig): Promise<AgentSession> {
-    const bridge: AskHumanBridge = {
-      sseSender: null,
-      cockpitSender: null,
-      pendingHumanInput: new Map(),
-    };
-
+    const bridge = AgentSession._createBridge();
     const llmModel = options.model ?? config.llm.model;
-    const llmClient = new LLMClient({ baseUrl: config.llm.baseUrl });
-    llmClient.registerProvider({ name: 'openai', maxConcurrency: 10 });
-    llmClient.registerApiKey({
-      key: config.llm.apiKey,
-      provider: 'openai',
-      maxConcurrency: 5,
-      models: [
-        {
-          modelId: llmModel,
-          maxConcurrency: 3,
-          contextWindow: config.llm.contextWindow,
-          maxTokens: config.llm.maxTokens,
-          reasoning: config.llm.reasoning,
-        },
-      ],
-    });
+    const llmClient = AgentSession._createLLMClient(config, llmModel);
 
-    const askHumanHandler: AskHumanHandler = async ({ questions, context }) => {
-      const requestId = `human-${Date.now()}`;
-      bridge.sseSender?.({ event: 'human-input', data: { requestId, questions, context } });
-      bridge.cockpitSender?.({ event: 'human-input', data: { requestId, questions, context } });
-      return new Promise<HumanResponse>((resolve, reject) => {
-        bridge.pendingHumanInput.set(requestId, { resolve, reject });
-      });
-    };
+    const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
 
     const runner = await EnhancedRunner.create({
       llmClient,
@@ -224,6 +208,85 @@ export class AgentSession {
     const session = new AgentSession(runner, state, bridge, options);
     session._llmClient = llmClient;
     return session;
+  }
+
+  /**
+   * Resume an AgentSession from a persisted session directory.
+   *
+   * Delegates to EnhancedRunner.resume() to reconstruct the runner and state
+   * from the runnerConfig snapshot stored on disk.
+   */
+  static async resume(
+    sessionDir: string,
+    options: AgentSessionResumeOptions,
+    config: DaemonConfig
+  ): Promise<AgentSession> {
+    const bridge = AgentSession._createBridge();
+    const llmModel = config.llm.model;
+    const llmClient = AgentSession._createLLMClient(config, llmModel);
+    const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
+
+    const { runner, state } = await EnhancedRunner.resume(sessionDir, {
+      llmClient,
+      model: llmModel,
+      askHumanHandler,
+    });
+
+    const session = new AgentSession(runner, state, bridge, {
+      sessionId: options.sessionId,
+      workspacePath: options.workspacePath,
+      agentName: options.agentName,
+      agentInstructions: options.agentInstructions,
+      agentConfigPath: options.agentConfigPath,
+      sessionStore: options.sessionStore,
+      sessionManager: options.sessionManager,
+      model: runner.getConfig().model,
+    });
+    session._llmClient = llmClient;
+    return session;
+  }
+
+  /** Create an AskHumanBridge instance. */
+  private static _createBridge(): AskHumanBridge {
+    return {
+      sseSender: null,
+      cockpitSender: null,
+      pendingHumanInput: new Map(),
+    };
+  }
+
+  /** Create an LLMClient from daemon config. */
+  private static _createLLMClient(config: DaemonConfig, model?: string): LLMClient {
+    const llmModel = model ?? config.llm.model;
+    const llmClient = new LLMClient({ baseUrl: config.llm.baseUrl });
+    llmClient.registerProvider({ name: 'openai', maxConcurrency: 10 });
+    llmClient.registerApiKey({
+      key: config.llm.apiKey,
+      provider: 'openai',
+      maxConcurrency: 5,
+      models: [
+        {
+          modelId: llmModel,
+          maxConcurrency: 3,
+          contextWindow: config.llm.contextWindow,
+          maxTokens: config.llm.maxTokens,
+          reasoning: config.llm.reasoning,
+        },
+      ],
+    });
+    return llmClient;
+  }
+
+  /** Create an AskHumanHandler wired to the given bridge. */
+  private static _createAskHumanHandler(bridge: AskHumanBridge): AskHumanHandler {
+    return async ({ questions, context }) => {
+      const requestId = `human-${Date.now()}`;
+      bridge.sseSender?.({ event: 'human-input', data: { requestId, questions, context } });
+      bridge.cockpitSender?.({ event: 'human-input', data: { requestId, questions, context } });
+      return new Promise<HumanResponse>((resolve, reject) => {
+        bridge.pendingHumanInput.set(requestId, { resolve, reject });
+      });
+    };
   }
 
   /** Whether the session is currently processing a message */

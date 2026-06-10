@@ -152,4 +152,6 @@ export interface ResumeOptions {
   model?: string;
   /** Optional thinking mode override */
   thinkingEnabled?: boolean;
+  /** AskHuman handler for human-in-the-loop */
+  askHumanHandler?: import('@agentskillmania/colts').AskHumanHandler;
 }
