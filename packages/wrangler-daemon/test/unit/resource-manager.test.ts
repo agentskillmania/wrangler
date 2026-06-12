@@ -32,6 +32,24 @@ describe('ResourceManager', () => {
     expect(skillsStat.isDirectory()).toBe(true);
   });
 
+  it('init throws when a target path exists as a non-directory', async () => {
+    // Create a file where the agents directory should be
+    await writeFile(agentsDir, 'not a directory');
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+    await expect(manager.init()).rejects.toThrow();
+  });
+
+  it('validateName throws for empty name', () => {
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+    expect(() => manager.validateName('')).toThrow('name is required');
+  });
+
+  it('validateName throws for names with path traversal', () => {
+    const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+    expect(() => manager.validateName('../evil')).toThrow('path separators or traversal sequences');
+    expect(() => manager.validateName('a/b')).toThrow('path separators or traversal sequences');
+  });
+
   it('listAgents returns empty array when no agents', async () => {
     const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
     await manager.init();
@@ -212,7 +230,7 @@ describe('ResourceManager', () => {
       expect(result).toBeNull();
     });
 
-    it('returns parsed agent detail for valid agent', async () => {
+    it('returns parsed agent identity and instructions', async () => {
       const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
@@ -226,6 +244,18 @@ describe('ResourceManager', () => {
       expect(detail!.id).toBe('coder');
       expect(detail!.instructions).toContain('coding assistant');
       expect(detail!.path).toContain('agents/coder');
+    });
+
+    it('returns empty skillDirs, mcpPaths and zero skillCount for plain agent', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      await manager.createAgent({
+        name: 'plain',
+        instructions: 'Plain agent.',
+      });
+
+      const detail = await manager.getAgent('plain');
       expect(detail!.skillDirs).toEqual([]);
       expect(detail!.mcpPaths).toEqual([]);
       expect(detail!.skillCount).toBe(0);
@@ -437,7 +467,7 @@ describe('ResourceManager', () => {
       expect(result).toBeNull();
     });
 
-    it('returns parsed crew detail with agents and skills', async () => {
+    async function createDetailCrew(): Promise<ReturnType<ResourceManager['getCrew']>> {
       const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
@@ -448,24 +478,33 @@ describe('ResourceManager', () => {
         instructions: 'Do things.',
       });
 
-      // Add agent files manually
       await writeFile(join(crewsDir, 'detail-crew', 'agents', 'leader.md'), '# Leader\n');
-
-      // Add skill directory with SKILL.md
       const skillDir = join(crewsDir, 'detail-crew', 'skills', 'search');
       await mkdir(skillDir, { recursive: true });
       await writeFile(join(skillDir, 'SKILL.md'), '---\nname: search\n---\n');
 
-      const detail = await manager.getCrew('detail-crew');
+      return manager.getCrew('detail-crew');
+    }
+
+    it('returns parsed crew identity fields', async () => {
+      const detail = await createDetailCrew();
       expect(detail).not.toBeNull();
       expect(detail!.id).toBe('detail-crew');
       expect(detail!.name).toBe('detail-crew');
       expect(detail!.description).toBe('A crew for detail test');
       expect(detail!.primaryAgent).toBe('leader');
       expect(detail!.crewMd).toContain('detail-crew');
+    });
+
+    it('returns parsed crew agents list', async () => {
+      const detail = await createDetailCrew();
       expect(detail!.agents).toHaveLength(1);
       expect(detail!.agents[0].name).toBe('leader');
       expect(detail!.agents[0].fileName).toBe('leader.md');
+    });
+
+    it('returns parsed crew skills list', async () => {
+      const detail = await createDetailCrew();
       expect(detail!.skills).toHaveLength(1);
       expect(detail!.skills[0].name).toBe('search');
     });
@@ -508,7 +547,7 @@ describe('ResourceManager', () => {
       expect(content).not.toContain('Original description.');
     });
 
-    it('creates directory structure and CREW.md', async () => {
+    it('creates crew subdirectories', async () => {
       const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
       await manager.init();
 
@@ -525,6 +564,17 @@ describe('ResourceManager', () => {
       const skillsStat = await statFn(join(crewsDir, 'new-crew', 'skills'));
       expect(agentsStat.isDirectory()).toBe(true);
       expect(skillsStat.isDirectory()).toBe(true);
+    });
+
+    it('creates CREW.md with expected content', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      await manager.createCrew({
+        name: 'new-crew',
+        description: 'A new crew',
+        instructions: 'Work together.',
+      });
 
       const content = await import('node:fs/promises').then((fs) =>
         fs.readFile(join(crewsDir, 'new-crew', 'CREW.md'), 'utf-8')

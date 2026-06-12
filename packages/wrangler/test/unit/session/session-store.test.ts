@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm, readFile, readdir, stat } from 'node:fs/promises';
+import { mkdir, rm, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -51,7 +51,7 @@ describe('SessionStore', () => {
       const meta = await store.getMeta(sessionId);
       expect(meta!.id).toBe(sessionId);
       expect(meta!.workspacePath).toBe(workspacePath);
-      expect(meta!.runnerConfig).toBeDefined();
+      expect(meta!.runnerConfig).toEqual({ model: '' });
       expect(meta!.agentName).toBe('my-agent');
     });
   });
@@ -379,8 +379,32 @@ describe('SessionStore', () => {
   });
 
   describe('resume', () => {
-    it('returns state, meta, and entries for existing session', async () => {
-      const sessionId = '1745800000-resume-test';
+    it('returns meta for existing session', async () => {
+      const sessionId = '1745800000-resume-meta';
+      await store.createWithId(sessionId, 'test-agent');
+      const agentState = createAgentState({ name: 'test-agent', tools: [] });
+      await store.saveState(sessionId, agentState);
+
+      const result = await store.resume(sessionId);
+      expect(result).not.toBeNull();
+      expect(result!.meta.id).toBe(sessionId);
+      expect(result!.meta.agentName).toBe('test-agent');
+    });
+
+    it('returns state for existing session', async () => {
+      const sessionId = '1745800000-resume-state';
+      await store.createWithId(sessionId, 'test-agent');
+      const agentState = createAgentState({ name: 'test-agent', instructions: 'test', tools: [] });
+      await store.saveState(sessionId, agentState);
+
+      const result = await store.resume(sessionId);
+      expect(result).not.toBeNull();
+      expect(result!.state.id).toBe(agentState.id);
+      expect(result!.state.config.name).toBe('test-agent');
+    });
+
+    it('returns recent entries for existing session', async () => {
+      const sessionId = '1745800000-resume-entries';
       await store.createWithId(sessionId, 'test-agent');
       await store.appendEntry(sessionId, {
         id: randomUUID(),
@@ -388,19 +412,11 @@ describe('SessionStore', () => {
         content: 'hello',
         timestamp: Date.now(),
       });
-      const agentState = createAgentState({
-        name: 'test-agent',
-        instructions: 'test',
-        tools: [],
-      });
+      const agentState = createAgentState({ name: 'test-agent', tools: [] });
       await store.saveState(sessionId, agentState);
 
       const result = await store.resume(sessionId);
       expect(result).not.toBeNull();
-      expect(result!.meta.id).toBe(sessionId);
-      expect(result!.meta.agentName).toBe('test-agent');
-      expect(result!.state).toBeDefined();
-      expect(result!.state.id).toBe(agentState.id);
       expect(result!.recentEntries).toHaveLength(1);
       expect(result!.recentEntries[0].role).toBe('user');
       expect(result!.recentEntries[0].content).toBe('hello');
@@ -492,6 +508,43 @@ describe('SessionStore', () => {
       const entries = await boundStore.readEntries();
       expect(entries).toHaveLength(1);
       expect(entries[0].content).toBe('hello');
+    });
+  });
+
+  describe('negative paths', () => {
+    it('returns null when loading state from a non-existent session', async () => {
+      const loaded = await store.loadState('no-such-session');
+      expect(loaded).toBeNull();
+    });
+
+    it('returns null when loading state from corrupt JSON', async () => {
+      const sessionId = '1745800000-corrupt-state';
+      await store.createWithId(sessionId, 'test-agent');
+      const dir = store.getSessionDir(sessionId);
+      await writeFile(join(dir, 'state.json'), 'not-json', 'utf-8');
+
+      const loaded = await store.loadState(sessionId);
+      expect(loaded).toBeNull();
+    });
+
+    it('returns empty entries when session.jsonl contains invalid lines', async () => {
+      const sessionId = '1745800000-bad-jsonl';
+      await store.createWithId(sessionId, 'test-agent');
+      const dir = store.getSessionDir(sessionId);
+      await writeFile(join(dir, 'session.jsonl'), 'not-json\n{"role":"user"}\n', 'utf-8');
+
+      const entries = await store.readEntries(sessionId);
+      expect(entries).toEqual([]);
+    });
+
+    it('throws when workspace-based store is asked for sessionDir without sessionId', () => {
+      expect(() => store.getSessionDir()).toThrow(
+        'sessionId is required for workspace-based SessionStore'
+      );
+    });
+
+    it('does not throw when deleting a non-existent session', async () => {
+      await expect(store.deleteSession('no-such-session')).resolves.toBeUndefined();
     });
   });
 });

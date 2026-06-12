@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createSessionSupport } from '../../../src/session/support.js';
+import { SessionStore } from '../../../src/session/session-store.js';
 import { mkdir, rm, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -33,7 +34,8 @@ describe('createSessionSupport', () => {
     expect(result.middlewares).toHaveLength(2);
     expect(result.middlewares[0].name).toBe('session');
     expect(result.middlewares[1].name).toBe('session-naming');
-    expect(typeof result.store.exists).toBe('function');
+    expect(result.store).toBeInstanceOf(SessionStore);
+    expect(result.store.exists('never-created')).toBe(false);
     expect(result.tools).toHaveLength(1);
   });
 

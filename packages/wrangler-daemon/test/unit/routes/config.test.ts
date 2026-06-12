@@ -44,7 +44,7 @@ describe('Unit: Config Routes', () => {
 
     fastify = Fastify();
     fastify.decorate('configManager', configManager);
-    fastify.register(configRoutes);
+    await fastify.register(configRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 
@@ -111,6 +111,13 @@ describe('Unit: Config Routes', () => {
     expect(res.ok).toBe(true);
     const body = await res.json();
     expect(body).toEqual({ error: 'path is required' });
+  });
+
+  it('GET /api/config/file returns 500 when file is missing', async () => {
+    const res = await fetch(
+      `${getUrl()}/api/config/file?path=${encodeURIComponent(join(tempDir, 'missing.yaml'))}`
+    );
+    expect(res.status).toBe(500);
   });
 
   // Test 5: PUT /api/config/file writes file

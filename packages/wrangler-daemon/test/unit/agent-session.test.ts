@@ -359,15 +359,11 @@ describe('AgentSession', () => {
       });
 
       const events: SSEEvent[] = [];
-      await expect(
-        (async () => {
-          for await (const event of session.handleMessage('hello', { thinkingEnabled: true })) {
-            events.push(event);
-          }
-        })()
-      ).resolves.not.toThrow();
+      for await (const event of session.handleMessage('hello', { thinkingEnabled: true })) {
+        events.push(event);
+      }
 
-      expect(events.length).toBeGreaterThan(0);
+      expect(events).toEqual([{ event: 'done', data: {} }]);
     });
 
     it('accepts options parameter without thinkingEnabled', async () => {
@@ -380,15 +376,11 @@ describe('AgentSession', () => {
       });
 
       const events: SSEEvent[] = [];
-      await expect(
-        (async () => {
-          for await (const event of session.handleMessage('hello', {})) {
-            events.push(event);
-          }
-        })()
-      ).resolves.not.toThrow();
+      for await (const event of session.handleMessage('hello', {})) {
+        events.push(event);
+      }
 
-      expect(events.length).toBeGreaterThan(0);
+      expect(events).toEqual([{ event: 'done', data: {} }]);
     });
 
     it('handles undefined options parameter', async () => {
@@ -401,15 +393,11 @@ describe('AgentSession', () => {
       });
 
       const events: SSEEvent[] = [];
-      await expect(
-        (async () => {
-          for await (const event of session.handleMessage('hello', undefined)) {
-            events.push(event);
-          }
-        })()
-      ).resolves.not.toThrow();
+      for await (const event of session.handleMessage('hello', undefined)) {
+        events.push(event);
+      }
 
-      expect(events.length).toBeGreaterThan(0);
+      expect(events).toEqual([{ event: 'done', data: {} }]);
     });
 
     it('passes thinkingEnabled option to runner when provided', async () => {
@@ -755,18 +743,9 @@ describe('AgentSession', () => {
       ).toBe(5);
     });
 
-    it('includes session.overview and session.info in diagnostics', async () => {
-      const finalState = {
-        id: 'test-state',
-        config: { name: 'test', instructions: '', tools: [] },
-        context: {
-          messages: [{ role: 'user', content: 'hi' }],
-          stepCount: 3,
-          createdAt: 0,
-          updatedAt: 0,
-          totalTokens: { input: 100, output: 50 },
-        },
-      };
+    async function captureLastDiagnostics(
+      finalState: Record<string, unknown>
+    ): Promise<Record<string, unknown>> {
       mockRunnerRunStream.mockImplementationOnce(() => {
         async function* stream() {
           yield { type: 'complete' } as any;
@@ -788,28 +767,52 @@ describe('AgentSession', () => {
       }
 
       const diagEvents = cockpitEvents.filter((e) => e.event === 'agent-diagnostics');
-      const data = diagEvents[diagEvents.length - 1].data as Record<string, unknown>;
+      return diagEvents[diagEvents.length - 1].data as Record<string, unknown>;
+    }
 
-      // Verify session.overview
-      const overview = data.session as Record<string, Record<string, unknown>>;
-      expect(overview).toBeDefined();
-      expect(overview.overview).toBeDefined();
-      expect((overview.overview as Record<string, unknown>).agentName).toBe('test');
-      expect((overview.overview as Record<string, unknown>).model).toBe('test-model');
-      expect((overview.overview as Record<string, unknown>).stepCount).toBe(3);
-      expect((overview.overview as Record<string, unknown>).messageCount).toBe(1);
-      expect((overview.overview as Record<string, unknown>).tokensIn).toBe(100);
-      expect((overview.overview as Record<string, unknown>).tokensOut).toBe(50);
-      expect((overview.overview as Record<string, unknown>).tokensTotal).toBe(150);
-      expect((overview.overview as Record<string, unknown>).status).toBe('idle');
+    it('includes session.overview in diagnostics', async () => {
+      const data = await captureLastDiagnostics({
+        id: 'test-state',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [{ role: 'user', content: 'hi' }],
+          stepCount: 3,
+          createdAt: 0,
+          updatedAt: 0,
+          totalTokens: { input: 100, output: 50 },
+        },
+      });
 
-      // Verify session.info
-      expect(overview.info).toBeDefined();
-      expect((overview.info as Record<string, unknown>).sessionId).toBe('test-state');
-      expect((overview.info as Record<string, unknown>).agentName).toBe('test');
-      expect((overview.info as Record<string, unknown>).model).toBe('test-model');
-      expect((overview.info as Record<string, unknown>).workspacePath).toBe('/tmp/test');
-      expect((overview.info as Record<string, unknown>).tokensIn).toBe(100);
+      const overview = (data.session as Record<string, Record<string, unknown>>).overview;
+      expect(overview.agentName).toBe('test');
+      expect(overview.model).toBe('test-model');
+      expect(overview.stepCount).toBe(3);
+      expect(overview.messageCount).toBe(1);
+      expect(overview.tokensIn).toBe(100);
+      expect(overview.tokensOut).toBe(50);
+      expect(overview.tokensTotal).toBe(150);
+      expect(overview.status).toBe('idle');
+    });
+
+    it('includes session.info in diagnostics', async () => {
+      const data = await captureLastDiagnostics({
+        id: 'test-state',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [{ role: 'user', content: 'hi' }],
+          stepCount: 3,
+          createdAt: 0,
+          updatedAt: 0,
+          totalTokens: { input: 100, output: 50 },
+        },
+      });
+
+      const info = (data.session as Record<string, Record<string, unknown>>).info;
+      expect(info.sessionId).toBe('test-state');
+      expect(info.agentName).toBe('test');
+      expect(info.model).toBe('test-model');
+      expect(info.workspacePath).toBe('/tmp/test');
+      expect(info.tokensIn).toBe(100);
     });
 
     it('does not forward events after cockpitSender cleared', async () => {
@@ -842,7 +845,7 @@ describe('AgentSession', () => {
       expect(cockpitEvents[0].event).toBe('agent-diagnostics');
     });
 
-    it('includes runner.features in diagnostics with correct feature flags', async () => {
+    async function captureRunnerDiagnostics(): Promise<Record<string, unknown>> {
       mockRunnerRunStream.mockImplementationOnce(() => {
         async function* stream() {
           yield { type: 'complete' } as any;
@@ -851,7 +854,6 @@ describe('AgentSession', () => {
         return stream();
       });
 
-      // Mock config with feature flags
       mockEnhancedRunnerCreate.mockResolvedValue({
         runStream: mockRunnerRunStream,
         getToolInfo: vi
@@ -890,10 +892,14 @@ describe('AgentSession', () => {
       }
 
       const diagEvents = cockpitEvents.filter((e) => e.event === 'agent-diagnostics');
-      const data = diagEvents[diagEvents.length - 1].data as Record<string, unknown>;
-      const runner = data.runner as Record<string, unknown>;
+      return (diagEvents[diagEvents.length - 1].data as Record<string, unknown>).runner as Record<
+        string,
+        unknown
+      >;
+    }
 
-      // Verify features
+    it('includes runner.feature flags in diagnostics', async () => {
+      const runner = await captureRunnerDiagnostics();
       const features = runner.features as Record<string, unknown>;
       expect(features.sandbox).toBe(true);
       expect(features.thinkingEnabled).toBe(false);
@@ -903,11 +909,17 @@ describe('AgentSession', () => {
       expect(features.enableSession).toBe(true);
       expect(features.enableTodolist).toBe(false);
       expect(features.enableCommands).toBe(true);
+    });
 
-      // Verify tools and skills come from runner methods
+    it('includes runner.tools in diagnostics', async () => {
+      const runner = await captureRunnerDiagnostics();
       expect(runner.tools).toEqual([
         { name: 'file_read', description: 'Read files', type: 'builtin', enabled: true },
       ]);
+    });
+
+    it('includes runner.skills in diagnostics', async () => {
+      const runner = await captureRunnerDiagnostics();
       expect(runner.skills).toEqual([
         { name: 'spec-plan', description: 'Plan specs', source: '/skills/spec-plan' },
       ]);

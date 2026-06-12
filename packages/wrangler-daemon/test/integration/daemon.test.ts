@@ -92,6 +92,6 @@ describe('Daemon', () => {
     expect(response.headers.get('content-type')).toContain('text/html');
 
     const html = await response.text();
-    expect(html).toContain('Skill-UI Daemon');
+    expect(html).toContain('Wrangler Daemon Playground');
   });
 });

@@ -100,9 +100,7 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
           break;
 
         case 'assistant': {
-          const content: (TextContent | ToolCall)[] = [
-            { type: 'text', text: msg.content },
-          ];
+          const content: (TextContent | ToolCall)[] = [{ type: 'text', text: msg.content }];
           if (msg.toolCalls && msg.toolCalls.length > 0) {
             for (const tc of msg.toolCalls) {
               content.push({

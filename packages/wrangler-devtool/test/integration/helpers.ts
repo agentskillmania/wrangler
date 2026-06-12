@@ -21,27 +21,27 @@ const DIMENSION_NAMES = ['clarity', 'completeness', 'focus', 'safety', 'efficien
  * Layer 3: overallScore correlates with dimension scores (within 2 points of average).
  */
 export function validateReviewReport(result: ReviewReport): void {
+  const VALID_SCORES = [1, 2, 3, 4, 5];
+
   // Layer 1: structural legality
-  expect(result.overallScore).toBeTypeOf('number');
+  expect(Number.isInteger(result.overallScore)).toBe(true);
   expect(result.summary).toBeTypeOf('string');
   expect(Array.isArray(result.issues)).toBe(true);
 
   for (const name of DIMENSION_NAMES) {
     const dim = result.dimensions[name];
     expect(dim, `dimension "${name}" should exist`).toBeDefined();
-    expect(dim.score).toBeTypeOf('number');
+    expect(Number.isInteger(dim.score)).toBe(true);
     expect(dim.reasoning).toBeTypeOf('string');
   }
 
   // Layer 2: domain constraints
-  expect(result.overallScore).toBeGreaterThanOrEqual(1);
-  expect(result.overallScore).toBeLessThanOrEqual(5);
+  expect(VALID_SCORES).toContain(result.overallScore);
   expect(result.summary.length).toBeGreaterThan(0);
 
   for (const name of DIMENSION_NAMES) {
     const dim = result.dimensions[name];
-    expect(dim.score).toBeGreaterThanOrEqual(1);
-    expect(dim.score).toBeLessThanOrEqual(5);
+    expect(VALID_SCORES).toContain(dim.score);
     expect(dim.reasoning.length).toBeGreaterThan(0);
   }
 

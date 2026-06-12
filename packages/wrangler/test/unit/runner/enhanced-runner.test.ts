@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+vi.mock('@agentskillmania/sandbox', () => ({
+  Sandbox: vi.fn().mockImplementation(() => ({})),
+}));
+
 import { EnhancedRunner } from '../../../src/runner/enhanced-runner.js';
 import type { EnhancedRunnerOptions } from '../../../src/runner/types.js';
 import type { ILLMProvider, Tool } from '@agentskillmania/colts';
@@ -590,6 +595,108 @@ describe('EnhancedRunner', () => {
     });
   });
 
+  // ── branch coverage tests ────────────────────────────────────────────
+
+  describe('branch coverage', () => {
+    it('should wrap tools with ConfirmableRegistry when confirmHandler is provided', async () => {
+      const confirmHandler = vi.fn().mockResolvedValue({ allowed: true });
+      await EnhancedRunner.create(
+        makeOptions({
+          confirmHandler,
+          confirmTools: ['shell'],
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+          extraTools: [],
+        })
+      );
+
+      const calls = await getAgentRunnerCalls();
+      const args = calls[calls.length - 1][0];
+      expect(args.tools).toBeUndefined();
+      expect(args.toolRegistry).toBeDefined();
+    });
+
+    it('should include a2ui tools and middleware when a2ui.enabled is true', async () => {
+      const runner = await EnhancedRunner.create(
+        makeOptions({
+          a2ui: { enabled: true },
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+          extraTools: [],
+        })
+      );
+
+      const config = runner.getConfig();
+      expect(config.middlewareNames).toContain('A2UIMiddleware');
+
+      const toolNames = runner.getToolInfo().map((t) => t.name);
+      expect(toolNames).toContain('a2ui_create_surface');
+      expect(toolNames).toContain('a2ui_wait');
+    });
+
+    it('should not include a2ui tools or middleware when a2ui is disabled', async () => {
+      const runner = await EnhancedRunner.create(
+        makeOptions({
+          a2ui: { enabled: false },
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+          extraTools: [],
+        })
+      );
+
+      const config = runner.getConfig();
+      expect(config.middlewareNames).not.toContain('A2UIMiddleware');
+      const toolNames = runner.getToolInfo().map((t) => t.name);
+      expect(toolNames).not.toContain('a2ui_create_surface');
+    });
+
+    it('should not include a2ui tools or middleware when a2ui is omitted', async () => {
+      const runner = await EnhancedRunner.create(
+        makeOptions({
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+          extraTools: [],
+        })
+      );
+
+      const config = runner.getConfig();
+      expect(config.middlewareNames).not.toContain('A2UIMiddleware');
+      const toolNames = runner.getToolInfo().map((t) => t.name);
+      expect(toolNames).not.toContain('a2ui_create_surface');
+    });
+
+    it('should exclude a builtin tool when its toggle is explicitly false', async () => {
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createBuiltinTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
+
+      await EnhancedRunner.create(
+        makeOptions({
+          builtinTools: { fileRead: true, shell: false },
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+          extraTools: [],
+        })
+      );
+
+      const calls = await getAgentRunnerCalls();
+      const tools = calls[calls.length - 1][0].tools;
+      const names = tools.map((t: { name: string }) => t.name);
+      expect(names).toContain('file_read');
+      expect(names).not.toContain('shell');
+    });
+
+    it('should keep command middleware when enableCommands is true', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ enableCommands: true }));
+      expect(runner.getConfig().middlewareNames).toContain('command');
+      expect(runner.getConfig().enableCommands).toBe(true);
+    });
+  });
+
   // ── getConfig() observability tests ──────────────────────────────────
 
   describe('getConfig()', () => {
@@ -604,10 +711,6 @@ describe('EnhancedRunner', () => {
     });
 
     it('returns sandbox=true when configured', async () => {
-      // Mock the dynamic import so we don't need a real sandbox runtime
-      vi.doMock('@agentskillmania/sandbox', () => ({
-        Sandbox: vi.fn().mockImplementation(() => ({})),
-      }));
       const runner = await EnhancedRunner.create(makeOptions({ sandbox: true }));
       expect(runner.getConfig().sandbox).toBe(true);
     });
@@ -863,6 +966,33 @@ describe('EnhancedRunner', () => {
       await expect(
         EnhancedRunner.create(makeOptions({ llm: { apiKey: 'sk-test' } }))
       ).rejects.toThrow('Cannot specify both llmClient and llm');
+    });
+
+    it('create() with empty skillDirs still succeeds', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ skillDirs: [] }));
+      expect(runner).toBeInstanceOf(EnhancedRunner);
+      expect(runner.getConfig().skillDirs).toEqual([]);
+    });
+
+    it('create() ignores unknown builtinTools toggles', async () => {
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createBuiltinTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
+
+      await EnhancedRunner.create(
+        makeOptions({
+          builtinTools: { fileRead: true, unknownToggle: true } as any,
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+          extraTools: [],
+        })
+      );
+
+      const calls = await getAgentRunnerCalls();
+      const tools = calls[calls.length - 1][0].tools;
+      const names = tools.map((t: { name: string }) => t.name);
+      expect(names).toContain('file_read');
+      expect(names).not.toContain('shell');
     });
   });
 

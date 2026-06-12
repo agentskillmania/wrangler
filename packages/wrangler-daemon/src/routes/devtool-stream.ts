@@ -272,7 +272,7 @@ async function handleStreamReview(
   }
 }
 
-async function getRunner(
+export async function getRunner(
   devtool: DevTool,
   promptName: string
 ): Promise<{ runner: EnhancedRunner; state: AgentState }> {

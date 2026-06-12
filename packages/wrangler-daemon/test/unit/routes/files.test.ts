@@ -45,7 +45,7 @@ describe('workspace file routes', () => {
     // Boot Fastify with sessionManager decoration
     fastify = Fastify();
     (fastify as unknown as DecoratedFastifyInstance).sessionManager = sessionManager;
-    fastify.register(fileRoutes);
+    await fastify.register(fileRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 
@@ -94,6 +94,27 @@ describe('workspace file routes', () => {
       const res = await fetch(`${baseUrl()}/api/files/nonexistent/tree`);
       expect(res.ok).toBe(true);
       expect((await res.json()).error).toBe('Session not found');
+    });
+  });
+
+  describe('path traversal protection', () => {
+    it('returns 500 when path escapes workspace on write', async () => {
+      const res = await fetch(`${baseUrl()}/api/files/test-session/content`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: '../outside.txt', content: 'x' }),
+      });
+
+      expect(res.status).toBe(500);
+    });
+
+    it('returns error when path escapes workspace on read', async () => {
+      const res = await fetch(
+        `${baseUrl()}/api/files/test-session/content?path=${encodeURIComponent('../outside.txt')}`
+      );
+
+      expect(res.ok).toBe(true);
+      expect((await res.json()).error).toBe('File not found');
     });
   });
 

@@ -22,21 +22,20 @@ export interface TestConfig {
 }
 
 function loadConfig(): TestConfig {
-  const enabled = process.env.ENABLE_INTEGRATION_TESTS === 'true';
-
   const apiKey = process.env.OPENAI_API_KEY || '';
   const baseUrl = process.env.OPENAI_BASE_URL;
   const provider = process.env.PROVIDER || 'openai';
   const testModel = process.env.MODEL || 'gpt-3.5-turbo';
+  const enabled = process.env.ENABLE_INTEGRATION_TESTS === 'true' && !!apiKey;
 
-  if (enabled && !apiKey) {
+  if (process.env.ENABLE_INTEGRATION_TESTS === 'true' && !apiKey) {
     console.warn(
-      '[wrangler-devtool Integration Tests] Warning: ENABLE_INTEGRATION_TESTS is true but OPENAI_API_KEY is not set.'
+      '[wrangler-devtool Integration Tests] Warning: ENABLE_INTEGRATION_TESTS is true but OPENAI_API_KEY is not set; skipping LLM integration tests.'
     );
   }
 
   let llmClient: ILLMProvider | undefined;
-  if (enabled && apiKey) {
+  if (enabled) {
     llmClient = createLLMClient({
       provider,
       apiKey,

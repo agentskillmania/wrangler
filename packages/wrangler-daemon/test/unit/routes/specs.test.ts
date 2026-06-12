@@ -28,7 +28,7 @@ describe('Spec API Routes', () => {
     specStore = new SpecStore(sessionsDir, workspacePath);
 
     fastify = Fastify();
-    fastify.register(specRoutes);
+    await fastify.register(specRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 
@@ -178,6 +178,78 @@ describe('Spec API Routes', () => {
       const body = await res.json();
       expect(body.error).toBe('workspacePath and name are required');
     });
+
+    it('creates spec with empty body when body omitted', async () => {
+      const res = await fetch(`${getUrl()}/api/specs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath, name: 'minimal-spec' }),
+      });
+
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body).toMatchObject({ ok: true, name: 'minimal-spec', version: 1 });
+
+      const spec = await specStore.get('minimal-spec', 1);
+      expect(spec).not.toBeNull();
+      expect(spec!.body).toBe('');
+    });
+  });
+
+  describe('PUT /api/specs/:name/:version', () => {
+    it('updates spec body', async () => {
+      const now = new Date().toISOString();
+      await specStore.save({
+        meta: {
+          name: 'test-spec',
+          version: 1,
+          status: 'draft',
+          workspacePath,
+          createdAt: now,
+          updatedAt: now,
+        },
+        body: 'Original body',
+      });
+
+      const res = await fetch(`${getUrl()}/api/specs/test-spec/1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath, body: 'Updated body' }),
+      });
+
+      expect(res.ok).toBe(true);
+      expect(await res.json()).toEqual({ ok: true });
+
+      const spec = await specStore.get('test-spec', 1);
+      expect(spec!.body).toBe('Updated body');
+      expect(new Date(spec!.meta.updatedAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(now).getTime()
+      );
+    });
+
+    it('returns error when workspacePath or body missing', async () => {
+      const res = await fetch(`${getUrl()}/api/specs/test-spec/1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath }),
+      });
+
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body.error).toBe('workspacePath and body are required');
+    });
+
+    it('returns error when spec not found', async () => {
+      const res = await fetch(`${getUrl()}/api/specs/missing/1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath, body: 'x' }),
+      });
+
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body.error).toBe('Spec not found');
+    });
   });
 
   describe('PATCH /api/specs/:name/:version/status', () => {
@@ -222,6 +294,31 @@ describe('Spec API Routes', () => {
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.error).toBe('workspacePath and status are required');
+    });
+
+    it('returns error when updateStatus throws', async () => {
+      const now = new Date().toISOString();
+      await specStore.save({
+        meta: {
+          name: 'test-spec',
+          version: 1,
+          status: 'draft',
+          workspacePath,
+          createdAt: now,
+          updatedAt: now,
+        },
+        body: 'Test body',
+      });
+
+      const res = await fetch(`${getUrl()}/api/specs/test-spec/1/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath, status: 'superseded' }),
+      });
+
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body.error).toContain('Invalid status transition');
     });
   });
 });

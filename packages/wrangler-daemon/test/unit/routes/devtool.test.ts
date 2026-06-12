@@ -47,7 +47,7 @@ describe('Devtool API', () => {
 
     fastify = Fastify();
     fastify.decorate('configManager', configManager);
-    fastify.register(devtoolRoutes);
+    await fastify.register(devtoolRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
 
     mockRunAgentArchitect.mockReset();
@@ -71,7 +71,7 @@ describe('Devtool API', () => {
   }
 
   describe('POST /api/devtool/agent/generate', () => {
-    it('returns generated agent changes', async () => {
+    it('returns generated agent changes in response body', async () => {
       mockRunAgentArchitect.mockResolvedValue({
         changes: [{ file: 'AGENT.md', type: 'create', new: 'agent content' }],
         summary: 'Created agent',
@@ -86,7 +86,21 @@ describe('Devtool API', () => {
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.summary).toBe('Created agent');
-      expect(body.changes).toHaveLength(1);
+      expect(body.changes).toEqual([{ file: 'AGENT.md', type: 'create', new: 'agent content' }]);
+    });
+
+    it('calls runAgentArchitect with prompt and no optional args', async () => {
+      mockRunAgentArchitect.mockResolvedValue({
+        changes: [{ file: 'AGENT.md', type: 'create', new: 'agent content' }],
+        summary: 'Created agent',
+      });
+
+      await fetch(`${getUrl()}/api/devtool/agent/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Create a helpful assistant' }),
+      });
+
       expect(mockRunAgentArchitect).toHaveBeenCalledWith(
         'Create a helpful assistant',
         undefined,
@@ -144,7 +158,7 @@ describe('Devtool API', () => {
   });
 
   describe('POST /api/devtool/skill/generate', () => {
-    it('returns generated skill changes', async () => {
+    it('returns generated skill changes in response body', async () => {
       mockRunSkillDesigner.mockResolvedValue({
         changes: [{ file: 'SKILL.md', type: 'create', new: 'skill content' }],
         summary: 'Created skill',
@@ -159,7 +173,21 @@ describe('Devtool API', () => {
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.summary).toBe('Created skill');
-      expect(body.changes).toHaveLength(1);
+      expect(body.changes).toEqual([{ file: 'SKILL.md', type: 'create', new: 'skill content' }]);
+    });
+
+    it('calls runSkillDesigner with prompt and no optional args', async () => {
+      mockRunSkillDesigner.mockResolvedValue({
+        changes: [{ file: 'SKILL.md', type: 'create', new: 'skill content' }],
+        summary: 'Created skill',
+      });
+
+      await fetch(`${getUrl()}/api/devtool/skill/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Create a search skill' }),
+      });
+
       expect(mockRunSkillDesigner).toHaveBeenCalledWith(
         'Create a search skill',
         undefined,
@@ -217,7 +245,7 @@ describe('Devtool API', () => {
   });
 
   describe('POST /api/devtool/crew/generate', () => {
-    it('returns generated crew changes', async () => {
+    it('returns generated crew changes in response body', async () => {
       mockRunCrewComposer.mockResolvedValue({
         changes: [{ file: 'CREW.md', type: 'create', new: 'crew content' }],
         summary: 'Created crew',
@@ -232,6 +260,21 @@ describe('Devtool API', () => {
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.summary).toBe('Created crew');
+      expect(body.changes).toEqual([{ file: 'CREW.md', type: 'create', new: 'crew content' }]);
+    });
+
+    it('calls runCrewComposer with prompt and no optional args', async () => {
+      mockRunCrewComposer.mockResolvedValue({
+        changes: [{ file: 'CREW.md', type: 'create', new: 'crew content' }],
+        summary: 'Created crew',
+      });
+
+      await fetch(`${getUrl()}/api/devtool/crew/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Create a dev team' }),
+      });
+
       expect(mockRunCrewComposer).toHaveBeenCalledWith('Create a dev team', undefined, undefined);
     });
 
@@ -521,7 +564,7 @@ describe('Devtool API', () => {
   });
 
   describe('POST /api/devtool/test/run', () => {
-    it('runs tests and returns report', async () => {
+    it('returns test report in response body', async () => {
       mockRunTests.mockResolvedValue({
         total: 3,
         passed: 2,
@@ -544,6 +587,22 @@ describe('Devtool API', () => {
       expect(body.total).toBe(3);
       expect(body.passed).toBe(2);
       expect(body.failed).toBe(1);
+    });
+
+    it('calls runTests with targetPath and empty options by default', async () => {
+      mockRunTests.mockResolvedValue({
+        total: 3,
+        passed: 2,
+        failed: 1,
+        results: [],
+      });
+
+      await fetch(`${getUrl()}/api/devtool/test/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetPath: 'agents/my-agent' }),
+      });
+
       expect(mockRunTests).toHaveBeenCalledWith('agents/my-agent', {});
     });
 

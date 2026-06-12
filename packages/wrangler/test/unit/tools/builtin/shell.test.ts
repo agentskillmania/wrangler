@@ -96,4 +96,23 @@ describe('createShellTool', () => {
     expect(result).toContain('partial output');
     expect(result).toContain('error msg');
   });
+
+  describe('schema validation', () => {
+    it('rejects arguments missing the command field', () => {
+      const tool = createShellTool(deps);
+      expect(() => tool.parameters.parse({})).toThrow();
+    });
+
+    it('rejects non-string command argument', () => {
+      const tool = createShellTool(deps);
+      expect(() => tool.parameters.parse({ command: 123 })).toThrow();
+    });
+
+    it('accepts valid command argument', () => {
+      const tool = createShellTool(deps);
+      expect(tool.parameters.parse({ command: 'echo hi' })).toEqual({
+        command: 'echo hi',
+      });
+    });
+  });
 });

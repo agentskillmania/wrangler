@@ -66,8 +66,10 @@ describe('Integration: Per-Request Configuration', () => {
     // Create agents directory with a test agent
     const agentsDir = join(tempDir, 'agents');
     await mkdir(agentsDir, { recursive: true });
+    const testAgentDir = join(agentsDir, 'test-agent');
+    await mkdir(testAgentDir, { recursive: true });
     await writeFile(
-      join(agentsDir, 'test-agent.md'),
+      join(testAgentDir, 'AGENT.md'),
       `---\nname: test-agent\ndescription: A test agent\n---\nYou are a helpful test assistant. Answer briefly.`
     );
 

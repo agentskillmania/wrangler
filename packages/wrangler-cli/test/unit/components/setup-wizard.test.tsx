@@ -147,4 +147,34 @@ describe('SetupWizard', () => {
       model: 'claude-sonnet-4-20250514',
     });
   });
+
+  it('proceeds with empty API key (negative path: no validation)', () => {
+    const onComplete = vi.fn();
+    render(React.createElement(SetupWizard, { onComplete }));
+
+    capturedSelectOnChange!('openai');
+    capturedTextInputOnSubmit!('');
+    capturedTextInputOnSubmit!('gpt-4o-mini');
+
+    expect(onComplete).toHaveBeenCalledWith({
+      provider: 'openai',
+      apiKey: '',
+      model: 'gpt-4o-mini',
+    });
+  });
+
+  it('falls back to undefined model for unrecognized provider', () => {
+    const onComplete = vi.fn();
+    render(React.createElement(SetupWizard, { onComplete }));
+
+    capturedSelectOnChange!('unsupported-provider' as string);
+    capturedTextInputOnSubmit!('sk-key');
+    capturedTextInputOnSubmit!('');
+
+    expect(onComplete).toHaveBeenCalledWith({
+      provider: 'unsupported-provider',
+      apiKey: 'sk-key',
+      model: undefined,
+    });
+  });
 });

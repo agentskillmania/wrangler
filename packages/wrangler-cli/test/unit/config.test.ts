@@ -6,7 +6,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { loadConfig, saveConfig, saveSetup, setNestedValue } from '../../src/config.js';
+import {
+  loadConfig,
+  saveConfig,
+  saveSetup,
+  setNestedValue,
+  getGlobalConfigPath,
+} from '../../src/config.js';
 
 describe('config', () => {
   const testDir = path.join(os.tmpdir(), `wrangler-test-config-${Date.now()}`);
@@ -282,6 +288,28 @@ llm:
       }
     });
 
+    it('should return default model when explicitly set to null', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-test-key
+  model: null
+`;
+      const localConfig = path.join(testDir, 'wrangler.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.llm?.model).toBe('gpt-4o');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
     it('should return baseUrl when specified', async () => {
       const yamlContent = `
 llm:
@@ -448,6 +476,22 @@ llm:
   });
 
   // ---------------------------------------------------------------------------
+  // getGlobalConfigPath
+  // ---------------------------------------------------------------------------
+
+  describe('getGlobalConfigPath', () => {
+    it('should return path inside globalDir when provided', () => {
+      const result = getGlobalConfigPath('/custom/global');
+      expect(result).toBe(path.join('/custom/global', 'config.yaml'));
+    });
+
+    it('should return path inside default CONFIG_DIR when globalDir omitted', () => {
+      const result = getGlobalConfigPath();
+      expect(result).toBe(path.join(os.homedir(), '.agentskillmania', 'wrangler', 'config.yaml'));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // loadConfig error handling
   // ---------------------------------------------------------------------------
 
@@ -492,7 +536,9 @@ llm:
       try {
         // No globalDir — falls back to ~/.agentskillmania/wrangler/
         const config = await loadConfig();
-        // Result depends on whether real config exists; just verify it doesn't throw
+        expect(config.configPath).toBe(
+          path.join(os.homedir(), '.agentskillmania', 'wrangler', 'config.yaml')
+        );
         expect(typeof config.hasValidConfig).toBe('boolean');
       } finally {
         process.chdir(originalCwd);

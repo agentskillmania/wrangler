@@ -1,28 +1,46 @@
 import { describe, it, expect } from 'vitest';
+import {
+  EnhancedRunner,
+  AgentLoader,
+  Crew,
+  SessionStore,
+  createBuiltinTools,
+  parseCommand,
+  CommandRegistry,
+  createCommandMiddleware,
+  parseAgentMd,
+} from '../../src/index.js';
 
 describe('@agentskillmania/wrangler exports', () => {
-  it('exports key APIs that can be imported and called', async () => {
-    const mod = await import('../../src/index.js');
-
+  it('exports key APIs that can be imported and called', () => {
     // EnhancedRunner is a class with static create method
-    expect(typeof mod.EnhancedRunner).toBe('function');
-    expect(typeof mod.EnhancedRunner.create).toBe('function');
+    expect(EnhancedRunner).toBeInstanceOf(Function);
+    expect(EnhancedRunner.name).toBe('EnhancedRunner');
+    expect(EnhancedRunner.create).toBeInstanceOf(Function);
 
     // AgentLoader is a class
-    expect(typeof mod.AgentLoader).toBe('function');
+    expect(AgentLoader).toBeInstanceOf(Function);
+    expect(AgentLoader.name).toBe('AgentLoader');
 
     // Crew is a class
-    expect(typeof mod.Crew).toBe('function');
+    expect(Crew).toBeInstanceOf(Function);
+    expect(Crew.name).toBe('Crew');
 
     // SessionStore is a class
-    expect(typeof mod.SessionStore).toBe('function');
+    expect(SessionStore).toBeInstanceOf(Function);
+    expect(SessionStore.name).toBe('SessionStore');
 
     // Tool creators are functions
-    expect(typeof mod.createBuiltinTools).toBe('function');
+    expect(createBuiltinTools).toBeInstanceOf(Function);
+    expect(createBuiltinTools.name).toBe('createBuiltinTools');
+
+    // Command system
+    expect(parseCommand).toBeInstanceOf(Function);
+    expect(CommandRegistry).toBeInstanceOf(Function);
+    expect(createCommandMiddleware).toBeInstanceOf(Function);
   });
 
-  it('parseCommand parses slash commands correctly', async () => {
-    const { parseCommand } = await import('../../src/index.js');
+  it('parseCommand parses slash commands correctly', () => {
     expect(parseCommand('/clear')).toEqual({ name: 'clear', target: undefined, body: '' });
     expect(parseCommand('/skill:my-skill do this')).toEqual({
       name: 'skill',
@@ -32,8 +50,7 @@ describe('@agentskillmania/wrangler exports', () => {
     expect(parseCommand('hello world')).toBeNull();
   });
 
-  it('parseAgentMd parses YAML frontmatter and markdown body', async () => {
-    const { parseAgentMd } = await import('../../src/index.js');
+  it('parseAgentMd parses YAML frontmatter and markdown body', () => {
     const md = `---
 name: test-agent
 model: gpt-4o

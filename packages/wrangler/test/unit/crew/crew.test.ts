@@ -1,7 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createAgentState } from '@agentskillmania/colts';
+import { existsSync } from 'node:fs';
 import { Crew } from '../../../src/crew/crew.js';
 import type { CrewConfig, CrewOutputEvent } from '../../../src/crew/types.js';
+import { discoverGlobalConfigPath } from '../../../src/tools/mcp/config-merger.js';
+
+vi.mock('../../../src/tools/mcp/config-merger.js', () => ({
+  discoverGlobalConfigPath: vi.fn().mockReturnValue('/home/user/.mcporter/mcporter.json'),
+}));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    existsSync: vi.fn().mockReturnValue(false),
+  };
+});
 
 // ─── Mock EnhancedRunner ───
 
@@ -30,6 +44,7 @@ vi.mock('../../../src/runner/enhanced-runner.js', () => ({
 type InternalCrew = Crew & {
   emit: (event: CrewOutputEvent) => void;
   buildAgentCatalog: () => string;
+  buildMCPConfigPaths: () => string[];
   createTask: (...args: unknown[]) => string;
   advanceAgent: (agent: unknown, messages: unknown[]) => Promise<void>;
 };
@@ -470,6 +485,59 @@ describe('Crew', () => {
       expect(task?.status).toBe('completed');
       expect(task?.result).toBe('42 items found');
       expect(task?.completedAt).toBeGreaterThan(0);
+    });
+  });
+
+  // ─── buildMCPConfigPaths branch coverage ────────────────────────────
+
+  describe('buildMCPConfigPaths', () => {
+    beforeEach(() => {
+      vi.mocked(discoverGlobalConfigPath).mockReturnValue('/global/mcp.json');
+      vi.mocked(existsSync).mockReturnValue(false);
+    });
+
+    it('returns explicit mcpConfigPaths when provided', () => {
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        mcpConfigPaths: ['/explicit/mcp.json'],
+      });
+      expect(asInternal(crew).buildMCPConfigPaths()).toEqual(['/explicit/mcp.json']);
+    });
+
+    it('includes global config when it exists', () => {
+      vi.mocked(existsSync).mockImplementation((p) => String(p) === '/global/mcp.json');
+      const crew = new Crew(mockConfig, { llmClient: {} as never });
+      expect(asInternal(crew).buildMCPConfigPaths()).toEqual(['/global/mcp.json']);
+    });
+
+    it('includes crew-dir mcp.json when it exists', () => {
+      vi.mocked(existsSync).mockImplementation((p) => String(p) === '/crew/workspace/mcp.json');
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        workspaceDeps: { workspacePath: '/crew/workspace' } as any,
+      });
+      expect(asInternal(crew).buildMCPConfigPaths()).toEqual(['/crew/workspace/mcp.json']);
+    });
+
+    it('includes both global and crew-dir configs when both exist', () => {
+      vi.mocked(existsSync).mockReturnValue(true);
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        workspaceDeps: { workspacePath: '/crew/workspace' } as any,
+      });
+      expect(asInternal(crew).buildMCPConfigPaths()).toEqual([
+        '/global/mcp.json',
+        '/crew/workspace/mcp.json',
+      ]);
+    });
+
+    it('returns empty array when neither global nor crew-dir config exists', () => {
+      vi.mocked(existsSync).mockReturnValue(false);
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        workspaceDeps: { workspacePath: '/crew/workspace' } as any,
+      });
+      expect(asInternal(crew).buildMCPConfigPaths()).toEqual([]);
     });
   });
 

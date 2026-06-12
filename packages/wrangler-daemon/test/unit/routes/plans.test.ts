@@ -28,7 +28,7 @@ describe('Plan API Routes', () => {
     planStore = new PlanStore(sessionsDir, workspacePath);
 
     fastify = Fastify();
-    fastify.register(planRoutes);
+    await fastify.register(planRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 
@@ -189,6 +189,81 @@ describe('Plan API Routes', () => {
       const body = await res.json();
       expect(body.error).toBe('workspacePath, name, and specName are required');
     });
+
+    it('creates plan with default specVersion and empty body when omitted', async () => {
+      const res = await fetch(`${getUrl()}/api/plans`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath, name: 'minimal-plan', specName: 'test-spec' }),
+      });
+
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body).toMatchObject({ ok: true, name: 'minimal-plan', version: 1 });
+
+      const plan = await planStore.get('minimal-plan', 1, 1);
+      expect(plan).not.toBeNull();
+      expect(plan!.meta.specVersion).toBe(1);
+      expect(plan!.body).toBe('');
+    });
+  });
+
+  describe('PUT /api/plans/:name/:specVersion/:version', () => {
+    it('updates plan body', async () => {
+      const now = new Date().toISOString();
+      await planStore.save({
+        meta: {
+          name: 'test-plan',
+          specName: 'test-spec',
+          specVersion: 1,
+          version: 1,
+          status: 'draft',
+          workspacePath,
+          createdAt: now,
+          updatedAt: now,
+        },
+        body: 'Original body',
+      });
+
+      const res = await fetch(`${getUrl()}/api/plans/test-plan/1/1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath, body: 'Updated body' }),
+      });
+
+      expect(res.ok).toBe(true);
+      expect(await res.json()).toEqual({ ok: true });
+
+      const plan = await planStore.get('test-plan', 1, 1);
+      expect(plan!.body).toBe('Updated body');
+      expect(new Date(plan!.meta.updatedAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(now).getTime()
+      );
+    });
+
+    it('returns error when workspacePath or body missing', async () => {
+      const res = await fetch(`${getUrl()}/api/plans/test-plan/1/1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath }),
+      });
+
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body.error).toBe('workspacePath and body are required');
+    });
+
+    it('returns error when plan not found', async () => {
+      const res = await fetch(`${getUrl()}/api/plans/missing/1/1`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath, body: 'x' }),
+      });
+
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body.error).toBe('Plan not found');
+    });
   });
 
   describe('PATCH /api/plans/:name/:specVersion/:version/status', () => {
@@ -235,6 +310,33 @@ describe('Plan API Routes', () => {
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.error).toBe('workspacePath and status are required');
+    });
+
+    it('returns error when updateStatus throws', async () => {
+      const now = new Date().toISOString();
+      await planStore.save({
+        meta: {
+          name: 'test-plan',
+          specName: 'test-spec',
+          specVersion: 1,
+          version: 1,
+          status: 'draft',
+          workspacePath,
+          createdAt: now,
+          updatedAt: now,
+        },
+        body: 'Test body',
+      });
+
+      const res = await fetch(`${getUrl()}/api/plans/test-plan/1/1/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath, status: 'executing' }),
+      });
+
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body.error).toContain('Invalid status transition');
     });
   });
 });

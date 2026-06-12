@@ -33,7 +33,7 @@ describe('Unit: Agent CRUD Routes', () => {
 
     fastify = Fastify();
     fastify.decorate('resourceManager', manager);
-    fastify.register(agentRoutes);
+    await fastify.register(agentRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 
@@ -136,6 +136,18 @@ describe('Unit: Agent CRUD Routes', () => {
     expect(res.ok).toBe(true);
     const body = await res.json();
     expect(body).toEqual({ error: 'name is required' });
+  });
+
+  it('POST /api/agents returns error when name contains path traversal', async () => {
+    const res = await fetch(`${getUrl()}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '../escaped' }),
+    });
+
+    expect(res.ok).toBe(true);
+    const body = await res.json();
+    expect(body.error).toContain('path separators or traversal sequences');
   });
 
   // Test 8: DELETE /api/agents/:id removes agent

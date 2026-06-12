@@ -51,7 +51,7 @@ describe('agent file routes', () => {
     // Boot Fastify with resourceManager decoration
     fastify = Fastify();
     (fastify as unknown as DecoratedFastifyInstance).resourceManager = resourceManager;
-    fastify.register(agentFileRoutes);
+    await fastify.register(agentFileRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 
@@ -201,35 +201,34 @@ describe('agent file routes', () => {
       expect((await res.json()).error).toBe('File not found');
     });
 
-    it('blocks traversal via PUT file (../../tmp/evil.txt → response.ok not true or error)', async () => {
+    it('blocks traversal via PUT file (returns 400 Invalid path)', async () => {
       const res = await fetch(`${baseUrl()}/api/agents/${agentId}/file`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: '../../tmp/evil.txt', content: 'pwned' }),
       });
-      // Should fail — resolvePath throws "Path outside agent directory"
-      const body = await res.json();
-      expect(body.ok).not.toBe(true);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('Invalid path');
     });
 
-    it('blocks traversal via POST create (../../tmp/evil.txt → response.ok not true or error)', async () => {
+    it('blocks traversal via POST create (returns 400 Invalid path)', async () => {
       const res = await fetch(`${baseUrl()}/api/agents/${agentId}/file`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: '../../tmp/evil.txt', content: 'pwned' }),
       });
-      const body = await res.json();
-      expect(body.ok).not.toBe(true);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('Invalid path');
     });
 
-    it('blocks traversal via DELETE (../../tmp/important.txt → not deleted)', async () => {
+    it('blocks traversal via DELETE (returns "File not found")', async () => {
       const res = await fetch(`${baseUrl()}/api/agents/${agentId}/file`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: '../../tmp/important.txt' }),
       });
-      const body = await res.json();
-      expect(body.ok).not.toBe(true);
+      expect(res.ok).toBe(true);
+      expect((await res.json()).error).toBe('File not found');
     });
   });
 

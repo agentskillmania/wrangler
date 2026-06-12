@@ -14,7 +14,7 @@ describe('TimelinePanel', () => {
     const output = lastFrame();
     // An empty Box still produces whitespace-only output, not null.
     // Verify no entry content is rendered.
-    expect(output).toBeDefined();
+    expect(output).not.toContain('Hello');
     expect(output!.trim()).toBe('');
   });
 

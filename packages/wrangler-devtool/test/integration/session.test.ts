@@ -88,9 +88,13 @@ describe('US5 & US6: Session management', () => {
     // Verify new session exists
     const newStore = new SessionStore(baseDir, tempDir);
     const newMeta = await newStore.getMeta(newId);
-    expect(newMeta).toHaveProperty('id', newId);
-    expect(newMeta).toHaveProperty('model', 'glm-5');
-    expect(newMeta).toHaveProperty('workspacePath', tempDir);
+    expect(newMeta).toEqual(
+      expect.objectContaining({
+        id: newId,
+        agentName: 'glm-5',
+        workspacePath: tempDir,
+      })
+    );
   });
 
   it('fork non-existent session throws error', async () => {

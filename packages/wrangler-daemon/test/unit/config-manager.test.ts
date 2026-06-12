@@ -87,6 +87,29 @@ describe('ConfigManager', () => {
     expect(() => manager.get()).toThrow('not initialized');
   });
 
+  it('update() throws before init()', async () => {
+    const manager = new ConfigManager(join(tempDir, 'config.yaml'));
+    await expect(manager.update({ server: { port: 4000 } })).rejects.toThrow('not initialized');
+  });
+
+  it('getConfigFile throws for missing file', async () => {
+    const manager = new ConfigManager(join(tempDir, 'config.yaml'));
+    await manager.init();
+
+    await expect(manager.getConfigFile(join(tempDir, 'missing.yaml'))).rejects.toThrow();
+  });
+
+  it('setConfigFile throws when parent path is not a directory', async () => {
+    const manager = new ConfigManager(join(tempDir, 'config.yaml'));
+    await manager.init();
+
+    // Create a file where a parent directory is expected
+    await writeFile(join(tempDir, 'not-a-dir'), 'file');
+    const targetPath = join(tempDir, 'not-a-dir', 'file.yaml');
+
+    await expect(manager.setConfigFile(targetPath, 'content')).rejects.toThrow();
+  });
+
   it('update handles nested key creation', async () => {
     const manager = new ConfigManager(join(tempDir, 'config.yaml'));
     await manager.init();

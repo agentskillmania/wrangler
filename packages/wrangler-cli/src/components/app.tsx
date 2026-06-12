@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useApp, Text } from 'ink';
 import { AgentLoader, EnhancedRunner, discoverGlobalConfigPath } from '@agentskillmania/wrangler';
 import type { SessionSource } from '@agentskillmania/wrangler';
-import { existsSync } from 'node:fs';
+import * as fs from 'node:fs';
 import { MainTUI } from './main-tui.js';
 import type { DialogState } from './main-tui.js';
 import { SetupWizard } from './setup/setup-wizard.js';
@@ -118,7 +118,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
         source = loaded.source;
 
         const globalPath = discoverGlobalConfigPath();
-        mcpConfigPaths = [globalPath, ...loaded.mcpPaths].filter((p) => existsSync(p));
+        mcpConfigPaths = [globalPath, ...loaded.mcpPaths].filter((p) => fs.existsSync(p));
         if (mcpConfigPaths.length === 0) mcpConfigPaths = undefined;
       }
 

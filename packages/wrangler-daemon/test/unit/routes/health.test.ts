@@ -14,7 +14,7 @@ describe('Unit: Health Routes', () => {
 
   beforeEach(async () => {
     fastify = Fastify();
-    fastify.register(healthRoutes);
+    await fastify.register(healthRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 

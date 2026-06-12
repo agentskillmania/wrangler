@@ -126,6 +126,17 @@ describe('evaluateSoft', () => {
     expect(result.passed).toBe(true);
   });
 
+  it('should fall back to text score when JSON object is malformed', async () => {
+    mockCall.mockResolvedValue({
+      content: 'I would give this a score: 3 out of 5. { not valid json }',
+    });
+
+    const result = await evaluateSoft(BASE_EVALUATION, BASE_OUTPUT, LLM_CONFIG);
+
+    expect(result.score).toBe(3);
+    expect(result.passed).toBe(true);
+  });
+
   it('should default to score 1 when no score found in text', async () => {
     mockCall.mockResolvedValue({
       content: 'Unable to evaluate this output properly.',
@@ -145,5 +156,35 @@ describe('evaluateSoft', () => {
     expect(result.passed).toBe(false);
     expect(result.score).toBe(0);
     expect(result.reasoning).toContain('API rate limit exceeded');
+  });
+
+  it('should default to empty content when response.content is undefined', async () => {
+    mockCall.mockResolvedValue({});
+
+    const result = await evaluateSoft(BASE_EVALUATION, BASE_OUTPUT, LLM_CONFIG);
+
+    expect(result.score).toBe(1);
+    expect(result.passed).toBe(false);
+  });
+
+  it('should default to score 1 when parsed JSON has no score', async () => {
+    mockCall.mockResolvedValue({
+      content: '{"reasoning": "Missing score field"}',
+    });
+
+    const result = await evaluateSoft(BASE_EVALUATION, BASE_OUTPUT, LLM_CONFIG);
+
+    expect(result.score).toBe(1);
+    expect(result.passed).toBe(false);
+  });
+
+  it('should handle non-Error thrown values', async () => {
+    mockCall.mockRejectedValue('string error');
+
+    const result = await evaluateSoft(BASE_EVALUATION, BASE_OUTPUT, LLM_CONFIG);
+
+    expect(result.passed).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reasoning).toContain('string error');
   });
 });

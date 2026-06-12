@@ -115,7 +115,7 @@ async function findConfigPath(globalDir?: string): Promise<string | null> {
  * @param globalDir - Optional override for the global config directory
  * @returns Absolute path to the global config file
  */
-function getGlobalConfigPath(globalDir?: string): string {
+export function getGlobalConfigPath(globalDir?: string): string {
   return path.join(globalDir ?? CONFIG_DIR, CONFIG_FILE);
 }
 

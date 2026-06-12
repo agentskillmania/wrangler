@@ -101,7 +101,7 @@ describe('Chat API', () => {
     fastify.decorate('configManager', configManager);
     fastify.decorate('resourceManager', resourceManager);
     fastify.decorate('sessionManager', sessionManager);
-    fastify.register(chatRoutes);
+    await fastify.register(chatRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
 
     mockAgentSessionCreate.mockClear();

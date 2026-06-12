@@ -288,20 +288,14 @@ describe('MarkdownMessageAssembler', () => {
     expect(toolMsg!.isError).toBe(true);
   });
 
-  it('handles assistant messages with toolCalls', () => {
+  it('creates an assistant message when input has toolCalls', () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     state.context.messages = [
       {
         role: 'assistant',
         content: 'Let me search.',
-        toolCalls: [
-          {
-            id: 'tc-1',
-            name: 'search',
-            arguments: { query: 'test' },
-          },
-        ],
+        toolCalls: [{ id: 'tc-1', name: 'search', arguments: { query: 'test' } }],
         timestamp: 1001,
       },
     ] as any;
@@ -313,12 +307,52 @@ describe('MarkdownMessageAssembler', () => {
     expect(assistantMsgs).toHaveLength(2);
     const assistantMsg = assistantMsgs[1];
     expect(Array.isArray(assistantMsg.content)).toBe(true);
+  });
+
+  it('includes tool call details in assistant message content', () => {
+    const assembler = new MarkdownMessageAssembler();
+    const state = makeState({ instructions: 'Be helpful.' });
+    state.context.messages = [
+      {
+        role: 'assistant',
+        content: 'Let me search.',
+        toolCalls: [{ id: 'tc-1', name: 'search', arguments: { query: 'test' } }],
+        timestamp: 1001,
+      },
+    ] as any;
+    const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
+
+    const messages = assembler.build(state, opts);
+    const assistantMsg = messages.filter((m) => m.role === 'assistant')[1];
+
     expect(assistantMsg.content).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'toolCall' })])
     );
     const toolCall = (assistantMsg.content as any[]).find((c: any) => c.type === 'toolCall');
-    expect(toolCall!.id).toBe('tc-1');
-    expect(toolCall!.name).toBe('search');
+    expect(toolCall).toEqual({
+      type: 'toolCall',
+      id: 'tc-1',
+      name: 'search',
+      arguments: { query: 'test' },
+    });
+  });
+
+  it('sets stopReason to toolUse for assistant messages with toolCalls', () => {
+    const assembler = new MarkdownMessageAssembler();
+    const state = makeState({ instructions: 'Be helpful.' });
+    state.context.messages = [
+      {
+        role: 'assistant',
+        content: 'Let me search.',
+        toolCalls: [{ id: 'tc-1', name: 'search', arguments: { query: 'test' } }],
+        timestamp: 1001,
+      },
+    ] as any;
+    const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
+
+    const messages = assembler.build(state, opts);
+    const assistantMsg = messages.filter((m) => m.role === 'assistant')[1];
+
     expect(assistantMsg.stopReason).toBe('toolUse');
   });
 

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { render } from 'ink-testing-library';
+import * as fs from 'node:fs';
 import { App } from '../../../src/components/app.js';
 import type { AppConfig } from '../../../src/config.js';
 
@@ -44,7 +45,7 @@ vi.mock('@agentskillmania/wrangler', () => ({
   discoverGlobalConfigPath: vi.fn().mockReturnValue('/mock/global-mcp.json'),
 }));
 
-vi.mock('node:fs', async (importOriginal) => {
+vi.mock(import('node:fs'), async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return {
     ...actual,
@@ -121,11 +122,24 @@ vi.mock('../../../src/components/setup/setup-wizard.js', async () => {
   };
 });
 
+const { mainTUICapture } = vi.hoisted(() => ({
+  mainTUICapture: {
+    props: null as Record<string, unknown> | null,
+  },
+}));
+
 vi.mock('../../../src/components/main-tui.js', async () => {
   const { Text } = await import('ink');
   return {
-    MainTUI: ({ agentName, model }: { agentName: string; model: string }) =>
-      React.createElement(Text, null, `MainTUI Mock: ${agentName} / ${model}`),
+    MainTUI: (props: Record<string, unknown>) => {
+      mainTUICapture.props = props;
+      const dialog = (props.dialog as { type: string }) ?? { type: 'none' };
+      return React.createElement(
+        Text,
+        null,
+        `MainTUI Mock: ${props.agentName as string} / ${props.model as string} / dialog=${dialog.type}`
+      );
+    },
   };
 });
 
@@ -153,6 +167,7 @@ const bareMode: { mode: 'bare'; dir: string } = { mode: 'bare', dir: '/tmp/works
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mainTUICapture.props = null;
     mockLoadConfig.mockResolvedValue(validConfig);
     mockSaveSetup.mockResolvedValue(undefined);
   });
@@ -312,5 +327,342 @@ describe('App', () => {
     // Note: the mock useApp returns { exit: vi.fn() } but we can't easily access it here.
     // The important thing is that the setup was attempted.
     expect(EnhancedRunner.create).toHaveBeenCalled();
+  });
+
+  it('exposes confirm and ask handlers through MainTUI callbacks', async () => {
+    const { EnhancedRunner } = await import('@agentskillmania/wrangler');
+    const mockRunner = { runStream: vi.fn() };
+    vi.mocked(EnhancedRunner.create).mockResolvedValue(mockRunner as never);
+
+    render(
+      React.createElement(App, {
+        config: validConfig,
+        mode: bareMode,
+        dir: '/tmp/workspace',
+      })
+    );
+
+    await vi.waitFor(() => {
+      expect(mainTUICapture.props).not.toBeNull();
+    });
+
+    const props = mainTUICapture.props!;
+    expect(typeof props.onConfirmResult).toBe('function');
+    expect(typeof props.onAskAnswer).toBe('function');
+  });
+
+  it('handleConfirmResult resolves confirm promise with true for yes', async () => {
+    const { EnhancedRunner } = await import('@agentskillmania/wrangler');
+    const mockRunner = { runStream: vi.fn() };
+    vi.mocked(EnhancedRunner.create).mockResolvedValue(mockRunner as never);
+
+    let capturedConfirmHandler: ((toolName: string, args: Record<string, unknown>) => Promise<boolean>) | null = null;
+    vi.mocked(EnhancedRunner.create).mockImplementation(async (opts: Record<string, unknown>) => {
+      capturedConfirmHandler = opts.confirmHandler as (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
+      return mockRunner as never;
+    });
+
+    render(
+      React.createElement(App, {
+        config: validConfig,
+        mode: bareMode,
+        dir: '/tmp/workspace',
+      })
+    );
+
+    await vi.waitFor(() => {
+      expect(capturedConfirmHandler).not.toBeNull();
+    });
+
+    const confirmPromise = capturedConfirmHandler!('shell', { cmd: 'ls' });
+
+    await vi.waitFor(() => {
+      expect(mainTUICapture.props).not.toBeNull();
+      const dialog = mainTUICapture.props!.dialog as { type: string };
+      expect(dialog.type).toBe('confirm');
+    });
+
+    (mainTUICapture.props!.onConfirmResult as (result: 'yes' | 'no' | 'always') => void)('yes');
+
+    await expect(confirmPromise).resolves.toBe(true);
+  });
+
+  it('handleConfirmResult resolves confirm promise with true for always', async () => {
+    const { EnhancedRunner } = await import('@agentskillmania/wrangler');
+    const mockRunner = { runStream: vi.fn() };
+    let capturedConfirmHandler: ((toolName: string, args: Record<string, unknown>) => Promise<boolean>) | null = null;
+
+    vi.mocked(EnhancedRunner.create).mockImplementation(async (opts: Record<string, unknown>) => {
+      capturedConfirmHandler = opts.confirmHandler as (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
+      return mockRunner as never;
+    });
+
+    render(
+      React.createElement(App, {
+        config: validConfig,
+        mode: bareMode,
+        dir: '/tmp/workspace',
+      })
+    );
+
+    await vi.waitFor(() => expect(capturedConfirmHandler).not.toBeNull());
+
+    const confirmPromise = capturedConfirmHandler!('shell', {});
+    await vi.waitFor(() => {
+      expect(mainTUICapture.props).not.toBeNull();
+      expect((mainTUICapture.props!.dialog as { type: string }).type).toBe('confirm');
+    });
+
+    (mainTUICapture.props!.onConfirmResult as (result: 'yes' | 'no' | 'always') => void)('always');
+
+    await expect(confirmPromise).resolves.toBe(true);
+  });
+
+  it('handleConfirmResult resolves confirm promise with false for no', async () => {
+    const { EnhancedRunner } = await import('@agentskillmania/wrangler');
+    const mockRunner = { runStream: vi.fn() };
+    let capturedConfirmHandler: ((toolName: string, args: Record<string, unknown>) => Promise<boolean>) | null = null;
+
+    vi.mocked(EnhancedRunner.create).mockImplementation(async (opts: Record<string, unknown>) => {
+      capturedConfirmHandler = opts.confirmHandler as (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
+      return mockRunner as never;
+    });
+
+    render(
+      React.createElement(App, {
+        config: validConfig,
+        mode: bareMode,
+        dir: '/tmp/workspace',
+      })
+    );
+
+    await vi.waitFor(() => expect(capturedConfirmHandler).not.toBeNull());
+
+    const confirmPromise = capturedConfirmHandler!('shell', {});
+    await vi.waitFor(() => {
+      expect(mainTUICapture.props).not.toBeNull();
+      expect((mainTUICapture.props!.dialog as { type: string }).type).toBe('confirm');
+    });
+
+    (mainTUICapture.props!.onConfirmResult as (result: 'yes' | 'no' | 'always') => void)('no');
+
+    await expect(confirmPromise).resolves.toBe(false);
+  });
+
+  it('handleAskAnswer resolves askHuman promise with answer', async () => {
+    const { EnhancedRunner } = await import('@agentskillmania/wrangler');
+    const mockRunner = { runStream: vi.fn() };
+    let capturedAskHandler: ((params: { questions: Array<{ id: string; question: string }> }) => Promise<Record<string, unknown>>) | null = null;
+
+    vi.mocked(EnhancedRunner.create).mockImplementation(async (opts: Record<string, unknown>) => {
+      capturedAskHandler = opts.askHumanHandler as (params: {
+        questions: Array<{ id: string; question: string }>;
+      }) => Promise<Record<string, unknown>>;
+      return mockRunner as never;
+    });
+
+    render(
+      React.createElement(App, {
+        config: validConfig,
+        mode: bareMode,
+        dir: '/tmp/workspace',
+      })
+    );
+
+    await vi.waitFor(() => expect(capturedAskHandler).not.toBeNull());
+
+    const askPromise = capturedAskHandler!({
+      questions: [{ id: 'q1', question: 'What is your name?' }],
+    });
+
+    await vi.waitFor(() => {
+      expect(mainTUICapture.props).not.toBeNull();
+      expect((mainTUICapture.props!.dialog as { type: string }).type).toBe('ask');
+    });
+
+    (mainTUICapture.props!.onAskAnswer as (answer: string) => void)('Alice');
+
+    await expect(askPromise).resolves.toEqual({
+      q1: { type: 'direct', value: 'Alice' },
+    });
+  });
+
+  it('agent mode builds mcpConfigPaths when global and loaded paths exist', async () => {
+    const { EnhancedRunner, discoverGlobalConfigPath } = await import('@agentskillmania/wrangler');
+    const mockRunner = { runStream: vi.fn() };
+    vi.mocked(EnhancedRunner.create).mockResolvedValue(mockRunner as never);
+
+    vi.mocked(fs.existsSync).mockImplementation((p: string) =>
+      ['/mock/global-mcp.json', '/agent/mcp.json'].includes(p as string)
+    );
+    vi.mocked(discoverGlobalConfigPath).mockReturnValue('/mock/global-mcp.json');
+
+    const { AgentLoader } = await import('@agentskillmania/wrangler');
+    vi.mocked(AgentLoader.loadFrom).mockResolvedValue({
+      name: 'agent-with-mcp',
+      instructions: 'loaded instructions',
+      skillDirs: ['/skills'],
+      mcpPaths: ['/agent/mcp.json'],
+    });
+
+    const agentMode = { mode: 'agent' as const, agentDir: '/tmp/agent-dir', dir: '/tmp/agent-dir' };
+
+    render(
+      React.createElement(App, {
+        config: validConfig,
+        mode: agentMode,
+        dir: '/tmp/agent-dir',
+      })
+    );
+
+    await vi.waitFor(() => {
+      expect(EnhancedRunner.create).toHaveBeenCalled();
+    });
+
+    const callArgs = vi.mocked(EnhancedRunner.create).mock.calls[0][0];
+    expect(callArgs.mcpConfigPaths).toEqual(['/mock/global-mcp.json', '/agent/mcp.json']);
+    expect(callArgs.skillDirs).toEqual(['/skills']);
+  });
+
+  it('agent mode omits mcpConfigPaths when no paths exist', async () => {
+    const { EnhancedRunner } = await import('@agentskillmania/wrangler');
+    const mockRunner = { runStream: vi.fn() };
+    vi.mocked(EnhancedRunner.create).mockResolvedValue(mockRunner as never);
+
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+
+    const { AgentLoader } = await import('@agentskillmania/wrangler');
+    vi.mocked(AgentLoader.loadFrom).mockResolvedValue({
+      name: 'agent-no-mcp',
+      instructions: 'loaded instructions',
+      skillDirs: [],
+      mcpPaths: ['/agent/mcp.json'],
+    });
+
+    const agentMode = { mode: 'agent' as const, agentDir: '/tmp/agent-dir', dir: '/tmp/agent-dir' };
+
+    render(
+      React.createElement(App, {
+        config: validConfig,
+        mode: agentMode,
+        dir: '/tmp/agent-dir',
+      })
+    );
+
+    await vi.waitFor(() => {
+      expect(EnhancedRunner.create).toHaveBeenCalled();
+    });
+
+    const callArgs = vi.mocked(EnhancedRunner.create).mock.calls[0][0];
+    expect(callArgs.mcpConfigPaths).toBeUndefined();
+  });
+
+  it('remains on loading screen when createLLMClientFromConfig returns null', async () => {
+    const { createLLMClientFromConfig } = await import('../../../src/runner-setup.js');
+    vi.mocked(createLLMClientFromConfig).mockReturnValueOnce(null);
+
+    const { lastFrame } = render(
+      React.createElement(App, {
+        config: validConfig,
+        mode: bareMode,
+        dir: '/tmp/workspace',
+      })
+    );
+
+    // Give any pending async work a chance to run
+    await vi.waitFor(() => {
+      expect(lastFrame()).toContain('Initializing runner...');
+    });
+  });
+
+  it('uses default instructions when agent provides empty instructions', async () => {
+    const { EnhancedRunner } = await import('@agentskillmania/wrangler');
+    const mockRunner = { runStream: vi.fn() };
+    vi.mocked(EnhancedRunner.create).mockResolvedValue(mockRunner as never);
+
+    const { AgentLoader } = await import('@agentskillmania/wrangler');
+    vi.mocked(AgentLoader.loadFrom).mockResolvedValue({
+      name: 'empty-instr-agent',
+      instructions: '',
+      skillDirs: [],
+      mcpPaths: [],
+      source: { type: 'agent', configPath: '/tmp/agent-dir' },
+    });
+
+    const agentMode = { mode: 'agent' as const, agentDir: '/tmp/agent-dir', dir: '/tmp/agent-dir' };
+
+    render(
+      React.createElement(App, {
+        config: validConfig,
+        mode: agentMode,
+        dir: '/tmp/agent-dir',
+      })
+    );
+
+    await vi.waitFor(() => {
+      expect(EnhancedRunner.create).toHaveBeenCalled();
+    });
+
+    const callArgs = vi.mocked(EnhancedRunner.create).mock.calls[0][0];
+    expect(callArgs.source).toEqual({ type: 'agent', configPath: '/tmp/agent-dir' });
+
+    const { createInitialState } = await import('../../../src/runner-setup.js');
+    await vi.waitFor(() => {
+      expect(createInitialState).toHaveBeenCalledWith('empty-instr-agent', 'You are a helpful assistant.');
+    });
+  });
+
+  it('uses crewDir as workspacePath when mode is crew', async () => {
+    const { EnhancedRunner } = await import('@agentskillmania/wrangler');
+    const mockRunner = { runStream: vi.fn() };
+    vi.mocked(EnhancedRunner.create).mockResolvedValue(mockRunner as never);
+
+    const crewMode = { mode: 'crew' as const, crewDir: '/tmp/crew-dir', dir: '/tmp/crew-dir' };
+
+    render(
+      React.createElement(App, {
+        config: validConfig,
+        mode: crewMode,
+        dir: '/tmp/crew-dir',
+      })
+    );
+
+    await vi.waitFor(() => {
+      expect(EnhancedRunner.create).toHaveBeenCalled();
+    });
+
+    const callArgs = vi.mocked(EnhancedRunner.create).mock.calls[0][0];
+    expect(callArgs.workspacePath).toBe('/tmp/crew-dir');
+  });
+
+  it('passes unknown model fallback when config lacks model', async () => {
+    const { EnhancedRunner } = await import('@agentskillmania/wrangler');
+    const mockRunner = { runStream: vi.fn() };
+    vi.mocked(EnhancedRunner.create).mockResolvedValue(mockRunner as never);
+
+    const configWithoutModel = {
+      hasValidConfig: true,
+      configPath: '/tmp/test-config.yaml',
+      llm: {
+        provider: 'openai',
+        apiKey: 'sk-test-key',
+        // @ts-expect-error testing runtime fallback when model is missing
+        model: undefined,
+      },
+    } as AppConfig;
+
+    render(
+      React.createElement(App, {
+        config: configWithoutModel,
+        mode: bareMode,
+        dir: '/tmp/workspace',
+      })
+    );
+
+    await vi.waitFor(() => {
+      expect(mainTUICapture.props).not.toBeNull();
+    });
+
+    expect(mainTUICapture.props!.model).toBe('unknown');
   });
 });

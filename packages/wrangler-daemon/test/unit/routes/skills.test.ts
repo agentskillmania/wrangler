@@ -33,7 +33,7 @@ describe('Unit: Skill CRUD Routes', () => {
 
     fastify = Fastify();
     fastify.decorate('resourceManager', manager);
-    fastify.register(skillRoutes);
+    await fastify.register(skillRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 
@@ -137,6 +137,18 @@ describe('Unit: Skill CRUD Routes', () => {
     expect(res.ok).toBe(true);
     const body = await res.json();
     expect(body).toEqual({ error: 'name is required' });
+  });
+
+  it('POST /api/skills returns error when name contains path traversal', async () => {
+    const res = await fetch(`${getUrl()}/api/skills`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '../escaped' }),
+    });
+
+    expect(res.ok).toBe(true);
+    const body = await res.json();
+    expect(body.error).toContain('path separators or traversal sequences');
   });
 
   // Test 8: DELETE /api/skills/:id removes skill

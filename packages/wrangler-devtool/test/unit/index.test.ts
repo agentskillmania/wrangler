@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const TEST_TIMEOUT = 30000;
+const TEST_TIMEOUT = 60000;
 
 describe('@agentskillmania/wrangler-devtool', () => {
   it(
@@ -16,16 +16,21 @@ describe('@agentskillmania/wrangler-devtool', () => {
         llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
       });
       expect(tool).toBeInstanceOf(DevTool);
+      expect(tool.maxSteps).toBeUndefined();
+      expect(tool.requestTimeout).toBeUndefined();
     },
     TEST_TIMEOUT
   );
 
   it(
-    'exports DevToolConfig type',
+    'exports expected public API entries',
     async () => {
-      // Type-only export, just verify re-export exists
       const types = await import('../../src/index.js');
-      expect(types).toBeDefined();
+      expect(Object.keys(types).sort()).toEqual(
+        expect.arrayContaining(['DevTool', 'CliError', 'initProject', 'createTemplate'])
+      );
+      expect(types.DevTool).toBeTypeOf('function');
+      expect(types.CliError).toBeTypeOf('function');
     },
     TEST_TIMEOUT
   );

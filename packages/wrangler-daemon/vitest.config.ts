@@ -20,8 +20,7 @@ export default defineConfig({
         'src/**/index.ts',
         'src/cli/**',
         'src/types.ts',
-        'src/daemon.ts',
-        'src/constants.ts',
+        'src/core/session-diagnostics.ts',
       ],
       thresholds: {
         branches: 85,

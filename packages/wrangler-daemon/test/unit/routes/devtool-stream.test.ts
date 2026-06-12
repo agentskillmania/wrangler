@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ConfigManager } from '../../../src/core/config-manager.js';
 import { devtoolStreamRoutes } from '../../../src/routes/devtool-stream.js';
-import { mapDevtoolStreamEvent } from '../../../src/routes/devtool-stream.js';
+import { mapDevtoolStreamEvent, getRunner } from '../../../src/routes/devtool-stream.js';
 import type { RunStreamEvent } from '@agentskillmania/colts';
 
 // ─── Mock setup ───
@@ -181,7 +181,7 @@ describe('Devtool Stream API', () => {
 
     fastify = Fastify();
     fastify.decorate('configManager', configManager);
-    fastify.register(devtoolStreamRoutes);
+    await fastify.register(devtoolStreamRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
 
     mockCreateArchitectRunner.mockReset();
@@ -370,6 +370,106 @@ describe('Devtool Stream API', () => {
       const genDone = events.filter((e) => e.event === 'devtool:generation-done');
       expect(genDone).toHaveLength(2);
     });
+
+    it('falls back to raw output when parseAgentOutput throws', async () => {
+      const rawOutput = 'unparseable agent content';
+      const runner = makeMockRunner([{ type: 'token', token: 'gen' } as any], rawOutput);
+      mockCreateArchitectRunner.mockResolvedValue({ runner, state: mockState });
+      mockParseAgentOutput.mockImplementation(() => {
+        throw new Error('parse failed');
+      });
+
+      const res = await fetch(`${getUrl()}/api/devtool/agent/generate/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Create agent', maxRounds: 1 }),
+      });
+
+      expect(res.status).toBe(200);
+      const raw = await res.text();
+      const events = parseSSE(raw);
+      const completeEvent = events.find((e) => e.event === 'devtool:complete');
+      expect(completeEvent).toBeDefined();
+      expect((completeEvent!.data as { output: { summary: string } }).output.summary).toBe(
+        rawOutput
+      );
+    });
+
+    it('treats unparseable review report as passed and stops', async () => {
+      const genRunner = makeMockRunner([{ type: 'token', token: 'gen' } as any]);
+      mockCreateArchitectRunner.mockResolvedValue({ runner: genRunner, state: mockState });
+      mockParseAgentOutput.mockReturnValue({ changes: [], summary: 'generated' });
+
+      const reviewRunner = makeMockRunner([{ type: 'token', token: 'review' } as any]);
+      mockCreateReviewerRunner.mockResolvedValue({ runner: reviewRunner, state: mockState });
+      mockParseReviewReport.mockImplementation(() => {
+        throw new Error('bad report');
+      });
+
+      const res = await fetch(`${getUrl()}/api/devtool/agent/generate/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Create agent', maxRounds: 3 }),
+      });
+
+      const raw = await res.text();
+      const events = parseSSE(raw);
+
+      const reviewDone = events.find((e) => e.event === 'devtool:review-done');
+      expect(reviewDone).toBeDefined();
+      expect((reviewDone!.data as { passed: boolean }).passed).toBe(true);
+
+      const roundStarts = events.filter((e) => e.event === 'devtool:round-start');
+      expect(roundStarts).toHaveLength(1);
+    });
+
+    it('getRunner throws for unknown prompt name', async () => {
+      const fakeDevTool = {
+        createArchitectRunner: vi.fn(),
+        createSkillDesignerRunner: vi.fn(),
+        createCrewComposerRunner: vi.fn(),
+      } as any;
+
+      await expect(getRunner(fakeDevTool, 'unknown-prompt')).rejects.toThrow(
+        'Unknown prompt: unknown-prompt'
+      );
+    });
+
+    it('streams skill generation via /api/devtool/skill/generate/stream', async () => {
+      const runner = makeMockRunner([{ type: 'token', token: 'skill' } as any]);
+      mockCreateSkillDesignerRunner.mockResolvedValue({ runner, state: mockState });
+      mockParseAgentOutput.mockReturnValue({ changes: [], summary: 'skill done' });
+
+      const res = await fetch(`${getUrl()}/api/devtool/skill/generate/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Create skill', maxRounds: 1 }),
+      });
+
+      expect(res.status).toBe(200);
+      const raw = await res.text();
+      const events = parseSSE(raw);
+      expect(events.some((e) => e.event === 'devtool:generation-done')).toBe(true);
+      expect(events.some((e) => e.event === 'devtool:complete')).toBe(true);
+    });
+
+    it('streams crew generation via /api/devtool/crew/generate/stream', async () => {
+      const runner = makeMockRunner([{ type: 'token', token: 'crew' } as any]);
+      mockCreateArchitectRunner.mockResolvedValue({ runner, state: mockState });
+      mockParseAgentOutput.mockReturnValue({ changes: [], summary: 'crew done' });
+
+      const res = await fetch(`${getUrl()}/api/devtool/crew/generate/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Create crew', maxRounds: 1 }),
+      });
+
+      expect(res.status).toBe(200);
+      const raw = await res.text();
+      const events = parseSSE(raw);
+      expect(events.some((e) => e.event === 'devtool:generation-done')).toBe(true);
+      expect(events.some((e) => e.event === 'devtool:complete')).toBe(true);
+    });
   });
 
   describe('POST /api/devtool/review/stream', () => {
@@ -432,6 +532,28 @@ describe('Devtool Stream API', () => {
       const errorEvent = events.find((e) => e.event === 'devtool:error');
       expect(errorEvent).toBeDefined();
       expect((errorEvent!.data as { message: string }).message).toBe('review crash');
+    });
+
+    it('streams complete with undefined report when parseReviewReport throws', async () => {
+      const reviewRunner = makeMockRunner([{ type: 'token', token: 'reviewing' } as any]);
+      mockCreateReviewerRunner.mockResolvedValue({ runner: reviewRunner, state: mockState });
+      mockParseReviewReport.mockImplementation(() => {
+        throw new Error('unparseable report');
+      });
+
+      const res = await fetch(`${getUrl()}/api/devtool/review/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'agent definition content' }),
+      });
+
+      expect(res.status).toBe(200);
+      const raw = await res.text();
+      const events = parseSSE(raw);
+
+      const completeEvent = events.find((e) => e.event === 'devtool:complete');
+      expect(completeEvent).toBeDefined();
+      expect((completeEvent!.data as { report: unknown }).report).toBeUndefined();
     });
   });
 });

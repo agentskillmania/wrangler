@@ -37,7 +37,7 @@ describe('Unit: Launcher Routes', () => {
     fastify = Fastify();
     fastify.decorate('resourceManager', resourceManager);
     fastify.decorate('sessionManager', sessionManager);
-    fastify.register(launcherRoutes);
+    await fastify.register(launcherRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 

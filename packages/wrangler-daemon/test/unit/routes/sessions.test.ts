@@ -30,7 +30,7 @@ describe('Unit: Session Routes', () => {
 
     fastify = Fastify();
     fastify.decorate('sessionManager', sessionManager);
-    fastify.register(sessionRoutes);
+    await fastify.register(sessionRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 

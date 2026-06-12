@@ -1,12 +1,36 @@
+import React from 'react';
+import { render } from 'ink-testing-library';
 import { describe, it, expect } from 'vitest';
 import { App } from '../../src/components/app.js';
 import { detectMode } from '../../src/detect-mode.js';
 
+vi.mock('ink', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ink')>();
+  return {
+    ...actual,
+    useApp: () => ({ exit: vi.fn() }),
+  };
+});
+
+vi.mock('../../src/config.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/config.js')>();
+  return {
+    ...actual,
+    saveSetup: vi.fn().mockResolvedValue(undefined),
+    loadConfig: vi.fn().mockResolvedValue({ hasValidConfig: false }),
+  };
+});
+
 describe('@agentskillmania/wrangler-cli exports', () => {
-  it('App is a valid React component function', () => {
-    expect(typeof App).toBe('function');
-    // React components accept props object
-    expect(App.length).toBe(1);
+  it('App renders setup wizard when config is invalid', () => {
+    const { lastFrame } = render(
+      React.createElement(App, {
+        config: { hasValidConfig: false },
+        mode: { mode: 'bare', dir: '/tmp' },
+        dir: '/tmp',
+      })
+    );
+    expect(lastFrame()).toContain('wrangler Setup');
   });
 
   it('detectMode detects agent mode from AGENT.md', async () => {

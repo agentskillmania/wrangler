@@ -241,4 +241,125 @@ describe('review command', () => {
       expect.any(Object)
     );
   });
+
+  it('should report crew loader failure in static check', async () => {
+    process.chdir(tempDir);
+    writeFileSync(join(tempDir, 'CREW.md'), '---\nname: test-crew\n---\n\n# Test Crew\n', 'utf-8');
+    mkdirSync(join(tempDir, 'skills'), { recursive: true });
+    mkdirSync(join(tempDir, 'test'), { recursive: true });
+
+    const code = await reviewCommand.handler!([tempDir], {});
+    expect(code).toBe(ExitCode.GeneralError);
+
+    const output = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(output.static.issues).toContainEqual(
+      expect.objectContaining({
+        location: join(tempDir, 'CREW.md'),
+        severity: 'major',
+      })
+    );
+  });
+
+  it('should fall back to empty content report for deep review of directory without definition', async () => {
+    process.chdir(tempDir);
+    mkdirSync(join(tempDir, 'skills'), { recursive: true });
+    mkdirSync(join(tempDir, 'test'), { recursive: true });
+
+    vi.spyOn(configModule, 'loadConfig').mockResolvedValue({
+      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
+    });
+
+    const code = await reviewCommand.handler!([tempDir], { deep: true });
+    expect(code).toBe(ExitCode.GeneralError);
+
+    const output = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(output.deep).toMatchObject({
+      overallScore: 0,
+      dimensions: {},
+      summary: 'No content available for deep review',
+    });
+    expect(output.deep.issues).toContainEqual(
+      expect.objectContaining({
+        severity: 'critical',
+        description: 'No content available for deep review',
+      })
+    );
+  });
+
+  it('should run deep review on a single file', async () => {
+    process.chdir(tempDir);
+    const filePath = join(tempDir, 'agent.md');
+    writeFileSync(
+      filePath,
+      '---\nname: test-agent\ndescription: A test agent\n---\n\n# Test Agent\nSome detailed content here that is longer than one hundred characters to avoid the short content warning.\n',
+      'utf-8'
+    );
+
+    vi.spyOn(configModule, 'loadConfig').mockResolvedValue({
+      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
+    });
+    const mockReviewer = vi.spyOn(reviewerModule, 'runReviewer').mockResolvedValue({
+      overallScore: 4,
+      dimensions: {
+        clarity: { score: 4, reasoning: 'Clear' },
+        completeness: { score: 4, reasoning: 'Complete' },
+        focus: { score: 4, reasoning: 'Focused' },
+        safety: { score: 4, reasoning: 'Safe' },
+        efficiency: { score: 4, reasoning: 'Efficient' },
+      },
+      issues: [],
+      summary: 'Good',
+    });
+
+    const code = await reviewCommand.handler!([filePath], { deep: true });
+    expect(code).toBe(ExitCode.Success);
+
+    const output = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(output.deep.overallScore).toBe(4);
+    expect(mockReviewer).toHaveBeenCalledWith(
+      filePath,
+      expect.any(String),
+      undefined,
+      expect.any(Object)
+    );
+  });
+
+  it('should run deep review on a crew directory', async () => {
+    process.chdir(tempDir);
+    mkdirSync(join(tempDir, 'agents'), { recursive: true });
+    writeFileSync(
+      join(tempDir, 'CREW.md'),
+      '---\nname: test-crew\nprimary-agent: primary\n---\n\n# Test Crew\nSome detailed content here that is longer than one hundred characters to avoid the short content warning.\n',
+      'utf-8'
+    );
+    writeFileSync(
+      join(tempDir, 'agents', 'primary.md'),
+      '---\nname: primary\ndescription: primary agent\n---\nYou are primary.',
+      'utf-8'
+    );
+    mkdirSync(join(tempDir, 'skills'), { recursive: true });
+    mkdirSync(join(tempDir, 'test'), { recursive: true });
+
+    vi.spyOn(configModule, 'loadConfig').mockResolvedValue({
+      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
+    });
+    vi.spyOn(reviewerModule, 'runReviewer').mockResolvedValue({
+      overallScore: 4,
+      dimensions: {
+        clarity: { score: 4, reasoning: 'Clear' },
+        completeness: { score: 4, reasoning: 'Complete' },
+        focus: { score: 4, reasoning: 'Focused' },
+        safety: { score: 4, reasoning: 'Safe' },
+        efficiency: { score: 4, reasoning: 'Efficient' },
+      },
+      issues: [],
+      summary: 'Good crew',
+    });
+
+    const code = await reviewCommand.handler!([tempDir], { deep: true });
+    expect(code).toBe(ExitCode.Success);
+
+    const output = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(output.deep.overallScore).toBe(4);
+  });
 });

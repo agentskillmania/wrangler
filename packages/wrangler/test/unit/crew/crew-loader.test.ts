@@ -6,19 +6,44 @@ import { CrewLoader } from '../../../src/crew/crew-loader.js';
 const FIXTURE_DIR = join(__dirname, '../../fixtures/crew');
 
 describe('CrewLoader', () => {
-  it('loads config from fixture directory', async () => {
+  it('loads crew meta from fixture directory', async () => {
     const loader = new CrewLoader(FIXTURE_DIR);
     const config = await loader.load();
 
-    expect(config.meta.name).toBe('test-crew');
-    expect(config.meta.description).toBe('A test crew for unit tests');
-    expect(config.meta.primaryAgent).toBe('primary');
+    expect(config.meta).toEqual({
+      name: 'test-crew',
+      description: 'A test crew for unit tests',
+      primaryAgent: 'primary',
+    });
+  });
+
+  it('loads crew memory from fixture directory', async () => {
+    const loader = new CrewLoader(FIXTURE_DIR);
+    const config = await loader.load();
+
     expect(config.memory).toContain('shared context');
-    expect(config.agentDefs).toHaveProperty('primary');
-    expect(config.agentDefs).toHaveProperty('searcher');
-    expect(config.agentDefs.primary.model).toBe('gpt-4o');
-    expect(config.agentDefs.searcher.description).toBe('Searches the web');
-    expect(config.agentDefs.searcher.instructions).toContain('search agent');
+  });
+
+  it('loads agent definitions from fixture directory', async () => {
+    const loader = new CrewLoader(FIXTURE_DIR);
+    const config = await loader.load();
+
+    expect(Object.keys(config.agentDefs)).toEqual(['primary', 'searcher']);
+    expect(config.agentDefs.primary).toMatchObject({
+      name: 'primary',
+      model: 'gpt-4o',
+    });
+    expect(config.agentDefs.searcher).toMatchObject({
+      name: 'searcher',
+      description: 'Searches the web',
+      instructions: expect.stringContaining('search agent'),
+    });
+  });
+
+  it('loads empty skillDirs when skills directory is absent', async () => {
+    const loader = new CrewLoader(FIXTURE_DIR);
+    const config = await loader.load();
+
     expect(config.skillDirs).toEqual([]);
   });
 

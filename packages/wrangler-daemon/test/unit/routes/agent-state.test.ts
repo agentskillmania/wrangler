@@ -126,7 +126,7 @@ describe('Agent State SSE route', () => {
 
     fastify = Fastify();
     fastify.decorate('sessionManager', sessionManager);
-    fastify.register(agentStateRoutes);
+    await fastify.register(agentStateRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
 
     mockSetCockpitSender.mockClear();
@@ -170,8 +170,9 @@ describe('Agent State SSE route', () => {
       expect(headers.get('content-type')).toBe('text/event-stream');
       expect(headers.get('cache-control')).toBe('no-cache');
 
-      // Verify we got at least one SSE frame
-      expect(body).toContain('event: agent-diagnostics');
+      // Verify we got at least one agent-diagnostics SSE frame
+      const events = parseSSE(body);
+      expect(events.some((e) => e.event === 'agent-diagnostics')).toBe(true);
     });
 
     it('sends real AgentState for active session', async () => {
@@ -245,8 +246,9 @@ describe('Agent State SSE route', () => {
       const { status, body } = await fetchSSE(`${getUrl()}/api/agent/active-session/state`);
 
       expect(status).toBe(200);
-      // Ensure the handler ran before asserting mock calls
-      expect(body).toContain('event: agent-diagnostics');
+      // Ensure the handler ran and emitted at least one diagnostics frame
+      const events = parseSSE(body);
+      expect(events.some((e) => e.event === 'agent-diagnostics')).toBe(true);
 
       // setCockpitSender should have been called with a function (not null)
       expect(mockSetCockpitSender).toHaveBeenCalled();

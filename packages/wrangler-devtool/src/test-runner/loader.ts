@@ -13,6 +13,7 @@ import type {
   TestTools,
   HardAssertion,
   AssertionType,
+  SoftEvaluation,
 } from './types.js';
 export type { TestCase };
 
@@ -340,6 +341,80 @@ function validateAssertion(
   return result;
 }
 
+function validateSoftEvaluation(
+  evaluation: unknown,
+  file: string,
+  caseName: string,
+  index: number
+): SoftEvaluation {
+  if (evaluation === null || typeof evaluation !== 'object') {
+    throw new TestLoaderError(
+      `Test case "${caseName}" expected.soft[${index}] must be an object`,
+      file,
+      caseName
+    );
+  }
+
+  const obj = evaluation as Record<string, unknown>;
+
+  if (typeof obj.name !== 'string' || obj.name.trim().length === 0) {
+    throw new TestLoaderError(
+      `Test case "${caseName}" expected.soft[${index}].name must be a non-empty string`,
+      file,
+      caseName
+    );
+  }
+
+  if (typeof obj.criteria !== 'string') {
+    throw new TestLoaderError(
+      `Test case "${caseName}" expected.soft[${index}].criteria must be a string`,
+      file,
+      caseName
+    );
+  }
+
+  if (!Array.isArray(obj.rubric)) {
+    throw new TestLoaderError(
+      `Test case "${caseName}" expected.soft[${index}].rubric must be an array`,
+      file,
+      caseName
+    );
+  }
+
+  for (let i = 0; i < obj.rubric.length; i++) {
+    const item = obj.rubric[i] as Record<string, unknown>;
+    if (typeof item.score !== 'number') {
+      throw new TestLoaderError(
+        `Test case "${caseName}" expected.soft[${index}].rubric[${i}].score must be a number`,
+        file,
+        caseName
+      );
+    }
+    if (typeof item.description !== 'string') {
+      throw new TestLoaderError(
+        `Test case "${caseName}" expected.soft[${index}].rubric[${i}].description must be a string`,
+        file,
+        caseName
+      );
+    }
+  }
+
+  if (typeof obj.minScore !== 'number') {
+    throw new TestLoaderError(
+      `Test case "${caseName}" expected.soft[${index}].minScore must be a number`,
+      file,
+      caseName
+    );
+  }
+
+  return {
+    name: obj.name,
+    criteria: obj.criteria,
+    rubric: obj.rubric as Array<{ score: number; description: string }>,
+    minScore: obj.minScore,
+  };
+}
+
 function validateExpected(expected: unknown, file: string, caseName: string): TestCase['expected'] {
   if (expected === undefined) {
     return {};
@@ -360,6 +435,17 @@ function validateExpected(expected: unknown, file: string, caseName: string): Te
       );
     }
     result.hard = obj.hard.map((a, i) => validateAssertion(a, file, caseName, i));
+  }
+
+  if (obj.soft !== undefined) {
+    if (!Array.isArray(obj.soft)) {
+      throw new TestLoaderError(
+        `Test case "${caseName}" expected.soft must be an array`,
+        file,
+        caseName
+      );
+    }
+    result.soft = obj.soft.map((s, i) => validateSoftEvaluation(s, file, caseName, i));
   }
 
   return result;

@@ -322,4 +322,40 @@ describe('MainTUI', () => {
     // but we verify the prop is passed by checking the component renders
     expect(onConfirmResult).not.toHaveBeenCalled();
   });
+
+  it('handles switch-session command by adding a system entry', () => {
+    const sendMessage = vi.fn();
+    const addSystemEntry = vi.fn();
+    render(
+      React.createElement(
+        MainTUI,
+        makeProps({ agentHook: makeAgentHook({ sendMessage, addSystemEntry }), agentName: 'agent' })
+      )
+    );
+
+    capturedInputSubmit!({ type: 'switch-session', name: 'subagent-1' });
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(addSystemEntry).toHaveBeenCalledWith('Session management is not yet implemented.');
+  });
+
+  it('ignores unknown command types without calling handlers', () => {
+    const sendMessage = vi.fn();
+    const clearEntries = vi.fn();
+    const addSystemEntry = vi.fn();
+    render(
+      React.createElement(
+        MainTUI,
+        makeProps({
+          agentHook: makeAgentHook({ sendMessage, clearEntries, addSystemEntry }),
+          agentName: 'agent',
+        })
+      )
+    );
+
+    // Cast to bypass TS and exercise the switch default (no-op) branch
+    capturedInputSubmit!({ type: 'unknown' } as unknown as ParsedCommand);
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(clearEntries).not.toHaveBeenCalled();
+    expect(addSystemEntry).not.toHaveBeenCalled();
+  });
 });

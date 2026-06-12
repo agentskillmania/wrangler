@@ -16,11 +16,14 @@ vi.mock('@agentskillmania/wrangler', () => ({
   },
 }));
 
-import { runAgentArchitect } from '../../../src/agents/architect.js';
-import { runSkillDesigner } from '../../../src/agents/skill-designer.js';
-import { runCrewComposer } from '../../../src/agents/crew-composer.js';
-import { runReviewer } from '../../../src/agents/reviewer.js';
-import { runSessionCurator } from '../../../src/agents/session-curator.js';
+import { runAgentArchitect, createArchitectRunner } from '../../../src/agents/architect.js';
+import { runSkillDesigner, createSkillDesignerRunner } from '../../../src/agents/skill-designer.js';
+import { runCrewComposer, createCrewComposerRunner } from '../../../src/agents/crew-composer.js';
+import { runReviewer, createReviewerRunner } from '../../../src/agents/reviewer.js';
+import {
+  runSessionCurator,
+  createCuratorRunnerWrapper,
+} from '../../../src/agents/session-curator.js';
 
 /** Build a mock runner return value with a real AgentState */
 function makeRunnerReturn(content: string) {
@@ -174,6 +177,95 @@ describe('agent wrappers', () => {
 
       expect(result.title).toBe('Bug Fix');
       expect(result.description).toBe('Fixed null pointer');
+    });
+  });
+
+  // ── create*Runner wrappers ─────────────────────────────
+
+  describe('create*Runner wrappers', () => {
+    beforeEach(() => {
+      mocks.create.mockClear();
+    });
+
+    it('createArchitectRunner creates generation runner with file tools', async () => {
+      const { runner, state } = await createArchitectRunner({
+        llmClient: {} as never,
+        workspacePath: tempDir,
+        model: 'gpt-4o',
+      });
+
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gpt-4o',
+          workspacePath: tempDir,
+          builtinTools: {
+            fileRead: true,
+            fileWrite: true,
+            fileEdit: true,
+            glob: true,
+            grep: true,
+          },
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+        })
+      );
+      expect(state.config.instructions).toContain('Agent Architect');
+      expect(runner).toBeDefined();
+    });
+
+    it('createSkillDesignerRunner creates generation runner with skill designer prompt', async () => {
+      const { state } = await createSkillDesignerRunner({
+        llmClient: {} as never,
+        workspacePath: tempDir,
+      });
+
+      expect(state.config.instructions).toContain('Skill Designer');
+    });
+
+    it('createCrewComposerRunner creates generation runner with crew composer prompt', async () => {
+      const { state } = await createCrewComposerRunner({
+        llmClient: {} as never,
+        workspacePath: tempDir,
+      });
+
+      expect(state.config.instructions).toContain('Crew Composer');
+    });
+
+    it('createReviewerRunner creates review runner with no builtin tools', async () => {
+      const { runner, state } = await createReviewerRunner({
+        llmClient: {} as never,
+        workspacePath: tempDir,
+      });
+
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          builtinTools: {},
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+        })
+      );
+      expect(state.config.instructions).toContain('Definition Reviewer');
+      expect(runner).toBeDefined();
+    });
+
+    it('createCuratorRunnerWrapper creates curator runner with no builtin tools', async () => {
+      const { runner, state } = await createCuratorRunnerWrapper({
+        llmClient: {} as never,
+        workspacePath: tempDir,
+      });
+
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          builtinTools: {},
+          enableSession: false,
+          enableTodolist: false,
+          enableCommands: false,
+        })
+      );
+      expect(state.config.instructions).toContain('Session Curator');
+      expect(runner).toBeDefined();
     });
   });
 });

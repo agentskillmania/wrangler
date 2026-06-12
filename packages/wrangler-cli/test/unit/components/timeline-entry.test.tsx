@@ -96,4 +96,27 @@ describe('TimelineEntry', () => {
     const { lastFrame } = render(React.createElement(TimelineEntry, { entry }));
     expect(lastFrame()).toBe('');
   });
+
+  it('renders thought entry with streaming cursor', () => {
+    const entry: TEntry = { ...baseEntry, type: 'thought', content: 'Planning...', isStreaming: true };
+    const { lastFrame } = render(React.createElement(TimelineEntry, { entry }));
+    expect(lastFrame()).toContain('Planning...');
+    expect(lastFrame()).toContain('◉');
+    expect(lastFrame()).toContain('▌');
+  });
+
+  it('renders thought entry without streaming cursor', () => {
+    const entry: TEntry = { ...baseEntry, type: 'thought', content: 'Done planning' };
+    const { lastFrame } = render(React.createElement(TimelineEntry, { entry }));
+    expect(lastFrame()).toContain('Done planning');
+    expect(lastFrame()).toContain('◉');
+    expect(lastFrame()).not.toContain('▌');
+  });
+
+  it('returns null for unrecognized entry type', () => {
+    // Cast to bypass TS exhaustiveness and exercise the default branch
+    const entry = { ...baseEntry, type: 'unknown' } as unknown as TEntry;
+    const { lastFrame } = render(React.createElement(TimelineEntry, { entry }));
+    expect(lastFrame()).toBe('');
+  });
 });

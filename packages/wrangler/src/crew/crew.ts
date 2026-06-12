@@ -325,9 +325,7 @@ export class Crew {
     });
   }
 
-  private createCommTools(
-    agent: AgentInstance
-  ): Tool<ZodTypeAny>[] {
+  private createCommTools(agent: AgentInstance): Tool<ZodTypeAny>[] {
     switch (agent.role) {
       case 'primary':
         return [

@@ -22,6 +22,7 @@ const {
   createReviewerRunnerMock,
   createCuratorRunnerWrapperMock,
   mockOutput,
+  mockRunnerResult,
 } = vi.hoisted(() => {
   const output = {
     changes: [{ file: 'AGENT.md', type: 'create' as const, new: '# Test' }],
@@ -56,6 +57,7 @@ const {
     createReviewerRunnerMock: vi.fn().mockResolvedValue(mockRunnerResult),
     createCuratorRunnerWrapperMock: vi.fn().mockResolvedValue(mockRunnerResult),
     mockOutput: output,
+    mockRunnerResult,
   };
 });
 
@@ -99,6 +101,8 @@ describe('DevTool', () => {
       const tool = new DevTool({ llm: VALID_LLM_CONFIG });
 
       expect(tool).toBeInstanceOf(DevTool);
+      expect(tool.maxSteps).toBeUndefined();
+      expect(tool.requestTimeout).toBeUndefined();
     });
 
     it('throws on missing LLM config', () => {
@@ -146,6 +150,8 @@ describe('DevTool', () => {
         requestTimeout: 60000,
       });
       expect(tool).toBeInstanceOf(DevTool);
+      expect(tool.maxSteps).toBe(50);
+      expect(tool.requestTimeout).toBe(60000);
     });
   });
 
@@ -204,10 +210,15 @@ describe('DevTool', () => {
       runAgentArchitectMock.mockResolvedValue(mockOutput);
     });
 
-    it('runAgentArchitect delegates to wrapper with prompt and model', async () => {
+    it('runAgentArchitect returns wrapper output', async () => {
       const result = await tool.runAgentArchitect('Create a review agent');
 
       expect(result).toEqual(mockOutput);
+    });
+
+    it('runAgentArchitect passes prompt and default model to wrapper', async () => {
+      await tool.runAgentArchitect('Create a review agent');
+
       expect(runAgentArchitectMock).toHaveBeenCalledOnce();
       const [prompt, existingContent, config] = runAgentArchitectMock.mock.calls[0]!;
       expect(prompt).toBe('Create a review agent');
@@ -216,7 +227,7 @@ describe('DevTool', () => {
       expect(config.llmClient).toBeDefined();
     });
 
-    it('runAgentArchitect passes existingContent and custom model', async () => {
+    it('runAgentArchitect passes existingContent and custom options to wrapper', async () => {
       await tool.runAgentArchitect('Modify', 'existing content', {
         model: 'gpt-4o-mini',
         timeout: 30000,
@@ -227,6 +238,7 @@ describe('DevTool', () => {
       expect(prompt).toBe('Modify');
       expect(content).toBe('existing content');
       expect(config.model).toBe('gpt-4o-mini');
+      expect(config.timeout).toBe(30000);
     });
 
     it('runSkillDesigner delegates to wrapper', async () => {
@@ -274,40 +286,35 @@ describe('DevTool', () => {
       const result = await tool.createArchitectRunner();
 
       expect(createArchitectRunnerMock).toHaveBeenCalledOnce();
-      expect(result).toHaveProperty('runner');
-      expect(result).toHaveProperty('state');
+      expect(result).toEqual(mockRunnerResult);
     });
 
     it('createSkillDesignerRunner delegates to wrapper module', async () => {
       const result = await tool.createSkillDesignerRunner();
 
       expect(createSkillDesignerRunnerMock).toHaveBeenCalledOnce();
-      expect(result).toHaveProperty('runner');
-      expect(result).toHaveProperty('state');
+      expect(result).toEqual(mockRunnerResult);
     });
 
     it('createCrewComposerRunner delegates to wrapper module', async () => {
       const result = await tool.createCrewComposerRunner();
 
       expect(createCrewComposerRunnerMock).toHaveBeenCalledOnce();
-      expect(result).toHaveProperty('runner');
-      expect(result).toHaveProperty('state');
+      expect(result).toEqual(mockRunnerResult);
     });
 
     it('createReviewerRunner delegates to wrapper module', async () => {
       const result = await tool.createReviewerRunner();
 
       expect(createReviewerRunnerMock).toHaveBeenCalledOnce();
-      expect(result).toHaveProperty('runner');
-      expect(result).toHaveProperty('state');
+      expect(result).toEqual(mockRunnerResult);
     });
 
     it('createSessionCuratorRunner delegates to wrapper module', async () => {
       const result = await tool.createSessionCuratorRunner();
 
       expect(createCuratorRunnerWrapperMock).toHaveBeenCalledOnce();
-      expect(result).toHaveProperty('runner');
-      expect(result).toHaveProperty('state');
+      expect(result).toEqual(mockRunnerResult);
     });
   });
 
@@ -331,17 +338,22 @@ describe('DevTool', () => {
       });
     });
 
-    it('delegates to wrapper with target path and content', async () => {
+    it('returns wrapper review report', async () => {
       const result = await tool.runReviewer('AGENT.md', '# My Agent');
 
       expect(result.overallScore).toBe(4);
+    });
+
+    it('passes target path and content to wrapper', async () => {
+      await tool.runReviewer('AGENT.md', '# My Agent');
+
       expect(runReviewerMock).toHaveBeenCalledOnce();
       const [targetPath, content] = runReviewerMock.mock.calls[0]!;
       expect(targetPath).toBe('AGENT.md');
       expect(content).toBe('# My Agent');
     });
 
-    it('passes additional prompt and options through', async () => {
+    it('passes additional prompt and options to wrapper', async () => {
       await tool.runReviewer('AGENT.md', '# My Agent', 'Focus on safety', {
         model: 'gpt-4o-mini',
         timeout: 30000,
@@ -351,6 +363,7 @@ describe('DevTool', () => {
       const [, , prompt, config] = runReviewerMock.mock.calls[0]!;
       expect(prompt).toBe('Focus on safety');
       expect(config.model).toBe('gpt-4o-mini');
+      expect(config.timeout).toBe(30000);
     });
   });
 

@@ -75,4 +75,22 @@ describe('InputBar', () => {
 
     expect(onSubmit).toHaveBeenCalledWith({ type: 'help' });
   });
+
+  it('renders TextInput with placeholder when status is waiting', () => {
+    const onSubmit = vi.fn();
+    const { lastFrame } = render(
+      React.createElement(InputBar, { status: 'waiting', onSubmit }),
+    );
+    expect(lastFrame()).toContain('Type a message...');
+    expect(lastFrame()).toContain('/help for commands');
+  });
+
+  it('does not render TextInput when status is running', () => {
+    const onSubmit = vi.fn();
+    const { lastFrame } = render(
+      React.createElement(InputBar, { status: 'running', onSubmit }),
+    );
+    expect(lastFrame()).toContain('Agent is running...');
+    expect(lastFrame()).not.toContain('Type a message...');
+  });
 });

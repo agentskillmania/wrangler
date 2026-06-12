@@ -55,7 +55,7 @@ describe('crew file routes', () => {
     // Boot Fastify with resourceManager decoration
     fastify = Fastify();
     (fastify as unknown as DecoratedFastifyInstance).resourceManager = resourceManager;
-    fastify.register(crewFileRoutes);
+    await fastify.register(crewFileRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 

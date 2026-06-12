@@ -23,11 +23,11 @@ export interface TestConfig {
 }
 
 function loadConfig(): TestConfig {
-  const enabled = process.env.ENABLE_INTEGRATION_TESTS === 'true';
+  const enabled = process.env.ENABLE_INTEGRATION_TESTS === 'true' && !!process.env.OPENAI_API_KEY;
 
-  if (enabled && !process.env.OPENAI_API_KEY) {
+  if (process.env.ENABLE_INTEGRATION_TESTS === 'true' && !process.env.OPENAI_API_KEY) {
     console.warn(
-      '[Wrangler-Cli Integration Tests] Warning: ENABLE_INTEGRATION_TESTS is true but OPENAI_API_KEY is not set.'
+      '[Wrangler-Cli Integration Tests] Warning: ENABLE_INTEGRATION_TESTS is true but OPENAI_API_KEY is not set; skipping LLM integration tests.'
     );
   }
 

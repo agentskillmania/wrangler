@@ -11,6 +11,7 @@ import { modelRoutes } from '../../../src/routes/models.js';
 describe('Model metadata endpoint', () => {
   let fastify: FastifyInstance;
   let tempDir: string;
+  let sessionManager: SessionManager;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'daemon-models-'));
@@ -31,14 +32,14 @@ describe('Model metadata endpoint', () => {
     await resourceManager.init();
 
     const sessionsDir = join(tempDir, 'sessions');
-    const sessionManager = new SessionManager(sessionsDir);
+    sessionManager = new SessionManager(sessionsDir);
     await sessionManager.init();
 
     fastify = Fastify();
     fastify.decorate('configManager', configManager);
     fastify.decorate('resourceManager', resourceManager);
     fastify.decorate('sessionManager', sessionManager);
-    fastify.register(modelRoutes);
+    await fastify.register(modelRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 
@@ -68,6 +69,57 @@ describe('Model metadata endpoint', () => {
       expect(res.status).toBe(404);
       const body = await res.json();
       expect(body.error).toContain('not found');
+    });
+
+    it('returns metadata from active session LLMClient when available', async () => {
+      const fakeSession = {
+        llmClient: {
+          getModelMeta: vi.fn().mockReturnValue({
+            contextWindow: 65536,
+            maxTokens: 4096,
+            reasoning: true,
+          }),
+        },
+      };
+      sessionManager.setAgentSession('active-session', fakeSession as never);
+
+      const res = await fetch(`${getUrl()}/api/models/active-model/metadata`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual({
+        modelId: 'active-model',
+        contextWindow: 65536,
+        maxTokens: 4096,
+        reasoning: true,
+      });
+      expect(fakeSession.llmClient.getModelMeta).toHaveBeenCalledWith('active-model');
+    });
+
+    it('falls back to YAML config when active session lacks model meta', async () => {
+      const fakeSession = {
+        llmClient: {
+          getModelMeta: vi.fn().mockReturnValue(undefined),
+        },
+      };
+      sessionManager.setAgentSession('active-session', fakeSession as never);
+
+      const res = await fetch(`${getUrl()}/api/models/test-model/metadata`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.modelId).toBe('test-model');
+      expect(body.contextWindow).toBe(128000);
+    });
+
+    it('returns 404 when active sessions have no meta and config model does not match', async () => {
+      const fakeSession = {
+        llmClient: {
+          getModelMeta: vi.fn().mockReturnValue(undefined),
+        },
+      };
+      sessionManager.setAgentSession('active-session', fakeSession as never);
+
+      const res = await fetch(`${getUrl()}/api/models/unknown-model/metadata`);
+      expect(res.status).toBe(404);
     });
 
     it('returns defaults when model has no optional metadata', async () => {
