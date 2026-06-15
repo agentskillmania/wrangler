@@ -198,6 +198,41 @@ llm:
       }
     });
 
+    it('should normalize legacy flat LLM config to providers shape', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-legacy
+  model: gpt-4
+  baseUrl: https://legacy.api.com
+  maxConcurrency: 8
+  contextWindow: 64000
+  maxTokens: 2048
+  reasoning: true
+`;
+      const localConfig = path.join(testDir, 'wrangler.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(true);
+        expect(config.llm?.providers?.[0]?.name).toBe('openai');
+        expect(config.llm?.providers?.[0]?.apiKey).toBe('sk-legacy');
+        expect(config.llm?.providers?.[0]?.baseUrl).toBe('https://legacy.api.com');
+        expect(config.llm?.providers?.[0]?.maxConcurrency).toBe(8);
+        expect(config.llm?.providers?.[0]?.models?.[0]?.modelId).toBe('gpt-4');
+        expect(config.llm?.providers?.[0]?.models?.[0]?.maxConcurrency).toBe(8);
+        expect(config.llm?.providers?.[0]?.models?.[0]?.contextWindow).toBe(64000);
+        expect(config.llm?.providers?.[0]?.models?.[0]?.maxTokens).toBe(2048);
+        expect(config.llm?.providers?.[0]?.models?.[0]?.reasoning).toBe(true);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
     it('should return hasValidConfig=false when YAML is empty', async () => {
       const localConfig = path.join(testDir, 'wrangler.yaml');
       await fs.writeFile(localConfig, '', 'utf-8');
