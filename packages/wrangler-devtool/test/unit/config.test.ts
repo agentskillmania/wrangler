@@ -20,39 +20,41 @@ describe('loadConfig', () => {
     const configPath = join(tempDir, 'wrangler.yaml');
     await writeFile(
       configPath,
-      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n  baseUrl: https://api.example.com\n  thinkingEnabled: true\n  enablePromptThinking: true\n  maxConcurrency: 8\nmaxSteps: 100\nrequestTimeout: 300000\n`
+      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      baseUrl: https://api.example.com\n      maxConcurrency: 8\n      models:\n        - modelId: gpt-4o\nmaxSteps: 100\nrequestTimeout: 300000\n`
     );
 
     const config = await loadConfig(tempDir, { extraPaths: [configPath] });
 
     expect(config).not.toBeNull();
-    expect(config!.llm!.provider).toBe('openai');
-    expect(config!.llm!.baseUrl).toBe('https://api.example.com');
-    expect(config!.llm!.thinkingEnabled).toBe(true);
-    expect(config!.llm!.enablePromptThinking).toBe(true);
-    expect(config!.llm!.maxConcurrency).toBe(8);
+    expect(config!.llm!.providers[0].name).toBe('openai');
+    expect(config!.llm!.providers[0].baseUrl).toBe('https://api.example.com');
+    expect(config!.llm!.providers[0].maxConcurrency).toBe(8);
+    expect(config!.llm!.providers[0].models[0].modelId).toBe('gpt-4o');
     expect(config!.maxSteps).toBe(100);
     expect(config!.requestTimeout).toBe(300000);
   });
 
   it('returns defaults for optional fields', async () => {
     const configPath = join(tempDir, 'wrangler.yaml');
-    await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`);
+    await writeFile(
+      configPath,
+      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      models:\n        - modelId: gpt-4o\n`
+    );
 
     const config = await loadConfig(tempDir, { extraPaths: [configPath] });
 
     expect(config!.maxSteps).toBeUndefined();
     expect(config!.requestTimeout).toBeUndefined();
-    expect(config!.llm!.baseUrl).toBeUndefined();
-    expect(config!.llm!.thinkingEnabled).toBeUndefined();
-    expect(config!.llm!.maxConcurrency).toBeUndefined();
+    expect(config!.llm!.providers[0].baseUrl).toBeUndefined();
+    expect(config!.llm!.providers[0].maxConcurrency).toBeUndefined();
+    expect(config!.llm!.providers[0].models[0].maxConcurrency).toBeUndefined();
   });
 
   it('parses numeric strings for maxSteps and requestTimeout', async () => {
     const configPath = join(tempDir, 'wrangler.yaml');
     await writeFile(
       configPath,
-      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\nmaxSteps: "200"\nrequestTimeout: "60000"\n`
+      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      models:\n        - modelId: gpt-4o\nmaxSteps: "200"\nrequestTimeout: "60000"\n`
     );
 
     const config = await loadConfig(tempDir, { extraPaths: [configPath] });
@@ -64,7 +66,7 @@ describe('loadConfig', () => {
     const configPath = join(tempDir, 'wrangler.yaml');
     await writeFile(
       configPath,
-      `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\nmaxSteps: not-a-number\nrequestTimeout: also-not\n`
+      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      models:\n        - modelId: gpt-4o\nmaxSteps: not-a-number\nrequestTimeout: also-not\n`
     );
 
     const config = await loadConfig(tempDir, { extraPaths: [configPath] });
@@ -95,7 +97,10 @@ describe('loadConfig', () => {
 
   it('returns null when llm config is invalid — missing model', async () => {
     const configPath = join(tempDir, 'wrangler.yaml');
-    await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-test\n`);
+    await writeFile(
+      configPath,
+      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      models: []\n`
+    );
 
     const config = await loadConfig(tempDir, { extraPaths: [configPath], skipGlobal: true });
     expect(config).toBeNull();
@@ -116,11 +121,14 @@ describe('requireLLMConfig', () => {
 
   it('returns llm config when valid', async () => {
     const configPath = join(tempDir, 'wrangler.yaml');
-    await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`);
+    await writeFile(
+      configPath,
+      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      models:\n        - modelId: gpt-4o\n`
+    );
 
     const llm = await requireLLMConfig(tempDir);
-    expect(llm.provider).toBe('openai');
-    expect(llm.apiKey).toBe('sk-test');
-    expect(llm.model).toBe('gpt-4o');
+    expect(llm.providers[0].name).toBe('openai');
+    expect(llm.providers[0].apiKey).toBe('sk-test');
+    expect(llm.providers[0].models[0].modelId).toBe('gpt-4o');
   });
 });

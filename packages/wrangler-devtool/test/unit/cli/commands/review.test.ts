@@ -7,6 +7,18 @@ import { ExitCode } from '../../../../src/cli/options.js';
 import * as reviewerModule from '../../../../src/agents/reviewer.js';
 import * as configModule from '../../../../src/config.js';
 
+const MOCK_LLM_CONFIG = {
+  llm: {
+    providers: [
+      {
+        name: 'openai',
+        apiKey: 'sk-test',
+        models: [{ modelId: 'gpt-4o' }],
+      },
+    ],
+  },
+};
+
 describe('review command', () => {
   let tempDir: string;
   let logSpy: ReturnType<typeof vi.spyOn>;
@@ -16,6 +28,7 @@ describe('review command', () => {
     tempDir = mkdtempSync(join(tmpdir(), 'wrangler-review-test-'));
     originalCwd = process.cwd();
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue(MOCK_LLM_CONFIG.llm);
   });
 
   afterEach(() => {
@@ -166,9 +179,7 @@ describe('review command', () => {
     mkdirSync(join(tempDir, 'skills'), { recursive: true });
     mkdirSync(join(tempDir, 'test'), { recursive: true });
 
-    vi.spyOn(configModule, 'loadConfig').mockResolvedValue({
-      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
-    });
+    vi.spyOn(configModule, 'loadConfig').mockResolvedValue(MOCK_LLM_CONFIG);
     vi.spyOn(reviewerModule, 'runReviewer').mockResolvedValue({
       overallScore: 4,
       dimensions: {
@@ -216,9 +227,7 @@ describe('review command', () => {
     mkdirSync(join(tempDir, 'skills'), { recursive: true });
     mkdirSync(join(tempDir, 'test'), { recursive: true });
 
-    vi.spyOn(configModule, 'loadConfig').mockResolvedValue({
-      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
-    });
+    vi.spyOn(configModule, 'loadConfig').mockResolvedValue(MOCK_LLM_CONFIG);
     const mockReviewer = vi.spyOn(reviewerModule, 'runReviewer').mockResolvedValue({
       overallScore: 5,
       dimensions: {
@@ -265,9 +274,7 @@ describe('review command', () => {
     mkdirSync(join(tempDir, 'skills'), { recursive: true });
     mkdirSync(join(tempDir, 'test'), { recursive: true });
 
-    vi.spyOn(configModule, 'loadConfig').mockResolvedValue({
-      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
-    });
+    vi.spyOn(configModule, 'loadConfig').mockResolvedValue(MOCK_LLM_CONFIG);
 
     const code = await reviewCommand.handler!([tempDir], { deep: true });
     expect(code).toBe(ExitCode.GeneralError);
@@ -295,9 +302,7 @@ describe('review command', () => {
       'utf-8'
     );
 
-    vi.spyOn(configModule, 'loadConfig').mockResolvedValue({
-      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
-    });
+    vi.spyOn(configModule, 'loadConfig').mockResolvedValue(MOCK_LLM_CONFIG);
     const mockReviewer = vi.spyOn(reviewerModule, 'runReviewer').mockResolvedValue({
       overallScore: 4,
       dimensions: {
@@ -340,9 +345,7 @@ describe('review command', () => {
     mkdirSync(join(tempDir, 'skills'), { recursive: true });
     mkdirSync(join(tempDir, 'test'), { recursive: true });
 
-    vi.spyOn(configModule, 'loadConfig').mockResolvedValue({
-      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
-    });
+    vi.spyOn(configModule, 'loadConfig').mockResolvedValue(MOCK_LLM_CONFIG);
     vi.spyOn(reviewerModule, 'runReviewer').mockResolvedValue({
       overallScore: 4,
       dimensions: {

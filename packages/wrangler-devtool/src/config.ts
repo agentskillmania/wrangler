@@ -6,17 +6,10 @@ import { access } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import type { LLMQuickInit, LLMProviderEntry } from '@agentskillmania/colts';
 import yaml from 'js-yaml';
 
-export interface LLMConfig {
-  provider: string;
-  apiKey: string;
-  model: string;
-  baseUrl?: string;
-  thinkingEnabled?: boolean;
-  enablePromptThinking?: boolean;
-  maxConcurrency?: number;
-}
+export type LLMConfig = LLMQuickInit;
 
 export interface DevToolConfig {
   llm?: LLMConfig;
@@ -48,17 +41,23 @@ async function readYamlConfig(filePath: string): Promise<unknown | null> {
   }
 }
 
+function isValidProviderEntry(entry: unknown): entry is LLMProviderEntry {
+  if (typeof entry !== 'object' || entry === null) return false;
+  const p = entry as Record<string, unknown>;
+  if (typeof p.name !== 'string' || p.name.length === 0) return false;
+  if (typeof p.apiKey !== 'string') return false;
+  if (!Array.isArray(p.models) || p.models.length === 0) return false;
+  const firstModel = p.models[0];
+  if (typeof firstModel !== 'object' || firstModel === null) return false;
+  if (typeof (firstModel as Record<string, unknown>).modelId !== 'string') return false;
+  return true;
+}
+
 function isValidLLMConfig(obj: unknown): obj is LLMConfig {
   if (typeof obj !== 'object' || obj === null) return false;
   const c = obj as Record<string, unknown>;
-  return (
-    typeof c.provider === 'string' &&
-    c.provider.length > 0 &&
-    typeof c.apiKey === 'string' &&
-    c.apiKey.length > 0 &&
-    typeof c.model === 'string' &&
-    c.model.length > 0
-  );
+  if (!Array.isArray(c.providers) || c.providers.length === 0) return false;
+  return c.providers.every(isValidProviderEntry);
 }
 
 function pickOptionalNumber(obj: Record<string, unknown>, key: string): number | undefined {
@@ -113,18 +112,6 @@ export async function loadConfig(
       const llmRaw = config.llm;
       if (isValidLLMConfig(llmRaw)) {
         const result: DevToolConfig = { llm: llmRaw };
-        if (typeof llmRaw.baseUrl === 'string' && llmRaw.baseUrl.length > 0) {
-          result.llm!.baseUrl = llmRaw.baseUrl;
-        }
-        if (typeof llmRaw.thinkingEnabled === 'boolean') {
-          result.llm!.thinkingEnabled = llmRaw.thinkingEnabled;
-        }
-        if (typeof llmRaw.enablePromptThinking === 'boolean') {
-          result.llm!.enablePromptThinking = llmRaw.enablePromptThinking;
-        }
-        if (typeof llmRaw.maxConcurrency === 'number') {
-          result.llm!.maxConcurrency = llmRaw.maxConcurrency;
-        }
         result.maxSteps = pickOptionalNumber(config, 'maxSteps');
         result.requestTimeout = pickOptionalNumber(config, 'requestTimeout');
         return result;
@@ -142,7 +129,7 @@ export async function requireLLMConfig(cwd?: string): Promise<LLMConfig> {
   const config = await loadConfig(cwd);
   if (!config?.llm) {
     throw new Error(
-      'No valid LLM configuration found. Create wrangler.yaml or ~/.agentskillmania/wrangler/config.yaml with llm.provider, llm.apiKey, and llm.model.'
+      'No valid LLM configuration found. Create wrangler.yaml or ~/.agentskillmania/wrangler/config.yaml with llm.providers containing name, apiKey, and models.'
     );
   }
   return config.llm;

@@ -4,7 +4,7 @@
 import { readFile, access, readdir, stat } from 'node:fs/promises';
 import { join, resolve, extname } from 'node:path';
 
-import { parseAgentMd, CrewLoader } from '@agentskillmania/wrangler';
+import { parseAgentMd, CrewLoader, resolveDefaultModel } from '@agentskillmania/wrangler';
 
 import { runReviewer } from '../../agents/reviewer.js';
 import { loadConfig, requireLLMConfig } from '../../config.js';
@@ -212,7 +212,7 @@ export const reviewCommand = defineCommand({
       const config = await loadConfig();
       if (!config?.llm) {
         throw new CliError(
-          'No LLM configuration found. Cannot run deep review without llm.provider, llm.apiKey, and llm.model.',
+          'No LLM configuration found. Cannot run deep review without llm.providers containing name, apiKey, and models.',
           'MISSING_LLM_CONFIG',
           ExitCode.ConfigError
         );
@@ -248,7 +248,11 @@ export const reviewCommand = defineCommand({
           reviewTarget,
           content,
           (options.prompt as string | undefined) || undefined,
-          { llmClient, workspacePath: process.cwd(), model: llmConfig.model }
+          {
+            llmClient,
+            workspacePath: process.cwd(),
+            model: resolveDefaultModel(llmConfig.providers),
+          }
         );
         report.deep = deepReport;
       } else {

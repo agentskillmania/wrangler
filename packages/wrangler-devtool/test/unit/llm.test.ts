@@ -33,42 +33,59 @@ describe('createLLMClient', () => {
 
   it('registers provider, apiKey and model with basic config', () => {
     const config: LLMConfig = {
-      provider: 'openai',
-      apiKey: 'sk-test',
-      model: 'gpt-4o',
+      providers: [
+        {
+          name: 'openai',
+          apiKey: 'sk-test',
+          models: [{ modelId: 'gpt-4o' }],
+        },
+      ],
     };
 
     createLLMClient(config);
 
     expect(mockConstructor).toHaveBeenCalledWith(undefined);
-    expect(mockRegisterProvider).toHaveBeenCalledWith({ name: 'openai', maxConcurrency: 5 });
+    expect(mockRegisterProvider).toHaveBeenCalledWith({ name: 'openai', maxConcurrency: 10 });
     expect(mockRegisterApiKey).toHaveBeenCalledWith({
       key: 'sk-test',
       provider: 'openai',
-      maxConcurrency: 5,
-      models: [{ modelId: 'gpt-4o', maxConcurrency: 5 }],
+      maxConcurrency: 10,
+      models: [{ modelId: 'gpt-4o', maxConcurrency: 3 }],
     });
   });
 
-  it('passes baseUrl through to LLMClient constructor', () => {
+  it('passes baseUrl through to provider registration', () => {
     const config: LLMConfig = {
-      provider: 'openai',
-      apiKey: 'sk-test',
-      model: 'gpt-4o',
-      baseUrl: 'https://custom.example.com',
+      providers: [
+        {
+          name: 'openai',
+          apiKey: 'sk-test',
+          baseUrl: 'https://custom.example.com',
+          models: [{ modelId: 'gpt-4o' }],
+        },
+      ],
     };
 
     createLLMClient(config);
 
-    expect(mockConstructor).toHaveBeenCalledWith({ baseUrl: 'https://custom.example.com' });
+    expect(mockConstructor).toHaveBeenCalledWith(undefined);
+    expect(mockRegisterProvider).toHaveBeenCalledWith({
+      name: 'openai',
+      baseUrl: 'https://custom.example.com',
+      maxConcurrency: 10,
+    });
   });
 
   it('uses custom maxConcurrency when provided', () => {
     const config: LLMConfig = {
-      provider: 'anthropic',
-      apiKey: 'sk-ant-test',
-      model: 'claude-3',
-      maxConcurrency: 10,
+      providers: [
+        {
+          name: 'anthropic',
+          apiKey: 'sk-ant-test',
+          maxConcurrency: 10,
+          models: [{ modelId: 'claude-3', maxConcurrency: 10 }],
+        },
+      ],
     };
 
     createLLMClient(config);
@@ -82,41 +99,72 @@ describe('createLLMClient', () => {
     });
   });
 
-  it('defaults maxConcurrency to 5 when not specified', () => {
+  it('defaults maxConcurrency when not specified', () => {
     const config: LLMConfig = {
-      provider: 'openai',
-      apiKey: 'sk-default',
-      model: 'gpt-4o',
+      providers: [
+        {
+          name: 'openai',
+          apiKey: 'sk-default',
+          models: [{ modelId: 'gpt-4o' }],
+        },
+      ],
     };
 
     createLLMClient(config);
 
     expect(mockRegisterProvider).toHaveBeenCalledWith(
-      expect.objectContaining({ maxConcurrency: 5 })
+      expect.objectContaining({ maxConcurrency: 10 })
     );
-    expect(mockRegisterApiKey).toHaveBeenCalledWith(expect.objectContaining({ maxConcurrency: 5 }));
+    expect(mockRegisterApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxConcurrency: 10,
+        models: [{ modelId: 'gpt-4o', maxConcurrency: 3 }],
+      })
+    );
   });
 
   it('passes all optional fields to the client', () => {
     const config: LLMConfig = {
-      provider: 'google',
-      apiKey: 'sk-full-test',
-      model: 'gemini-pro',
-      baseUrl: 'https://custom.google.com',
-      thinkingEnabled: true,
-      enablePromptThinking: true,
-      maxConcurrency: 3,
+      providers: [
+        {
+          name: 'google',
+          apiKey: 'sk-full-test',
+          baseUrl: 'https://custom.google.com',
+          maxConcurrency: 3,
+          models: [
+            {
+              modelId: 'gemini-pro',
+              maxConcurrency: 3,
+              contextWindow: 128000,
+              maxTokens: 8192,
+              reasoning: true,
+            },
+          ],
+        },
+      ],
     };
 
     createLLMClient(config);
 
-    expect(mockConstructor).toHaveBeenCalledWith({ baseUrl: 'https://custom.google.com' });
-    expect(mockRegisterProvider).toHaveBeenCalledWith({ name: 'google', maxConcurrency: 3 });
+    expect(mockConstructor).toHaveBeenCalledWith(undefined);
+    expect(mockRegisterProvider).toHaveBeenCalledWith({
+      name: 'google',
+      baseUrl: 'https://custom.google.com',
+      maxConcurrency: 3,
+    });
     expect(mockRegisterApiKey).toHaveBeenCalledWith({
       key: 'sk-full-test',
       provider: 'google',
       maxConcurrency: 3,
-      models: [{ modelId: 'gemini-pro', maxConcurrency: 3 }],
+      models: [
+        {
+          modelId: 'gemini-pro',
+          maxConcurrency: 3,
+          contextWindow: 128000,
+          maxTokens: 8192,
+          reasoning: true,
+        },
+      ],
     });
   });
 });

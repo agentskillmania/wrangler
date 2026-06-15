@@ -5,6 +5,17 @@ import { tmpdir } from 'node:os';
 import { agentCommand } from '../../../../src/cli/commands/agent.js';
 import { ExitCode } from '../../../../src/cli/options.js';
 import * as architectModule from '../../../../src/agents/architect.js';
+import * as configModule from '../../../../src/config.js';
+
+const MOCK_LLM_CONFIG = {
+  providers: [
+    {
+      name: 'openai',
+      apiKey: 'sk-test',
+      models: [{ modelId: 'gpt-4o' }],
+    },
+  ],
+};
 
 describe('agent write', () => {
   let tempDir: string;
@@ -15,6 +26,7 @@ describe('agent write', () => {
     tempDir = mkdtempSync(join(tmpdir(), 'wrangler-devtool-test-'));
     originalCwd = process.cwd();
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue(MOCK_LLM_CONFIG);
   });
 
   afterEach(() => {

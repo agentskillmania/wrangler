@@ -90,10 +90,16 @@ import type { DevToolOptions } from '../../src/devtool.js';
 import { DevTool } from '../../src/devtool.js';
 
 const VALID_LLM_CONFIG = {
-  provider: 'openai',
-  apiKey: 'sk-test-key',
-  model: 'gpt-4o',
-} as const;
+  providers: [
+    {
+      name: 'openai',
+      apiKey: 'sk-test-key',
+      models: [{ modelId: 'gpt-4o' }],
+    },
+  ],
+};
+
+const DEFAULT_MODEL = 'gpt-4o';
 
 describe('DevTool', () => {
   describe('constructor', () => {
@@ -109,36 +115,49 @@ describe('DevTool', () => {
       expect(() => new DevTool({} as DevToolOptions)).toThrow(/llm configuration is required/i);
     });
 
-    it('throws on invalid LLM config — missing provider', () => {
+    it('throws on invalid LLM config — missing providers', () => {
       expect(
         () =>
           new DevTool({
-            llm: { apiKey: 'sk-test', model: 'gpt-4o' } as DevToolOptions['llm'],
+            llm: {} as DevToolOptions['llm'],
           })
-      ).toThrow(/provider.*required/i);
+      ).toThrow(/providers.*required/i);
     });
 
     it('throws on invalid LLM config — missing apiKey', () => {
       expect(
         () =>
           new DevTool({
-            llm: { provider: 'openai', model: 'gpt-4o' } as DevToolOptions['llm'],
+            llm: {
+              providers: [{ name: 'openai', models: [{ modelId: 'gpt-4o' }] }],
+            } as DevToolOptions['llm'],
           })
       ).toThrow(/apiKey.*required/i);
     });
 
-    it('throws on invalid LLM config — missing model', () => {
+    it('throws on invalid LLM config — missing modelId', () => {
       expect(
         () =>
           new DevTool({
-            llm: { provider: 'openai', apiKey: 'sk-test' } as DevToolOptions['llm'],
+            llm: {
+              providers: [{ name: 'openai', apiKey: 'sk-test', models: [{}] }],
+            } as DevToolOptions['llm'],
           })
-      ).toThrow(/model.*required/i);
+      ).toThrow(/modelId.*required/i);
     });
 
     it('accepts optional baseUrl in LLM config', () => {
       const tool = new DevTool({
-        llm: { ...VALID_LLM_CONFIG, baseUrl: 'https://custom.api.com/v1' },
+        llm: {
+          providers: [
+            {
+              name: 'openai',
+              apiKey: 'sk-test-key',
+              baseUrl: 'https://custom.api.com/v1',
+              models: [{ modelId: 'gpt-4o' }],
+            },
+          ],
+        },
       });
       expect(tool).toBeInstanceOf(DevTool);
     });
@@ -169,7 +188,10 @@ describe('DevTool', () => {
 
     it('creates instance from wrangler.yaml file', async () => {
       const configPath = join(tempDir, 'wrangler.yaml');
-      await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`);
+      await writeFile(
+        configPath,
+        `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      models:\n        - modelId: gpt-4o\n`
+      );
 
       const tool = await DevTool.fromConfig(tempDir);
 
@@ -178,7 +200,10 @@ describe('DevTool', () => {
 
     it('creates instance from explicit config path', async () => {
       const configPath = join(tempDir, 'custom.yaml');
-      await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-test\n  model: gpt-4o\n`);
+      await writeFile(
+        configPath,
+        `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      models:\n        - modelId: gpt-4o\n`
+      );
 
       const tool = await DevTool.fromConfig(tempDir, { extraPaths: [configPath] });
 
@@ -193,7 +218,7 @@ describe('DevTool', () => {
 
     it('throws when config has invalid LLM section', async () => {
       const configPath = join(tempDir, 'wrangler.yaml');
-      await writeFile(configPath, `llm:\n  provider: openai\n`);
+      await writeFile(configPath, `llm:\n  providers:\n    - name: openai\n`);
 
       await expect(
         DevTool.fromConfig(tempDir, { extraPaths: [configPath], skipGlobal: true })
@@ -223,7 +248,7 @@ describe('DevTool', () => {
       const [prompt, existingContent, config] = runAgentArchitectMock.mock.calls[0]!;
       expect(prompt).toBe('Create a review agent');
       expect(existingContent).toBeUndefined();
-      expect(config.model).toBe('gpt-4o');
+      expect(config.model).toBe(DEFAULT_MODEL);
       expect(config.llmClient).toBeDefined();
     });
 

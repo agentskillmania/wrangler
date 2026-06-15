@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { access, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { resolveDefaultModel } from '@agentskillmania/wrangler';
+
 import { runSkillDesigner } from '../../agents/skill-designer.js';
 import { requireLLMConfig } from '../../config.js';
 import { createLLMClient } from '../../llm.js';
@@ -91,7 +93,7 @@ export const skillCommand = defineCommand({
         const output = await runSkillDesigner(fullPrompt, existingContent, {
           llmClient,
           workspacePath: cwd,
-          model: llmConfig.model,
+          model: resolveDefaultModel(llmConfig.providers),
         });
 
         const result = await applyChanges(output.changes, { cwd, dryRun });

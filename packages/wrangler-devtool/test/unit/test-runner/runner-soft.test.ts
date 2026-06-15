@@ -18,6 +18,16 @@ vi.mock('../../../src/test-runner/soft-evaluator.js', () => ({
 
 import { TestRunner } from '../../../src/test-runner/runner.js';
 
+const MOCK_LLM_CONFIG = {
+  providers: [
+    {
+      name: 'openai',
+      apiKey: 'sk-test',
+      models: [{ modelId: 'gpt-4o' }],
+    },
+  ],
+};
+
 function makeAgentWorkspace(tempDir: string, testName: string, softYaml: string) {
   const ws = join(tempDir, `soft-${testName}`);
   mkdirSync(ws);
@@ -135,9 +145,7 @@ expected:
 `
     );
 
-    mocks.loadConfig.mockResolvedValue({
-      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
-    });
+    mocks.loadConfig.mockResolvedValue({ llm: MOCK_LLM_CONFIG });
     mocks.evaluateSoft.mockRejectedValue(new Error('LLM unavailable'));
 
     const runner = new TestRunner({
@@ -176,9 +184,7 @@ expected:
 `
     );
 
-    mocks.loadConfig.mockResolvedValue({
-      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
-    });
+    mocks.loadConfig.mockResolvedValue({ llm: MOCK_LLM_CONFIG });
     mocks.evaluateSoft.mockResolvedValue({
       name: 'quality',
       score: 4,
@@ -227,9 +233,7 @@ expected:
 `
     );
 
-    mocks.loadConfig.mockResolvedValue({
-      llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
-    });
+    mocks.loadConfig.mockResolvedValue({ llm: MOCK_LLM_CONFIG });
     mocks.evaluateSoft.mockResolvedValue({
       name: 'quality',
       score: 2,

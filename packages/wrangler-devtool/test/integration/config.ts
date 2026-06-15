@@ -37,10 +37,14 @@ function loadConfig(): TestConfig {
   let llmClient: ILLMProvider | undefined;
   if (enabled) {
     llmClient = createLLMClient({
-      provider,
-      apiKey,
-      model: testModel,
-      baseUrl,
+      providers: [
+        {
+          name: provider,
+          apiKey,
+          baseUrl,
+          models: [{ modelId: testModel }],
+        },
+      ],
     });
   }
 

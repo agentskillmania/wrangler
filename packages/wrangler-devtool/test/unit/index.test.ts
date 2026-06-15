@@ -13,7 +13,15 @@ describe('@agentskillmania/wrangler-devtool', () => {
 
       expect(DevTool).toBeTypeOf('function');
       const tool = new DevTool({
-        llm: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
+        llm: {
+          providers: [
+            {
+              name: 'openai',
+              apiKey: 'sk-test',
+              models: [{ modelId: 'gpt-4o' }],
+            },
+          ],
+        },
       });
       expect(tool).toBeInstanceOf(DevTool);
       expect(tool.maxSteps).toBeUndefined();

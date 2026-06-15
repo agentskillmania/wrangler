@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SoftEvaluation, AgentRunOutput } from '../../../src/test-runner/types.js';
+import type { LLMConfig } from '../../../src/config.js';
 
 // Mock llm.ts to control LLM responses
 const mockCall = vi.fn();
@@ -23,10 +24,14 @@ const BASE_OUTPUT: AgentRunOutput = {
   totalSteps: 1,
 };
 
-const LLM_CONFIG = {
-  provider: 'openai',
-  apiKey: 'sk-test',
-  model: 'gpt-4o',
+const LLM_CONFIG: LLMConfig = {
+  providers: [
+    {
+      name: 'openai',
+      apiKey: 'sk-test',
+      models: [{ modelId: 'gpt-4o' }],
+    },
+  ],
 };
 
 describe('evaluateSoft', () => {

@@ -1,6 +1,8 @@
 // packages/wrangler-devtool/src/test-runner/soft-evaluator.ts
 // LLM-based soft evaluation for test cases
 
+import { resolveDefaultModel } from '@agentskillmania/wrangler';
+
 import type { SoftEvaluation, AgentRunOutput } from './types.js';
 import type { LLMConfig } from '../config.js';
 import { createLLMClient } from '../llm.js';
@@ -48,11 +50,12 @@ export async function evaluateSoft(
   config: LLMConfig
 ): Promise<SoftEvaluationResult> {
   const client = createLLMClient(config);
+  const model = resolveDefaultModel(config.providers);
   const prompt = buildPrompt(evaluation, output);
 
   try {
     const response = await client.call({
-      model: config.model,
+      model,
       messages: [{ role: 'user', content: prompt, timestamp: Date.now() }],
     });
 

@@ -5,6 +5,17 @@ import { tmpdir } from 'node:os';
 import { skillCommand } from '../../../../src/cli/commands/skill.js';
 import { ExitCode } from '../../../../src/cli/options.js';
 import * as skillDesignerModule from '../../../../src/agents/skill-designer.js';
+import * as configModule from '../../../../src/config.js';
+
+const MOCK_LLM_CONFIG = {
+  providers: [
+    {
+      name: 'openai',
+      apiKey: 'sk-test',
+      models: [{ modelId: 'gpt-4o' }],
+    },
+  ],
+};
 
 describe('skill write', () => {
   let tempDir: string;
@@ -15,6 +26,7 @@ describe('skill write', () => {
     tempDir = mkdtempSync(join(tmpdir(), 'wrangler-devtool-test-'));
     originalCwd = process.cwd();
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(configModule, 'requireLLMConfig').mockResolvedValue(MOCK_LLM_CONFIG);
   });
 
   afterEach(() => {

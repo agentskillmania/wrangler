@@ -1,9 +1,8 @@
 // packages/wrangler-devtool/src/devtool.ts
 // DevTool facade — single entry point for programmatic usage
 
-import type { ILLMProvider } from '@agentskillmania/colts';
-import type { AgentState } from '@agentskillmania/colts';
-import type { EnhancedRunner } from '@agentskillmania/wrangler';
+import type { ILLMProvider, AgentState } from '@agentskillmania/colts';
+import { EnhancedRunner, resolveDefaultModel } from '@agentskillmania/wrangler';
 
 import { runAgentArchitect, createArchitectRunner } from './agents/architect.js';
 import { runCrewComposer, createCrewComposerRunner } from './agents/crew-composer.js';
@@ -34,20 +33,31 @@ function validateLLMConfig(llm: unknown): asserts llm is LLMConfig {
     throw new Error('LLM configuration is required');
   }
   const c = llm as Record<string, unknown>;
-  if (typeof c.provider !== 'string' || c.provider.length === 0) {
-    throw new Error('llm.provider is required and must be a non-empty string');
+  if (!Array.isArray(c.providers) || c.providers.length === 0) {
+    throw new Error('llm.providers is required and must contain at least one provider');
   }
-  if (typeof c.apiKey !== 'string' || c.apiKey.length === 0) {
-    throw new Error('llm.apiKey is required and must be a non-empty string');
+  const firstProvider = c.providers[0] as Record<string, unknown>;
+  if (typeof firstProvider.name !== 'string' || firstProvider.name.length === 0) {
+    throw new Error('llm.providers[0].name is required and must be a non-empty string');
   }
-  if (typeof c.model !== 'string' || c.model.length === 0) {
-    throw new Error('llm.model is required and must be a non-empty string');
+  if (typeof firstProvider.apiKey !== 'string' || firstProvider.apiKey.length === 0) {
+    throw new Error('llm.providers[0].apiKey is required and must be a non-empty string');
+  }
+  if (!Array.isArray(firstProvider.models) || firstProvider.models.length === 0) {
+    throw new Error('llm.providers[0].models is required and must contain at least one model');
+  }
+  const firstModel = firstProvider.models[0] as Record<string, unknown>;
+  if (typeof firstModel.modelId !== 'string' || firstModel.modelId.length === 0) {
+    throw new Error(
+      'llm.providers[0].models[0].modelId is required and must be a non-empty string'
+    );
   }
 }
 
 export class DevTool {
   private readonly client: ILLMProvider;
   private readonly llmConfig: LLMConfig;
+  private readonly defaultModel: string;
   private readonly _workspacePath: string;
   readonly maxSteps?: number;
   readonly requestTimeout?: number;
@@ -55,6 +65,7 @@ export class DevTool {
   constructor(config: DevToolOptions) {
     validateLLMConfig(config.llm);
     this.llmConfig = config.llm;
+    this.defaultModel = resolveDefaultModel(config.llm.providers);
     this.client = createLLMClient(config.llm);
     this._workspacePath = config.workspacePath ?? process.cwd();
     this.maxSteps = config.maxSteps;
@@ -74,7 +85,7 @@ export class DevTool {
     });
     if (!config?.llm) {
       throw new Error(
-        'No valid LLM configuration found. Create wrangler.yaml or ~/.agentskillmania/wrangler/config.yaml with llm.provider, llm.apiKey, and llm.model.'
+        'No valid LLM configuration found. Create wrangler.yaml or ~/.agentskillmania/wrangler/config.yaml with llm.providers containing name, apiKey, and models.'
       );
     }
     return new DevTool({
@@ -95,7 +106,7 @@ export class DevTool {
     return runAgentArchitect(prompt, existingContent, {
       llmClient: this.client,
       workspacePath: this._workspacePath,
-      model: options?.model ?? this.llmConfig.model,
+      model: options?.model ?? this.defaultModel,
       ...options,
     });
   }
@@ -108,7 +119,7 @@ export class DevTool {
     return runSkillDesigner(prompt, existingContent, {
       llmClient: this.client,
       workspacePath: this._workspacePath,
-      model: options?.model ?? this.llmConfig.model,
+      model: options?.model ?? this.defaultModel,
       ...options,
     });
   }
@@ -121,7 +132,7 @@ export class DevTool {
     return runCrewComposer(prompt, existingContent, {
       llmClient: this.client,
       workspacePath: this._workspacePath,
-      model: options?.model ?? this.llmConfig.model,
+      model: options?.model ?? this.defaultModel,
       ...options,
     });
   }
@@ -130,7 +141,7 @@ export class DevTool {
     return runSessionCurator(text, {
       llmClient: this.client,
       workspacePath: this._workspacePath,
-      model: options?.model ?? this.llmConfig.model,
+      model: options?.model ?? this.defaultModel,
       ...options,
     });
   }
@@ -144,7 +155,7 @@ export class DevTool {
     return runReviewer(targetPath, content, prompt, {
       llmClient: this.client,
       workspacePath: this._workspacePath,
-      model: options?.model ?? this.llmConfig.model,
+      model: options?.model ?? this.defaultModel,
       ...options,
     });
   }
