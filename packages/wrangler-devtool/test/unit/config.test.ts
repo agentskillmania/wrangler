@@ -105,6 +105,14 @@ describe('loadConfig', () => {
     const config = await loadConfig(tempDir, { extraPaths: [configPath], skipGlobal: true });
     expect(config).toBeNull();
   });
+
+  it('returns null for legacy flat LLM config', async () => {
+    const configPath = join(tempDir, 'wrangler.yaml');
+    await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-legacy\n  model: gpt-4\n`);
+
+    const config = await loadConfig(tempDir, { extraPaths: [configPath], skipGlobal: true });
+    expect(config).toBeNull();
+  });
 });
 
 describe('requireLLMConfig', () => {
@@ -130,5 +138,12 @@ describe('requireLLMConfig', () => {
     expect(llm.providers[0].name).toBe('openai');
     expect(llm.providers[0].apiKey).toBe('sk-test');
     expect(llm.providers[0].models[0].modelId).toBe('gpt-4o');
+  });
+
+  it('throws for legacy flat LLM config', async () => {
+    const configPath = join(tempDir, 'wrangler.yaml');
+    await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-legacy\n  model: gpt-4\n`);
+
+    await expect(requireLLMConfig(tempDir)).rejects.toThrow('No valid LLM configuration');
   });
 });

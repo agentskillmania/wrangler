@@ -198,6 +198,27 @@ llm:
       }
     });
 
+    it('should return hasValidConfig=false for legacy flat LLM config', async () => {
+      const yamlContent = `
+llm:
+  provider: openai
+  apiKey: sk-legacy
+  model: gpt-4
+`;
+      const localConfig = path.join(testDir, 'wrangler.yaml');
+      await fs.writeFile(localConfig, yamlContent, 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(false);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
     it('should return hasValidConfig=false when YAML is empty', async () => {
       const localConfig = path.join(testDir, 'wrangler.yaml');
       await fs.writeFile(localConfig, '', 'utf-8');

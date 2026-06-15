@@ -132,4 +132,16 @@ describe('ConfigManager', () => {
     const config = manager.get();
     expect((config as any).newKey).toBe('newValue');
   });
+
+  it('throws when config contains legacy flat LLM keys', async () => {
+    await writeFile(
+      join(tempDir, 'config.yaml'),
+      'llm:\n  apiKey: sk-legacy\n  model: deepseek-chat\n'
+    );
+
+    const manager = new ConfigManager(join(tempDir, 'config.yaml'));
+    await manager.init();
+
+    expect(() => manager.get()).toThrow('deprecated flat LLM format');
+  });
 });

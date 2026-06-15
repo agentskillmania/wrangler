@@ -18,6 +18,23 @@ server:
 `;
 
 /**
+ * Detect deprecated flat LLM config keys.
+ *
+ * settings-yaml may deep-merge default `providers` over an old flat config,
+ * silently hiding the legacy values. We fail fast instead.
+ */
+function hasLegacyFlatLlmKeys(llm: unknown): boolean {
+  if (!llm || typeof llm !== 'object') return false;
+  const l = llm as Record<string, unknown>;
+  return (
+    typeof l.provider === 'string' ||
+    typeof l.apiKey === 'string' ||
+    typeof l.model === 'string' ||
+    typeof l.baseUrl === 'string'
+  );
+}
+
+/**
  * Manages daemon configuration via settings-yaml.
  *
  * Config file is created with defaults on first init. Subsequent loads
@@ -40,7 +57,14 @@ export class ConfigManager {
   /** Get current config values (frozen object) */
   get(): DaemonConfig {
     if (!this.settings) throw new Error('ConfigManager not initialized');
-    return this.settings.getValues();
+    const values = this.settings.getValues();
+    if (hasLegacyFlatLlmKeys(values.llm)) {
+      throw new Error(
+        'Daemon config uses the deprecated flat LLM format. ' +
+          'Migrate to llm.providers (name, apiKey, models) or recreate the config file.'
+      );
+    }
+    return values;
   }
 
   /** Update partial config and persist to disk */
