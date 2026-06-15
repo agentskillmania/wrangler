@@ -7,9 +7,11 @@ import type { DaemonConfig } from '../types.js';
 
 /** Default config as YAML string for settings-yaml initialization */
 const DEFAULT_YAML = `llm:
-  baseUrl: ''
-  apiKey: ''
-  model: deepseek-chat
+  providers:
+    - name: openai
+      apiKey: ''
+      models:
+        - modelId: deepseek-chat
 server:
   port: 3100
   host: localhost

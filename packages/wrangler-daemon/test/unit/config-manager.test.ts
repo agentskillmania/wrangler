@@ -32,20 +32,21 @@ describe('ConfigManager', () => {
 
     const config = manager.get();
     expect(config.server.port).toBe(3100);
-    expect(config.llm.model).toBe('deepseek-chat');
+    expect(config.llm.providers[0].models[0].modelId).toBe('deepseek-chat');
   });
 
   it('reads existing config and merges with defaults', async () => {
     await writeFile(
       join(tempDir, 'config.yaml'),
-      'llm:\n  model: gpt-4o\n  baseUrl: http://example.com\n  apiKey: sk-test\nserver:\n  port: 4200\n'
+      'llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      baseUrl: http://example.com\n      models:\n        - modelId: gpt-4o\nserver:\n  port: 4200\n'
     );
 
     const manager = new ConfigManager(join(tempDir, 'config.yaml'));
     await manager.init();
 
     const config = manager.get();
-    expect(config.llm.model).toBe('gpt-4o');
+    expect(config.llm.providers[0].models[0].modelId).toBe('gpt-4o');
+    expect(config.llm.providers[0].apiKey).toBe('sk-test');
     expect(config.server.port).toBe(4200);
     expect(config.server.host).toBe('localhost');
   });

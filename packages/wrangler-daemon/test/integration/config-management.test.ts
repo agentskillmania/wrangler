@@ -30,7 +30,7 @@ describe('Integration: Configuration Management', () => {
     const configPath = join(tempDir, 'config.yaml');
     await writeFile(
       configPath,
-      `llm:\n  baseUrl: 'https://api.example.com'\n  apiKey: sk-test-key\n  model: gpt-4\nserver:\n  port: 3200\n  host: localhost\n`
+      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test-key\n      baseUrl: 'https://api.example.com'\n      models:\n        - modelId: gpt-4\nserver:\n  port: 3200\n  host: localhost\n`
     );
 
     const configManager = new ConfigManager(configPath);
@@ -58,8 +58,8 @@ describe('Integration: Configuration Management', () => {
     const res = await fetch(`${getUrl()}/api/config`);
     expect(res.ok).toBe(true);
     const body = await res.json();
-    expect(body.llm.model).toBe('gpt-4');
-    expect(body.llm.apiKey).toBe('sk-test-key');
+    expect(body.llm.providers[0].models[0].modelId).toBe('gpt-4');
+    expect(body.llm.providers[0].apiKey).toBe('sk-test-key');
     expect(body.server.port).toBe(3200);
   });
 
@@ -69,16 +69,20 @@ describe('Integration: Configuration Management', () => {
     const patchRes = await fetch(`${getUrl()}/api/config`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ llm: { model: 'gpt-4o' } }),
+      body: JSON.stringify({
+        llm: {
+          providers: [{ name: 'openai', apiKey: 'sk-test-key', models: [{ modelId: 'gpt-4o' }] }],
+        },
+      }),
     });
     expect(patchRes.ok).toBe(true);
 
     // Verify updated via API
     const getRes = await fetch(`${getUrl()}/api/config`);
     const body = await getRes.json();
-    expect(body.llm.model).toBe('gpt-4o');
+    expect(body.llm.providers[0].models[0].modelId).toBe('gpt-4o');
     // Other values preserved
-    expect(body.llm.apiKey).toBe('sk-test-key');
+    expect(body.llm.providers[0].apiKey).toBe('sk-test-key');
 
     // Verify persisted to disk
     const diskContent = await readFile(join(tempDir, 'config.yaml'), 'utf-8');
@@ -140,16 +144,22 @@ describe('Integration: Configuration Management', () => {
 
     // 1. Read initial config
     const initial = await (await fetch(`${url}/api/config`)).json();
-    expect(initial.llm.model).toBe('gpt-4');
+    expect(initial.llm.providers[0].models[0].modelId).toBe('gpt-4');
 
     // 2. Patch model
     await fetch(`${url}/api/config`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ llm: { model: 'patched-model' } }),
+      body: JSON.stringify({
+        llm: {
+          providers: [
+            { name: 'openai', apiKey: 'sk-test-key', models: [{ modelId: 'patched-model' }] },
+          ],
+        },
+      }),
     });
     const patched = await (await fetch(`${url}/api/config`)).json();
-    expect(patched.llm.model).toBe('patched-model');
+    expect(patched.llm.providers[0].models[0].modelId).toBe('patched-model');
 
     // 3. Write a side config file
     const sidePath = join(tempDir, 'side.yaml');

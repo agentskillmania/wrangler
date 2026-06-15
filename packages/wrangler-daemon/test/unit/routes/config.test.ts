@@ -29,9 +29,12 @@ describe('Unit: Config Routes', () => {
       configPath,
       [
         'llm:',
-        "  baseUrl: 'https://api.example.com'",
-        '  apiKey: sk-test',
-        '  model: test-model',
+        '  providers:',
+        '    - name: openai',
+        '      apiKey: sk-test',
+        "      baseUrl: 'https://api.example.com'",
+        '      models:',
+        '        - modelId: test-model',
         'server:',
         '  port: 3100',
         '  host: localhost',
@@ -65,9 +68,14 @@ describe('Unit: Config Routes', () => {
     const body = await res.json();
     expect(body).toMatchObject({
       llm: {
-        baseUrl: 'https://api.example.com',
-        apiKey: 'sk-test',
-        model: 'test-model',
+        providers: [
+          {
+            name: 'openai',
+            apiKey: 'sk-test',
+            baseUrl: 'https://api.example.com',
+            models: [{ modelId: 'test-model' }],
+          },
+        ],
       },
       server: {
         port: 3100,

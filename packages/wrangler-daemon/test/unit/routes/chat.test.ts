@@ -72,7 +72,7 @@ describe('Chat API', () => {
     const configPath = join(tempDir, 'config.yaml');
     await writeFile(
       configPath,
-      `llm:\n  baseUrl: 'https://api.example.com'\n  apiKey: sk-test\n  model: test-model\nserver:\n  port: 3100\n  host: localhost\n`
+      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      baseUrl: 'https://api.example.com'\n      models:\n        - modelId: test-model\nserver:\n  port: 3100\n  host: localhost\n`
     );
     const configManager = new ConfigManager(configPath);
     await configManager.init();

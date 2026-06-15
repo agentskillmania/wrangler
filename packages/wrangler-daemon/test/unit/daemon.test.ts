@@ -194,7 +194,7 @@ describe('Daemon', () => {
   it('loads existing config during startup', async () => {
     await writeFile(
       join(tempDir, 'config.yaml'),
-      'llm:\n  model: custom-model\n  apiKey: key\n  baseUrl: \nserver:\n  port: 3100\n  host: localhost\n'
+      'llm:\n  providers:\n    - name: openai\n      apiKey: key\n      models:\n        - modelId: custom-model\nserver:\n  port: 3100\n  host: localhost\n'
     );
 
     daemon = new Daemon({ port: 0, host: '127.0.0.1' });
@@ -203,6 +203,6 @@ describe('Daemon', () => {
     const res = await fetch(`http://${daemon.address}/api/config`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.llm.model).toBe('custom-model');
+    expect(body.llm.providers[0].models[0].modelId).toBe('custom-model');
   });
 });

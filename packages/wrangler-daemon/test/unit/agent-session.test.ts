@@ -27,10 +27,14 @@ const { mockEnhancedRunnerCreate, mockEnhancedRunnerResume, mockRunnerRunStream 
     mockRunnerRunStream: vi.fn(),
   })
 );
-vi.mock('@agentskillmania/wrangler', () => ({
-  EnhancedRunner: { create: mockEnhancedRunnerCreate, resume: mockEnhancedRunnerResume },
-  SessionStore: vi.fn(),
-}));
+vi.mock('@agentskillmania/wrangler', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agentskillmania/wrangler')>();
+  return {
+    ...actual,
+    EnhancedRunner: { create: mockEnhancedRunnerCreate, resume: mockEnhancedRunnerResume },
+    SessionStore: vi.fn(),
+  };
+});
 vi.mock('@agentskillmania/llm-client', () => ({
   LLMClient: vi.fn().mockReturnValue({
     registerProvider: vi.fn(),
@@ -47,7 +51,16 @@ vi.mock('@agentskillmania/colts', () => ({
 }));
 
 const testConfig = {
-  llm: { baseUrl: 'https://api.example.com', apiKey: 'sk-test', model: 'test-model' },
+  llm: {
+    providers: [
+      {
+        name: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.example.com',
+        models: [{ modelId: 'test-model' }],
+      },
+    ],
+  },
   server: { port: 3100, host: 'localhost' },
 } satisfies import('../../src/types.js').DaemonConfig;
 

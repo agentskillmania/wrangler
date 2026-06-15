@@ -8,8 +8,13 @@
 import { createAgentState, addUserMessage, updateState } from '@agentskillmania/colts';
 import type { AgentState, RunStreamEvent, RunOptions } from '@agentskillmania/colts';
 import type { AskHumanHandler, HumanResponse } from '@agentskillmania/colts';
-import { LLMClient } from '@agentskillmania/llm-client';
-import { EnhancedRunner, SessionStore } from '@agentskillmania/wrangler';
+import type { LLMClient } from '@agentskillmania/llm-client';
+import {
+  EnhancedRunner,
+  SessionStore,
+  createLLMClient,
+  resolveDefaultModel,
+} from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
@@ -151,8 +156,9 @@ export class AgentSession {
    */
   static async create(options: AgentSessionOptions, config: DaemonConfig): Promise<AgentSession> {
     const bridge = AgentSession._createBridge();
-    const llmModel = options.model ?? config.llm.model;
-    const llmClient = AgentSession._createLLMClient(config, llmModel);
+    const defaultModel = resolveDefaultModel(config.llm.providers);
+    const llmModel = options.model ?? defaultModel;
+    const llmClient = createLLMClient(config.llm.providers);
 
     const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
 
@@ -222,8 +228,8 @@ export class AgentSession {
     config: DaemonConfig
   ): Promise<AgentSession> {
     const bridge = AgentSession._createBridge();
-    const llmModel = config.llm.model;
-    const llmClient = AgentSession._createLLMClient(config, llmModel);
+    const llmModel = resolveDefaultModel(config.llm.providers);
+    const llmClient = createLLMClient(config.llm.providers);
     const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
 
     const { runner, state } = await EnhancedRunner.resume(sessionDir, {
@@ -253,28 +259,6 @@ export class AgentSession {
       cockpitSender: null,
       pendingHumanInput: new Map(),
     };
-  }
-
-  /** Create an LLMClient from daemon config. */
-  private static _createLLMClient(config: DaemonConfig, model?: string): LLMClient {
-    const llmModel = model ?? config.llm.model;
-    const llmClient = new LLMClient({ baseUrl: config.llm.baseUrl });
-    llmClient.registerProvider({ name: 'openai', maxConcurrency: 10 });
-    llmClient.registerApiKey({
-      key: config.llm.apiKey,
-      provider: 'openai',
-      maxConcurrency: 5,
-      models: [
-        {
-          modelId: llmModel,
-          maxConcurrency: 3,
-          contextWindow: config.llm.contextWindow,
-          maxTokens: config.llm.maxTokens,
-          reasoning: config.llm.reasoning,
-        },
-      ],
-    });
-    return llmClient;
   }
 
   /** Create an AskHumanHandler wired to the given bridge. */

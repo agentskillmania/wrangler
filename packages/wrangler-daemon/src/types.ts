@@ -1,20 +1,12 @@
+import type { LLMQuickInit } from '@agentskillmania/colts';
+
 import type { ConfigManager } from './core/config-manager.js';
 import type { ResourceManager } from './core/resource-manager.js';
 import type { SessionManager } from './core/session-manager.js';
 
 /** Daemon configuration stored in config.yaml */
 export interface DaemonConfig {
-  llm: {
-    baseUrl: string;
-    apiKey: string;
-    model: string;
-    /** Model context window in tokens (optional, overrides built-in defaults) */
-    contextWindow?: number;
-    /** Model max output tokens (optional, overrides built-in defaults) */
-    maxTokens?: number;
-    /** Whether model supports native reasoning (optional, overrides auto-detection) */
-    reasoning?: boolean;
-  };
+  llm: LLMQuickInit;
   server: {
     port: number;
     host: string;
@@ -25,9 +17,13 @@ export interface DaemonConfig {
 /** Default daemon config values */
 export const DEFAULT_CONFIG: DaemonConfig = {
   llm: {
-    baseUrl: '',
-    apiKey: '',
-    model: 'deepseek-chat',
+    providers: [
+      {
+        name: 'openai',
+        apiKey: '',
+        models: [{ modelId: 'deepseek-chat' }],
+      },
+    ],
   },
   server: {
     port: 3100,

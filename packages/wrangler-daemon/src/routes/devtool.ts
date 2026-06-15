@@ -10,14 +10,7 @@ import type { DecoratedFastifyInstance } from '../types.js';
  */
 function createDevTool(configManager: ConfigManager): DevTool {
   const config = configManager.get();
-  return new DevTool({
-    llm: {
-      provider: 'openai',
-      apiKey: config.llm.apiKey,
-      model: config.llm.model,
-      baseUrl: config.llm.baseUrl || undefined,
-    },
-  });
+  return new DevTool({ llm: config.llm });
 }
 
 /**

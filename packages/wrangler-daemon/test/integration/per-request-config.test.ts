@@ -57,7 +57,7 @@ describe('Integration: Per-Request Configuration', () => {
     const configPath = join(tempDir, 'config.yaml');
     await writeFile(
       configPath,
-      `llm:\n  baseUrl: '${testConfig.baseUrl || ''}'\n  apiKey: ${testConfig.apiKey}\n  model: ${testConfig.testModel}\n  contextWindow: 128000\n  maxTokens: 4096\n  reasoning: false\nserver:\n  port: 3100\n  host: localhost\n`
+      `llm:\n  providers:\n    - name: ${testConfig.provider}\n      apiKey: ${testConfig.apiKey}\n${testConfig.baseUrl ? `      baseUrl: '${testConfig.baseUrl}'\n` : ''}      models:\n        - modelId: ${testConfig.testModel}\n          contextWindow: 128000\n          maxTokens: 4096\n          reasoning: false\nserver:\n  port: 3100\n  host: localhost\n`
     );
 
     const configManager = new ConfigManager(configPath);

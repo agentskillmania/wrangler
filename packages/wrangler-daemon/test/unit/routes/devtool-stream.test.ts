@@ -173,7 +173,7 @@ describe('Devtool Stream API', () => {
     const configPath = join(tempDir, 'config.yaml');
     await writeFile(
       configPath,
-      `llm:\n  baseUrl: 'https://api.example.com'\n  apiKey: sk-test\n  model: deepseek-chat\nserver:\n  port: 3100\n  host: localhost\n`
+      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      baseUrl: 'https://api.example.com'\n      models:\n        - modelId: deepseek-chat\nserver:\n  port: 3100\n  host: localhost\n`
     );
 
     configManager = new ConfigManager(configPath);

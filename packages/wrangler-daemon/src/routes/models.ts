@@ -38,12 +38,15 @@ export async function modelRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Strategy 2: Fall back to YAML config metadata for the configured model
     const config = configManager().get();
-    if (config.llm.model === modelId) {
+    const matchedModel = config.llm.providers
+      .flatMap((p) => p.models)
+      .find((m) => m.modelId === modelId);
+    if (matchedModel) {
       return {
         modelId,
-        contextWindow: config.llm.contextWindow ?? 0,
-        maxTokens: config.llm.maxTokens ?? 0,
-        reasoning: config.llm.reasoning ?? false,
+        contextWindow: matchedModel.contextWindow ?? 0,
+        maxTokens: matchedModel.maxTokens ?? 0,
+        reasoning: matchedModel.reasoning ?? false,
       };
     }
 

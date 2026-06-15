@@ -20,7 +20,7 @@ describe('Model metadata endpoint', () => {
     const configPath = join(tempDir, 'config.yaml');
     await writeFile(
       configPath,
-      `llm:\n  baseUrl: 'https://api.example.com'\n  apiKey: sk-test\n  model: test-model\n  contextWindow: 128000\n  maxTokens: 8192\n  reasoning: true\nserver:\n  port: 3100\n  host: localhost\n`
+      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      baseUrl: 'https://api.example.com'\n      models:\n        - modelId: test-model\n          contextWindow: 128000\n          maxTokens: 8192\n          reasoning: true\nserver:\n  port: 3100\n  host: localhost\n`
     );
     const configManager = new ConfigManager(configPath);
     await configManager.init();
@@ -127,7 +127,7 @@ describe('Model metadata endpoint', () => {
       const configPath2 = join(tempDir, 'config2.yaml');
       await writeFile(
         configPath2,
-        `llm:\n  baseUrl: ''\n  apiKey: ''\n  model: bare-model\nserver:\n  port: 3100\n  host: localhost\n`
+        `llm:\n  providers:\n    - name: openai\n      apiKey: ''\n      models:\n        - modelId: bare-model\nserver:\n  port: 3100\n  host: localhost\n`
       );
       const cm2 = new ConfigManager(configPath2);
       await cm2.init();
