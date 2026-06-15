@@ -8,6 +8,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import type { LLMQuickInit } from '@agentskillmania/colts';
 import { Settings } from '@agentskillmania/settings-yaml';
 
 /** Default configuration directory */
@@ -18,23 +19,8 @@ const CONFIG_FILE = 'config.yaml';
  * wrangler.yaml configuration structure
  */
 export interface WranglerConfig extends Record<string, unknown> {
-  /** LLM provider settings */
-  llm?: {
-    /** Provider name (e.g., openai) */
-    provider?: string;
-    /** API key for the provider */
-    apiKey?: string;
-    /** Model identifier */
-    model?: string;
-    /** Custom base URL for the provider API */
-    baseUrl?: string;
-    /** Enable extended thinking for supported models */
-    thinkingEnabled?: boolean;
-    /** Enable prompt-level thinking control */
-    enablePromptThinking?: boolean;
-    /** Maximum concurrent requests to the LLM provider */
-    maxConcurrency?: number;
-  };
+  /** LLM provider list (one apiKey per provider) */
+  llm?: LLMQuickInit;
   /** Maximum number of agent steps per run */
   maxSteps?: number;
   /** Request timeout in milliseconds */
@@ -50,15 +36,7 @@ export interface AppConfig {
   /** Configuration file path */
   configPath?: string;
   /** LLM configuration */
-  llm?: {
-    provider: string;
-    apiKey: string;
-    model: string;
-    baseUrl?: string;
-    thinkingEnabled?: boolean;
-    enablePromptThinking?: boolean;
-    maxConcurrency?: number;
-  };
+  llm?: LLMQuickInit;
   /** Maximum number of agent steps per run */
   maxSteps?: number;
   /** Request timeout in milliseconds */
@@ -67,8 +45,11 @@ export interface AppConfig {
 
 /** Default configuration YAML */
 const DEFAULT_CONFIG_YAML = `llm:
-  provider: openai
-  model: gpt-4o
+  providers:
+    - name: openai
+      apiKey: ''
+      models:
+        - modelId: gpt-4o
 
 `;
 
@@ -126,7 +107,8 @@ export function getGlobalConfigPath(globalDir?: string): string {
  * @returns True if both provider and apiKey are present
  */
 function isValidConfig(config: WranglerConfig): boolean {
-  return !!(config.llm?.apiKey && config.llm?.provider);
+  const first = config.llm?.providers?.[0];
+  return !!(first?.name && first?.apiKey && first?.models && first.models.length > 0);
 }
 
 /**
@@ -155,15 +137,7 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
     return {
       hasValidConfig: true,
       configPath,
-      llm: {
-        provider: config.llm!.provider!,
-        apiKey: config.llm!.apiKey!,
-        model: config.llm!.model ?? 'gpt-4o',
-        baseUrl: config.llm!.baseUrl,
-        thinkingEnabled: config.llm?.thinkingEnabled,
-        enablePromptThinking: config.llm?.enablePromptThinking,
-        maxConcurrency: config.llm?.maxConcurrency,
-      },
+      llm: config.llm,
       maxSteps: config.maxSteps,
       requestTimeout: config.requestTimeout ?? 1800000,
     };
@@ -202,7 +176,7 @@ export async function saveConfig(
  * @param options - Save options
  */
 export async function saveSetup(
-  setup: { provider: string; apiKey: string; model: string },
+  setup: { provider: string; apiKey: string; model: string; baseUrl?: string },
   options?: { globalDir?: string }
 ): Promise<void> {
   const configPath = getGlobalConfigPath(options?.globalDir);
@@ -210,9 +184,16 @@ export async function saveSetup(
 
   const settings = new Settings<WranglerConfig>(configPath);
   await settings.initialize({ defaultYaml: DEFAULT_CONFIG_YAML });
-  settings.set('llm.provider', setup.provider);
-  settings.set('llm.apiKey', setup.apiKey);
-  settings.set('llm.model', setup.model);
+  settings.set('llm', {
+    providers: [
+      {
+        name: setup.provider,
+        apiKey: setup.apiKey,
+        baseUrl: setup.baseUrl,
+        models: [{ modelId: setup.model }],
+      },
+    ],
+  });
   await settings.save();
 }
 

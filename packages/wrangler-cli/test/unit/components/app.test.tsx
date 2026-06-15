@@ -149,9 +149,13 @@ const validConfig: AppConfig = {
   hasValidConfig: true,
   configPath: '/tmp/test-config.yaml',
   llm: {
-    provider: 'openai',
-    apiKey: 'sk-test-key',
-    model: 'gpt-4o',
+    providers: [
+      {
+        name: 'openai',
+        apiKey: 'sk-test-key',
+        models: [{ modelId: 'gpt-4o' }],
+      },
+    ],
   },
 };
 
@@ -644,10 +648,13 @@ describe('App', () => {
       hasValidConfig: true,
       configPath: '/tmp/test-config.yaml',
       llm: {
-        provider: 'openai',
-        apiKey: 'sk-test-key',
-        // @ts-expect-error testing runtime fallback when model is missing
-        model: undefined,
+        providers: [
+          {
+            name: 'openai',
+            apiKey: 'sk-test-key',
+            models: [{}],
+          },
+        ],
       },
     } as AppConfig;
 

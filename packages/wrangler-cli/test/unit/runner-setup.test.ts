@@ -11,7 +11,7 @@ import type { AppConfig } from '../../src/config.js';
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Build a minimal valid AppConfig */
+/** Build a minimal valid AppConfig with multi-provider shape */
 function makeValidConfig(
   overrides?: Partial<AppConfig['llm']>,
   extra?: Partial<AppConfig>
@@ -20,9 +20,13 @@ function makeValidConfig(
     hasValidConfig: true,
     configPath: '/test/config.yaml',
     llm: {
-      provider: 'openai',
-      apiKey: 'sk-test-key',
-      model: 'gpt-4o',
+      providers: [
+        {
+          name: 'openai',
+          apiKey: 'sk-test-key',
+          models: [{ modelId: 'gpt-4o' }],
+        },
+      ],
       ...overrides,
     },
     ...extra,
@@ -48,6 +52,11 @@ describe('createLLMClientFromConfig', () => {
     expect(result).toBeNull();
   });
 
+  it('returns null when providers array is empty', () => {
+    const result = createLLMClientFromConfig(makeValidConfig({ providers: [] }));
+    expect(result).toBeNull();
+  });
+
   it('creates client and registers provider + apiKey with correct values', () => {
     const registerProviderSpy = vi.spyOn(LLMClient.prototype, 'registerProvider');
     const registerApiKeySpy = vi.spyOn(LLMClient.prototype, 'registerApiKey');
@@ -58,7 +67,7 @@ describe('createLLMClientFromConfig', () => {
     expect(registerProviderSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'openai',
-        maxConcurrency: 5,
+        maxConcurrency: 10,
       })
     );
 
@@ -66,25 +75,50 @@ describe('createLLMClientFromConfig', () => {
       expect.objectContaining({
         key: 'sk-test-key',
         provider: 'openai',
-        maxConcurrency: 5,
+        maxConcurrency: 10,
         models: expect.arrayContaining([
-          expect.objectContaining({ modelId: 'gpt-4o', maxConcurrency: 5 }),
+          expect.objectContaining({ modelId: 'gpt-4o', maxConcurrency: 3 }),
         ]),
       })
     );
   });
 
-  it('passes custom baseUrl to LLMClient constructor', () => {
-    const config = makeValidConfig({ baseUrl: 'https://custom.api.com/v1' });
-    const client = createLLMClientFromConfig(config);
+  it('passes custom baseUrl to LLMClient registration', () => {
+    const registerProviderSpy = vi.spyOn(LLMClient.prototype, 'registerProvider');
 
-    expect(client).toBeInstanceOf(LLMClient);
+    const config = makeValidConfig({
+      providers: [
+        {
+          name: 'openai',
+          apiKey: 'sk-test-key',
+          baseUrl: 'https://custom.api.com/v1',
+          models: [{ modelId: 'gpt-4o' }],
+        },
+      ],
+    });
+    createLLMClientFromConfig(config);
+
+    expect(registerProviderSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'openai',
+        baseUrl: 'https://custom.api.com/v1',
+      })
+    );
   });
 
   it('uses custom maxConcurrency when provided', () => {
     const registerProviderSpy = vi.spyOn(LLMClient.prototype, 'registerProvider');
 
-    const config = makeValidConfig({ maxConcurrency: 10 });
+    const config = makeValidConfig({
+      providers: [
+        {
+          name: 'openai',
+          apiKey: 'sk-test-key',
+          maxConcurrency: 10,
+          models: [{ modelId: 'gpt-4o' }],
+        },
+      ],
+    });
     createLLMClientFromConfig(config);
 
     expect(registerProviderSpy).toHaveBeenCalledWith(
@@ -92,14 +126,50 @@ describe('createLLMClientFromConfig', () => {
     );
   });
 
-  it('defaults to 5 maxConcurrency when not provided', () => {
+  it('defaults to 10 provider and 3 model maxConcurrency when not provided', () => {
     const registerProviderSpy = vi.spyOn(LLMClient.prototype, 'registerProvider');
+    const registerApiKeySpy = vi.spyOn(LLMClient.prototype, 'registerApiKey');
 
     const config = makeValidConfig();
     createLLMClientFromConfig(config);
 
     expect(registerProviderSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ maxConcurrency: 5 })
+      expect.objectContaining({ maxConcurrency: 10 })
+    );
+    expect(registerApiKeySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        models: expect.arrayContaining([
+          expect.objectContaining({ modelId: 'gpt-4o', maxConcurrency: 3 }),
+        ]),
+      })
+    );
+  });
+
+  it('registers multiple providers', () => {
+    const registerProviderSpy = vi.spyOn(LLMClient.prototype, 'registerProvider');
+    const registerApiKeySpy = vi.spyOn(LLMClient.prototype, 'registerApiKey');
+
+    const config = makeValidConfig({
+      providers: [
+        {
+          name: 'openai',
+          apiKey: 'sk-openai',
+          models: [{ modelId: 'gpt-4o' }],
+        },
+        {
+          name: 'anthropic',
+          apiKey: 'sk-anthropic',
+          models: [{ modelId: 'claude-3' }],
+        },
+      ],
+    });
+    createLLMClientFromConfig(config);
+
+    expect(registerProviderSpy).toHaveBeenCalledTimes(2);
+    expect(registerApiKeySpy).toHaveBeenCalledTimes(2);
+    expect(registerProviderSpy).toHaveBeenCalledWith(expect.objectContaining({ name: 'openai' }));
+    expect(registerProviderSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'anthropic' })
     );
   });
 });

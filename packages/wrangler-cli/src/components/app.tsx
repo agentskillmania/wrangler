@@ -125,14 +125,16 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
       const workspacePath =
         mode.mode === 'bare' ? mode.dir : mode.mode === 'agent' ? mode.agentDir : mode.crewDir;
 
+      const model = config.llm!.providers[0].models[0].modelId;
+
       const r = await EnhancedRunner.create({
         llmClient,
-        model: config.llm!.model,
+        model,
         workspacePath,
         skillDirs: dirs,
         mcpConfigPaths,
-        thinkingEnabled: config.llm?.thinkingEnabled ?? true,
-        enablePromptThinking: config.llm?.enablePromptThinking,
+        thinkingEnabled: true,
+        enablePromptThinking: false,
         requestTimeout: config.requestTimeout,
         maxSteps: config.maxSteps,
         sandbox,
@@ -181,7 +183,7 @@ export function App({ config: initialConfig, mode, dir }: AppProps) {
     <MainTUI
       agentHook={agentHook}
       agentName={agentName}
-      model={config.llm?.model ?? 'unknown'}
+      model={config.llm?.providers[0]?.models[0]?.modelId ?? 'unknown'}
       isCrewMode={sessionManager.isCrewMode}
       currentSession={sessionManager.currentSession}
       dialog={dialog}
