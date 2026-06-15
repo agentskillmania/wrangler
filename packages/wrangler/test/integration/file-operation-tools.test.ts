@@ -28,9 +28,14 @@ function makeRunner(tools: ToolDefinition[]) {
   return new AgentRunner({
     model: testConfig.testModel,
     llm: {
-      apiKey: testConfig.apiKey,
-      provider: testConfig.provider,
-      baseUrl: testConfig.baseUrl,
+      providers: [
+        {
+          name: testConfig.provider,
+          apiKey: testConfig.apiKey,
+          baseUrl: testConfig.baseUrl,
+          models: [{ modelId: testConfig.testModel }],
+        },
+      ],
     },
     tools,
     middleware: [],

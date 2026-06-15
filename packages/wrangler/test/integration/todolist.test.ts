@@ -29,7 +29,16 @@ import { testConfig, itif } from './config.js';
 function makeRunner(tools: ToolDefinition[], middleware: any[]) {
   return new AgentRunner({
     model: testConfig.testModel,
-    llm: { apiKey: testConfig.apiKey, provider: testConfig.provider, baseUrl: testConfig.baseUrl },
+    llm: {
+      providers: [
+        {
+          name: testConfig.provider,
+          apiKey: testConfig.apiKey,
+          baseUrl: testConfig.baseUrl,
+          models: [{ modelId: testConfig.testModel }],
+        },
+      ],
+    },
     tools,
     middleware,
     messageAssembler: new MarkdownMessageAssembler(),

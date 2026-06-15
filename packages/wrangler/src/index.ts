@@ -21,6 +21,9 @@ export type { SessionNamingDeps } from './middleware/session-naming-middleware.j
 export { EnhancedRunner, buildTimeContext } from './runner/index.js';
 export type { EnhancedRunnerOptions } from './runner/index.js';
 
+// LLM client factory
+export { createLLMClient, resolveDefaultModel } from './llm/client.js';
+
 // Agent (Layer 5)
 export { parseAgentMd } from './agent/index.js';
 export type { ParsedAgent } from './agent/index.js';

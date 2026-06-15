@@ -17,8 +17,8 @@ import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as dotenvConfig } from 'dotenv';
-import { LLMClient } from '@agentskillmania/llm-client';
 import type { ILLMProvider } from '@agentskillmania/colts';
+import { createLLMClient } from '../src/llm/client.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -57,17 +57,15 @@ export function getDemoConfig(): DemoConfig {
   const provider = process.env.PROVIDER || 'openai';
   const model = process.env.MODEL || 'gpt-4';
 
-  const client = new LLMClient({
-    baseUrl: process.env.OPENAI_BASE_URL,
-  });
-
-  client.registerProvider({ name: provider, maxConcurrency: 10 });
-  client.registerApiKey({
-    key: apiKey,
-    provider,
-    maxConcurrency: 5,
-    models: [{ modelId: model, maxConcurrency: 3 }],
-  });
+  const client = createLLMClient([
+    {
+      name: provider,
+      apiKey,
+      baseUrl: process.env.OPENAI_BASE_URL,
+      maxConcurrency: 10,
+      models: [{ modelId: model, maxConcurrency: 3 }],
+    },
+  ]);
 
   return { provider: client, model };
 }

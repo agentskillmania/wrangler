@@ -49,9 +49,14 @@ describe('US1: LLM executes shell command and reports result', () => {
       const runner = new AgentRunner({
         model: testConfig.testModel,
         llm: {
-          apiKey: testConfig.apiKey,
-          provider: testConfig.provider,
-          baseUrl: testConfig.baseUrl,
+          providers: [
+            {
+              name: testConfig.provider,
+              apiKey: testConfig.apiKey,
+              baseUrl: testConfig.baseUrl,
+              models: [{ modelId: testConfig.testModel }],
+            },
+          ],
         },
         tools: [shellTool],
         middleware: [],
@@ -95,9 +100,14 @@ describe('US2: LLM uses shell tool for computation', () => {
       const runner = new AgentRunner({
         model: testConfig.testModel,
         llm: {
-          apiKey: testConfig.apiKey,
-          provider: testConfig.provider,
-          baseUrl: testConfig.baseUrl,
+          providers: [
+            {
+              name: testConfig.provider,
+              apiKey: testConfig.apiKey,
+              baseUrl: testConfig.baseUrl,
+              models: [{ modelId: testConfig.testModel }],
+            },
+          ],
         },
         tools: [shellTool],
         middleware: [],
@@ -143,9 +153,14 @@ describe('US3: LLM handles shell command failure gracefully', () => {
       const runner = new AgentRunner({
         model: testConfig.testModel,
         llm: {
-          apiKey: testConfig.apiKey,
-          provider: testConfig.provider,
-          baseUrl: testConfig.baseUrl,
+          providers: [
+            {
+              name: testConfig.provider,
+              apiKey: testConfig.apiKey,
+              baseUrl: testConfig.baseUrl,
+              models: [{ modelId: testConfig.testModel }],
+            },
+          ],
         },
         tools: [shellTool],
         middleware: [],

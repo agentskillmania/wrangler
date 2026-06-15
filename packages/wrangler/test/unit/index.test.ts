@@ -9,6 +9,8 @@ import {
   CommandRegistry,
   createCommandMiddleware,
   parseAgentMd,
+  createLLMClient,
+  resolveDefaultModel,
 } from '../../src/index.js';
 
 describe('@agentskillmania/wrangler exports', () => {
@@ -38,6 +40,12 @@ describe('@agentskillmania/wrangler exports', () => {
     expect(parseCommand).toBeInstanceOf(Function);
     expect(CommandRegistry).toBeInstanceOf(Function);
     expect(createCommandMiddleware).toBeInstanceOf(Function);
+
+    // LLM client factory
+    expect(createLLMClient).toBeInstanceOf(Function);
+    expect(createLLMClient.name).toBe('createLLMClient');
+    expect(resolveDefaultModel).toBeInstanceOf(Function);
+    expect(resolveDefaultModel.name).toBe('resolveDefaultModel');
   });
 
   it('parseCommand parses slash commands correctly', () => {

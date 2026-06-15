@@ -29,7 +29,16 @@ const itif = (condition: boolean) => (condition ? it : it.skip);
 function makeRunner(tools: ReturnType<typeof createBuiltinTools>) {
   return new AgentRunner({
     model: testModel,
-    llm: { apiKey, provider, baseUrl },
+    llm: {
+      providers: [
+        {
+          name: provider,
+          apiKey,
+          baseUrl,
+          models: [{ modelId: testModel }],
+        },
+      ],
+    },
     tools,
   });
 }

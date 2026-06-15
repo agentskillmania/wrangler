@@ -946,7 +946,12 @@ describe('EnhancedRunner', () => {
   describe('LLM configuration', () => {
     it('create() with llm quick init succeeds', async () => {
       const runner = await EnhancedRunner.create(
-        makeOptions({ llmClient: undefined, llm: { apiKey: 'sk-test' } })
+        makeOptions({
+          llmClient: undefined,
+          llm: {
+            providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+          },
+        })
       );
       expect(runner).toBeInstanceOf(EnhancedRunner);
     });
@@ -964,7 +969,13 @@ describe('EnhancedRunner', () => {
 
     it('create() with both llmClient and llm throws', async () => {
       await expect(
-        EnhancedRunner.create(makeOptions({ llm: { apiKey: 'sk-test' } }))
+        EnhancedRunner.create(
+          makeOptions({
+            llm: {
+              providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+            },
+          })
+        )
       ).rejects.toThrow('Cannot specify both llmClient and llm');
     });
 
@@ -1007,7 +1018,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { runner, state } = await EnhancedRunner.resume(dir, {
-        llm: { apiKey: 'sk-test' },
+        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
       });
 
       expect(runner).toBeInstanceOf(EnhancedRunner);
@@ -1025,7 +1036,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { runner, state } = await EnhancedRunner.resume(dir, {
-        llm: { apiKey: 'sk-test' },
+        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
       });
 
       const result = await runner.run(state);
@@ -1045,7 +1056,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { state } = await EnhancedRunner.resume(dir, {
-        llm: { apiKey: 'sk-test' },
+        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
       });
 
       // runner.getToolInfo() returns mock tools (empty in this test env)
@@ -1062,7 +1073,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { runner } = await EnhancedRunner.resume(dir, {
-        llm: { apiKey: 'sk-test' },
+        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
         model: 'claude-3',
       });
 
@@ -1085,9 +1096,13 @@ describe('EnhancedRunner', () => {
 
     it('resume throws for non-existent session directory', async () => {
       const badDir = join(testBaseDir, 'nonexistent');
-      await expect(EnhancedRunner.resume(badDir, { llm: { apiKey: 'sk-test' } })).rejects.toThrow(
-        'Session not found or incomplete'
-      );
+      await expect(
+        EnhancedRunner.resume(badDir, {
+          llm: {
+            providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+          },
+        })
+      ).rejects.toThrow('Session not found or incomplete');
     });
 
     it('resume throws when runnerConfig snapshot is missing', async () => {
@@ -1104,9 +1119,13 @@ describe('EnhancedRunner', () => {
       await store.saveState(sessionId, agentState);
 
       const dir = store.getSessionDir(sessionId);
-      await expect(EnhancedRunner.resume(dir, { llm: { apiKey: 'sk-test' } })).rejects.toThrow(
-        'Session not found or incomplete'
-      );
+      await expect(
+        EnhancedRunner.resume(dir, {
+          llm: {
+            providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+          },
+        })
+      ).rejects.toThrow('Session not found or incomplete');
     });
 
     it('resume throws when state.json is missing', async () => {
@@ -1117,9 +1136,13 @@ describe('EnhancedRunner', () => {
       // Intentionally do NOT call saveState — state.json is missing
 
       const dir = store.getSessionDir(sessionId);
-      await expect(EnhancedRunner.resume(dir, { llm: { apiKey: 'sk-test' } })).rejects.toThrow(
-        'Session not found or incomplete'
-      );
+      await expect(
+        EnhancedRunner.resume(dir, {
+          llm: {
+            providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+          },
+        })
+      ).rejects.toThrow('Session not found or incomplete');
     });
   });
 });

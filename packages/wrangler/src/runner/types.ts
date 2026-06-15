@@ -5,6 +5,7 @@ import type {
   Tool,
   CompressionConfig,
   IContextCompressor,
+  LLMQuickInit,
 } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
 
@@ -40,13 +41,8 @@ export interface A2UIConfig {
 export interface EnhancedRunnerOptions {
   /** LLM provider instance (injection mode) */
   llmClient?: ILLMProvider;
-  /** LLM quick initialization config */
-  llm?: {
-    apiKey: string;
-    provider?: string;
-    baseUrl?: string;
-    maxConcurrency?: number;
-  };
+  /** LLM quick initialization config (multi-provider, one apiKey per provider) */
+  llm?: LLMQuickInit;
   model?: string;
   workspacePath?: string;
   extraTools?: Tool<ZodTypeAny>[];
@@ -141,13 +137,8 @@ export interface ResolvedRunnerConfig {
 export interface ResumeOptions {
   /** LLM provider instance (injection mode) */
   llmClient?: ILLMProvider;
-  /** LLM quick initialization config */
-  llm?: {
-    apiKey: string;
-    provider?: string;
-    baseUrl?: string;
-    maxConcurrency?: number;
-  };
+  /** LLM quick initialization config (multi-provider, one apiKey per provider) */
+  llm?: LLMQuickInit;
   /** Optional model override */
   model?: string;
   /** Optional thinking mode override */

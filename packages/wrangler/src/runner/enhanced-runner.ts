@@ -17,9 +17,9 @@ import type {
   CompressionConfig,
   ILLMProvider,
   IToolRegistry,
+  LLMQuickInit,
 } from '@agentskillmania/colts';
 import type { Tool } from '@agentskillmania/colts';
-import { LLMClient } from '@agentskillmania/llm-client';
 import { Sandbox } from '@agentskillmania/sandbox';
 import { produce } from 'immer';
 import type { ZodTypeAny } from 'zod';
@@ -39,6 +39,7 @@ import { createCompactHandler } from '../command/handlers/compact.js';
 import { createSkillHandler } from '../command/handlers/skill.js';
 import { createSkillsHandler } from '../command/handlers/skills.js';
 import { CommandRegistry } from '../command/registry.js';
+import { createLLMClient, resolveDefaultModel } from '../llm/client.js';
 import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
 import { createSessionSupport } from '../session/support.js';
@@ -60,7 +61,7 @@ function resolveSearchProvider(provider?: SearchProvider | 'bing' | 'sogou'): Se
 
 function resolveLLMClient(options: {
   llmClient?: ILLMProvider;
-  llm?: { apiKey: string; provider?: string; baseUrl?: string; maxConcurrency?: number };
+  llm?: LLMQuickInit;
   model?: string;
 }): ILLMProvider {
   if (options.llmClient && options.llm) {
@@ -69,17 +70,8 @@ function resolveLLMClient(options: {
     );
   }
   if (options.llmClient) return options.llmClient;
-  if (options.llm) {
-    const { apiKey, provider = 'openai', baseUrl, maxConcurrency = 5 } = options.llm;
-    const client = new LLMClient({ baseUrl });
-    client.registerProvider({ name: provider, maxConcurrency });
-    client.registerApiKey({
-      key: apiKey,
-      provider,
-      maxConcurrency,
-      models: [{ modelId: options.model ?? 'glm-5.1', maxConcurrency }],
-    });
-    return client;
+  if (options.llm?.providers && options.llm.providers.length > 0) {
+    return createLLMClient(options.llm.providers);
   }
   throw new Error('Must specify either llmClient or llm.');
 }
@@ -211,6 +203,10 @@ export class EnhancedRunner {
     const mcpConfigPaths = options.mcpConfigPaths ?? [];
     const mcpTools = await loadMCPTools({ configPaths: mcpConfigPaths });
 
+    const resolvedModel =
+      options.model ??
+      (options.llm?.providers ? resolveDefaultModel(options.llm.providers) : 'glm-5.1');
+
     const sessionEnabled = options.enableSession !== false;
     const sessionSupport = sessionEnabled
       ? createSessionSupport({
@@ -218,9 +214,9 @@ export class EnhancedRunner {
           sessionBaseDir: options.sessionBaseDir,
           askHumanHandler: options.askHumanHandler,
           llmClient,
-          model: options.model ?? 'glm-5.1',
+          model: resolvedModel,
           runnerConfigSnapshot: {
-            model: options.model ?? 'glm-5.1',
+            model: resolvedModel,
             skillDirs: options.skillDirs,
             mcpConfigPaths,
             builtinTools: options.builtinTools,
@@ -310,8 +306,7 @@ export class EnhancedRunner {
       });
     }
 
-    // Resolve model metadata once — reused by compression config and diagnostics
-    const resolvedModel = options.model ?? 'glm-5.1';
+    // resolvedModel is computed earlier after llmClient resolution
     let modelMeta: { contextWindow: number; maxTokens: number } | undefined;
     try {
       modelMeta = llmClient.getModelMeta(resolvedModel);
@@ -368,7 +363,7 @@ export class EnhancedRunner {
           compressorInstance = new DefaultContextCompressor(
             compressionConfig,
             llmClient,
-            options.model
+            resolvedModel
           );
         }
       }
@@ -413,7 +408,7 @@ export class EnhancedRunner {
     }
 
     const runner = new AgentRunner({
-      model: options.model ?? 'glm-5.1',
+      model: resolvedModel,
       llmClient,
       tools: finalToolRegistry ? undefined : allTools,
       toolRegistry: finalToolRegistry,
@@ -443,7 +438,7 @@ export class EnhancedRunner {
     });
 
     const resolvedConfig: ResolvedRunnerConfig = {
-      model: options.model ?? 'glm-5.1',
+      model: resolvedModel,
       sandbox: !!sandboxInstance,
       enableSession: sessionEnabled,
       enableTodolist: todolistEnabled,
