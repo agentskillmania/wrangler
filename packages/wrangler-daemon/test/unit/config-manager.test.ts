@@ -51,25 +51,6 @@ describe('ConfigManager', () => {
     expect(config.server.host).toBe('localhost');
   });
 
-  it('normalizes legacy flat LLM config to providers shape', async () => {
-    await writeFile(
-      join(tempDir, 'config.yaml'),
-      'llm:\n  baseUrl: https://api.example.com\n  apiKey: sk-legacy\n  model: custom-model\n  contextWindow: 64000\n  maxTokens: 2048\n  reasoning: true\nserver:\n  port: 3100\n'
-    );
-
-    const manager = new ConfigManager(join(tempDir, 'config.yaml'));
-    await manager.init();
-
-    const config = manager.get();
-    expect(config.llm.providers[0].name).toBe('openai');
-    expect(config.llm.providers[0].apiKey).toBe('sk-legacy');
-    expect(config.llm.providers[0].baseUrl).toBe('https://api.example.com');
-    expect(config.llm.providers[0].models[0].modelId).toBe('custom-model');
-    expect(config.llm.providers[0].models[0].contextWindow).toBe(64000);
-    expect(config.llm.providers[0].models[0].maxTokens).toBe(2048);
-    expect(config.llm.providers[0].models[0].reasoning).toBe(true);
-  });
-
   it('updates a config value and persists to disk', async () => {
     const manager = new ConfigManager(join(tempDir, 'config.yaml'));
     await manager.init();

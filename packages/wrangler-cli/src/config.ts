@@ -8,14 +8,12 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import type { LLMProviderEntry, LLMQuickInit } from '@agentskillmania/colts';
+import type { LLMQuickInit } from '@agentskillmania/colts';
 import { Settings } from '@agentskillmania/settings-yaml';
 
 /** Default configuration directory */
 const CONFIG_DIR = path.join(os.homedir(), '.agentskillmania', 'wrangler');
 const CONFIG_FILE = 'config.yaml';
-
-const DEFAULT_MODEL = 'gpt-4o';
 
 /**
  * wrangler.yaml configuration structure
@@ -103,74 +101,6 @@ export function getGlobalConfigPath(globalDir?: string): string {
 }
 
 /**
- * Convert legacy flat LLM config to the new multi-provider shape.
- *
- * Supports old files that used:
- *   llm:
- *     provider: openai
- *     apiKey: sk-xxx
- *     model: gpt-4o
- *     baseUrl: ...
- *     maxConcurrency: 5
- *     contextWindow: 128000
- *     maxTokens: 4096
- *     reasoning: true
- */
-function normalizeLlmConfig(llm: unknown): LLMQuickInit | undefined {
-  if (!llm || typeof llm !== 'object') return undefined;
-
-  const flat = llm as Record<string, unknown>;
-
-  // Legacy flat config always takes precedence. This also handles the case
-  // where settings-yaml deep-merged a default `providers` array into an old
-  // flat config that only had `provider`/`apiKey` keys.
-  if (
-    typeof flat.provider === 'string' &&
-    flat.provider.length > 0 &&
-    typeof flat.apiKey === 'string'
-  ) {
-    const provider = {
-      name: flat.provider,
-      apiKey: flat.apiKey,
-    } as LLMProviderEntry;
-
-    if (typeof flat.baseUrl === 'string' && flat.baseUrl.length > 0) {
-      provider.baseUrl = flat.baseUrl;
-    }
-    if (typeof flat.maxConcurrency === 'number') {
-      provider.maxConcurrency = flat.maxConcurrency;
-    }
-
-    const modelId =
-      typeof flat.model === 'string' && flat.model.length > 0 ? flat.model : DEFAULT_MODEL;
-    const model: LLMProviderEntry['models'][number] = { modelId };
-
-    if (typeof flat.maxConcurrency === 'number') {
-      model.maxConcurrency = flat.maxConcurrency;
-    }
-    if (typeof flat.contextWindow === 'number') {
-      model.contextWindow = flat.contextWindow;
-    }
-    if (typeof flat.maxTokens === 'number') {
-      model.maxTokens = flat.maxTokens;
-    }
-    if (typeof flat.reasoning === 'boolean') {
-      model.reasoning = flat.reasoning;
-    }
-
-    provider.models = [model];
-    return { providers: [provider] };
-  }
-
-  const quick = llm as LLMQuickInit;
-  if (Array.isArray(quick.providers) && quick.providers.length > 0) {
-    return quick;
-  }
-
-  return undefined;
-}
-
-/**
  * Check if configuration contains required LLM settings
  *
  * @param config - Raw configuration object
@@ -200,15 +130,14 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
     await settings.initialize({ defaultYaml: DEFAULT_CONFIG_YAML });
     const config = settings.getValues();
 
-    const llm = normalizeLlmConfig(config.llm) ?? config.llm;
-    if (!isValidConfig({ ...config, llm })) {
+    if (!isValidConfig(config)) {
       return { hasValidConfig: false, configPath };
     }
 
     return {
       hasValidConfig: true,
       configPath,
-      llm,
+      llm: config.llm,
       maxSteps: config.maxSteps,
       requestTimeout: config.requestTimeout ?? 1800000,
     };

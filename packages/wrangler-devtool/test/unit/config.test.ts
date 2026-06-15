@@ -105,26 +105,6 @@ describe('loadConfig', () => {
     const config = await loadConfig(tempDir, { extraPaths: [configPath], skipGlobal: true });
     expect(config).toBeNull();
   });
-
-  it('normalizes legacy flat LLM config to providers shape', async () => {
-    const configPath = join(tempDir, 'wrangler.yaml');
-    await writeFile(
-      configPath,
-      `llm:\n  provider: openai\n  apiKey: sk-legacy\n  model: gpt-4\n  baseUrl: https://legacy.api.com\n  maxConcurrency: 8\n  contextWindow: 64000\n  maxTokens: 2048\n  reasoning: true\n`
-    );
-
-    const config = await loadConfig(tempDir, { extraPaths: [configPath], skipGlobal: true });
-
-    expect(config).not.toBeNull();
-    expect(config!.llm!.providers[0].name).toBe('openai');
-    expect(config!.llm!.providers[0].apiKey).toBe('sk-legacy');
-    expect(config!.llm!.providers[0].baseUrl).toBe('https://legacy.api.com');
-    expect(config!.llm!.providers[0].maxConcurrency).toBe(8);
-    expect(config!.llm!.providers[0].models[0].modelId).toBe('gpt-4');
-    expect(config!.llm!.providers[0].models[0].contextWindow).toBe(64000);
-    expect(config!.llm!.providers[0].models[0].maxTokens).toBe(2048);
-    expect(config!.llm!.providers[0].models[0].reasoning).toBe(true);
-  });
 });
 
 describe('requireLLMConfig', () => {
@@ -150,15 +130,5 @@ describe('requireLLMConfig', () => {
     expect(llm.providers[0].name).toBe('openai');
     expect(llm.providers[0].apiKey).toBe('sk-test');
     expect(llm.providers[0].models[0].modelId).toBe('gpt-4o');
-  });
-
-  it('normalizes legacy flat LLM config for requireLLMConfig', async () => {
-    const configPath = join(tempDir, 'wrangler.yaml');
-    await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-legacy\n  model: gpt-4\n`);
-
-    const llm = await requireLLMConfig(tempDir);
-    expect(llm.providers[0].name).toBe('openai');
-    expect(llm.providers[0].apiKey).toBe('sk-legacy');
-    expect(llm.providers[0].models[0].modelId).toBe('gpt-4');
   });
 });
