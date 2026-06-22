@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
+
 import type { FilesystemSkillProvider } from '@agentskillmania/colts';
-import { loadSkill } from '@agentskillmania/colts';
+import { addAssistantMessage, addToolMessage, loadSkill } from '@agentskillmania/colts';
 
 import type { CommandHandler } from '../types.js';
 
@@ -9,6 +11,11 @@ import type { CommandHandler } from '../types.js';
  * The handler behavior depends on whether a message body is provided:
  * - With body: Returns handled=false to continue execution, allowing the LLM to process the message with the skill loaded
  * - Without body: Returns handled=true with a confirmation message, stopping execution
+ *
+ * Skill instructions are persisted into conversation history as a synthesized
+ * `load_skill` tool-call + tool-result pair, mirroring the LLM-driven load_skill
+ * path. This keeps the slash-command shortcut consistent with the tool path so
+ * the compressor's skill-exemption can find and protect the instruction payload.
  *
  * @param skillProvider - The FilesystemSkillProvider instance to load skills from
  * @returns A CommandHandler that loads skills by name
@@ -46,7 +53,23 @@ export function createSkillHandler(skillProvider: FilesystemSkillProvider): Comm
         }
 
         const instructions = await skillProvider.loadInstructions(skillName);
-        const newState = loadSkill(ctx.state, skillName, instructions);
+        // Set skillState.current (for UI display). The instruction payload itself
+        // is persisted via the synthesized tool-result below — loadSkill does not
+        // store instructions into state by design.
+        let newState = loadSkill(ctx.state, skillName, instructions);
+
+        // Synthesize the same history shape the LLM-driven load_skill tool produces:
+        // an assistant message carrying the toolCall, followed by a tool message
+        // whose content is the skill instructions. This is the single point where
+        // instructions enter conversation history for the slash-command path.
+        const toolCallId = randomUUID();
+        newState = addAssistantMessage(newState, '', {
+          toolCalls: [{ id: toolCallId, name: 'load_skill', arguments: { name: skillName } }],
+        });
+        newState = addToolMessage(newState, instructions, {
+          toolCallId,
+          toolName: 'load_skill',
+        });
 
         // If body is present, continue run so LLM processes the message with skill loaded
         if (ctx.command.body) {
