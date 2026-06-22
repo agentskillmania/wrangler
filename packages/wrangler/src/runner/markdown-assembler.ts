@@ -7,8 +7,10 @@
  *
  * KV-cache design:
  * - Static prefix: YAML frontmatter + instructions + skill catalog + sub-agents + thinking
- * - Dynamic content (todolist, active skill): injected as <system-reminder>
+ * - Dynamic content (todolist): injected as <system-reminder>
  *   into the last user message, keeping the static prefix stable for caching
+ * - Skill instructions persist in history via load_skill tool results, so they
+ *   are NOT re-injected as a dynamic reminder
  * - Same-turn thoughts (after last user message) included; cross-turn skipped
  */
 
@@ -219,7 +221,7 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
    * Build the structured markdown system document
    *
    * Contains ONLY static content for KV-cache friendliness.
-   * Dynamic content (todolist, active skill) is in buildDynamicReminder().
+   * Dynamic content (todolist) is in buildDynamicReminder().
    */
   private buildSystemDocument(state: AgentState, opts: BuildMessagesOptions): string | null {
     const sections: string[] = [];
@@ -289,18 +291,9 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
       parts.push('## Task List\n' + lines.join('\n'));
     }
 
-    const skillState = state.context.skillState;
-    if (skillState?.current) {
-      parts.push('## Active Skill: ' + skillState.current);
-      if (skillState.loadedInstructions) {
-        parts.push(shiftHeadings(skillState.loadedInstructions, 2));
-      }
-      parts.push(
-        `You are currently executing the '${skillState.current}' skill.\n\n` +
-          'You may switch to another skill at any time using the `load_skill` tool.\n' +
-          'When you COMPLETE your task, you MUST call the `return_skill` tool.'
-      );
-    }
+    // Active skill is intentionally NOT injected here. Skill instructions now
+    // persist in conversation history as load_skill tool results, so a dynamic
+    // reminder would only duplicate them and waste tokens.
 
     return parts.length > 0 ? parts.join('\n\n') : null;
   }
