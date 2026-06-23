@@ -1,7 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+// Mock node:os homedir so loadConfig's global fallback (~/.agentskillmania/...)
+// resolves inside tempDir; tmpdir stays real (used to create tempDir). Keeps the
+// fallback feature intact, only isolates the test from real configs leaking in.
+const osMock = vi.hoisted(() => ({ homedirValue: '' }));
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  return { ...actual, homedir: () => osMock.homedirValue };
+});
+import { tmpdir } from 'node:os';
+
 import { loadConfig, requireLLMConfig } from '../../src/config.js';
 
 describe('loadConfig', () => {
@@ -13,6 +23,8 @@ describe('loadConfig', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+    osMock.homedirValue = '';
     await rm(tempDir, { recursive: true, force: true });
   });
 
@@ -141,6 +153,14 @@ describe('requireLLMConfig', () => {
   });
 
   it('throws for legacy flat LLM config', async () => {
+    // Only this case needs fallback isolation: legacy flat is invalid, so loadConfig
+    // would otherwise fall through to process.cwd()/global and pick up a real
+    // providers config. Pin the fallback chain to tempDir for this case only;
+    // afterEach restores. Other cases write valid config that returns on the first
+    // search path, so they never hit fallback and don't need mocking.
+    osMock.homedirValue = tempDir;
+    vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+
     const configPath = join(tempDir, 'wrangler.yaml');
     await writeFile(configPath, `llm:\n  provider: openai\n  apiKey: sk-legacy\n  model: gpt-4\n`);
 

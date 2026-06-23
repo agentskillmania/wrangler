@@ -111,9 +111,7 @@ describe('createSkillHandler', () => {
 
       // The synthesized pair: an assistant message with a load_skill toolCall,
       // followed by a tool message whose content is the instructions.
-      const toolMsg = messages.find(
-        (m) => m.role === 'tool' && m.toolName === 'load_skill'
-      );
+      const toolMsg = messages.find((m) => m.role === 'tool' && m.toolName === 'load_skill');
       expect(toolMsg).toBeDefined();
       expect(toolMsg!.content).toContain('Code Review Skill');
 
@@ -140,9 +138,7 @@ describe('createSkillHandler', () => {
       expect(result.handled).toBe(true);
       expect(result.state).toBeDefined();
       const messages = result.state!.context.messages;
-      const toolMsg = messages.find(
-        (m) => m.role === 'tool' && m.toolName === 'load_skill'
-      );
+      const toolMsg = messages.find((m) => m.role === 'tool' && m.toolName === 'load_skill');
       expect(toolMsg).toBeDefined();
       expect(toolMsg!.content).toBe('Review instructions body.');
     });
