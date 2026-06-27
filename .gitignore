@@ -44,6 +44,9 @@ Thumbs.db
 .full-review/
 .fallow/
 
+# Spec-plan runtime data (plans/specs persisted by EnhancedRunner)
+.agentskillmania/
+
 # AI agent docs (local copies)
 AGENTS.md
 CLAUDE.md
