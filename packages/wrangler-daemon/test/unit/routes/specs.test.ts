@@ -25,7 +25,7 @@ describe('Spec API Routes', () => {
     sessionsDir = join(tempDir, 'sessions');
     await mkdir(sessionsDir, { recursive: true });
     workspacePath = join(tempDir, 'workspace');
-    specStore = new SpecStore(sessionsDir, workspacePath);
+    specStore = new SpecStore(sessionsDir);
 
     fastify = Fastify();
     await fastify.register(specRoutes);

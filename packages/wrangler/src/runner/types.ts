@@ -82,6 +82,8 @@ export interface EnhancedRunnerOptions {
   enableSession?: boolean;
   /** Whether to enable todolist support (default: true) */
   enableTodolist?: boolean;
+  /** Whether to enable spec-plan tools (default: true) */
+  enableSpecPlan?: boolean;
   /** Whether to enable command middleware (default: true) */
   enableCommands?: boolean;
   /** Source of session creation — automatically set by AgentLoader when loading from agent directory */
@@ -101,6 +103,8 @@ export interface ResolvedRunnerConfig {
   enableSession: boolean;
   /** Whether todolist support is active */
   enableTodolist: boolean;
+  /** Whether spec-plan tools are active */
+  enableSpecPlan: boolean;
   /** Whether command middleware is active */
   enableCommands: boolean;
   /** Whether thinking/reasoning mode is enabled */
@@ -123,6 +127,8 @@ export interface ResolvedRunnerConfig {
   sessionToolCount: number;
   /** Number of todolist tools */
   todolistToolCount: number;
+  /** Number of spec-plan tools */
+  specPlanToolCount: number;
   /** Names of all active middleware */
   middlewareNames: string[];
   /** Whether context compression is configured */

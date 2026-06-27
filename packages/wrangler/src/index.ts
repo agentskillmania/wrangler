@@ -91,9 +91,9 @@ export type {
   SpecDocument,
   PlanDocument,
 } from './spec-plan/index.js';
-export { WRITING_SPEC_CONTENT, REVIEW_SPEC_CONTENT } from './spec-plan/index.js';
-export { WRITING_PLAN_CONTENT, REVIEW_PLAN_CONTENT } from './spec-plan/index.js';
-export { EXECUTE_PLAN_CONTENT } from './spec-plan/index.js';
+export { WRITE_SPEC_CONTENT, REVIEW_SPEC_CONTENT } from './spec-plan/index.js';
+export { WRITE_PLAN_CONTENT, REVIEW_PLAN_CONTENT } from './spec-plan/index.js';
+export { EXECUTE_PLAN_CONTENT, CONCEIVE_CONTENT } from './spec-plan/index.js';
 
 // Crew (Layer 8)
 export { Crew } from './crew/index.js';

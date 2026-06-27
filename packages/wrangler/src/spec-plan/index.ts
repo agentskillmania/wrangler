@@ -27,8 +27,9 @@ export type {
 } from './naming.js';
 
 // Skill content
-export { WRITING_SPEC_CONTENT } from './skills/writing-spec.js';
+export { WRITE_SPEC_CONTENT } from './skills/write-spec.js';
 export { REVIEW_SPEC_CONTENT } from './skills/review-spec.js';
-export { WRITING_PLAN_CONTENT } from './skills/writing-plan.js';
+export { WRITE_PLAN_CONTENT } from './skills/write-plan.js';
 export { REVIEW_PLAN_CONTENT } from './skills/review-plan.js';
 export { EXECUTE_PLAN_CONTENT } from './skills/execute-plan.js';
+export { CONCEIVE_CONTENT } from './skills/conceive.js';

@@ -1,6 +1,5 @@
-import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import yaml from 'js-yaml';
 
@@ -14,29 +13,18 @@ const VALID_TRANSITIONS: Record<SpecStatus, SpecStatus[]> = {
   superseded: [],
 };
 
-function hashWorkspacePath(workspacePath: string): string {
-  const absolute = resolve(workspacePath);
-  return createHash('md5').update(absolute).digest('hex');
-}
-
 /**
  * Spec 文档存储
  *
- * 按 workspace 路径 MD5 分组存储 spec 文档。
+ * 直接在 baseDir 下存储 spec 文档，不再使用 workspace hash 子目录。
  * 文档格式为 YAML frontmatter + markdown body。
+ * 文件名：{name}-spec-v{version}.md
  */
 export class SpecStore {
-  private readonly workspaceHash: string;
-
-  constructor(
-    private readonly baseDir: string,
-    private readonly workspacePath: string
-  ) {
-    this.workspaceHash = hashWorkspacePath(workspacePath);
-  }
+  constructor(private readonly baseDir: string) {}
 
   private getWorkspaceDir(): string {
-    return join(this.baseDir, this.workspaceHash);
+    return this.baseDir;
   }
 
   /** 保存 spec 文档 */
@@ -47,7 +35,6 @@ export class SpecStore {
     const fileName = formatSpecFileName({
       name: doc.meta.name,
       version: doc.meta.version,
-      timestamp: doc.meta.createdAt.replace(/[-:]/g, '').replace('T', '-').slice(0, 15),
     });
     const filePath = join(dir, fileName);
 
@@ -65,7 +52,7 @@ export class SpecStore {
     await writeFile(filePath, content, 'utf-8');
   }
 
-  /** 列出当前 workspace 的所有 spec，按时间倒序 */
+  /** 列出当前目录的所有 spec，按时间倒序 */
   async list(): Promise<SpecDocument[]> {
     const dir = this.getWorkspaceDir();
     let entries: string[];
@@ -160,6 +147,9 @@ export class SpecStore {
   /** 解析 YAML frontmatter + markdown body */
   private parseDocument(content: string): SpecDocument {
     const frontmatterEnd = content.indexOf('---', 4);
+    if (frontmatterEnd === -1) {
+      throw new Error('Invalid spec document: missing YAML frontmatter');
+    }
     const yamlStr = content.slice(4, frontmatterEnd);
     const body = content.slice(frontmatterEnd + 3).trimStart();
 

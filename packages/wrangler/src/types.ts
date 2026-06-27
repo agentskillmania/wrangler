@@ -27,6 +27,8 @@ export interface RunnerConfigSnapshot {
   enableSession?: boolean;
   /** Todolist support enabled */
   enableTodolist?: boolean;
+  /** Spec-plan tools enabled */
+  enableSpecPlan?: boolean;
   /** Commands enabled */
   enableCommands?: boolean;
   /** A2UI support */

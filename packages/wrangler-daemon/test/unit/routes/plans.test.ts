@@ -25,7 +25,7 @@ describe('Plan API Routes', () => {
     sessionsDir = join(tempDir, 'sessions');
     await mkdir(sessionsDir, { recursive: true });
     workspacePath = join(tempDir, 'workspace');
-    planStore = new PlanStore(sessionsDir, workspacePath);
+    planStore = new PlanStore(sessionsDir);
 
     fastify = Fastify();
     await fastify.register(planRoutes);

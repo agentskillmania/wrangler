@@ -1,6 +1,5 @@
-import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import yaml from 'js-yaml';
 
@@ -15,29 +14,18 @@ const VALID_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
   completed: [],
 };
 
-function hashWorkspacePath(workspacePath: string): string {
-  const absolute = resolve(workspacePath);
-  return createHash('md5').update(absolute).digest('hex');
-}
-
 /**
  * Plan 文档存储
  *
- * 按 workspace 路径 MD5 分组存储 plan 文档。
+ * 直接在 baseDir 下存储 plan 文档，不再使用 workspace hash 子目录。
  * plan 文件名包含 spec 版本和 plan 版本，可追溯到对应 spec。
+ * 文件名：{name}-v{specVersion}-plan-v{version}.md
  */
 export class PlanStore {
-  private readonly workspaceHash: string;
-
-  constructor(
-    private readonly baseDir: string,
-    private readonly workspacePath: string
-  ) {
-    this.workspaceHash = hashWorkspacePath(workspacePath);
-  }
+  constructor(private readonly baseDir: string) {}
 
   private getWorkspaceDir(): string {
-    return join(this.baseDir, this.workspaceHash);
+    return this.baseDir;
   }
 
   /** 保存 plan 文档 */
@@ -49,7 +37,6 @@ export class PlanStore {
       name: doc.meta.name,
       specVersion: doc.meta.specVersion,
       version: doc.meta.version,
-      timestamp: doc.meta.createdAt.replace(/[-:]/g, '').replace('T', '-').slice(0, 15),
     });
     const filePath = join(dir, fileName);
 
@@ -69,7 +56,7 @@ export class PlanStore {
     await writeFile(filePath, content, 'utf-8');
   }
 
-  /** 列出当前 workspace 的所有 plan，按时间倒序 */
+  /** 列出当前目录的所有 plan，按时间倒序 */
   async list(): Promise<PlanDocument[]> {
     const dir = this.getWorkspaceDir();
     let entries: string[];
@@ -178,6 +165,9 @@ export class PlanStore {
   /** 解析 YAML frontmatter + markdown body */
   private parseDocument(content: string): PlanDocument {
     const frontmatterEnd = content.indexOf('---', 4);
+    if (frontmatterEnd === -1) {
+      throw new Error('Invalid plan document: missing YAML frontmatter');
+    }
     const yamlStr = content.slice(4, frontmatterEnd);
     const body = content.slice(frontmatterEnd + 3).trimStart();
 

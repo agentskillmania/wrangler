@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PlanStore } from '../../../src/spec-plan/plan-store.js';
 import type { PlanDocument } from '../../../src/spec-plan/types.js';
@@ -9,8 +9,6 @@ describe('PlanStore', () => {
   let testDir: string;
   let store: PlanStore;
 
-  const workspacePath = '/test/project';
-
   const makeDoc = (overrides: Partial<PlanDocument['meta']> = {}): PlanDocument => ({
     meta: {
       name: 'user-login',
@@ -18,7 +16,7 @@ describe('PlanStore', () => {
       specVersion: 1,
       version: 1,
       status: 'draft',
-      workspacePath,
+      workspacePath: '/test/project',
       createdAt: '2026-04-23T15:00:00.000Z',
       updatedAt: '2026-04-23T15:00:00.000Z',
       ...overrides,
@@ -29,7 +27,7 @@ describe('PlanStore', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), `plan-store-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
-    store = new PlanStore(testDir, workspacePath);
+    store = new PlanStore(testDir);
   });
 
   afterEach(async () => {
@@ -54,6 +52,19 @@ describe('PlanStore', () => {
       expect(doc!.meta.specVersion).toBe(2);
       expect(doc!.meta.version).toBe(3);
     });
+
+    it('stores files directly under baseDir without hash subdirectory', async () => {
+      await store.save(makeDoc());
+      const list = await store.list();
+      expect(list).toHaveLength(1);
+      expect(list[0].meta.name).toBe('user-login');
+    });
+
+    it('file name does NOT contain timestamp', async () => {
+      await store.save(makeDoc());
+      const doc = await store.getLatestForSpec('user-login');
+      expect(doc).not.toBeNull();
+    });
   });
 
   // --- list ---
@@ -73,6 +84,38 @@ describe('PlanStore', () => {
       expect(list[0].meta.version).toBe(2);
       expect(list[1].meta.version).toBe(1);
     });
+
+    it('filters out non-plan files', async () => {
+      await mkdir(testDir, { recursive: true });
+      await writeFile(join(testDir, 'not-a-plan.md'), '---\nname: test\n---\nbody');
+      await store.save(makeDoc());
+      const list = await store.list();
+      expect(list).toHaveLength(1);
+    });
+  });
+
+  // --- Negative paths: list ---
+
+  describe('list - negative paths', () => {
+    it('handles non-existent directory gracefully', async () => {
+      const tempDir = join(tmpdir(), `empty-plan-${Date.now()}`);
+      try {
+        const emptyStore = new PlanStore(tempDir);
+        const list = await emptyStore.list();
+        expect(list).toEqual([]);
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('skips corrupt YAML files gracefully', async () => {
+      await mkdir(testDir, { recursive: true });
+      await writeFile(join(testDir, 'bad-plan-v1-plan-v1.md'), 'no frontmatter here');
+      await store.save(makeDoc());
+      const list = await store.list();
+      expect(list.length).toBeGreaterThanOrEqual(1);
+      expect(list.some((doc) => doc.meta.name === 'user-login')).toBe(true);
+    });
   });
 
   // --- get ---
@@ -89,6 +132,15 @@ describe('PlanStore', () => {
 
       const doc = await store.get('user-login', 1, 1);
       expect(doc!.meta.version).toBe(1);
+    });
+
+    // --- Negative paths: get ---
+
+    it('returns null when directory does not exist', async () => {
+      const tempDir = join(tmpdir(), `nonexistent-plan-${Date.now()}`);
+      const emptyStore = new PlanStore(tempDir);
+      const doc = await emptyStore.get('anything', 1, 1);
+      expect(doc).toBeNull();
     });
   });
 
@@ -115,6 +167,15 @@ describe('PlanStore', () => {
 
       const doc = await store.getLatestForSpec('user-login', 1);
       expect(doc!.meta.specVersion).toBe(1);
+    });
+
+    // --- Negative paths: getLatestForSpec ---
+
+    it('returns null when directory does not exist', async () => {
+      const tempDir = join(tmpdir(), `nonexistent-latest-plan-${Date.now()}`);
+      const emptyStore = new PlanStore(tempDir);
+      const doc = await emptyStore.getLatestForSpec('anything');
+      expect(doc).toBeNull();
     });
   });
 
@@ -153,14 +214,49 @@ describe('PlanStore', () => {
     it('throws when plan not found', async () => {
       await expect(store.updateStatus('nonexistent', 1, 1, 'approved')).rejects.toThrow();
     });
+
+    // --- Negative paths: updateStatus ---
+
+    it('throws with descriptive error message on invalid transition', async () => {
+      await store.save(makeDoc({ status: 'draft' }));
+      await expect(store.updateStatus('user-login', 1, 1, 'completed')).rejects.toThrow(
+        /Invalid status transition/
+      );
+    });
+
+    it('throws when plan not found with descriptive message', async () => {
+      await expect(store.updateStatus('nonexistent', 1, 1, 'approved')).rejects.toThrow(
+        /Plan not found/
+      );
+    });
+
+    it('cannot transition from completed to any other status', async () => {
+      await store.save(makeDoc({ status: 'completed' }));
+      await expect(store.updateStatus('user-login', 1, 1, 'draft')).rejects.toThrow();
+      await expect(store.updateStatus('user-login', 1, 1, 'executing')).rejects.toThrow();
+    });
   });
 
   // --- spec isolation ---
 
   describe('spec isolation', () => {
     it('different specs do not interfere', async () => {
-      await store.save(makeDoc({ name: 'plan-a', specName: 'spec-a', specVersion: 1, version: 1 }));
-      await store.save(makeDoc({ name: 'plan-b', specName: 'spec-b', specVersion: 1, version: 1 }));
+      await store.save(
+        makeDoc({
+          name: 'plan-a',
+          specName: 'spec-a',
+          specVersion: 1,
+          version: 1,
+        })
+      );
+      await store.save(
+        makeDoc({
+          name: 'plan-b',
+          specName: 'spec-b',
+          specVersion: 1,
+          version: 1,
+        })
+      );
 
       const latestA = await store.getLatestForSpec('spec-a');
       const latestB = await store.getLatestForSpec('spec-b');
@@ -179,29 +275,29 @@ describe('PlanStore', () => {
     });
   });
 
-  // --- workspace path normalization ---
+  // --- plan isolation (no workspace hash — files share same dir) ---
 
-  describe('workspace path normalization', () => {
-    it('relative and absolute paths to same workspace produce same directory', async () => {
-      await store.save(makeDoc());
+  describe('plan isolation by name/version', () => {
+    it('same spec name with different plan names', async () => {
+      await store.save(
+        makeDoc({
+          name: 'plan-v1',
+          specName: 'my-spec',
+          specVersion: 1,
+          version: 1,
+        })
+      );
+      await store.save(
+        makeDoc({
+          name: 'plan-v2',
+          specName: 'my-spec',
+          specVersion: 1,
+          version: 1,
+        })
+      );
 
-      const relPath = relative(process.cwd(), workspacePath);
-      const relativeStore = new PlanStore(testDir, relPath);
-      const list = await relativeStore.list();
-      expect(list).toHaveLength(1);
-      expect(list[0].meta.name).toBe('user-login');
-    });
-  });
-
-  // --- workspace isolation ---
-
-  describe('workspace isolation', () => {
-    it('does not see plans from different workspace', async () => {
-      await store.save(makeDoc());
-
-      const otherStore = new PlanStore(testDir, '/other/workspace');
-      const list = await otherStore.list();
-      expect(list).toHaveLength(0);
+      const plans = await store.list();
+      expect(plans).toHaveLength(2);
     });
   });
 });

@@ -3,83 +3,56 @@ name: execute-plan
 description: plan 批准后触发。创建 todolist，逐任务执行并验证验收条件。
 ---
 
-# Execute：按计划行动
+# Execute：按计划执行
 
-你是执行者。你的任务是按照已批准的 plan 逐步完成工作——不跳步、不猜测、不偷懒。
+你是执行者。按照已批准的 plan 逐步完成工作——不跳步、不猜测、不偷懒。
+
+## 用到的工具
+
+- `read_plan(name, specVersion?, version?)` — 从 store 读 plan
+- `read_spec(name, version?)` — 读关联 spec（理解验收标准）
+- `todolist` — 管理任务列表（`reset` + `update`）
+- `update_plan_status(name, specVersion, version, status)` — 改状态
+- `ask_human` — 汇报进展、报告阻塞
 
 ## 前置条件
 
-必须存在已批准的 plan。没有的话，告诉用户先用 \`writing-plan\` skill。
+用 `read_plan` 确认 plan 状态为 `approved`。不是就提示用户先完成 plan 流程。
 
 ## 阶段一：准备
 
-1. **读 plan。** 加载最新的已批准 plan 文档。
-2. **加载关联 spec。** 读取 plan 对应的 spec，理解背景和验收标准。
-3. **确认工作环境。** 确认当前 workspace、相关文件和资源就绪。
+1. 用 `read_plan` 读 approved plan
+2. 用 `read_spec` 读关联 spec（了解背景和验收标准）
+3. 确认工作环境就绪
 
 ## 阶段二：创建 todolist
 
-用 \`todolist\` 工具的 \`reset\` action，把 plan 中的所有任务映射为 todo item。
+用 `todolist reset` 映射 plan 任务：
 
-映射规则：
+- 每任务 → 一个 todo item
+- subject = 任务标题
+- description = 合并的验收条件
+- 保持 plan 顺序，可并行标 `[P]`
 
-- 每个 plan 任务 → 一个 todo item
-- todo 的 \`subject\` = plan 任务的标题
-- todo 的 \`description\` = plan 任务的验收条件（合并为一段文字）
-- 保持 plan 中的顺序
-- 已标注 \`[P]\` 的可并行任务，在 description 中标记
-
-映射完成后，向用户确认："已创建 {N} 个任务，准备开始执行？"
+向用户确认："已创建 {N} 个任务，准备开始执行？"
 
 ## 阶段三：逐任务执行
 
-对每个 todo item，按以下循环：
+对每个 todo item：
+1. `todolist update` → `in_progress`
+2. 理解任务内容
+3. 按步骤执行，能自己找的资源自己找
+4. 条目验证验收条件
+5. 全部通过 → `todolist update` → `completed`
 
-### 1. 标记开始
-
-用 \`todolist update\` 将当前任务标记为 \`in_progress\`。
-
-### 2. 理解任务
-
-读取当前任务的完整内容，包括范围、验收条件、步骤。
-
-### 3. 执行步骤
-
-按 plan 中定义的步骤顺序执行。每完成一步，确认结果。
-
-如果步骤依赖外部资源或信息：
-- 能自己找到的，自己找（读文件、查文档）
-- 找不到的，通过 \`ask_human\` 问，给出你的判断和推荐
-
-### 4. 验证验收条件
-
-每个任务完成后，逐条检查验收条件。每条验收条件必须是可检查的具体事实。
-
-- **通过** → 继续下一步
-- **不通过** → 修复问题，重新验证
-
-### 5. 标记完成
-
-所有验收条件通过后，用 \`todolist update\` 将任务标记为 \`completed\`。
-
-### 异常处理
-
-遇到以下情况时，停下来用 \`ask_human\` 汇报：
-
-- **阻塞**：某个步骤无法继续（缺少依赖、权限不足、环境问题）
-- **偏离**：发现 plan 与实际情况不符，需要调整
-- **风险**：执行中发现了 plan 没有预料到的问题
-
-不要自己悄悄绕过问题。停下来，说清楚发生了什么，给出你的建议，让用户决定。
+**异常处理**（停下来 ask_human）：
+- 阻塞：步骤无法继续
+- 偏离：plan 与实际不符
+- 风险：未预料的问题
 
 ## 阶段四：收尾
 
-所有任务完成后：
-
-1. **运行整体验证。** 执行 plan 中定义的整体验证方法（如果有）。
-2. **汇总结果。** 用 \`ask_human\` 展示：
-   - 完成的任务数 / 总任务数
-   - 执行中遇到的问题和处理方式
-   - 需要用户关注的事项（如果有）
-3. **更新 plan 状态。** 用 \`updateStatus\` 将 plan 状态改为 \`completed\`。
-4. **返回。** 调用 \`return_skill\` 返回执行摘要。
+1. 运行整体验证
+2. 用 `ask_human` 汇总：完成数/总数、问题、关注事项
+3. `update_plan_status(name, specVersion, version, 'completed')`
+4. 任务完成

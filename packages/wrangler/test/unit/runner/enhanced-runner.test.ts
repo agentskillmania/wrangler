@@ -66,6 +66,18 @@ vi.mock('../../../src/todolist/support.js', () => ({
   }),
 }));
 
+vi.mock('../../../src/spec-plan/spec-store.js', () => ({
+  SpecStore: vi.fn().mockImplementation(() => ({})),
+}));
+
+vi.mock('../../../src/spec-plan/plan-store.js', () => ({
+  PlanStore: vi.fn().mockImplementation(() => ({})),
+}));
+
+vi.mock('../../../src/tools/spec-plan/index.js', () => ({
+  createSpecPlanTools: vi.fn().mockReturnValue([]),
+}));
+
 vi.mock('../../../src/runner/system-prompt.js', () => ({
   buildTimeContext: vi.fn().mockReturnValue(`---
 Time: Tuesday, 05/13/2026, 10:06
@@ -490,6 +502,33 @@ describe('EnhancedRunner', () => {
     expect(middlewareNames).not.toContain('todolist');
   });
 
+  it('should skip spec-plan tools when enableSpecPlan is false', async () => {
+    const { createSpecPlanTools } = await import('../../../src/tools/spec-plan/index.js');
+    vi.mocked(createSpecPlanTools).mockClear();
+
+    await EnhancedRunner.create(makeOptions({ enableSpecPlan: false }));
+
+    expect(createSpecPlanTools).not.toHaveBeenCalled();
+  });
+
+  it('should include spec-plan tools when enableSpecPlan is true', async () => {
+    const { createSpecPlanTools } = await import('../../../src/tools/spec-plan/index.js');
+    vi.mocked(createSpecPlanTools).mockClear();
+
+    await EnhancedRunner.create(makeOptions({ enableSpecPlan: true }));
+
+    expect(createSpecPlanTools).toHaveBeenCalled();
+  });
+
+  it('should include spec-plan tools by default (enableSpecPlan not set)', async () => {
+    const { createSpecPlanTools } = await import('../../../src/tools/spec-plan/index.js');
+    vi.mocked(createSpecPlanTools).mockClear();
+
+    await EnhancedRunner.create(makeOptions());
+
+    expect(createSpecPlanTools).toHaveBeenCalled();
+  });
+
   it('should skip command middleware when enableCommands is false', async () => {
     await EnhancedRunner.create(makeOptions({ enableCommands: false }));
 
@@ -722,6 +761,7 @@ describe('EnhancedRunner', () => {
       expect(config.mcpToolCount).toBe(0);
       expect(config.sessionToolCount).toBeGreaterThanOrEqual(0);
       expect(config.todolistToolCount).toBeGreaterThanOrEqual(0);
+      expect(config.specPlanToolCount).toBeGreaterThanOrEqual(0);
     });
 
     it('includes middleware names', async () => {
@@ -743,6 +783,14 @@ describe('EnhancedRunner', () => {
       const config = runner.getConfig();
       expect(config.enableTodolist).toBe(false);
       expect(config.middlewareNames).not.toContain('todolist');
+    });
+
+    it('returns enableSpecPlan reflecting the option', async () => {
+      const runner1 = await EnhancedRunner.create(makeOptions({ enableSpecPlan: true }));
+      expect(runner1.getConfig().enableSpecPlan).toBe(true);
+
+      const runner2 = await EnhancedRunner.create(makeOptions({ enableSpecPlan: false }));
+      expect(runner2.getConfig().enableSpecPlan).toBe(false);
     });
 
     it('returns thinkingEnabled reflecting the option (true)', async () => {
@@ -897,6 +945,29 @@ describe('EnhancedRunner', () => {
       const todoTool = tools.find((t) => t.name === 'todo_read');
       expect(todoTool?.type).toBe('todolist');
       expect(todoTool?.enabled).toBe(true);
+    });
+
+    it('returns spec-plan tools with type=builtin', async () => {
+      const { createSpecPlanTools } = await import('../../../src/tools/spec-plan/index.js');
+      vi.mocked(createSpecPlanTools).mockReturnValueOnce([
+        { name: 'save_spec', description: 'Save a spec' },
+        { name: 'read_spec', description: 'Read a spec' },
+      ] as any);
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
+      const runner = await EnhancedRunner.create(
+        makeOptions({
+          enableSession: false,
+          enableTodolist: false,
+          enableSpecPlan: true,
+          enableCommands: false,
+          extraTools: [],
+        })
+      );
+      const tools = runner.getToolInfo();
+      const saveSpecTool = tools.find((t) => t.name === 'save_spec');
+      expect(saveSpecTool?.type).toBe('builtin');
+      expect(saveSpecTool?.enabled).toBe(true);
     });
 
     it('returns consistent content across repeated calls', async () => {

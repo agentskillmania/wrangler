@@ -4,8 +4,8 @@ import type { FastifyInstance } from 'fastify';
 
 import { SESSIONS_DIR } from '../constants.js';
 
-function getSpecStore(workspacePath: string): SpecStore {
-  return new SpecStore(SESSIONS_DIR, workspacePath);
+function getSpecStore(_workspacePath: string): SpecStore {
+  return new SpecStore(SESSIONS_DIR);
 }
 
 export async function specRoutes(fastify: FastifyInstance): Promise<void> {

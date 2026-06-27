@@ -4,8 +4,8 @@ import type { FastifyInstance } from 'fastify';
 
 import { SESSIONS_DIR } from '../constants.js';
 
-function getPlanStore(workspacePath: string): PlanStore {
-  return new PlanStore(SESSIONS_DIR, workspacePath);
+function getPlanStore(_workspacePath: string): PlanStore {
+  return new PlanStore(SESSIONS_DIR);
 }
 
 export async function planRoutes(fastify: FastifyInstance): Promise<void> {

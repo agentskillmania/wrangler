@@ -43,6 +43,8 @@ import { createLLMClient, resolveDefaultModel } from '../llm/client.js';
 import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
 import { createSessionSupport } from '../session/support.js';
+import { PlanStore } from '../spec-plan/plan-store.js';
+import { SpecStore } from '../spec-plan/spec-store.js';
 import { createTodolistSupport } from '../todolist/support.js';
 import { createA2UITools, A2UIMiddleware } from '../tools/a2ui/index.js';
 import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js';
@@ -50,6 +52,7 @@ import { createBuiltinTools } from '../tools/builtin/index.js';
 import type { SearchProvider } from '../tools/builtin/index.js';
 import { SogouScrapeSearchProvider } from '../tools/builtin/sogou-scrape-search.js';
 import { loadMCPTools } from '../tools/mcp/index.js';
+import { createSpecPlanTools } from '../tools/spec-plan/index.js';
 
 const nodeRequire = typeof require === 'function' ? require : createRequire(import.meta.url);
 
@@ -223,6 +226,7 @@ export class EnhancedRunner {
             sandbox: options.sandbox,
             enableSession: options.enableSession,
             enableTodolist: options.enableTodolist,
+            enableSpecPlan: options.enableSpecPlan,
             enableCommands: options.enableCommands,
             a2ui: options.a2ui,
           },
@@ -235,6 +239,16 @@ export class EnhancedRunner {
       ? createTodolistSupport()
       : { tools: [] as Tool<ZodTypeAny>[], middleware: { name: 'todolist' } };
 
+    // Spec-plan support (conditional)
+    const specPlanEnabled = options.enableSpecPlan !== false;
+    const specPlanBaseDir = path.join(
+      options.sessionBaseDir ?? path.join(workspacePath, '.agentskillmania'),
+      'spec-plan'
+    );
+    const specStore = new SpecStore(path.join(specPlanBaseDir, 'specs'));
+    const planStore = new PlanStore(path.join(specPlanBaseDir, 'plans'));
+    const specPlanTools = specPlanEnabled ? createSpecPlanTools(specStore, planStore) : [];
+
     // A2UI support (conditional)
     const a2uiEnabled = options.a2ui?.enabled === true;
     const a2uiTools = a2uiEnabled ? createA2UITools() : [];
@@ -243,6 +257,7 @@ export class EnhancedRunner {
     const allTools: Tool<ZodTypeAny>[] = [
       ...sessionSupport.tools,
       ...filteredBuiltinTools,
+      ...specPlanTools,
       ...mcpTools,
       ...todolistSupport.tools,
       ...a2uiTools,
@@ -262,6 +277,15 @@ export class EnhancedRunner {
         description: tool.description,
         type: 'builtin',
         enabled: filteredNameSet.has(tool.name),
+      });
+    }
+    // Add spec-plan tools (type='builtin' per design)
+    for (const tool of specPlanTools) {
+      toolMeta.set(tool.name, {
+        name: tool.name,
+        description: tool.description,
+        type: 'builtin',
+        enabled: true,
       });
     }
     // Add session, MCP, todolist, a2ui, extra tools (always enabled if present)
@@ -442,6 +466,7 @@ export class EnhancedRunner {
       sandbox: !!sandboxInstance,
       enableSession: sessionEnabled,
       enableTodolist: todolistEnabled,
+      enableSpecPlan: specPlanEnabled,
       enableCommands: commandsEnabled,
       thinkingEnabled: options.thinkingEnabled ?? false,
       enablePromptThinking: options.enablePromptThinking ?? false,
@@ -453,6 +478,7 @@ export class EnhancedRunner {
       mcpToolCount: mcpTools.length,
       sessionToolCount: sessionSupport.tools.length,
       todolistToolCount: todolistSupport.tools.length,
+      specPlanToolCount: specPlanTools.length,
       middlewareNames: [
         ...(commandMiddleware ? [commandMiddleware.name] : []),
         ...(sessionEnabled ? sessionSupport.middlewares.map((m) => m.name) : []),
@@ -504,6 +530,7 @@ export class EnhancedRunner {
       sandbox: rc.sandbox,
       enableSession: rc.enableSession,
       enableTodolist: rc.enableTodolist,
+      enableSpecPlan: rc.enableSpecPlan,
       enableCommands: rc.enableCommands,
       a2ui: rc.a2ui,
       sessionBaseDir: path.dirname(path.dirname(sessionDir)),
