@@ -1,15 +1,19 @@
 import React from 'react';
+import { Text } from 'ink';
 import { render } from 'ink-testing-library';
 import { InputBar } from '../../../src/components/input-bar.js';
 import type { ParsedCommand } from '../../../src/types.js';
 
 // Mock TextInput to capture its onSubmit callback for programmatic invocation.
+// NOTE: the mock must render placeholder via Ink's <Text> (not an HTML <span>),
+// because Ink only renders its own components — HTML tags render as nothing,
+// which would make lastFrame() assertions falsely fail.
 let textInputOnSubmit: ((input: string) => void) | null = null;
 
 vi.mock('@inkjs/ui', () => ({
   TextInput: (props: { onSubmit: (input: string) => void; placeholder?: string }) => {
     textInputOnSubmit = props.onSubmit;
-    return React.createElement('span', { 'data-testid': 'text-input' }, props.placeholder ?? '');
+    return React.createElement(Text, null, props.placeholder ?? '');
   },
 }));
 
