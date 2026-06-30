@@ -8,7 +8,7 @@ import type { DecoratedFastifyInstance } from '../types.js';
  * Provides endpoints for:
  * - Getting current daemon config
  * - Updating config values
- * - Reading/writing arbitrary config files
+ * - Reading/writing the daemon config raw content
  */
 export async function configRoutes(fastify: FastifyInstance): Promise<void> {
   const decorated = fastify as unknown as DecoratedFastifyInstance;
@@ -36,30 +36,37 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
-   * GET /api/config/file?path=<filepath>
+   * GET /api/config/raw
    *
-   * Reads and returns the content of an arbitrary config file.
-   * Query parameter `path` is required.
+   * Returns the raw content of the daemon config file.
+   * Always reads from the daemon's own configPath — no path parameter.
    */
-  fastify.get('/api/config/file', async (request) => {
-    const query = request.query as { path?: string };
-    if (!query.path) return { error: 'path is required' };
-    const content = await manager().getConfigFile(query.path);
+  fastify.get('/api/config/raw', async () => {
+    const content = await manager().getConfigFileRaw();
     return { content };
   });
 
   /**
-   * PUT /api/config/file
+   * PUT /api/config/raw
    *
-   * Writes content to an arbitrary config file.
-   * Body must contain `path` and `content` fields.
+   * Overwrites the daemon config file with the given content.
+   * Body must contain a `content` field. The content is validated as YAML
+   * (with a mapping root) before writing to prevent corrupting the config.
+   * Always writes to the daemon's own configPath — no path parameter.
    */
-  fastify.put('/api/config/file', async (request) => {
-    const body = request.body as { path?: string; content?: string };
-    if (!body.path || body.content === undefined) {
-      return { error: 'path and content are required' };
+  fastify.put('/api/config/raw', async (request, reply) => {
+    const body = request.body as { content?: string };
+    if (body.content === undefined) {
+      reply.code(400);
+      return { error: 'content is required' };
     }
-    await manager().setConfigFile(body.path, body.content);
-    return { ok: true };
+    try {
+      await manager().setConfigFileRaw(body.content);
+      return { ok: true };
+    } catch (e) {
+      reply.code(400);
+      const msg = e instanceof Error ? e.message : String(e);
+      return { error: msg };
+    }
   });
 }

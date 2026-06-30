@@ -65,22 +65,30 @@ describe('ConfigManager', () => {
     expect(content).toContain('5000');
   });
 
-  it('getConfigFile reads arbitrary config file content', async () => {
-    const manager = new ConfigManager(join(tempDir, 'config.yaml'));
+  it('getConfigFileRaw returns the EXACT bytes currently on disk for the daemon config', async () => {
+    const configPath = join(tempDir, 'config.yaml');
+    const manager = new ConfigManager(configPath);
     await manager.init();
 
-    await writeFile(join(tempDir, 'extra.yaml'), 'foo: bar\n');
-    const content = await manager.getConfigFile(join(tempDir, 'extra.yaml'));
-    expect(content).toContain('foo: bar');
+    // Contract: returns whatever is currently in the daemon config file,
+    // byte-for-byte (not a parsed/re-serialized version).
+    const onDisk = await readFile(configPath, 'utf-8');
+    const fromApi = await manager.getConfigFileRaw();
+    expect(fromApi).toBe(onDisk);
   });
 
-  it('setConfigFile writes content to arbitrary config file', async () => {
-    const manager = new ConfigManager(join(tempDir, 'config.yaml'));
+  it('setConfigFileRaw overwrites the daemon config file with the exact content', async () => {
+    const configPath = join(tempDir, 'config.yaml');
+    const manager = new ConfigManager(configPath);
     await manager.init();
 
-    await manager.setConfigFile(join(tempDir, 'extra.yaml'), 'baz: qux\n');
-    const content = await readFile(join(tempDir, 'extra.yaml'), 'utf-8');
-    expect(content).toContain('baz: qux');
+    const newContent =
+      'llm:\n  providers:\n    - name: x\n      apiKey: y\n      models:\n        - modelId: z\nserver:\n  port: 3100\n  host: localhost\n';
+    await manager.setConfigFileRaw(newContent);
+
+    // Exact match — verifies OVERWRITE (not append/merge)
+    const content = await readFile(configPath, 'utf-8');
+    expect(content).toBe(newContent);
   });
 
   it('get() throws before init()', () => {
@@ -93,22 +101,46 @@ describe('ConfigManager', () => {
     await expect(manager.update({ server: { port: 4000 } })).rejects.toThrow('not initialized');
   });
 
-  it('getConfigFile throws for missing file', async () => {
-    const manager = new ConfigManager(join(tempDir, 'config.yaml'));
-    await manager.init();
-
-    await expect(manager.getConfigFile(join(tempDir, 'missing.yaml'))).rejects.toThrow();
+  it('getConfigFileRaw rejects (ENOENT) when the daemon config file does not exist', async () => {
+    const manager = new ConfigManager(join(tempDir, 'no-such.yaml'));
+    await expect(manager.getConfigFileRaw()).rejects.toThrow();
   });
 
-  it('setConfigFile throws when parent path is not a directory', async () => {
-    const manager = new ConfigManager(join(tempDir, 'config.yaml'));
+  it('setConfigFileRaw rejects invalid YAML and leaves the file UNCHANGED', async () => {
+    const configPath = join(tempDir, 'config.yaml');
+    const manager = new ConfigManager(configPath);
     await manager.init();
+    const before = await readFile(configPath, 'utf-8');
 
-    // Create a file where a parent directory is expected
-    await writeFile(join(tempDir, 'not-a-dir'), 'file');
-    const targetPath = join(tempDir, 'not-a-dir', 'file.yaml');
+    await expect(manager.setConfigFileRaw(':\n  bad: : yaml')).rejects.toThrow();
 
-    await expect(manager.setConfigFile(targetPath, 'content')).rejects.toThrow();
+    // Side-effect contract: failed validation must not write anything
+    const after = await readFile(configPath, 'utf-8');
+    expect(after).toBe(before);
+  });
+
+  it('setConfigFileRaw rejects non-mapping YAML root (array) and leaves the file UNCHANGED', async () => {
+    const configPath = join(tempDir, 'config.yaml');
+    const manager = new ConfigManager(configPath);
+    await manager.init();
+    const before = await readFile(configPath, 'utf-8');
+
+    await expect(manager.setConfigFileRaw('- a\n- b\n')).rejects.toThrow();
+
+    const after = await readFile(configPath, 'utf-8');
+    expect(after).toBe(before);
+  });
+
+  it('setConfigFileRaw rejects non-mapping YAML root (scalar) and leaves the file UNCHANGED', async () => {
+    const configPath = join(tempDir, 'config.yaml');
+    const manager = new ConfigManager(configPath);
+    await manager.init();
+    const before = await readFile(configPath, 'utf-8');
+
+    await expect(manager.setConfigFileRaw('just a string\n')).rejects.toThrow();
+
+    const after = await readFile(configPath, 'utf-8');
+    expect(after).toBe(before);
   });
 
   it('update handles nested key creation', async () => {

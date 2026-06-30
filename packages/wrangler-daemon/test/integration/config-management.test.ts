@@ -1,37 +1,43 @@
 /**
- * @fileoverview User Story: Configuration Management (Integration)
+ * @fileoverview Integration: Configuration Management
  *
- * As a developer
- * I want to view and modify daemon configuration
- * So that I can change LLM settings at runtime
+ * User story: As a developer using skill-studio, I want to read and edit the
+ * daemon's configuration, so that I can change LLM and server settings.
  *
- * Acceptance Criteria:
- * 1. GET /api/config returns current config values
- * 2. PATCH /api/config updates config values and persists to disk
- * 3. GET /api/config/file?path= reads an arbitrary config file
- * 4. PUT /api/config/file writes an arbitrary config file
+ * Behavior contracts under test:
+ * - GET /api/config         returns the parsed config object
+ * - PATCH /api/config       updates values and persists
+ * - GET /api/config/raw     returns the EXACT raw bytes of the daemon config file
+ * - PUT /api/config/raw     OVERWRITES the daemon config file with the given content
+ *                           (validated as YAML mapping first; on failure returns 400
+ *                            and the file MUST remain unchanged)
+ *
+ * Security contract (SEC6 regression guard):
+ * - The raw endpoints accept NO path parameter; they always target the daemon's
+ *   own configPath. There is no way to read/write an arbitrary file via these
+ *   endpoints.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, writeFile, readFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ConfigManager } from '../../src/core/config-manager.js';
 import { configRoutes } from '../../src/routes/config.js';
 
+const INITIAL_CONFIG =
+  'llm:\n  providers:\n    - name: openai\n      apiKey: sk-test-key\n      baseUrl: \'https://api.example.com\'\n      models:\n        - modelId: gpt-4\nserver:\n  port: 3200\n  host: localhost\n';
+
 describe('Integration: Configuration Management', () => {
   let fastify: FastifyInstance;
   let tempDir: string;
+  let configPath: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'daemon-config-'));
-
-    const configPath = join(tempDir, 'config.yaml');
-    await writeFile(
-      configPath,
-      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test-key\n      baseUrl: 'https://api.example.com'\n      models:\n        - modelId: gpt-4\nserver:\n  port: 3200\n  host: localhost\n`
-    );
+    configPath = join(tempDir, 'config.yaml');
+    await writeFile(configPath, INITIAL_CONFIG);
 
     const configManager = new ConfigManager(configPath);
     await configManager.init();
@@ -52,126 +58,157 @@ describe('Integration: Configuration Management', () => {
     return typeof addr === 'string' ? addr : `http://127.0.0.1:${addr.port}`;
   }
 
-  // ─── AC 1: Get config ──────────────────────────────────────
+  // ─── GET /api/config (parsed object) ───────────────────────
 
-  it('returns current config values', async () => {
+  it('GET /api/config returns the parsed config object', async () => {
     const res = await fetch(`${getUrl()}/api/config`);
-    expect(res.ok).toBe(true);
+    expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.llm.providers[0].models[0].modelId).toBe('gpt-4');
-    expect(body.llm.providers[0].apiKey).toBe('sk-test-key');
-    expect(body.server.port).toBe(3200);
+    expect(body).toEqual({
+      llm: {
+        providers: [
+          {
+            name: 'openai',
+            apiKey: 'sk-test-key',
+            baseUrl: 'https://api.example.com',
+            models: [{ modelId: 'gpt-4' }],
+          },
+        ],
+      },
+      server: { port: 3200, host: 'localhost' },
+    });
   });
 
-  // ─── AC 2: Patch config ────────────────────────────────────
+  // ─── PATCH /api/config ─────────────────────────────────────
 
-  it('updates config values and persists to disk', async () => {
-    const patchRes = await fetch(`${getUrl()}/api/config`, {
+  it('PATCH /api/config updates a value and persists to disk', async () => {
+    const res = await fetch(`${getUrl()}/api/config`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        llm: {
-          providers: [{ name: 'openai', apiKey: 'sk-test-key', models: [{ modelId: 'gpt-4o' }] }],
-        },
-      }),
+      body: JSON.stringify({ server: { port: 4200 } }),
     });
-    expect(patchRes.ok).toBe(true);
+    expect(res.status).toBe(200);
 
-    // Verify updated via API
-    const getRes = await fetch(`${getUrl()}/api/config`);
+    // Returned object reflects the new value
+    const body = await res.json();
+    expect(body.server.port).toBe(4200);
+
+    // Disk reflects the new value
+    const disk = await readFile(configPath, 'utf-8');
+    expect(disk).toContain('4200');
+  });
+
+  // ─── GET /api/config/raw (exact raw bytes) ─────────────────
+
+  it('GET /api/config/raw returns the EXACT raw content of the daemon config file', async () => {
+    const res = await fetch(`${getUrl()}/api/config/raw`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // Exact match, not substring — guards against partial/truncated reads
+    expect(body.content).toBe(INITIAL_CONFIG);
+  });
+
+  // ─── PUT /api/config/raw (overwrite semantics) ─────────────
+
+  it('PUT /api/config/raw OVERWRITES the daemon config file with the submitted content', async () => {
+    const newContent =
+      'llm:\n  providers:\n    - name: openai\n      apiKey: sk-replaced\n      models:\n        - modelId: gpt-5\nserver:\n  port: 3200\n  host: localhost\n';
+
+    const res = await fetch(`${getUrl()}/api/config/raw`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: newContent }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+
+    // Exact match — verifies OVERWRITE (not append/merge), the core contract
+    const disk = await readFile(configPath, 'utf-8');
+    expect(disk).toBe(newContent);
+  });
+
+  it('PUT then GET /api/config/raw round-trips the exact content', async () => {
+    const newContent =
+      'llm:\n  providers:\n    - name: x\n      apiKey: y\n      models:\n        - modelId: z\nserver:\n  port: 3100\n  host: localhost\n';
+    const putRes = await fetch(`${getUrl()}/api/config/raw`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: newContent }),
+    });
+    expect(putRes.status).toBe(200);
+
+    const getRes = await fetch(`${getUrl()}/api/config/raw`);
     const body = await getRes.json();
-    expect(body.llm.providers[0].models[0].modelId).toBe('gpt-4o');
-    // Other values preserved
-    expect(body.llm.providers[0].apiKey).toBe('sk-test-key');
-
-    // Verify persisted to disk
-    const diskContent = await readFile(join(tempDir, 'config.yaml'), 'utf-8');
-    expect(diskContent).toContain('gpt-4o');
+    expect(body.content).toBe(newContent);
   });
 
-  // ─── AC 3: Read config file ────────────────────────────────
+  // ─── PUT /api/config/raw validation (negative paths) ───────
 
-  it('reads an arbitrary config file via path query', async () => {
-    // Create a side config file
-    await writeFile(join(tempDir, 'mcp.json'), '{"servers": {}}', 'utf-8');
+  it('PUT /api/config/raw returns 400 when `content` field is missing', async () => {
+    const res = await fetch(`${getUrl()}/api/config/raw`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notContent: 'x' }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'content is required' });
+  });
 
-    const res = await fetch(
-      `${getUrl()}/api/config/file?path=${encodeURIComponent(join(tempDir, 'mcp.json'))}`
-    );
-    expect(res.ok).toBe(true);
+  it('PUT /api/config/raw returns 400 for invalid YAML and leaves the file UNCHANGED', async () => {
+    const before = await readFile(configPath, 'utf-8');
+
+    const res = await fetch(`${getUrl()}/api/config/raw`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: ':\n  bad: : yaml' }),
+    });
+    expect(res.status).toBe(400);
+
+    // Critical side-effect contract: validation failure must NOT mutate the file
+    const after = await readFile(configPath, 'utf-8');
+    expect(after).toBe(before);
+  });
+
+  it('PUT /api/config/raw returns 400 for non-mapping YAML root (array) and leaves the file UNCHANGED', async () => {
+    const before = await readFile(configPath, 'utf-8');
+
+    const res = await fetch(`${getUrl()}/api/config/raw`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: '- a\n- b\n' }),
+    });
+    expect(res.status).toBe(400);
+
+    const after = await readFile(configPath, 'utf-8');
+    expect(after).toBe(before);
+  });
+
+  it('PUT /api/config/raw returns 400 for non-mapping YAML root (scalar) and leaves the file UNCHANGED', async () => {
+    const before = await readFile(configPath, 'utf-8');
+
+    const res = await fetch(`${getUrl()}/api/config/raw`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: 'just a string\n' }),
+    });
+    expect(res.status).toBe(400);
+
+    const after = await readFile(configPath, 'utf-8');
+    expect(after).toBe(before);
+  });
+
+  // ─── SEC6 regression guard ─────────────────────────────────
+
+  it('GET /api/config/raw accepts NO path parameter (cannot read arbitrary files)', async () => {
+    // Plant a sensitive-looking file outside the daemon config
+    const secret = join(tempDir, 'secret.txt');
+    await writeFile(secret, 'TOPSECRET');
+
+    // The endpoint ignores any path query — it must always return the daemon
+    // config, never the secret file.
+    const res = await fetch(`${getUrl()}/api/config/raw?path=${encodeURIComponent(secret)}`);
     const body = await res.json();
-    expect(body.content).toContain('servers');
-  });
-
-  it('returns error when path is missing', async () => {
-    const res = await fetch(`${getUrl()}/api/config/file`);
-    expect(res.ok).toBe(true);
-    const body = await res.json();
-    expect(body.error).toBe('path is required');
-  });
-
-  // ─── AC 4: Write config file ───────────────────────────────
-
-  it('writes content to a config file on disk', async () => {
-    const filePath = join(tempDir, 'custom.yaml');
-
-    const writeRes = await fetch(`${getUrl()}/api/config/file`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: filePath, content: 'key: value\n' }),
-    });
-    expect(writeRes.ok).toBe(true);
-
-    // Verify file on disk
-    const diskContent = await readFile(filePath, 'utf-8');
-    expect(diskContent).toBe('key: value\n');
-  });
-
-  it('returns error when path or content is missing', async () => {
-    const res = await fetch(`${getUrl()}/api/config/file`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: 'data' }),
-    });
-    expect(res.ok).toBe(true);
-    expect((await res.json()).error).toBe('path and content are required');
-  });
-
-  // ─── Full lifecycle ────────────────────────────────────────
-
-  it('full lifecycle: read config → patch → verify disk → write file → read back', async () => {
-    const url = getUrl();
-
-    // 1. Read initial config
-    const initial = await (await fetch(`${url}/api/config`)).json();
-    expect(initial.llm.providers[0].models[0].modelId).toBe('gpt-4');
-
-    // 2. Patch model
-    await fetch(`${url}/api/config`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        llm: {
-          providers: [
-            { name: 'openai', apiKey: 'sk-test-key', models: [{ modelId: 'patched-model' }] },
-          ],
-        },
-      }),
-    });
-    const patched = await (await fetch(`${url}/api/config`)).json();
-    expect(patched.llm.providers[0].models[0].modelId).toBe('patched-model');
-
-    // 3. Write a side config file
-    const sidePath = join(tempDir, 'side.yaml');
-    await fetch(`${url}/api/config/file`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: sidePath, content: 'side: true\n' }),
-    });
-
-    // 4. Read back the side file
-    const fileRes = await fetch(`${url}/api/config/file?path=${encodeURIComponent(sidePath)}`);
-    const fileBody = await fileRes.json();
-    expect(fileBody.content).toContain('side: true');
+    expect(body.content).toBe(INITIAL_CONFIG);
+    expect(body.content).not.toContain('TOPSECRET');
   });
 });

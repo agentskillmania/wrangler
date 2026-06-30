@@ -1,6 +1,7 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
+import { parse as parseYaml } from 'yaml';
 import { Settings } from '@agentskillmania/settings-yaml';
 
 import type { DaemonConfig } from '../types.js';
@@ -83,15 +84,33 @@ export class ConfigManager {
     await this.settings.save();
   }
 
-  /** Read arbitrary config file content */
-  async getConfigFile(path: string): Promise<string> {
-    return readFile(resolve(path), 'utf-8');
+  /**
+   * Read the daemon config file raw content.
+   * Always reads from the resolved configPath — never accepts an arbitrary path.
+   */
+  async getConfigFileRaw(): Promise<string> {
+    return readFile(this.configPath, 'utf-8');
   }
 
-  /** Write content to arbitrary config file */
-  async setConfigFile(path: string, content: string): Promise<void> {
-    const resolved = resolve(path);
-    await mkdir(dirname(resolved), { recursive: true });
-    await writeFile(resolved, content, 'utf-8');
+  /**
+   * Overwrite the daemon config file raw content.
+   * Always writes to the resolved configPath — never accepts an arbitrary path.
+   * Validates the content as YAML before writing to avoid corrupting the config.
+   */
+  async setConfigFileRaw(content: string): Promise<void> {
+    let parsed: unknown;
+    try {
+      parsed = parseYaml(content);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`Invalid YAML: ${msg}`);
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(
+        'Config root must be a YAML mapping (object), got ' +
+          (parsed === null ? 'null' : Array.isArray(parsed) ? 'array' : typeof parsed),
+      );
+    }
+    await writeFile(this.configPath, content, 'utf-8');
   }
 }
