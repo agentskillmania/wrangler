@@ -40,9 +40,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 // Import AFTER mock is registered.
-const { HostToolDeps } = await import(
-  '../../../../src/tools/builtin/workspace-deps.js'
-);
+const { HostToolDeps } = await import('../../../../src/tools/builtin/workspace-deps.js');
 
 describe('HostToolDeps command execution contract (unit, mocked child_process)', () => {
   let deps: InstanceType<typeof HostToolDeps>;

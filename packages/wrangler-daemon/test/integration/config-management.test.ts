@@ -27,7 +27,7 @@ import { ConfigManager } from '../../src/core/config-manager.js';
 import { configRoutes } from '../../src/routes/config.js';
 
 const INITIAL_CONFIG =
-  'llm:\n  providers:\n    - name: openai\n      apiKey: sk-test-key\n      baseUrl: \'https://api.example.com\'\n      models:\n        - modelId: gpt-4\nserver:\n  port: 3200\n  host: localhost\n';
+  "llm:\n  providers:\n    - name: openai\n      apiKey: sk-test-key\n      baseUrl: 'https://api.example.com'\n      models:\n        - modelId: gpt-4\nserver:\n  port: 3200\n  host: localhost\n";
 
 describe('Integration: Configuration Management', () => {
   let fastify: FastifyInstance;

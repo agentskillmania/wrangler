@@ -17,12 +17,14 @@ import { createGrepTool } from '../../../../src/tools/builtin/grep.js';
 import type { ToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
 
 /** Build a ToolDeps with a mocked grep that returns canned ripgrep-style output. */
-function makeMockDeps(opts: {
-  workspaceRoot?: string;
-  grepOutput?: string;
-  grepThrow?: Error;
-  resolvePathThrow?: Error;
-} = {}): ToolDeps {
+function makeMockDeps(
+  opts: {
+    workspaceRoot?: string;
+    grepOutput?: string;
+    grepThrow?: Error;
+    resolvePathThrow?: Error;
+  } = {}
+): ToolDeps {
   const workspaceRoot = opts.workspaceRoot ?? '/workspace';
   return {
     workspaceRoot,
@@ -86,7 +88,9 @@ describe('grep tool (unit, mocked deps)', () => {
   });
 
   it('caps parsed matches at 100', async () => {
-    const lines = Array.from({ length: 150 }, (_, i) => `/workspace/a.ts:${i + 1}:match_${i}`).join('\n');
+    const lines = Array.from({ length: 150 }, (_, i) => `/workspace/a.ts:${i + 1}:match_${i}`).join(
+      '\n'
+    );
     const tool = createGrepTool(makeMockDeps({ grepOutput: lines }));
     const result = await tool.execute({ pattern: 'match_' });
     const matchCount = (result.match(/Line \d+:/g) || []).length;
@@ -110,9 +114,7 @@ describe('grep tool (unit, mocked deps)', () => {
   });
 
   it('returns a path error when resolvePath throws a non-traversal error', async () => {
-    const tool = createGrepTool(
-      makeMockDeps({ resolvePathThrow: new Error('Permission denied') })
-    );
+    const tool = createGrepTool(makeMockDeps({ resolvePathThrow: new Error('Permission denied') }));
     const result = await tool.execute({ pattern: 'test', path: 'src' });
     expect(result).toContain('Error: Invalid path');
   });

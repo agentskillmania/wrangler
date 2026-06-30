@@ -1,8 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { parse as parseYaml } from 'yaml';
 import { Settings } from '@agentskillmania/settings-yaml';
+import { parse as parseYaml } from 'yaml';
 
 import type { DaemonConfig } from '../types.js';
 
@@ -108,7 +108,7 @@ export class ConfigManager {
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error(
         'Config root must be a YAML mapping (object), got ' +
-          (parsed === null ? 'null' : Array.isArray(parsed) ? 'array' : typeof parsed),
+          (parsed === null ? 'null' : Array.isArray(parsed) ? 'array' : typeof parsed)
       );
     }
     await writeFile(this.configPath, content, 'utf-8');
