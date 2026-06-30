@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { exec, execSync } from 'node:child_process';
+import { exec, execFile, execSync } from 'node:child_process';
 import { statSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import { resolve, sep, join, basename, dirname } from 'node:path';
@@ -11,6 +11,7 @@ import { isBinaryFile as detectBinary } from 'isbinaryfile';
 import { rgPath } from 'ripgrep';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /** Detected shell information */
 export interface ShellInfo {
@@ -218,6 +219,37 @@ export class HostToolDeps implements ToolDeps {
     }
   }
 
+  /**
+   * Execute a command using execFile (no shell), passing args as an array.
+   *
+   * Unlike {@link exec}, this does NOT go through a shell, so each argument is
+   * passed to the executable verbatim. This is the safe way to run a command
+   * whose arguments contain untrusted content (e.g. a regex pattern from the
+   * LLM) — shell metacharacters ($(), ``, ;, etc.) are treated as literal
+   * characters and cannot trigger command injection.
+   */
+  async execArray(
+    exe: string,
+    args: string[],
+    options?: { timeout?: number }
+  ): Promise<ExecResult> {
+    const timeout = options?.timeout ?? 30000;
+    try {
+      const { stdout, stderr } = await execFileAsync(exe, args, {
+        timeout,
+        maxBuffer: this.maxOutputSize,
+      });
+      return { stdout, stderr, exitCode: 0 };
+    } catch (error) {
+      const err = error as { stdout?: string; stderr?: string; code?: number };
+      return {
+        stdout: err.stdout ?? '',
+        stderr: err.stderr ?? '',
+        exitCode: err.code ?? 1,
+      };
+    }
+  }
+
   async readFile(filePath: string): Promise<string> {
     const absolute = this.resolvePath(filePath);
     return await fs.readFile(absolute, 'utf-8');
@@ -278,17 +310,19 @@ export class HostToolDeps implements ToolDeps {
   ): Promise<string> {
     const cwd = options?.cwd ?? this.workspaceRoot;
     const searchPath = resolve(cwd, path);
+    // Pass pattern and glob as literal args via execFile (no shell).
+    // This is critical: `pattern` is an untrusted regex from the LLM and may
+    // contain shell metacharacters ($(), ``, ;). Using execArray ensures they
+    // are treated as literal characters, not shell syntax (SEC1).
     const args = [pattern, searchPath, '--no-heading', '--line-number'];
 
     if (options?.include) {
-      // Need to escape the glob pattern for shell to prevent expansion
-      args.push('--glob', `'${options.include}'`);
+      // No shell quoting needed — execFile passes the glob verbatim to rg.
+      args.push('--glob', options.include);
     }
 
-    const cmd = `${rgPath} ${args.join(' ')}`;
-
     try {
-      const result = await this.exec(cmd);
+      const result = await this.execArray(rgPath, args);
       return result.stdout || 'No matches found';
     } catch {
       return 'No matches found';
