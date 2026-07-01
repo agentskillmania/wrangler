@@ -9,6 +9,7 @@ import type { Sandbox } from '@agentskillmania/sandbox';
 import fglob from 'fast-glob';
 import { isBinaryFile as detectBinary } from 'isbinaryfile';
 import { rgPath } from 'ripgrep';
+import { quote } from 'shell-quote';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -156,6 +157,16 @@ export interface ToolDeps {
 
   /** Execute a shell command */
   exec(command: string, options?: { timeout?: number }): Promise<ExecResult>;
+
+  /**
+   * Execute a command with argv array form (no shell).
+   *
+   * Each argument is passed to the executable verbatim — shell metacharacters
+   * ($(), ``, ;, |) are treated as literal characters and cannot trigger
+   * command injection. This is the safe way to run a command whose arguments
+   * contain untrusted content.
+   */
+  execArray(exe: string, args: string[], options?: { timeout?: number }): Promise<ExecResult>;
 
   /** Read file content as text */
   readFile(filePath: string): Promise<string>;
@@ -401,6 +412,24 @@ export class SandboxToolDeps implements ToolDeps {
 
   async exec(command: string, _options?: { timeout?: number }): Promise<ExecResult> {
     const result = await this.sandbox.run(command);
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+    };
+  }
+
+  async execArray(
+    exe: string,
+    args: string[],
+    _options?: { timeout?: number }
+  ): Promise<ExecResult> {
+    // The sandbox API only accepts a command string (sandbox.run), so we cannot
+    // bypass the shell entirely. Instead, each argv element is shell-quoted via
+    // shell-quote's quote() and joined — metacharacters become literal. This
+    // prevents command injection while preserving correct argument boundaries.
+    const cmd = quote([exe, ...args]);
+    const result = await this.sandbox.run(cmd);
     return {
       stdout: result.stdout,
       stderr: result.stderr,

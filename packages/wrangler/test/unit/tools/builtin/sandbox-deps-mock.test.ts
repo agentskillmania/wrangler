@@ -61,6 +61,58 @@ describe('SandboxToolDeps (mock sandbox)', () => {
     });
   });
 
+  describe('execArray', () => {
+    it('quotes each argv element and joins into a single sandbox.run command', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: 'ok',
+        stderr: '',
+        exitCode: 0,
+      });
+      await deps.execArray('git', ['status', '--porcelain']);
+      // shell-quote joins argv with spaces; safe tokens stay unquoted.
+      expect(sandbox.run).toHaveBeenCalledTimes(1);
+      const cmd = (sandbox.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      expect(cmd).toContain('git');
+      expect(cmd).toContain('status');
+      expect(cmd).toContain('--porcelain');
+    });
+
+    it('shell-quotes an argument containing $() so it cannot inject', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      });
+      await deps.execArray('echo', ['$(touch /workspace/PWNED)']);
+      const cmd = (sandbox.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      // The malicious content must be inside single quotes
+      expect(cmd).toContain("'$(touch /workspace/PWNED)'");
+      // Must NOT contain a raw unquoted $( that wsh would expand
+      expect(cmd).not.toMatch(/[^']\$\(/);
+    });
+
+    it('shell-quotes an argument containing a semicolon', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      });
+      await deps.execArray('echo', ['a; rm -rf /workspace']);
+      const cmd = (sandbox.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      expect(cmd).toContain("'a; rm -rf /workspace'");
+    });
+
+    it('propagates sandbox.run exit code and output', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: 'out',
+        stderr: 'err',
+        exitCode: 2,
+      });
+      const result = await deps.execArray('git', ['push']);
+      expect(result).toEqual({ stdout: 'out', stderr: 'err', exitCode: 2 });
+    });
+  });
+
   describe('readFile', () => {
     it('reads file content via sandbox', async () => {
       (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({

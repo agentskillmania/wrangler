@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "@agentskillmania/colts": "link:../../../colts/packages/colts",
+    "@agentskillmania/llm-client": "link:../../../colts/packages/llm-client",
     "@agentskillmania/sandbox": "link:../../../sandbox/sandbox/packages/sandbox",
     "@mariozechner/pi-ai": "^0.73.1",
     "@mozilla/readability": "^0.6.0",
@@ -50,9 +51,9 @@
     "jsdom": "^29.1.1",
     "mcporter": "^0.10.2",
     "ripgrep": "^0.3.1",
+    "shell-quote": "^1.9.0",
     "turndown": "^7.2.4",
-    "zod": "^3.25.76",
-    "@agentskillmania/llm-client": "link:../../../colts/packages/llm-client"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
