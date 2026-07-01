@@ -13,6 +13,18 @@ import { rgPath } from 'ripgrep';
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
+/**
+ * Wrap a string in POSIX single-quotes, escaping internal single-quotes via
+ * the '\'' sequence. Inside single quotes every character is literal — no
+ * command substitution ($()), backticks, semicolons, or glob expansion can
+ * occur. This is the safe way to interpolate untrusted content (e.g. an LLM
+ * regex) into a shell command string when the executor only accepts a string
+ * (such as the WASM sandbox's wsh).
+ */
+function shellSingleQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
 /** Detected shell information */
 export interface ShellInfo {
   /** Shell executable path */
@@ -470,9 +482,12 @@ export class SandboxToolDeps implements ToolDeps {
     options?: { cwd?: string; include?: string }
   ): Promise<string> {
     const searchPath = this.resolvePath(path);
-    let cmd = `grep -rn "${pattern}" ${searchPath}`;
+    // pattern and include are untrusted (LLM-supplied). wsh expands $() and
+    // backticks inside double quotes, so they MUST be POSIX single-quoted to
+    // be treated as literal grep arguments (SEC2).
+    let cmd = `grep -rn ${shellSingleQuote(pattern)} ${searchPath}`;
     if (options?.include) {
-      cmd += ` --include="${options.include}"`;
+      cmd += ` --include=${shellSingleQuote(options.include)}`;
     }
     const result = await this.sandbox.run(cmd);
     if (result.exitCode !== 0) {

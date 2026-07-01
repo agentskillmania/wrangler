@@ -229,7 +229,72 @@ describe('SandboxToolDeps (mock sandbox)', () => {
         exitCode: 1,
       });
       await deps.grep('pattern', '.', { include: '*.ts' });
-      expect(sandbox.run).toHaveBeenCalledWith('grep -rn "pattern" /workspace --include="*.ts"');
+      // pattern and include are shell-escaped via POSIX single-quoting (SEC2).
+      const call = (sandbox.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      expect(call).toContain("--include='*.ts'");
+    });
+  });
+
+  // ─── SEC2: sandbox grep command-injection guards ──────────
+  // The grep pattern is an untrusted regex from the LLM and is interpolated
+  // into a shell command run inside the WASM sandbox (wsh). wsh DOES expand
+  // $() and backticks inside double quotes, so the pattern MUST be wrapped in
+  // POSIX single-quotes (with internal single-quotes escaped as '\''), which
+  // makes every character literal. These guards assert on the COMMAND STRING
+  // passed to sandbox.run — proving the pattern is single-quoted, not raw or
+  // double-quoted.
+
+  describe('SEC2: grep pattern is POSIX single-quoted (no shell injection)', () => {
+    beforeEach(() => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: '',
+        stderr: '',
+        exitCode: 1,
+      });
+    });
+
+    it('wraps a benign pattern in single quotes', async () => {
+      await deps.grep('getUserById', '.');
+      const cmd = (sandbox.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      expect(cmd).toContain("'getUserById'");
+      // Must NOT use double quotes around the pattern
+      expect(cmd).not.toMatch(/"getUserById"/);
+    });
+
+    it('single-quotes a pattern containing $() command substitution', async () => {
+      const malicious = 'x$(touch /workspace/PWNED)y';
+      await deps.grep(malicious, '.');
+      const cmd = (sandbox.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      // The literal $() must appear inside single quotes, not be executed.
+      expect(cmd).toContain(`'${malicious}'`);
+      // No raw double-quoted form that wsh would expand.
+      expect(cmd).not.toMatch(/"\$\(/);
+    });
+
+    it('single-quotes a pattern containing backticks', async () => {
+      const malicious = 'x`touch /workspace/PWNED`y';
+      await deps.grep(malicious, '.');
+      const cmd = (sandbox.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      expect(cmd).toContain(`'${malicious}'`);
+    });
+
+    it('escapes internal single-quotes in the pattern (POSIX backslash-quote sequence)', async () => {
+      // A pattern that itself contains a single quote — the escape sequence
+      // '\'' must be used, otherwise the quote would close the wrapping and
+      // allow injection.
+      const withQuote = "foo'bar";
+      await deps.grep(withQuote, '.');
+      const cmd = (sandbox.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      expect(cmd).toContain("'foo'\\''bar'");
+    });
+
+    it('single-quotes the --include glob option', async () => {
+      const maliciousInclude = '*.ts"; touch /workspace/PWNED; echo "';
+      await deps.grep('foo', '.', { include: maliciousInclude });
+      const cmd = (sandbox.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+      // The include value must be single-quoted, not raw double-quoted.
+      expect(cmd).toContain(`--include='${maliciousInclude.replace(/'/g, "'\\''")}'`);
+      expect(cmd).not.toMatch(/--include=".*touch/);
     });
   });
 
