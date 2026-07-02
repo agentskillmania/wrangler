@@ -1,5 +1,5 @@
 import { readFile, writeFile, unlink, mkdir, readdir, stat as statFn } from 'node:fs/promises';
-import { resolve, dirname, join } from 'node:path';
+import { resolve, dirname, join, relative } from 'node:path';
 
 import type { FastifyInstance } from 'fastify';
 
@@ -15,7 +15,9 @@ import type { DecoratedFastifyInstance } from '../types.js';
  */
 function resolvePath(root: string, relativePath: string): string {
   const resolved = resolve(root, relativePath);
-  if (!resolved.startsWith(root)) {
+  // SEC9: relative() detects sibling-prefix escapes that startsWith misses.
+  const rel = relative(root, resolved);
+  if (rel.startsWith('..')) {
     throw new Error('Path outside agent directory');
   }
   return resolved;

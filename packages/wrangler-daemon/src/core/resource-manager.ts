@@ -83,6 +83,7 @@ export class ResourceManager {
 
   /** Get detailed agent info by parsing AGENT.md via wrangler AgentLoader */
   async getAgent(id: string): Promise<AgentDetail | null> {
+    this.validateName(id);
     const agentDir = join(this.agentsDir, id);
     try {
       const result = await AgentLoader.loadFrom(agentDir);
@@ -133,6 +134,7 @@ export class ResourceManager {
 
   /** Get detailed skill info with parsed SKILL.md and file listing */
   async getSkill(id: string): Promise<SkillDetail | null> {
+    this.validateName(id);
     const skillDir = join(this.skillsDir, id);
     try {
       const dirStat = await statFn(skillDir);
@@ -186,6 +188,7 @@ export class ResourceManager {
 
   /** Delete an agent by id */
   async deleteAgent(id: string): Promise<void> {
+    this.validateName(id);
     const agentDir = join(this.agentsDir, id);
     await rm(agentDir, { recursive: true, force: true });
   }
@@ -205,6 +208,7 @@ export class ResourceManager {
 
   /** Delete a skill by id */
   async deleteSkill(id: string): Promise<void> {
+    this.validateName(id);
     const skillDir = join(this.skillsDir, id);
     await rm(skillDir, { recursive: true, force: true });
   }
@@ -242,6 +246,7 @@ export class ResourceManager {
 
   /** Get detailed crew info with CREW.md content, agents, and skills */
   async getCrew(id: string): Promise<CrewDetail | null> {
+    this.validateName(id);
     const crewDir = join(this.crewsDir, id);
     try {
       const dirStat = await statFn(crewDir);
@@ -313,6 +318,7 @@ export class ResourceManager {
 
   /** Delete a crew by id */
   async deleteCrew(id: string): Promise<void> {
+    this.validateName(id);
     const crewDir = join(this.crewsDir, id);
     await rm(crewDir, { recursive: true, force: true });
   }

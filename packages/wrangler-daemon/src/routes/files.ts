@@ -15,7 +15,11 @@ import type { DecoratedFastifyInstance } from '../types.js';
  */
 function resolvePath(workspaceRoot: string, relativePath: string): string {
   const resolved = resolve(workspaceRoot, relativePath);
-  if (!resolved.startsWith(workspaceRoot)) {
+  // SEC9: use relative() to detect escape — startsWith without trailing
+  // separator allows sibling-prefix dirs (/foo/workspace-evil passes
+  // startsWith('/foo/workspace')).
+  const rel = relative(workspaceRoot, resolved);
+  if (rel.startsWith('..')) {
     throw new Error('Path outside workspace');
   }
   return resolved;

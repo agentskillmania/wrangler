@@ -116,6 +116,23 @@ describe('workspace file routes', () => {
       expect(res.ok).toBe(true);
       expect((await res.json()).error).toBe('File not found');
     });
+
+    // SEC9: startsWith without trailing separator allows sibling-prefix escape.
+    // workspacePath = /tmp/xxx/workspace; a sibling /tmp/xxx/workspace-secret
+    // startsWith('/tmp/xxx/workspace') → passes the check incorrectly.
+    it('SEC9: rejects sibling directory with workspace-prefix name', async () => {
+      // Plant a sibling dir whose name starts with "workspace"
+      await mkdir(join(tempDir, 'workspace-evil'), { recursive: true });
+      await writeFile(join(tempDir, 'workspace-evil', 'stolen.txt'), 'STOLEN');
+
+      const res = await fetch(
+        `${baseUrl()}/api/files/test-session/content?path=${encodeURIComponent('../workspace-evil/stolen.txt')}`
+      );
+
+      const body = await res.json();
+      // Must NOT return the stolen content — the sibling must be unreachable
+      expect(JSON.stringify(body)).not.toContain('STOLEN');
+    });
   });
 
   // ------------------------------------------------------------------ Read file
