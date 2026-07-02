@@ -1,8 +1,8 @@
 // packages/wrangler-devtool/src/utils/file-change.ts
 // 结构化文件变更应用器（create / edit / delete）
 
-import { readFile, writeFile, unlink, access } from 'node:fs/promises';
-import path, { resolve } from 'node:path';
+import { readFile, writeFile, unlink, access, realpath } from 'node:fs/promises';
+import path, { resolve, dirname } from 'node:path';
 
 import { CliError, ExitCode } from '../cli/options.js';
 
@@ -38,7 +38,7 @@ function resolveFilePath(file: string, cwd?: string): string {
   const resolved = cwd ? resolve(cwd, file) : resolve(file);
   const cwdResolved = cwd ? resolve(cwd) : resolve(process.cwd());
 
-  // Security: prevent escaping cwd via symlinks or case-insensitive FS
+  // Security: prevent escaping cwd via path traversal
   const relative = path.relative(cwdResolved, resolved);
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new CliError(
@@ -57,12 +57,50 @@ function resolveFilePath(file: string, cwd?: string): string {
   return resolved;
 }
 
+/**
+ * Resolve symlinks in the file path and verify the real path stays within cwd.
+ * SEC11: a symlink inside the workspace could point outside (e.g. to /etc).
+ * path.relative alone cannot detect this — realpath() is needed.
+ *
+ * For non-existent files (create mode), realpath the parent directory instead.
+ */
+async function assertWithinWorkspace(filePath: string, cwd?: string): Promise<void> {
+  const cwdResolved = cwd ? resolve(cwd) : resolve(process.cwd());
+
+  // Try to resolve the file itself; if it doesn't exist (create mode),
+  // resolve the parent directory.
+  let realPath: string;
+  try {
+    realPath = await realpath(filePath);
+  } catch {
+    // File doesn't exist — resolve parent dir
+    try {
+      realPath = await realpath(dirname(filePath));
+    } catch {
+      // Parent doesn't exist either — nothing to check (will fail at write time)
+      return;
+    }
+  }
+
+  const realCwd = await realpath(cwdResolved).catch(() => cwdResolved);
+  const rel = path.relative(realCwd, realPath);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new CliError(
+      `File path escapes workspace via symlink: ${filePath}`,
+      'PATH_ESCAPE',
+      ExitCode.ValidationFailure
+    );
+  }
+}
+
 async function validateChange(
   change: FileChange,
   cwd?: string
 ): Promise<{ valid: boolean; error?: string }> {
   try {
     const filePath = resolveFilePath(change.file, cwd);
+    // SEC11: check symlink escape after path resolution
+    await assertWithinWorkspace(filePath, cwd);
 
     switch (change.type) {
       case 'create': {
@@ -110,6 +148,8 @@ async function validateChange(
 
 async function applySingleChange(change: FileChange, cwd?: string): Promise<void> {
   const filePath = resolveFilePath(change.file, cwd);
+  // SEC11: check symlink escape before writing/deleting
+  await assertWithinWorkspace(filePath, cwd);
 
   switch (change.type) {
     case 'create':

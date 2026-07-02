@@ -132,4 +132,62 @@ describe('web_fetch', () => {
     const result = await tool.execute({ url: 'https://example.com' });
     expect(result).toContain('raw content');
   });
+
+  // ─── SEC14: SSRF protection ────────────────────────────────
+
+  describe('SEC14: rejects private/reserved addresses (SSRF)', () => {
+    it('rejects localhost', async () => {
+      const tool = createWebFetchTool(deps);
+      const result = await tool.execute({ url: 'http://localhost:8080/' });
+      expect(result).toContain('private or reserved');
+    });
+
+    it('rejects 127.0.0.1', async () => {
+      const tool = createWebFetchTool(deps);
+      const result = await tool.execute({ url: 'http://127.0.0.1/' });
+      expect(result).toContain('private or reserved');
+    });
+
+    it('rejects 169.254.169.254 (cloud metadata)', async () => {
+      const tool = createWebFetchTool(deps);
+      const result = await tool.execute({ url: 'http://169.254.169.254/latest/meta-data/' });
+      expect(result).toContain('private or reserved');
+    });
+
+    it('rejects 10.x private range', async () => {
+      const tool = createWebFetchTool(deps);
+      const result = await tool.execute({ url: 'http://10.0.0.1/' });
+      expect(result).toContain('private or reserved');
+    });
+
+    it('rejects 192.168.x private range', async () => {
+      const tool = createWebFetchTool(deps);
+      const result = await tool.execute({ url: 'http://192.168.1.1/' });
+      expect(result).toContain('private or reserved');
+    });
+
+    it('rejects 0.0.0.0', async () => {
+      const tool = createWebFetchTool(deps);
+      const result = await tool.execute({ url: 'http://0.0.0.0/' });
+      expect(result).toContain('private or reserved');
+    });
+
+    it('rejects IPv6 loopback ::1', async () => {
+      const tool = createWebFetchTool(deps);
+      const result = await tool.execute({ url: 'http://[::1]/' });
+      expect(result).toContain('private or reserved');
+    });
+
+    it('allows public URL (no false positive)', async () => {
+      mockFetch({
+        ok: true,
+        status: 200,
+        contentType: 'text/plain',
+        body: 'public content',
+      });
+      const tool = createWebFetchTool(deps);
+      const result = await tool.execute({ url: 'https://example.com/' });
+      expect(result).toBe('public content');
+    });
+  });
 });
