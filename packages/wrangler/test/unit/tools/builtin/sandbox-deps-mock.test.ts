@@ -143,10 +143,10 @@ describe('SandboxToolDeps (mock sandbox)', () => {
         exitCode: 0,
       });
       await deps.writeFile('src/new.txt', 'hello');
-      // First call: mkdir -p
+      // First call: mkdir via execArray (quote, no extra quotes for safe chars)
       expect(sandbox.run).toHaveBeenNthCalledWith(1, 'mkdir -p /workspace/src');
-      // Second call: cat > file with stdin
-      expect(sandbox.run).toHaveBeenNthCalledWith(2, 'cat > /workspace/src/new.txt', {
+      // Second call: cat > file with stdin (path shellSingleQuote'd)
+      expect(sandbox.run).toHaveBeenNthCalledWith(2, "cat > '/workspace/src/new.txt'", {
         stdin: 'hello',
       });
     });
@@ -360,7 +360,7 @@ describe('SandboxToolDeps (mock sandbox)', () => {
       const result = await deps.statFile('test.txt');
       expect(result).toEqual({ exists: true, isFile: true });
       expect(sandbox.run).toHaveBeenCalledWith(
-        'test -f /workspace/test.txt && echo YES || echo NO'
+        "test -f '/workspace/test.txt' && echo YES || echo NO"
       );
     });
 
@@ -389,8 +389,8 @@ describe('SandboxToolDeps (mock sandbox)', () => {
         .mockResolvedValueOnce({ stdout: '100\n', stderr: '', exitCode: 0 }) // wc -c (original)
         .mockResolvedValueOnce({ stdout: '50\n', stderr: '', exitCode: 0 }); // tr -d + wc -c (stripped)
       expect(await deps.isBinaryFile('binary.bin')).toBe(true);
-      expect(sandbox.run).toHaveBeenCalledWith('wc -c < /workspace/binary.bin');
-      expect(sandbox.run).toHaveBeenCalledWith('tr -d "\\000" < /workspace/binary.bin | wc -c');
+      expect(sandbox.run).toHaveBeenCalledWith("wc -c < '/workspace/binary.bin'");
+      expect(sandbox.run).toHaveBeenCalledWith('tr -d "\\000" < \'/workspace/binary.bin\' | wc -c');
     });
 
     it('should return false when no null bytes (stripped size equals original)', async () => {
@@ -416,6 +416,93 @@ describe('SandboxToolDeps (mock sandbox)', () => {
         exitCode: 0,
       });
       expect(await deps.isBinaryFile('empty.txt')).toBe(false);
+    });
+  });
+
+  // ─── SEC5: path injection guards for all sandbox commands ──
+  // Every SandboxToolDeps method that interpolates a file path into a sandbox
+  // command must prevent shell injection. Methods that are pure "program +
+  // args" use execArray (bypasses shell); methods relying on shell syntax
+  // (redirects, pipes, &&) use shellSingleQuote on the path.
+
+  describe('SEC5: paths with shell metacharacters are safely handled', () => {
+    beforeEach(() => {
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      });
+    });
+
+    // Helper: get all sandbox.run command strings from the mock
+    const runCmds = () =>
+      (sandbox.run as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as string);
+
+    // --- readFile (execArray: cat) ---
+
+    it('readFile: path with $() does not inject (execArray quotes it)', async () => {
+      await deps.readFile('x$(touch /workspace/PWNED)y.ts');
+      const cmds = runCmds();
+      // The dangerous path must appear quoted in the command, not raw
+      const catCmd = cmds.find((c) => c.includes('cat'));
+      expect(catCmd).toBeDefined();
+      expect(catCmd).toContain("'"); // shell-quote wraps unsafe chars in single quotes
+      expect(catCmd).not.toMatch(/cat .* \$\(touch/); // no raw unquoted $()
+    });
+
+    // --- writeFile (execArray: mkdir; shellSingleQuote: cat >) ---
+
+    it('writeFile: mkdir path with spaces is safely quoted', async () => {
+      await deps.writeFile('my dir/file.ts', 'content');
+      const cmds = runCmds();
+      const mkdirCmd = cmds.find((c) => c.includes('mkdir'));
+      expect(mkdirCmd).toBeDefined();
+      // "my dir" has a space — must be quoted
+      expect(mkdirCmd).toMatch(/'.*my dir.*'/);
+    });
+
+    it('writeFile: cat > path with $() does not inject', async () => {
+      await deps.writeFile('x$(touch /workspace/P)y.ts', 'content');
+      const cmds = runCmds();
+      const catCmd = cmds.find((c) => c.includes('cat >') || c.includes("cat>'"));
+      expect(catCmd).toBeDefined();
+      expect(catCmd).toContain("'"); // path is single-quoted
+    });
+
+    // --- glob (execArray: ls -R) ---
+
+    it('glob: cwd path with semicolon does not inject', async () => {
+      await deps.glob('*.ts', { cwd: 'foo; rm -rf /workspace' });
+      const cmds = runCmds();
+      const lsCmd = cmds.find((c) => c.includes('ls'));
+      expect(lsCmd).toBeDefined();
+      // The semicolon must be inside single quotes, not interpreted by shell
+      expect(lsCmd).toMatch(/'[^']*;[^']*'/); // ; is between single quotes
+    });
+
+    // --- statFile (shellSingleQuote: test -f / test -d) ---
+
+    it('statFile: path with $() does not inject into test -f', async () => {
+      await deps.statFile('x$(touch /workspace/P)y.ts');
+      const cmds = runCmds();
+      const testCmd = cmds.find((c) => c.includes('test -f'));
+      expect(testCmd).toBeDefined();
+      // $() must be inside single quotes, not interpreted by shell
+      expect(testCmd).toMatch(/'[^']*\$[^']*'/); // $ is between single quotes
+    });
+
+    // --- isBinaryFile (shellSingleQuote: wc -c < / tr <) ---
+
+    it('isBinaryFile: path with semicolon does not inject into wc', async () => {
+      (sandbox.run as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ stdout: '100\n', stderr: '', exitCode: 0 })
+        .mockResolvedValueOnce({ stdout: '100\n', stderr: '', exitCode: 0 });
+      await deps.isBinaryFile('foo; rm.ts');
+      const cmds = runCmds();
+      const wcCmd = cmds.find((c) => c.includes('wc'));
+      expect(wcCmd).toBeDefined();
+      // The semicolon must be inside single quotes
+      expect(wcCmd).toMatch(/'[^']*;[^']*'/); // ; is between single quotes
     });
   });
 });

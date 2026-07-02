@@ -439,7 +439,8 @@ export class SandboxToolDeps implements ToolDeps {
 
   async readFile(filePath: string): Promise<string> {
     const absolute = this.resolvePath(filePath);
-    const result = await this.sandbox.run(`cat ${absolute}`);
+    // SEC5: use execArray (no shell) so the path is a literal argv element
+    const result = await this.execArray('cat', [absolute]);
     if (result.exitCode !== 0) {
       throw new Error(`Failed to read ${filePath}: ${result.stdout}`);
     }
@@ -450,9 +451,13 @@ export class SandboxToolDeps implements ToolDeps {
     const absolute = this.resolvePath(filePath);
     // Ensure parent directory exists via sandbox (mkdir -p fixed for WASI)
     const dir = dirname(absolute);
-    await this.sandbox.run(`mkdir -p ${dir}`);
-    // Write file by piping content through stdin to cat
-    const writeResult = await this.sandbox.run(`cat > ${absolute}`, { stdin: content });
+    // SEC5: use execArray (no shell) for mkdir
+    await this.execArray('mkdir', ['-p', dir]);
+    // Write file by piping content through stdin to cat.
+    // SEC5: cat > uses shell redirect, so the path MUST be single-quoted.
+    const writeResult = await this.sandbox.run(`cat > ${shellSingleQuote(absolute)}`, {
+      stdin: content,
+    });
     if (writeResult.exitCode !== 0) {
       throw new Error(`Failed to write ${filePath}: ${writeResult.stdout}`);
     }
@@ -494,7 +499,8 @@ export class SandboxToolDeps implements ToolDeps {
       ? this.resolvePath(options.cwd.replace(/^\/workspace\/?/, ''))
       : '/workspace';
     // find is not available in busybox-wasi; use ls -R instead
-    const result = await this.sandbox.run(`ls -R ${cwd}`);
+    // SEC5: use execArray (no shell) so cwd path is a literal argv element
+    const result = await this.execArray('ls', ['-R', cwd]);
     if (result.exitCode !== 0 || !result.stdout.trim()) {
       return [];
     }
@@ -514,7 +520,7 @@ export class SandboxToolDeps implements ToolDeps {
     // pattern and include are untrusted (LLM-supplied). wsh expands $() and
     // backticks inside double quotes, so they MUST be POSIX single-quoted to
     // be treated as literal grep arguments (SEC2).
-    let cmd = `grep -rn ${shellSingleQuote(pattern)} ${searchPath}`;
+    let cmd = `grep -rn ${shellSingleQuote(pattern)} ${shellSingleQuote(searchPath)}`;
     if (options?.include) {
       cmd += ` --include=${shellSingleQuote(options.include)}`;
     }
@@ -530,9 +536,14 @@ export class SandboxToolDeps implements ToolDeps {
     // Use separate test -f and test -d calls for reliable detection across
     // different sandbox environments (WASM busybox may not support chained
     // test -e with subshells consistently).
-    const fileResult = await this.sandbox.run(`test -f ${absolute} && echo YES || echo NO`);
+    // SEC5: test uses && / || (shell syntax), so the path MUST be single-quoted
+    const fileResult = await this.sandbox.run(
+      `test -f ${shellSingleQuote(absolute)} && echo YES || echo NO`
+    );
     if (fileResult.stdout.trim() === 'YES') return { exists: true, isFile: true };
-    const dirResult = await this.sandbox.run(`test -d ${absolute} && echo YES || echo NO`);
+    const dirResult = await this.sandbox.run(
+      `test -d ${shellSingleQuote(absolute)} && echo YES || echo NO`
+    );
     if (dirResult.stdout.trim() === 'YES') return { exists: true, isFile: false };
     return { exists: false, isFile: false };
   }
@@ -543,11 +554,14 @@ export class SandboxToolDeps implements ToolDeps {
     // Uses tr -d "\000" to strip null bytes and wc -c to count.
     // This avoids relying on od | grep piping which behaves inconsistently
     // in busybox/WASM environments (e.g. "(standard input):" prefix, non-zero exit).
-    const sizeResult = await this.sandbox.run(`wc -c < ${absolute}`);
+    // SEC5: wc and tr use shell redirects (<) and pipes (|), so the path
+    // MUST be single-quoted to prevent injection.
+    const quoted = shellSingleQuote(absolute);
+    const sizeResult = await this.sandbox.run(`wc -c < ${quoted}`);
     if (sizeResult.exitCode !== 0) return false;
     const originalSize = parseInt(sizeResult.stdout.trim(), 10);
     if (isNaN(originalSize) || originalSize === 0) return false;
-    const strippedResult = await this.sandbox.run(`tr -d "\\000" < ${absolute} | wc -c`);
+    const strippedResult = await this.sandbox.run(`tr -d "\\000" < ${quoted} | wc -c`);
     if (strippedResult.exitCode !== 0) return false;
     const strippedSize = parseInt(strippedResult.stdout.trim(), 10);
     // If sizes differ, null bytes were removed → binary file
