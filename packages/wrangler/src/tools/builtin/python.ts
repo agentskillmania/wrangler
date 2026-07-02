@@ -19,16 +19,17 @@ export function createPythonTool(deps: ToolDeps): Tool<ZodTypeAny> {
         return 'Error: Provide either `code` or `file` parameter.';
       }
 
-      let command: string;
+      // Run via execArray (no shell) so file paths and code are passed as
+      // literal argv elements. This prevents command injection from filenames
+      // containing shell metacharacters (spaces, ;, $()) and removes the need
+      // for manual shell escaping of code (SEC4).
+      let result;
       if (args.file) {
         const filePath = deps.resolvePath(args.file);
-        command = `python3 ${filePath}`;
+        result = await deps.execArray('python3', [filePath]);
       } else {
-        const escapedCode = args.code!.replace(/'/g, "'\\''");
-        command = `python3 -c '${escapedCode}'`;
+        result = await deps.execArray('python3', ['-c', args.code!]);
       }
-
-      const result = await deps.exec(command);
 
       if (result.exitCode === 0) {
         return result.stdout || '(no output)';
