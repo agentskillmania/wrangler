@@ -13,6 +13,14 @@ var mockFns = {
   callTool: function () {
     return Promise.resolve('');
   },
+  // BUG9: track registered servers for incremental registration
+  registeredServers: new Set<string>(),
+  listServers: function () {
+    return Array.from(mockFns.registeredServers);
+  },
+  registerDefinition: function (def: { name: string }) {
+    mockFns.registeredServers.add(def.name);
+  },
 };
 
 vi.mock('mcporter', () => ({
@@ -21,13 +29,21 @@ vi.mock('mcporter', () => ({
     .mockImplementation((...args: unknown[]) =>
       mockFns.loadServerDefinitions(...(args as [{ configPath?: string }]))
     ),
-  createRuntime: vi.fn().mockImplementation(() => {
+  createRuntime: vi.fn().mockImplementation((opts?: { servers?: Array<{ name: string }> }) => {
     if (mockFns.shouldCreateRuntimeFail) {
       return Promise.reject(new Error('Runtime init failed'));
+    }
+    // Simulate mcporter: register initial servers into the set
+    if (opts?.servers) {
+      for (const s of opts.servers) {
+        mockFns.registeredServers.add(s.name);
+      }
     }
     return Promise.resolve({
       listTools: (...args: unknown[]) => mockFns.listTools(...args),
       callTool: (...args: unknown[]) => mockFns.callTool(...args),
+      listServers: () => mockFns.listServers(),
+      registerDefinition: (def: { name: string }) => mockFns.registerDefinition(def),
     });
   }),
 }));
@@ -38,6 +54,7 @@ describe('MCPToolCache', () => {
   beforeEach(() => {
     cache = new MCPToolCache();
     mockFns.shouldCreateRuntimeFail = false;
+    mockFns.registeredServers = new Set();
     mockFns.loadServerDefinitions = () => Promise.resolve([]);
     mockFns.listTools = () => Promise.resolve([]);
     mockFns.callTool = () => Promise.resolve('');
@@ -184,5 +201,36 @@ describe('MCPToolCache', () => {
 
     const tools = await cache.getTools(paths);
     expect(tools).toHaveLength(1);
+  });
+
+  // BUG9: new config paths with new servers must be registered into the
+  // existing runtime (not silently ignored).
+  it('BUG9: second config with a new server registers it into the existing runtime', async () => {
+    // First load: server "srv1"
+    mockFns.loadServerDefinitions = (opts: { configPath?: string }) => {
+      if (opts.configPath === '/config1.json') {
+        return Promise.resolve([{ name: 'srv1', command: { kind: 'stdio', command: 'echo' } }]);
+      }
+      return Promise.resolve([]);
+    };
+    mockFns.listTools = () => Promise.resolve([]);
+
+    await cache.getTools(['/config1.json']);
+    // srv1 should be registered now
+    expect(mockFns.registeredServers.has('srv1')).toBe(true);
+
+    // Second load: different config with a NEW server "srv2"
+    mockFns.loadServerDefinitions = (opts: { configPath?: string }) => {
+      if (opts.configPath === '/config2.json') {
+        return Promise.resolve([{ name: 'srv2', command: { kind: 'stdio', command: 'echo' } }]);
+      }
+      return Promise.resolve([]);
+    };
+
+    await cache.getTools(['/config2.json']);
+    // srv2 must also be registered — BUG9: it was silently ignored before
+    expect(mockFns.registeredServers.has('srv2')).toBe(true);
+    // srv1 should still be there
+    expect(mockFns.registeredServers.has('srv1')).toBe(true);
   });
 });

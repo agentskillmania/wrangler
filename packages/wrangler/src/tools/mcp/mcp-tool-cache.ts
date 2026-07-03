@@ -86,6 +86,22 @@ export class MCPToolCache {
         );
         return [];
       }
+    } else {
+      // BUG9 fix: incrementally register any new servers not yet in the runtime.
+      // The old code skipped this entirely (runtime already existed), so new
+      // config paths with new servers were silently unavailable.
+      const existingServers = new Set(this.runtime.listServers());
+      for (const def of allDefs) {
+        if (!existingServers.has(def.name)) {
+          try {
+            this.runtime.registerDefinition(def);
+          } catch (error) {
+            console.warn(
+              `[wrangler/mcp] Failed to register server "${def.name}": ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        }
+      }
     }
 
     const tools: Tool<ZodTypeAny>[] = [];
