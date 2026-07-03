@@ -101,4 +101,35 @@ No sandbox field.`;
     const result = parseAgentMd(content);
     expect(result.sandbox).toBeUndefined();
   });
+
+  // BUG7: frontmatter closing '---' must be on its own line.
+  // Body text containing '---' (markdown horizontal rule) must NOT be
+  // mistaken for the frontmatter delimiter.
+  it('BUG7: body with --- horizontal rule is not truncated', () => {
+    const content = `---
+name: test-agent
+description: Has a rule in body
+---
+
+Section 1
+
+---
+
+Section 2`;
+    const result = parseAgentMd(content);
+    expect(result.name).toBe('test-agent');
+    // Both sections must be present — the --- in body must not truncate
+    expect(result.instructions).toContain('Section 1');
+    expect(result.instructions).toContain('Section 2');
+  });
+
+  it('BUG7: body with --- mid-line is not truncated', () => {
+    const content = `---
+name: test-agent
+---
+
+Some---text with dashes`;
+    const result = parseAgentMd(content);
+    expect(result.instructions).toContain('Some---text');
+  });
 });

@@ -58,11 +58,29 @@ More content.
     expect(shiftHeadings('# Hello World **bold**', 2)).toBe('### Hello World **bold**');
   });
 
-  it('does not shift heading-like text inside code blocks', () => {
+  it('BUG8: does not shift heading-like text inside code blocks', () => {
     const input = '```\n# This is code\n```\n# This is a heading';
     const result = shiftHeadings(input, 2);
-    // Code block content is still matched by regex — this is a known limitation
+    // Code block content must NOT be shifted
+    expect(result).toContain('# This is code');
+    expect(result).not.toContain('### This is code');
+    // Heading outside code block IS shifted
     expect(result).toContain('### This is a heading');
+  });
+
+  it('BUG8: does not shift # comments inside ~~~ code blocks', () => {
+    const input = '~~~bash\n# set environment variable\nexport FOO=bar\n~~~\n# Real heading';
+    const result = shiftHeadings(input, 2);
+    expect(result).toContain('# set environment variable');
+    expect(result).not.toContain('### set environment variable');
+    expect(result).toContain('### Real heading');
+  });
+
+  it('BUG8: handles indented code fences', () => {
+    const input = '  ```\n  # indented code comment\n  ```\n# Heading';
+    const result = shiftHeadings(input, 2);
+    expect(result).toContain('# indented code comment');
+    expect(result).toContain('### Heading');
   });
 
   it('shifts by 1 level', () => {

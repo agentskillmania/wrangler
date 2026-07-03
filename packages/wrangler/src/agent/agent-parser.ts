@@ -19,16 +19,23 @@ export function parseAgentMd(content: string, fallbackName?: string): ParsedAgen
     };
   }
 
-  const secondDash = trimmed.indexOf('---', 4);
-  if (secondDash === -1) {
+  // BUG7 fix: find the closing '---' delimiter on its OWN LINE (not embedded
+  // in body text). The old code used indexOf('---', 4) which matched any '---'
+  // in the body — a markdown horizontal rule (---) would truncate the
+  // instructions. Use a regex anchored to line start with optional trailing
+  // whitespace.
+  const closeMatch = /^---\s*$/m.exec(trimmed.slice(4));
+  if (!closeMatch) {
     return {
       name: fallbackName ?? 'unknown',
       instructions: trimmed,
     };
   }
 
+  // secondDash is the index in the FULL trimmed string
+  const secondDash = 4 + closeMatch.index;
   const yamlStr = trimmed.slice(4, secondDash);
-  const body = trimmed.slice(secondDash + 3).trim();
+  const body = trimmed.slice(secondDash + closeMatch[0].length).trim();
 
   try {
     const raw = yaml.load(yamlStr, { schema: yaml.DEFAULT_SCHEMA }) as Record<string, unknown>;
