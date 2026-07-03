@@ -57,7 +57,7 @@ export class MCPToolCache {
       return [];
     }
 
-    const key = configPaths.join('\0');
+    const key = configPaths.join('\n');
     const cached = this.cache.get(key);
     if (cached) {
       return cached.tools;
