@@ -44,6 +44,7 @@ vi.mock('mcporter', () => ({
       callTool: (...args: unknown[]) => mockFns.callTool(...args),
       listServers: () => mockFns.listServers(),
       registerDefinition: (def: { name: string }) => mockFns.registerDefinition(def),
+      close: () => Promise.resolve(),
     });
   }),
 }));
@@ -197,7 +198,7 @@ describe('MCPToolCache', () => {
 
     const paths = ['/config.json'];
     await cache.getTools(paths);
-    cache.shutdown();
+    await cache.shutdown();
 
     const tools = await cache.getTools(paths);
     expect(tools).toHaveLength(1);

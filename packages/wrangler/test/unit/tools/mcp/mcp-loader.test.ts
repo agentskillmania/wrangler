@@ -81,7 +81,7 @@ describe('loadMCPTools', () => {
   });
 
   afterEach(async () => {
-    _resetCache();
+    await _resetCache();
     await rm(testDir, { recursive: true, force: true }).catch(() => {});
   });
 

@@ -37,6 +37,9 @@ export class Crew {
   private taskIdCounter = 0;
   private agentIdCounter = 0;
   private abortController = new AbortController();
+  // CONC3: total scheduling budget — prevents infinite inter-agent message loops
+  private totalRounds = 0;
+  private static readonly MAX_TOTAL_ROUNDS = 500;
 
   constructor(config: CrewConfig, options: CrewOptions) {
     this.config = config;
@@ -122,6 +125,21 @@ export class Crew {
 
   /** Start advancing all idle agents with messages. Returns immediately. */
   private scheduleRound(): void {
+    // CONC3: enforce crew-level total scheduling budget to prevent infinite
+    // inter-agent message loops (A→B→A→B... each agent stays under its own
+    // MAX_ADVANCES=200, but the crew as a whole can loop indefinitely).
+    this.totalRounds++;
+    if (this.totalRounds > Crew.MAX_TOTAL_ROUNDS) {
+      this._status = 'stopped';
+      this.emit({
+        type: 'error',
+        error: new Error(
+          `Crew exceeded total scheduling budget (${Crew.MAX_TOTAL_ROUNDS} rounds). Possible infinite message loop between agents.`
+        ),
+      });
+      return;
+    }
+
     for (const agent of this.agents.values()) {
       if (agent.status !== 'idle') continue;
 

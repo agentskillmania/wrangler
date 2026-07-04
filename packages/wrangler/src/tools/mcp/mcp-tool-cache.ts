@@ -156,9 +156,19 @@ export class MCPToolCache {
     return tools;
   }
 
-  /** Clear the tool cache and discard the Runtime. */
-  shutdown(): void {
+  /** Clear the tool cache and close the Runtime (releases MCP server connections). */
+  async shutdown(): Promise<void> {
     this.cache.clear();
+    // CONC4 fix: close the runtime to release MCP server connections
+    // (stdio child processes, HTTP connections). The old code just set
+    // this.runtime = null without closing, leaving orphan connections.
+    if (this.runtime) {
+      try {
+        await this.runtime.close();
+      } catch {
+        // runtime.close() may fail if connections are already broken — ignore
+      }
+    }
     this.runtime = null;
   }
 }

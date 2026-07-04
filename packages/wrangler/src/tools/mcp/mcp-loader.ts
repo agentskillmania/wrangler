@@ -23,8 +23,8 @@ export interface MCPLoaderOptions {
 const globalCache = new MCPToolCache();
 
 /** @internal Reset cache and runtime for testing. */
-export function _resetCache(): void {
-  globalCache.shutdown();
+export async function _resetCache(): Promise<void> {
+  await globalCache.shutdown();
 }
 
 /**

@@ -561,4 +561,37 @@ describe('Crew', () => {
       expect(EnhancedRunner.create).toHaveBeenCalledOnce();
     });
   });
+
+  // CONC3: crew must have a total scheduling budget to prevent infinite
+  // message loops between agents (A→B→A→B... each under their own 200 limit).
+  describe('CONC3: crew total scheduling budget', () => {
+    it('stops and emits error when total rounds exceed the budget', async () => {
+      const crew = new Crew(mockConfig, {
+        llmClient: {} as never,
+        workspaceDeps: { workspacePath: '/workspace' } as never,
+      });
+      const errors: Array<{ type: string; error: Error }> = [];
+      crew.on('error', (e) => errors.push(e as { type: string; error: Error }));
+
+      // Force scheduleRound to loop by calling it repeatedly.
+      // We simulate the crew exceeding its budget by calling scheduleRound
+      // many times rapidly.
+      const scheduleRound = (crew as unknown as { scheduleRound: () => void }).scheduleRound;
+      // Manually push input to start the crew
+      crew.pushInput({ type: 'user_message', content: 'test' });
+
+      // The crew has no real agents, so scheduleRound will just idle.
+      // Call it many times to exceed the budget.
+      for (let i = 0; i < 550; i++) {
+        scheduleRound.call(crew);
+      }
+
+      // After exceeding budget, crew should have emitted an error
+      // and set status to stopped or error
+      const budgetError = errors.find(
+        (e) => e.error?.message?.includes('budget') || e.error?.message?.includes('rounds')
+      );
+      expect(budgetError).toBeDefined();
+    });
+  });
 });
