@@ -50,6 +50,12 @@ function defaultCrewFactory(
 
 export class TestRunner {
   private deps: TestRunnerDeps;
+  /**
+   * Snapshot of env values before applyEnv overrides them, so cleanupEnv
+   * can restore the originals (CONC8). Keyed by env var name; undefined
+   * means the var did not exist before.
+   */
+  private envSnapshot = new Map<string, string | undefined>();
 
   constructor(deps: TestRunnerDeps = {}) {
     this.deps = deps;
@@ -223,7 +229,11 @@ export class TestRunner {
 
   private applyEnv(testCase: TestCase): void {
     if (!testCase.context?.env) return;
+    // CONC8: snapshot the previous values so cleanup can restore them
+    // instead of unconditionally deleting — a key that already existed
+    // must be restored to its original value, not wiped.
     for (const [key, value] of Object.entries(testCase.context.env)) {
+      this.envSnapshot.set(key, process.env[key]);
       process.env[key] = value;
     }
   }
@@ -231,8 +241,14 @@ export class TestRunner {
   private cleanupEnv(testCase: TestCase): void {
     if (!testCase.context?.env) return;
     for (const key of Object.keys(testCase.context.env)) {
-      delete process.env[key];
+      const previous = this.envSnapshot.get(key);
+      if (previous === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previous;
+      }
     }
+    this.envSnapshot.clear();
   }
 
   private async runAgent(
@@ -339,64 +355,91 @@ export class TestRunner {
     let hadError = false;
     let errorMsg = '';
 
-    crew.on('user_response', (event: unknown) => {
-      userResponse = (event as { content: string }).content;
-    });
+    // CONC7: collect every disposer returned by crew.on() so we can tear
+    // down all listeners when the run settles. Without this a reused crew
+    // accumulates listeners across test cases, and the closures they capture
+    // (resolve, toolCalls, ...) keep the old run alive in memory.
+    const disposers: Array<() => void> = [];
+    const track = (disposer: (() => void) | undefined): void => {
+      if (disposer) disposers.push(disposer);
+    };
 
-    crew.on('error', (event: unknown) => {
-      hadError = true;
-      errorMsg = (event as { error: Error }).error.message;
-    });
+    track(
+      crew.on('user_response', (event: unknown) => {
+        userResponse = (event as { content: string }).content;
+      })
+    );
 
-    crew.on('tool_invoked', (event: unknown) => {
-      const ev = event as { toolName: string; args: unknown };
-      toolCalls.push({
-        name: ev.toolName,
-        args: ev.args as Record<string, unknown>,
-      });
-    });
+    track(
+      crew.on('error', (event: unknown) => {
+        hadError = true;
+        errorMsg = (event as { error: Error }).error.message;
+      })
+    );
+
+    track(
+      crew.on('tool_invoked', (event: unknown) => {
+        const ev = event as { toolName: string; args: unknown };
+        toolCalls.push({
+          name: ev.toolName,
+          args: ev.args as Record<string, unknown>,
+        });
+      })
+    );
 
     // Apply multi-turn history if present (crew only supports final message for now)
     const message = this.buildCrewMessage(testCase);
 
     const timeoutMs = options.timeout ?? 2100000;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-      crew.pushInput({ type: 'stop' });
-    }, timeoutMs);
 
-    return new Promise<AgentRunOutput>((resolve, _reject) => {
-      crew.on('user_response', () => {
-        clearTimeout(timeoutId);
-        resolve({
-          answer: userResponse,
-          toolCalls,
-          resultType: hadError ? 'error' : 'success',
-          totalSteps: 0,
-          error: hadError ? new Error(errorMsg) : undefined,
-        });
-      });
+    return new Promise<AgentRunOutput>((resolve, reject) => {
+      let settled = false;
 
-      crew.pushInput({ type: 'user_message', content: message });
+      // Resolve on user_response (the primary completion signal).
+      track(
+        crew.on('user_response', () => {
+          finish(() => resolve(buildOutput()));
+        })
+      );
 
-      // Fallback: if crew goes idle without user_response, resolve
+      // Fallback: resolve if crew goes idle without emitting user_response.
       const checkInterval = setInterval(() => {
         if (crew.state.status === 'idle') {
-          clearInterval(checkInterval);
-          clearTimeout(timeoutId);
-          resolve({
-            answer: userResponse,
-            toolCalls,
-            resultType: hadError ? 'error' : 'success',
-            totalSteps: 0,
-            error: hadError ? new Error(errorMsg) : undefined,
-          });
+          finish(() => resolve(buildOutput()));
         }
       }, 100);
 
-      // Cleanup interval after timeout
-      setTimeout(() => clearInterval(checkInterval), timeoutMs + 1000);
+      // Hard deadline: if the crew neither responds nor goes idle, reject
+      // instead of leaving the Promise pending forever (CONC7).
+      const timeoutId = setTimeout(() => {
+        crew.pushInput({ type: 'stop' });
+        finish(() => reject(new Error(`Test case timed out after ${timeoutMs}ms`)));
+      }, timeoutMs);
+
+      // Single, shared teardown: clears the timeout, the idle-poll interval,
+      // and every crew listener. Safe to call from any settle path.
+      const cleanup = (): void => {
+        clearTimeout(timeoutId);
+        clearInterval(checkInterval);
+        for (const dispose of disposers) dispose();
+      };
+
+      const buildOutput = (): AgentRunOutput => ({
+        answer: userResponse,
+        toolCalls,
+        resultType: hadError ? 'error' : 'success',
+        totalSteps: 0,
+        error: hadError ? new Error(errorMsg) : undefined,
+      });
+
+      const finish = (fn: () => void): void => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        fn();
+      };
+
+      crew.pushInput({ type: 'user_message', content: message });
     });
   }
 

@@ -179,7 +179,7 @@ expected:
       'utf-8'
     );
 
-    let crewStatus = 'running';
+    const crewStatus = 'running';
     const errorHandlers: Array<(e: unknown) => void> = [];
     const userResponseHandlers: Array<(e: unknown) => void> = [];
 
@@ -330,6 +330,114 @@ expected:
     expect(receivedMessage).toContain('user: First');
     expect(receivedMessage).toContain('assistant: Second');
     expect(receivedMessage).toContain('user: Third');
+  });
+
+  it('rejects when crew never responds and never goes idle (no eternal hang)', async () => {
+    mkdirSync(join(tempDir, 'crew-workspace'));
+    writeFileSync(
+      join(tempDir, 'crew-workspace', 'CREW.md'),
+      '---\nname: test-crew\nprimary-agent: primary\n---\nMemory',
+      'utf-8'
+    );
+    mkdirSync(join(tempDir, 'crew-workspace', 'agents'));
+    writeFileSync(
+      join(tempDir, 'crew-workspace', 'agents', 'primary.md'),
+      '---\nname: primary\ndescription: primary agent\n---\nYou are primary.',
+      'utf-8'
+    );
+    mkdirSync(join(tempDir, 'crew-workspace', 'test'));
+    writeFileSync(
+      join(tempDir, 'crew-workspace', 'test', 'hang.yaml'),
+      `
+name: Hang test
+input:
+  message: Hello
+expected:
+  hard:
+    - type: output_contains
+      value: "never"
+`,
+      'utf-8'
+    );
+
+    // Crew that never emits user_response and stays running forever —
+    // the exact scenario that used to leave runCrew's Promise pending.
+    const mockCrew = {
+      on: vi.fn(),
+      pushInput: vi.fn(),
+      state: { status: 'running' },
+    };
+
+    const runner = new TestRunner({
+      crewFactory: vi.fn().mockReturnValue(mockCrew),
+    });
+
+    const report = await runner.run(join(tempDir, 'crew-workspace'), { timeout: 100 });
+
+    // CONC7: the case must terminate (not hang the test runner forever)
+    // and be recorded as failed with a timeout-style error.
+    expect(report.summary.total).toBe(1);
+    expect(report.summary.failed).toBe(1);
+    expect(report.suites[0].cases[0].error).toMatch(/timeout|timed out/i);
+  });
+
+  it('removes all crew listeners after run completes (no listener leak)', async () => {
+    mkdirSync(join(tempDir, 'crew-workspace'));
+    writeFileSync(
+      join(tempDir, 'crew-workspace', 'CREW.md'),
+      '---\nname: test-crew\nprimary-agent: primary\n---\nMemory',
+      'utf-8'
+    );
+    mkdirSync(join(tempDir, 'crew-workspace', 'agents'));
+    writeFileSync(
+      join(tempDir, 'crew-workspace', 'agents', 'primary.md'),
+      '---\nname: primary\ndescription: primary agent\n---\nYou are primary.',
+      'utf-8'
+    );
+    mkdirSync(join(tempDir, 'crew-workspace', 'test'));
+    writeFileSync(
+      join(tempDir, 'crew-workspace', 'test', 'leak.yaml'),
+      `
+name: Leak test
+input:
+  message: Hello
+expected:
+  hard:
+    - type: output_contains
+      value: "response"
+`,
+      'utf-8'
+    );
+
+    // Track disposers returned by crew.on(). Crew.on() returns a disposer
+    // per registration; runCrew must collect and invoke them all on cleanup.
+    const disposers: Array<ReturnType<typeof vi.fn>> = [];
+    const mockCrew = {
+      on: vi.fn().mockImplementation((event: string, handler: (e: unknown) => void) => {
+        if (event === 'user_response') {
+          setTimeout(() => handler({ content: 'a response' }), 10);
+        }
+        const disposer = vi.fn();
+        disposers.push(disposer);
+        return disposer;
+      }),
+      pushInput: vi.fn(),
+      state: { status: 'running' },
+    };
+
+    const runner = new TestRunner({
+      crewFactory: vi.fn().mockReturnValue(mockCrew),
+    });
+
+    await runner.run(join(tempDir, 'crew-workspace'));
+
+    // CONC7: every listener registered via crew.on() must have been
+    // disposed when the run finished, so a reused crew doesn't accumulate
+    // listeners across test cases.
+    expect(disposers.length).toBeGreaterThan(0);
+    for (const disposer of disposers) {
+      expect(disposer).toHaveBeenCalled();
+    }
   });
 
   it('should run agent with multi-turn history', async () => {

@@ -273,6 +273,62 @@ expected:
     expect(process.env.TEST_VAR).toBeUndefined();
   });
 
+  it('should restore pre-existing env vars on cleanup instead of deleting them', async () => {
+    mkdirSync(join(tempDir, 'agent-workspace'));
+    writeFileSync(
+      join(tempDir, 'agent-workspace', 'AGENT.md'),
+      '---\nname: test-agent\ndescription: test\n---\nYou are a test agent.',
+      'utf-8'
+    );
+    mkdirSync(join(tempDir, 'agent-workspace', 'test'));
+    writeFileSync(
+      join(tempDir, 'agent-workspace', 'test', 'env-override.yaml'),
+      `
+name: Env override test
+input:
+  message: Hello
+context:
+  env:
+    TEST_RESTORE_VAR: overridden_value
+expected:
+  hard:
+    - type: output_contains
+      value: "Hello"
+`,
+      'utf-8'
+    );
+
+    const mockRunner = createMockRunner({
+      answer: 'Hello',
+      toolCalls: [],
+      resultType: 'success',
+      totalSteps: 1,
+    });
+
+    const runner = new TestRunner({
+      runnerFactory: vi.fn().mockResolvedValue(
+        mockRunner as unknown as ReturnType<typeof createMockRunner> & {
+          run: () => Promise<unknown>;
+        }
+      ),
+    });
+
+    // Simulate a pre-existing env var that the test case will override.
+    const previousValue = process.env.TEST_RESTORE_VAR;
+    process.env.TEST_RESTORE_VAR = 'original_value';
+
+    try {
+      await runner.run(join(tempDir, 'agent-workspace'));
+
+      // CONC8: cleanup must restore the original value, not delete the key.
+      expect(process.env.TEST_RESTORE_VAR).toBe('original_value');
+    } finally {
+      // Leave the environment as we found it.
+      if (previousValue === undefined) delete process.env.TEST_RESTORE_VAR;
+      else process.env.TEST_RESTORE_VAR = previousValue;
+    }
+  });
+
   it('should track tool calls from runner events', async () => {
     mkdirSync(join(tempDir, 'agent-workspace'));
     writeFileSync(
