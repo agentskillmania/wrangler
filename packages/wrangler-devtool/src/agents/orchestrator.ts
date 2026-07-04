@@ -259,6 +259,32 @@ function getLastAssistantContent(state: AgentState): string {
 }
 
 /**
+ * Build a hard-fail ReviewReport used when review parsing fails (ERR5).
+ *
+ * Parsing failure means the review did not actually run — the result is
+ * unknown, not "pass". Returning this report (all scores 1) makes
+ * reviewPasses return false so the loop iterates instead of short-circuiting
+ * with an implicit pass, and the caller can see from `reasoning` that the
+ * failure was a parse error rather than a genuine low-score review.
+ */
+function makeParseFailureReport(parseError: unknown): ReviewReport {
+  const reason = `Review unparseable — ${parseError instanceof Error ? parseError.message : String(parseError)}`;
+  const failDim = { score: 1, reasoning: reason };
+  return {
+    overallScore: 1,
+    dimensions: {
+      clarity: failDim,
+      completeness: failDim,
+      focus: failDim,
+      safety: failDim,
+      efficiency: failDim,
+    },
+    issues: [],
+    summary: reason,
+  };
+}
+
+/**
  * Check if a review report passes the score threshold on all dimensions.
  */
 function reviewPasses(report: ReviewReport, threshold: number): boolean {
@@ -355,9 +381,12 @@ export async function runGenerationWithLoop(
 
     try {
       lastReview = parseReviewReport(reviewRaw);
-    } catch {
-      // If review parsing fails, assume pass to avoid infinite loop
-      return { output: lastOutput, review: undefined };
+    } catch (err) {
+      // ERR5: parsing failure means the review is unknown, not "pass".
+      // Synthesize a hard-fail report so reviewPasses returns false and the
+      // loop iterates (rather than short-circuiting with an implicit pass
+      // that lets unreviewed output through the quality gate).
+      lastReview = makeParseFailureReport(err);
     }
 
     if (reviewPasses(lastReview, threshold)) {

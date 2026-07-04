@@ -28,7 +28,7 @@ import {
   runReview,
   runCurator,
 } from '../../../src/agents/orchestrator.js';
-import type { AgentOutput, ReviewReport, AgentRunOptions } from '../../../src/agents/types.js';
+import type { AgentOutput, ReviewReport } from '../../../src/agents/types.js';
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -470,23 +470,32 @@ describe('orchestrator', () => {
       expect(result.output.changes).toEqual([]);
     });
 
-    it('should return undefined review when review output is unparseable', async () => {
+    it('should synthesize a hard-fail review (not undefined) when review output is unparseable', async () => {
+      // ERR5: unparseable review must surface as a hard-fail report, not an
+      // undefined that masks the failure as "no review ran".
       const output = makeAgentOutput('test');
+      const output2 = makeAgentOutput('round 2');
 
       mocks.run
         .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(output)))
-        .mockResolvedValueOnce(makeRunnerReturn('bad review json'));
+        .mockResolvedValueOnce(makeRunnerReturn('bad review json'))
+        // round 1 is final (maxRounds:2), gen only — review is the hard-fail
+        // synthesized from round 0's parse error.
+        .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(output2)));
 
       const result = await runGenerationWithLoop(
         'architect',
         'test input',
         { llmClient: {} as never, workspacePath: tempDir },
         undefined,
-        { maxRounds: 3, scoreThreshold: 4 }
+        { maxRounds: 2, scoreThreshold: 4 }
       );
 
-      expect(result.output.summary).toBe('test');
-      expect(result.review).toBeUndefined();
+      // maxRounds:2 → round 0 (gen + broken review) then round 1 final (gen
+      // only). lastReview is the synthesized hard-fail from round 0.
+      expect(result.output.summary).toBe('round 2');
+      expect(result.review).toBeDefined();
+      expect(result.review!.overallScore).toBe(1);
     });
 
     it('should pass existingContent in user message', async () => {
@@ -587,13 +596,17 @@ describe('orchestrator', () => {
       expect(result.review?.overallScore).toBe(4);
     });
 
-    it('should stop iteration after unparseable review instead of continuing', async () => {
-      const output = makeAgentOutput('round 1');
+    it('should NOT assume-pass on unparseable review; treat as hard fail and iterate', async () => {
+      // ERR5: when review parsing fails, the loop must NOT short-circuit with
+      // an implicit pass (the old "assume pass to avoid infinite loop"). It
+      // must continue iterating so the generator gets another chance, and the
+      // final result must surface the failure rather than a passing review.
+      const output1 = makeAgentOutput('round 1');
       const passReport = makeReviewReport(5);
       const output2 = makeAgentOutput('round 2');
 
       mocks.run
-        .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(output)))
+        .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(output1)))
         .mockResolvedValueOnce(makeRunnerReturn('not valid review json'))
         .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(output2)))
         .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(passReport)));
@@ -606,11 +619,51 @@ describe('orchestrator', () => {
         { maxRounds: 3, scoreThreshold: 4 }
       );
 
-      // Should stop at 2 calls (gen + failed review), not continue to 4
-      expect(mocks.run).toHaveBeenCalledTimes(2);
-      expect(result.output.summary).toBe('round 1');
-      expect(result.review).toBeUndefined();
+      // Should have continued to round 2 (4 calls), not stopped at 2.
+      expect(mocks.run).toHaveBeenCalledTimes(4);
+      expect(result.output.summary).toBe('round 2');
+      // Round 2 review passed, so the final review reflects that — but the
+      // key assertion is that round 1's parse failure did NOT end the loop.
+      expect(result.review?.overallScore).toBe(5);
     });
+
+    it('should return a hard-fail review (not undefined) when review stays unparseable to the end', async () => {
+      // ERR5: if review parsing keeps failing through the last round, the
+      // caller must be able to tell — a hard-fail review (all scores 1) is
+      // returned with reasoning that flags the parse failure, instead of an
+      // undefined review that masks the failure as "no review ran".
+      const output1 = makeAgentOutput('round 1');
+      const output2 = makeAgentOutput('round 2');
+
+      mocks.run
+        .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(output1)))
+        .mockResolvedValueOnce(makeRunnerReturn('broken review'))
+        // Final round (maxRounds=2): gen only, no review run — so lastReview
+        // is the hard-fail report synthesized from round 1's parse failure.
+        .mockResolvedValueOnce(makeRunnerReturn(JSON.stringify(output2)));
+
+      const result = await runGenerationWithLoop(
+        'architect',
+        'test input',
+        { llmClient: {} as never, workspacePath: tempDir },
+        undefined,
+        { maxRounds: 2, scoreThreshold: 4 }
+      );
+
+      // 3 calls: gen1 + review1(broken) + gen2(final round, no review)
+      expect(mocks.run).toHaveBeenCalledTimes(3);
+      // review must be defined and clearly failing, not undefined.
+      expect(result.review).toBeDefined();
+      expect(result.review!.overallScore).toBe(1);
+      const reasoning = result.review!.dimensions.clarity.reasoning;
+      expect(reasoning).toMatch(/parse|unparseable|fail/i);
+    });
+
+    // Note: the old "should stop iteration after unparseable review instead
+    // of continuing" test was removed — it codified the ERR5 bug (assume
+    // pass + stop). The correct behavior is covered by
+    // "should NOT assume-pass on unparseable review; treat as hard fail and
+    // iterate" above.
   });
 
   // ── New: runReview ─────────────────────────────────────
