@@ -58,15 +58,18 @@ export async function agentStateRoutes(fastify: FastifyInstance): Promise<void> 
     // If AgentSession is active, wire event forwarding (history + live events)
     const agentSession = sessionManager().getAgentSession(sessionId);
     if (agentSession) {
-      agentSession.setCockpitSender((event) => {
+      const removeSender = agentSession.addCockpitSender((event) => {
         if (event.event === 'agent-diagnostics') {
           writeSSE(reply, 'agent-diagnostics', event.data);
         } else {
           writeGenericSSE(reply, event);
         }
       });
-      request.raw.on('close', () => {
-        agentSession.setCockpitSender(null);
+      // Listen on reply.raw (the socket) — see chat.ts CONC5 note. The
+      // request body is already consumed by the time SSE opens, so
+      // request.raw would not reliably fire on client disconnect.
+      reply.raw.on('close', () => {
+        removeSender();
       });
     } else {
       // No in-memory AgentSession — load persisted state from disk

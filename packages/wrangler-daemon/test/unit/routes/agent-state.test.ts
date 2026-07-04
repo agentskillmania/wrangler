@@ -89,22 +89,25 @@ const mockGetState = vi.fn().mockReturnValue({
     estimatedContextSize: 2000,
   },
 });
-const mockSetCockpitSender = vi.fn(
-  (sender: ((event: { event: string; data: unknown }) => void) | null) => {
-    if (typeof sender === 'function') {
-      sender({
-        event: 'agent-diagnostics',
-        data: {
-          runner: { model: 'test-model', sandbox: true },
-          agent: mockGetState(),
-          llm: null,
-        },
-      });
-    }
-  }
-);
+/** Tracks disposers returned by addCockpitSender so tests can assert cleanup. */
+const mockDisposers: Array<() => void> = [];
+const mockAddCockpitSender = vi.fn((sender: (event: { event: string; data: unknown }) => void) => {
+  sender({
+    event: 'agent-diagnostics',
+    data: {
+      runner: { model: 'test-model', sandbox: true },
+      agent: mockGetState(),
+      llm: null,
+    },
+  });
+  const disposer = vi.fn(() => {
+    /* removed */
+  });
+  mockDisposers.push(disposer);
+  return disposer;
+});
 const mockAgentSession = {
-  setCockpitSender: mockSetCockpitSender,
+  addCockpitSender: mockAddCockpitSender,
   getState: mockGetState,
 };
 
@@ -129,7 +132,8 @@ describe('Agent State SSE route', () => {
     await fastify.register(agentStateRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
 
-    mockSetCockpitSender.mockClear();
+    mockAddCockpitSender.mockClear();
+    mockDisposers.length = 0;
   });
 
   afterEach(async () => {
@@ -250,15 +254,15 @@ describe('Agent State SSE route', () => {
       const events = parseSSE(body);
       expect(events.some((e) => e.event === 'agent-diagnostics')).toBe(true);
 
-      // setCockpitSender should have been called with a function (not null)
-      expect(mockSetCockpitSender).toHaveBeenCalled();
-      const functionCall = mockSetCockpitSender.mock.calls.find(
+      // addCockpitSender should have been called with a function
+      expect(mockAddCockpitSender).toHaveBeenCalled();
+      const functionCall = mockAddCockpitSender.mock.calls.find(
         (call: [unknown]) => typeof call[0] === 'function'
       );
       expect(functionCall).toBeDefined();
     });
 
-    it('clears cockpit sender on request close', { timeout: 10000 }, async () => {
+    it('disposes cockpit sender on request close', { timeout: 10000 }, async () => {
       await createSession('close-session');
       sessionManager.setAgentSession('close-session', mockAgentSession as never);
 
@@ -271,9 +275,9 @@ describe('Agent State SSE route', () => {
       // Allow the close event handler to execute
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      // setCockpitSender should have been called with null on close
-      const nullCall = mockSetCockpitSender.mock.calls.find((call: [unknown]) => call[0] === null);
-      expect(nullCall).toBeDefined();
+      // On close, the route must invoke the disposer returned by addCockpitSender
+      expect(mockDisposers.length).toBeGreaterThanOrEqual(1);
+      expect(mockDisposers[mockDisposers.length - 1]).toHaveBeenCalled();
     });
   });
 });

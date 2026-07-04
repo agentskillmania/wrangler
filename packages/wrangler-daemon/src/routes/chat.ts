@@ -209,6 +209,24 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       Connection: 'keep-alive',
     });
 
+    // CONC5: if the client drops the connection (page close, network loss,
+    // or premature EventSource close), abort the agent so it stops burning
+    // tokens and the session returns to idle instead of hanging in running.
+    // We listen on reply.raw (the socket) rather than request.raw, because
+    // once the request body is consumed request.raw has nothing left to
+    // signal — reply.raw is what actually reflects socket lifecycle.
+    // `settled` distinguishes a client disconnect (still streaming) from the
+    // natural end of the stream, which also closes reply.raw.
+    let clientGone = false;
+    let settled = false;
+    const onDisconnect = () => {
+      if (!settled && !clientGone) {
+        clientGone = true;
+        agentSession.stop();
+      }
+    };
+    reply.raw.on('close', onDisconnect);
+
     // Send sessionId as first event so client can save it
     writeSSE(reply, 'session-start', { sessionId });
     agentSession.emitCockpitEvent({ event: 'session-start', data: { sessionId } });
@@ -218,15 +236,19 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         thinkingEnabled: body.thinkingEnabled,
         model: body.model,
       })) {
+        if (clientGone) break;
         writeSSE(reply, sse.event, sse.data);
       }
-      sessionManager().updateStatus(sessionId, 'idle');
+      if (!clientGone) sessionManager().updateStatus(sessionId, 'idle');
     } catch {
-      writeSSE(reply, 'error', { message: 'Internal server error' });
-      sessionManager().updateStatus(sessionId, 'error');
+      if (!clientGone) {
+        writeSSE(reply, 'error', { message: 'Internal server error' });
+        sessionManager().updateStatus(sessionId, 'error');
+      }
+    } finally {
+      settled = true;
+      if (!clientGone) reply.raw.end();
     }
-
-    reply.raw.end();
   });
 
   /**
@@ -297,19 +319,36 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       Connection: 'keep-alive',
     });
 
+    // CONC5: stop the agent if the client drops the connection mid-stream.
+    // See new-conversation route above for why reply.raw (not request.raw)
+    // and why the `settled` guard is required.
+    let clientGone = false;
+    let settled = false;
+    const onDisconnect = () => {
+      if (!settled && !clientGone) {
+        clientGone = true;
+        agentSession.stop();
+      }
+    };
+    reply.raw.on('close', onDisconnect);
+
     try {
       for await (const sse of agentSession.handleMessage(body.message, {
         thinkingEnabled: body.thinkingEnabled,
         model: body.model,
       })) {
+        if (clientGone) break;
         writeSSE(reply, sse.event, sse.data);
       }
-      sessionManager().updateStatus(sessionId, 'idle');
+      if (!clientGone) sessionManager().updateStatus(sessionId, 'idle');
     } catch {
-      writeSSE(reply, 'error', { message: 'Internal server error' });
-      sessionManager().updateStatus(sessionId, 'error');
+      if (!clientGone) {
+        writeSSE(reply, 'error', { message: 'Internal server error' });
+        sessionManager().updateStatus(sessionId, 'error');
+      }
+    } finally {
+      settled = true;
+      if (!clientGone) reply.raw.end();
     }
-
-    reply.raw.end();
   });
 }

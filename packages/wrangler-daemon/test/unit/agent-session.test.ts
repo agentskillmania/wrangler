@@ -709,7 +709,7 @@ describe('AgentSession', () => {
       );
 
       const cockpitEvents: SSEEvent[] = [];
-      session.setCockpitSender((event) => cockpitEvents.push(event));
+      session.addCockpitSender((event) => cockpitEvents.push(event));
 
       for await (const _ of session.handleMessage('hello')) {
         // drain
@@ -740,7 +740,7 @@ describe('AgentSession', () => {
       );
 
       const cockpitEvents: SSEEvent[] = [];
-      session.setCockpitSender((event) => cockpitEvents.push(event));
+      session.addCockpitSender((event) => cockpitEvents.push(event));
 
       for await (const _ of session.handleMessage('hello')) {
         // drain
@@ -773,7 +773,7 @@ describe('AgentSession', () => {
       );
 
       const cockpitEvents: SSEEvent[] = [];
-      session.setCockpitSender((event) => cockpitEvents.push(event));
+      session.addCockpitSender((event) => cockpitEvents.push(event));
 
       for await (const _ of session.handleMessage('hello')) {
         // drain
@@ -828,6 +828,69 @@ describe('AgentSession', () => {
       expect(info.tokensIn).toBe(100);
     });
 
+    it('forwards emitCockpitEvent to all registered senders (multicast)', async () => {
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* stream() {
+          yield { type: 'complete' } as any;
+          return { state: { id: 'test-state' } };
+        }
+        return stream();
+      });
+
+      const session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      const senderA: SSEEvent[] = [];
+      const senderB: SSEEvent[] = [];
+      session.addCockpitSender((event) => senderA.push(event));
+      session.addCockpitSender((event) => senderB.push(event));
+
+      // Drain the initial diagnostics replay so it doesn't pollute assertions.
+      await new Promise((r) => setTimeout(r, 10));
+      senderA.length = 0;
+      senderB.length = 0;
+
+      session.emitCockpitEvent({ event: 'ping', data: { x: 1 } });
+
+      // Both senders must receive the event — single-sender slot would have dropped A.
+      expect(senderA.some((e) => e.event === 'ping')).toBe(true);
+      expect(senderB.some((e) => e.event === 'ping')).toBe(true);
+    });
+
+    it('removing one cockpit sender does not affect others', async () => {
+      mockRunnerRunStream.mockImplementationOnce(() => {
+        async function* stream() {
+          yield { type: 'complete' } as any;
+          return { state: { id: 'test-state' } };
+        }
+        return stream();
+      });
+
+      const session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      const senderA: SSEEvent[] = [];
+      const senderB: SSEEvent[] = [];
+      const removeA = session.addCockpitSender((event) => senderA.push(event));
+      session.addCockpitSender((event) => senderB.push(event));
+
+      // Drain the initial diagnostics replay so it doesn't pollute assertions.
+      await new Promise((r) => setTimeout(r, 10));
+      senderA.length = 0;
+      senderB.length = 0;
+
+      // Disconnect A only.
+      removeA();
+      session.emitCockpitEvent({ event: 'ping', data: { n: 1 } });
+
+      expect(senderA.length).toBe(0);
+      expect(senderB.some((e) => e.event === 'ping')).toBe(true);
+    });
+
     it('does not forward events after cockpitSender cleared', async () => {
       mockRunnerRunStream.mockImplementationOnce(() => {
         async function* stream() {
@@ -844,18 +907,17 @@ describe('AgentSession', () => {
       );
 
       const cockpitEvents: SSEEvent[] = [];
-      // Set then clear — initial connection event is captured before clear
-      session.setCockpitSender((event) => cockpitEvents.push(event));
-      session.setCockpitSender(null);
+      // Register then immediately unregister before the async diagnostics
+      // snapshot lands. With proper disposer semantics, neither the pending
+      // diagnostics nor any subsequent stream events should arrive.
+      const remove = session.addCockpitSender((event) => cockpitEvents.push(event));
+      remove();
 
       for await (const _ of session.handleMessage('hello')) {
         // drain
       }
 
-      // Only the initial connection diagnostics event remains;
-      // no stream events should have been forwarded after sender was cleared.
-      expect(cockpitEvents.length).toBe(1);
-      expect(cockpitEvents[0].event).toBe('agent-diagnostics');
+      expect(cockpitEvents.length).toBe(0);
     });
 
     async function captureRunnerDiagnostics(): Promise<Record<string, unknown>> {
@@ -898,7 +960,7 @@ describe('AgentSession', () => {
       );
 
       const cockpitEvents: SSEEvent[] = [];
-      session.setCockpitSender((event) => cockpitEvents.push(event));
+      session.addCockpitSender((event) => cockpitEvents.push(event));
 
       for await (const _ of session.handleMessage('hello')) {
         // drain
@@ -960,7 +1022,7 @@ describe('AgentSession', () => {
       );
 
       const cockpitEvents: SSEEvent[] = [];
-      session.setCockpitSender((event) => cockpitEvents.push(event));
+      session.addCockpitSender((event) => cockpitEvents.push(event));
 
       for await (const _ of session.handleMessage('hello')) {
         // drain

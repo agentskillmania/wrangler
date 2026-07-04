@@ -27,7 +27,13 @@ import type { RunnerFeatureFlags } from './session-diagnostics.js';
  */
 interface AskHumanBridge {
   sseSender: ((event: SSEEvent) => void) | null;
-  cockpitSender: ((event: SSEEvent) => void) | null;
+  /**
+   * Multiple concurrent cockpit observers. Each long-lived SSE connection
+   * registers a sender and unregisters on disconnect, so several clients
+   * (refresh, multi-tab) can observe the same session without overwriting
+   * each other.
+   */
+  cockpitSenders: Set<(event: SSEEvent) => void>;
   pendingHumanInput: Map<
     string,
     { resolve: (value: HumanResponse) => void; reject: (reason?: unknown) => void }
@@ -256,7 +262,7 @@ export class AgentSession {
   private static _createBridge(): AskHumanBridge {
     return {
       sseSender: null,
-      cockpitSender: null,
+      cockpitSenders: new Set(),
       pendingHumanInput: new Map(),
     };
   }
@@ -265,12 +271,18 @@ export class AgentSession {
   private static _createAskHumanHandler(bridge: AskHumanBridge): AskHumanHandler {
     return async ({ questions, context }) => {
       const requestId = `human-${Date.now()}`;
-      bridge.sseSender?.({ event: 'human-input', data: { requestId, questions, context } });
-      bridge.cockpitSender?.({ event: 'human-input', data: { requestId, questions, context } });
+      const payload: SSEEvent = { event: 'human-input', data: { requestId, questions, context } };
+      bridge.sseSender?.(payload);
+      for (const sender of bridge.cockpitSenders) sender(payload);
       return new Promise<HumanResponse>((resolve, reject) => {
         bridge.pendingHumanInput.set(requestId, { resolve, reject });
       });
     };
+  }
+
+  /** Fan out an event to all registered cockpit senders. */
+  private _broadcastToCockpit(event: SSEEvent): void {
+    for (const sender of this.bridge.cockpitSenders) sender(event);
   }
 
   /** Whether the session is currently processing a message */
@@ -399,7 +411,7 @@ export class AgentSession {
    * @param event - SSE event to emit
    */
   emitCockpitEvent(event: SSEEvent): void {
-    this.bridge.cockpitSender?.(event);
+    this._broadcastToCockpit(event);
     this.eventHistory.push(event);
     if (this.eventHistory.length > this.MAX_HISTORY) {
       this.eventHistory.shift();
@@ -407,22 +419,38 @@ export class AgentSession {
   }
 
   /**
-   * Set cockpit event sender for SSE streaming.
+   * Register a cockpit event sender for SSE streaming.
    *
-   * @param sender - Callback that receives SSE events, or null to clear
+   * Multiple senders may be registered concurrently (multi-tab observation,
+   * client refresh while an old connection drains). Each receives the same
+   * stream of events. The returned disposer unregisters this specific sender
+   * — callers must call it on disconnect to avoid leaks.
+   *
+   * On registration the new sender immediately receives:
+   *   1. A replay of recent event history (so a fresh connection sees the
+   *      full sequence, not just future events)
+   *   2. One unified diagnostics snapshot
+   *
+   * @param sender - Callback that receives SSE events
+   * @returns A disposer that removes this sender from the broadcast set
    */
-  setCockpitSender(sender: ((event: SSEEvent) => void) | null): void {
-    this.bridge.cockpitSender = sender;
-    if (sender) {
-      // Replay recent history so new connections see full event sequence
-      for (const event of this.eventHistory) {
-        sender(event);
-      }
-      // Send unified diagnostics snapshot (async — fire and forget)
-      this.buildDiagnostics().then((data) => {
-        sender({ event: 'agent-diagnostics', data });
-      });
+  addCockpitSender(sender: (event: SSEEvent) => void): () => void {
+    this.bridge.cockpitSenders.add(sender);
+    // Replay recent history so new connections see full event sequence
+    for (const event of this.eventHistory) {
+      sender(event);
     }
+    // Send unified diagnostics snapshot (async — fire and forget)
+    this.buildDiagnostics().then((data) => {
+      // Only deliver if this sender is still registered by the time the
+      // (async) diagnostics build completes.
+      if (this.bridge.cockpitSenders.has(sender)) {
+        sender({ event: 'agent-diagnostics', data });
+      }
+    });
+    return () => {
+      this.bridge.cockpitSenders.delete(sender);
+    };
   }
 
   /**
@@ -432,7 +460,7 @@ export class AgentSession {
    */
   sendStateSnapshot(): void {
     this.buildDiagnostics().then((data) => {
-      this.bridge.cockpitSender?.({ event: 'agent-diagnostics', data });
+      this._broadcastToCockpit({ event: 'agent-diagnostics', data });
     });
   }
 
@@ -504,7 +532,7 @@ export class AgentSession {
           const events = Array.isArray(mapped) ? mapped : [mapped];
           for (const sse of events) {
             this.pushEvent(sse);
-            this.bridge.cockpitSender?.(sse);
+            this._broadcastToCockpit(sse);
             this.eventHistory.push(sse);
             if (this.eventHistory.length > this.MAX_HISTORY) {
               this.eventHistory.shift();

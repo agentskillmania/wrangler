@@ -405,6 +405,68 @@ describe('Chat API', () => {
       expect(msgOpts.model).toBeUndefined();
       expect(msgOpts.thinkingEnabled).toBeUndefined();
     });
+
+    it('calls agentSession.stop() when client disconnects mid-stream', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+
+      // handleMessage yields one event then blocks until stop() is called —
+      // simulating a long-running agent stream that the client abandons.
+      let unblock: () => void = () => {};
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'token', data: { delta: 'partial' } };
+        await new Promise<void>((resolve) => {
+          unblock = resolve;
+        });
+        yield { event: 'done', data: {} };
+      });
+
+      const controller = new AbortController();
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
+        signal: controller.signal,
+      });
+
+      // Read the first chunk to ensure the stream has started, then abort —
+      // this is the client-disconnect scenario CONC5 addresses.
+      const reader = res.body!.getReader();
+      await reader.read();
+      controller.abort();
+      try {
+        await reader.read();
+      } catch {
+        // expected: aborted
+      }
+
+      // Allow the 'close' handler on the request to fire.
+      await new Promise((r) => setTimeout(r, 100));
+
+      // stop() must have been called exactly once (idempotent disconnect guard)
+      // so the agent does not keep running after the client is gone.
+      expect(mockSession.stop).toHaveBeenCalledTimes(1);
+
+      // Unblock the mock generator so test teardown doesn't hang.
+      unblock();
+    });
+
+    it('does not call stop() on normal stream completion', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'token', data: { delta: 'hi' } };
+        yield { event: 'done', data: {} };
+      });
+
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
+      });
+      await res.text();
+
+      // On a clean completion the route must not invoke stop().
+      expect(mockSession.stop).not.toHaveBeenCalled();
+    });
   });
 
   // ─── POST /api/chat/:sessionId (RESUME conversation) ───
