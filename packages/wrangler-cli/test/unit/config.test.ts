@@ -234,6 +234,46 @@ llm:
       }
     });
 
+    it('should return loadError when config file is corrupted (ERR7)', async () => {
+      // ERR7: a broken config (invalid YAML syntax) must surface as loadError
+      // so the caller can tell "no config yet" from "config is broken".
+      // Without this the user sees the setup wizard instead of an error.
+      const localConfig = path.join(testDir, 'wrangler.yaml');
+      await fs.writeFile(localConfig, '{ invalid: yaml: content: [[[', 'utf-8');
+
+      const originalCwd = process.cwd();
+      process.chdir(testDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(testDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(false);
+        // The key assertion: loadError is set, distinguishing corruption
+        // from a simple "not configured yet" state.
+        expect(config.loadError).toBeDefined();
+        expect(typeof config.loadError).toBe('string');
+        expect(config.loadError!.length).toBeGreaterThan(0);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should NOT set loadError when no config file exists (ERR7)', async () => {
+      // "No config yet" is a normal state (setup wizard), not an error.
+      const emptyDir = path.join(testDir, 'empty-noerror');
+      await fs.mkdir(emptyDir, { recursive: true });
+
+      const originalCwd = process.cwd();
+      process.chdir(emptyDir);
+
+      try {
+        const config = await loadConfig({ globalDir: path.join(emptyDir, 'noglobal') });
+        expect(config.hasValidConfig).toBe(false);
+        expect(config.loadError).toBeUndefined();
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
     it('should prefer local config over global config', async () => {
       // Local config
       const localYaml = `

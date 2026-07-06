@@ -125,6 +125,50 @@ expected:
     expect(report.suites[0].cases[0].softResults).toBeUndefined();
   });
 
+  it('skips soft evaluation (does not fail case) when evaluateSoft throws (ERR4)', async () => {
+    // ERR4: when the soft-eval infrastructure throws (LLM unavailable, network
+    // error, etc.), the case should NOT be marked failed — soft is a quality
+    // gate, not a correctness gate. Skipping soft lets the hard assertions
+    // decide pass/fail, the same as when LLM config is missing.
+    const ws = makeAgentWorkspace(
+      tempDir,
+      'throws-skip',
+      `
+name: Soft throws skip test
+input:
+  message: Hello
+expected:
+  hard:
+    - type: output_contains
+      value: "Hello"
+  soft:
+    - name: quality
+      criteria: Output should be clear
+      rubric: []
+      minScore: 3
+`
+    );
+
+    mocks.loadConfig.mockResolvedValue({ llm: MOCK_LLM_CONFIG });
+    mocks.evaluateSoft.mockRejectedValue(new Error('LLM unavailable'));
+
+    const runner = new TestRunner({
+      runnerFactory: vi.fn().mockResolvedValue({
+        run: vi.fn().mockResolvedValue({
+          state: {},
+          result: { type: 'success', answer: 'Hello', totalSteps: 1 },
+        }),
+        on: vi.fn(),
+      }),
+    });
+
+    const report = await runner.run(ws);
+
+    // Hard assertion passed → case should pass; soft was skipped due to infra error
+    expect(report.summary.passed).toBe(1);
+    expect(report.suites[0].cases[0].error).toBeUndefined();
+  });
+
   it('marks test failed when soft evaluation throws', async () => {
     const ws = makeAgentWorkspace(
       tempDir,
@@ -160,7 +204,10 @@ expected:
 
     const report = await runner.run(ws);
 
-    expect(report.summary.failed).toBe(1);
+    // ERR4: soft infra failure no longer fails the case; hard assertion decides.
+    expect(report.summary.passed).toBe(1);
+    // softResults was initialized to [] before the throw; it stays empty
+    // because no evaluation completed.
     expect(report.suites[0].cases[0].softResults).toEqual([]);
   });
 

@@ -35,6 +35,13 @@ export interface AppConfig {
   hasValidConfig: boolean;
   /** Configuration file path */
   configPath?: string;
+  /**
+   * Error message when config loading/parsing failed (ERR7).
+   * Distinguishes "config file is corrupted" (loadError set) from
+   * "no config yet" (loadError undefined, hasValidConfig false).
+   * Callers should check this before showing a setup wizard.
+   */
+  loadError?: string;
   /** LLM configuration */
   llm?: LLMQuickInit;
   /** Maximum number of agent steps per run */
@@ -141,8 +148,16 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
       maxSteps: config.maxSteps,
       requestTimeout: config.requestTimeout ?? 1800000,
     };
-  } catch {
-    return { hasValidConfig: false, configPath };
+  } catch (err) {
+    // ERR7: distinguish "config file is corrupted" from "no config yet".
+    // A parse/IO error means the user HAS a config but it's broken — surfacing
+    // the error lets the caller show a repair message instead of the setup
+    // wizard (which would confusingly ask them to configure from scratch).
+    return {
+      hasValidConfig: false,
+      configPath,
+      loadError: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

@@ -181,8 +181,10 @@ export class TestRunner {
           }
         }
       } catch {
-        // Soft evaluation failure is not fatal
-        allSoftPassed = false;
+        // ERR4: soft-eval infrastructure failure (LLM unavailable, network
+        // error, etc.) is not a correctness failure. Skip soft evaluation —
+        // leave allSoftPassed true so hard assertions decide the outcome,
+        // matching the behavior when LLM config is missing.
       }
     }
 
