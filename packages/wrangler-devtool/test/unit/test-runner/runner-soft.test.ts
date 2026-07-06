@@ -167,6 +167,11 @@ expected:
     // Hard assertion passed → case should pass; soft was skipped due to infra error
     expect(report.summary.passed).toBe(1);
     expect(report.suites[0].cases[0].error).toBeUndefined();
+    // softResults was initialized to [] before the throw but never populated —
+    // this confirms soft was skipped (no evaluation completed), not silently
+    // passed.
+    expect(report.suites[0].cases[0].softResults).toEqual([]);
+    expect(mocks.evaluateSoft).toHaveBeenCalled();
   });
 
   it('marks test failed when soft evaluation throws', async () => {
