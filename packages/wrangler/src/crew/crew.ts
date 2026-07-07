@@ -224,11 +224,7 @@ export class Crew {
 
       // Worker → auto-route result directly to Primary
       if (agent.role === 'worker') {
-        this.router.enqueue(this.primaryId, {
-          from: agent.id,
-          content: answer,
-          timestamp: Date.now(),
-        });
+        this.enqueueWorkerResult(agent.id, answer);
 
         // Mark task as completed with the actual result
         if (agent.taskId) {
@@ -257,11 +253,7 @@ export class Crew {
 
       // Route error to Primary so upstream knows
       if (agent.role === 'worker') {
-        this.router.enqueue(this.primaryId, {
-          from: agent.id,
-          content: `[error] ${errorMsg}`,
-          timestamp: Date.now(),
-        });
+        this.enqueueWorkerResult(agent.id, `[error] ${errorMsg}`);
       }
 
       // Primary always emits user_response on failure so the caller knows
@@ -269,6 +261,14 @@ export class Crew {
         this.emit({ type: 'user_response', content: `Error: ${errorMsg}` });
       }
     }
+  }
+
+  /**
+   * Route a worker's run result (answer or error message) to the Primary agent.
+   * Used for both success and failure paths.
+   */
+  private enqueueWorkerResult(workerId: string, content: string): void {
+    this.router.enqueue(this.primaryId, { from: workerId, content, timestamp: Date.now() });
   }
 
   // ─── Runner setup ───

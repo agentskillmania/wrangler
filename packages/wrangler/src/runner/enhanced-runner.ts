@@ -62,6 +62,22 @@ function resolveSearchProvider(provider?: SearchProvider | 'bing' | 'sogou'): Se
   return provider;
 }
 
+/**
+ * Build the base skill directory list: user-provided skillDirs plus the
+ * built-in wrangler spec-plan skills (resolved from the installed package).
+ * Returns a fresh array the caller may extend.
+ */
+function collectSkillDirs(options: EnhancedRunnerOptions): string[] {
+  const dirs = [...(options.skillDirs ?? [])];
+  try {
+    const wranglerRoot = nodeRequire.resolve('@agentskillmania/wrangler/package.json');
+    dirs.push(path.join(path.dirname(wranglerRoot), 'dist', 'spec-plan', 'skills'));
+  } catch {
+    /* package resolution failed — skip built-in skills */
+  }
+  return dirs;
+}
+
 function resolveLLMClient(options: {
   llmClient?: ILLMProvider;
   llm?: LLMQuickInit;
@@ -348,14 +364,7 @@ export class EnhancedRunner {
       commandRegistry.register(createCompactHandler());
       {
         // When a2ui is enabled, automatically include the a2ui-generation skill from @agentskillmania/agenui
-        const skillDirs = [...(options.skillDirs ?? [])];
-        // Always include built-in spec-plan skills
-        try {
-          const wranglerRoot = nodeRequire.resolve('@agentskillmania/wrangler/package.json');
-          skillDirs.push(path.join(path.dirname(wranglerRoot), 'dist', 'spec-plan', 'skills'));
-        } catch {
-          /* package resolution failed — skip built-in skills */
-        }
+        const skillDirs = collectSkillDirs(options);
         if (a2uiEnabled) {
           try {
             const agenuiRoot = nodeRequire.resolve('@agentskillmania/agenui/package.json');
@@ -403,14 +412,7 @@ export class EnhancedRunner {
     // Build skill metadata from the resolved skill provider (if any).
     // The AgentRunner's FilesystemSkillProvider is constructed inside AgentRunner
     // from skillDirs, so we list skills from our own provider to capture source.
-    const resolvedSkillDirs: string[] = [];
-    if (options.skillDirs) resolvedSkillDirs.push(...options.skillDirs);
-    try {
-      const wranglerRoot = nodeRequire.resolve('@agentskillmania/wrangler/package.json');
-      resolvedSkillDirs.push(path.join(path.dirname(wranglerRoot), 'dist', 'spec-plan', 'skills'));
-    } catch {
-      /* skip */
-    }
+    const resolvedSkillDirs = collectSkillDirs(options);
     const skillMeta: SkillMetadata[] =
       resolvedSkillDirs.length > 0
         ? new FilesystemSkillProvider(resolvedSkillDirs)
@@ -443,16 +445,7 @@ export class EnhancedRunner {
         ...a2uiMiddleware,
       ],
       systemPrompt: buildTimeContext(),
-      skillDirs: (() => {
-        const dirs = [...(options.skillDirs ?? [])];
-        try {
-          const wranglerRoot = nodeRequire.resolve('@agentskillmania/wrangler/package.json');
-          dirs.push(path.join(path.dirname(wranglerRoot), 'dist', 'spec-plan', 'skills'));
-        } catch {
-          /* skip */
-        }
-        return dirs;
-      })(),
+      skillDirs: collectSkillDirs(options),
       thinkingEnabled: options.thinkingEnabled,
       enablePromptThinking: options.enablePromptThinking,
       requestTimeout: options.requestTimeout,
