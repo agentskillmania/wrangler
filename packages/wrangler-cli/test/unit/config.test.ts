@@ -6,13 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import {
-  loadConfig,
-  saveConfig,
-  saveSetup,
-  setNestedValue,
-  getGlobalConfigPath,
-} from '../../src/config.js';
+import { loadConfig, saveSetup, getGlobalConfigPath } from '../../src/config.js';
 
 describe('config', () => {
   const testDir = path.join(os.tmpdir(), `wrangler-test-config-${Date.now()}`);
@@ -29,54 +23,6 @@ describe('config', () => {
     } catch {
       // Ignore cleanup errors
     }
-  });
-
-  // ---------------------------------------------------------------------------
-  // setNestedValue
-  // ---------------------------------------------------------------------------
-
-  describe('setNestedValue', () => {
-    it('should set top-level key', () => {
-      const obj: Record<string, unknown> = {};
-      setNestedValue(obj, 'name', 'test');
-      expect(obj.name).toBe('test');
-    });
-
-    it('should set nested path', () => {
-      const obj: Record<string, unknown> = {};
-      setNestedValue(obj, 'llm.provider', 'openai');
-      expect((obj.llm as Record<string, unknown>).provider).toBe('openai');
-    });
-
-    it('should set deeply nested path', () => {
-      const obj: Record<string, unknown> = {};
-      setNestedValue(obj, 'a.b.c', 'value');
-      const a = obj.a as Record<string, unknown>;
-      const b = a.b as Record<string, unknown>;
-      expect(b.c).toBe('value');
-    });
-
-    it('should overwrite existing value', () => {
-      const obj: Record<string, unknown> = { name: 'old' };
-      setNestedValue(obj, 'name', 'new');
-      expect(obj.name).toBe('new');
-    });
-
-    it('should set nested value on existing object', () => {
-      const obj: Record<string, unknown> = {
-        llm: { provider: 'openai' },
-      };
-      setNestedValue(obj, 'llm.model', 'gpt-4');
-      const llm = obj.llm as Record<string, unknown>;
-      expect(llm.provider).toBe('openai');
-      expect(llm.model).toBe('gpt-4');
-    });
-
-    it('should overwrite non-object value with object', () => {
-      const obj: Record<string, unknown> = { llm: 'string' };
-      setNestedValue(obj, 'llm.provider', 'openai');
-      expect(typeof obj.llm).toBe('object');
-    });
   });
 
   // ---------------------------------------------------------------------------
@@ -540,55 +486,6 @@ llm:
           path.join(os.homedir(), '.agentskillmania', 'wrangler', 'config.yaml')
         );
         expect(typeof config.hasValidConfig).toBe('boolean');
-      } finally {
-        process.chdir(originalCwd);
-      }
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // saveConfig
-  // ---------------------------------------------------------------------------
-
-  describe('saveConfig', () => {
-    it('should save config to specified global path', async () => {
-      await saveConfig(
-        'llm.providers',
-        [{ name: 'openai', apiKey: 'sk-test-key', models: [{ modelId: 'gpt-4o' }] }],
-        { globalDir }
-      );
-
-      const content = await fs.readFile(path.join(globalDir, 'config.yaml'), 'utf-8');
-      expect(content).toContain('openai');
-      expect(content).toContain('sk-test-key');
-    });
-
-    it('should set new top-level key', async () => {
-      await saveConfig('agent.name', 'my-test-agent', { globalDir });
-
-      const content = await fs.readFile(path.join(globalDir, 'config.yaml'), 'utf-8');
-      expect(content).toContain('my-test-agent');
-    });
-
-    it('should load config after saving', async () => {
-      await saveConfig(
-        'llm.providers',
-        [{ name: 'openai', apiKey: 'sk-test-key', models: [{ modelId: 'gpt-4' }] }],
-        { globalDir }
-      );
-
-      // Use isolated directory to avoid local config interference
-      const noLocalDir = path.join(testDir, 'nolocal2');
-      await fs.mkdir(noLocalDir, { recursive: true });
-
-      const originalCwd = process.cwd();
-      process.chdir(noLocalDir);
-
-      try {
-        const config = await loadConfig({ globalDir });
-        expect(config.hasValidConfig).toBe(true);
-        expect(config.llm?.providers?.[0]?.name).toBe('openai');
-        expect(config.llm?.providers?.[0]?.apiKey).toBe('sk-test-key');
       } finally {
         process.chdir(originalCwd);
       }

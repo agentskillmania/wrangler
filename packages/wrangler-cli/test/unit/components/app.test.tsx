@@ -88,17 +88,6 @@ vi.mock('../../../src/hooks/use-session-manager.js', () => ({
   },
 }));
 
-vi.mock('../../../src/context/interaction-context.js', () => ({
-  InteractionContext: {
-    Provider: ({ children }: { children: React.ReactNode }) => children,
-    $$typeof: Symbol.for('react.context'),
-  },
-  createInteractionCallbacks: vi.fn(() => ({
-    askHuman: vi.fn(),
-    confirm: vi.fn(),
-  })),
-}));
-
 const { setupWizardCapture } = vi.hoisted(() => ({
   setupWizardCapture: {
     onComplete: null as
@@ -360,9 +349,14 @@ describe('App', () => {
     const mockRunner = { runStream: vi.fn() };
     vi.mocked(EnhancedRunner.create).mockResolvedValue(mockRunner as never);
 
-    let capturedConfirmHandler: ((toolName: string, args: Record<string, unknown>) => Promise<boolean>) | null = null;
+    let capturedConfirmHandler:
+      | ((toolName: string, args: Record<string, unknown>) => Promise<boolean>)
+      | null = null;
     vi.mocked(EnhancedRunner.create).mockImplementation(async (opts: Record<string, unknown>) => {
-      capturedConfirmHandler = opts.confirmHandler as (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
+      capturedConfirmHandler = opts.confirmHandler as (
+        toolName: string,
+        args: Record<string, unknown>
+      ) => Promise<boolean>;
       return mockRunner as never;
     });
 
@@ -394,10 +388,15 @@ describe('App', () => {
   it('handleConfirmResult resolves confirm promise with true for always', async () => {
     const { EnhancedRunner } = await import('@agentskillmania/wrangler');
     const mockRunner = { runStream: vi.fn() };
-    let capturedConfirmHandler: ((toolName: string, args: Record<string, unknown>) => Promise<boolean>) | null = null;
+    let capturedConfirmHandler:
+      | ((toolName: string, args: Record<string, unknown>) => Promise<boolean>)
+      | null = null;
 
     vi.mocked(EnhancedRunner.create).mockImplementation(async (opts: Record<string, unknown>) => {
-      capturedConfirmHandler = opts.confirmHandler as (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
+      capturedConfirmHandler = opts.confirmHandler as (
+        toolName: string,
+        args: Record<string, unknown>
+      ) => Promise<boolean>;
       return mockRunner as never;
     });
 
@@ -425,10 +424,15 @@ describe('App', () => {
   it('handleConfirmResult resolves confirm promise with false for no', async () => {
     const { EnhancedRunner } = await import('@agentskillmania/wrangler');
     const mockRunner = { runStream: vi.fn() };
-    let capturedConfirmHandler: ((toolName: string, args: Record<string, unknown>) => Promise<boolean>) | null = null;
+    let capturedConfirmHandler:
+      | ((toolName: string, args: Record<string, unknown>) => Promise<boolean>)
+      | null = null;
 
     vi.mocked(EnhancedRunner.create).mockImplementation(async (opts: Record<string, unknown>) => {
-      capturedConfirmHandler = opts.confirmHandler as (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
+      capturedConfirmHandler = opts.confirmHandler as (
+        toolName: string,
+        args: Record<string, unknown>
+      ) => Promise<boolean>;
       return mockRunner as never;
     });
 
@@ -456,7 +460,11 @@ describe('App', () => {
   it('handleAskAnswer resolves askHuman promise with answer', async () => {
     const { EnhancedRunner } = await import('@agentskillmania/wrangler');
     const mockRunner = { runStream: vi.fn() };
-    let capturedAskHandler: ((params: { questions: Array<{ id: string; question: string }> }) => Promise<Record<string, unknown>>) | null = null;
+    let capturedAskHandler:
+      | ((params: {
+          questions: Array<{ id: string; question: string }>;
+        }) => Promise<Record<string, unknown>>)
+      | null = null;
 
     vi.mocked(EnhancedRunner.create).mockImplementation(async (opts: Record<string, unknown>) => {
       capturedAskHandler = opts.askHumanHandler as (params: {
@@ -612,7 +620,10 @@ describe('App', () => {
 
     const { createInitialState } = await import('../../../src/runner-setup.js');
     await vi.waitFor(() => {
-      expect(createInitialState).toHaveBeenCalledWith('empty-instr-agent', 'You are a helpful assistant.');
+      expect(createInitialState).toHaveBeenCalledWith(
+        'empty-instr-agent',
+        'You are a helpful assistant.'
+      );
     });
   });
 

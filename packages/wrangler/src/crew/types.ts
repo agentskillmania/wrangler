@@ -21,7 +21,7 @@ export interface AgentInstanceInfo {
 
 // ─── Task ───
 
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type TaskStatus = 'running' | 'completed' | 'failed';
 
 export interface TaskInfo {
   readonly id: string;

@@ -162,27 +162,6 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<AppConfig
 }
 
 /**
- * Save a configuration value
- *
- * Uses the Settings class to read/write config. Auto-creates the config file.
- *
- * @param keyPath - Dot-separated config key path (e.g. "llm.provider")
- * @param value - Configuration value
- * @param options - Save options
- */
-export async function saveConfig(
-  keyPath: string,
-  value: string,
-  options?: { globalDir?: string }
-): Promise<void> {
-  const configPath = getGlobalConfigPath(options?.globalDir);
-  const settings = new Settings<WranglerConfig>(configPath);
-  await settings.initialize({ defaultYaml: DEFAULT_CONFIG_YAML });
-  settings.set(keyPath, value);
-  await settings.save();
-}
-
-/**
  * First-time configuration wizard save
  *
  * Writes provider, apiKey, and model to the config file.
@@ -210,26 +189,4 @@ export async function saveSetup(
     ],
   });
   await settings.save();
-}
-
-/**
- * Set a nested value via a dot-separated path
- *
- * @param obj - Target object
- * @param keyPath - Dot-separated key path
- * @param value - Value to set
- */
-export function setNestedValue(obj: Record<string, unknown>, keyPath: string, value: string): void {
-  const keys = keyPath.split('.');
-  let current: Record<string, unknown> = obj;
-
-  for (let i = 0; i < keys.length - 1; i++) {
-    const key = keys[i];
-    if (!current[key] || typeof current[key] !== 'object') {
-      current[key] = {};
-    }
-    current = current[key] as Record<string, unknown>;
-  }
-
-  current[keys[keys.length - 1]] = value;
 }
