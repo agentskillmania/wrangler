@@ -1,27 +1,10 @@
-import { readFile, writeFile, unlink, mkdir, readdir, stat as statFn } from 'node:fs/promises';
-import { resolve, dirname, join, relative } from 'node:path';
+import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 import type { FastifyInstance } from 'fastify';
 
 import type { DecoratedFastifyInstance } from '../types.js';
-
-/**
- * Resolve a path relative to a root directory, preventing path traversal.
- *
- * @param root - Absolute root path
- * @param relativePath - Relative path to resolve
- * @returns Absolute resolved path within root
- * @throws Error if the resolved path escapes the root
- */
-function resolvePath(root: string, relativePath: string): string {
-  const resolved = resolve(root, relativePath);
-  // SEC9: relative() detects sibling-prefix escapes that startsWith misses.
-  const rel = relative(root, resolved);
-  if (rel.startsWith('..')) {
-    throw new Error('Path outside agent directory');
-  }
-  return resolved;
-}
+import { resolveWithinRoot, listFiles } from '../utils.js';
 
 /**
  * Agent file CRUD routes.
@@ -66,7 +49,7 @@ export async function agentFileRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const fullPath = resolvePath(detail.path, query.path);
+      const fullPath = resolveWithinRoot(detail.path, query.path);
       const content = await readFile(fullPath, 'utf-8');
       return { content, path: query.path };
     } catch {
@@ -92,7 +75,7 @@ export async function agentFileRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const fullPath = resolvePath(detail.path, body.path);
+      const fullPath = resolveWithinRoot(detail.path, body.path);
       await writeFile(fullPath, body.content, 'utf-8');
       return { ok: true };
     } catch {
@@ -118,7 +101,7 @@ export async function agentFileRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const fullPath = resolvePath(detail.path, body.path);
+      const fullPath = resolveWithinRoot(detail.path, body.path);
       await mkdir(dirname(fullPath), { recursive: true });
       await writeFile(fullPath, body.content ?? '', 'utf-8');
       return { ok: true, path: body.path };
@@ -145,59 +128,11 @@ export async function agentFileRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const fullPath = resolvePath(detail.path, body.path);
+      const fullPath = resolveWithinRoot(detail.path, body.path);
       await unlink(fullPath);
       return { ok: true };
     } catch {
       return { error: 'File not found' };
     }
-  });
-}
-
-/** File entry returned by the listing endpoint */
-interface FileEntry {
-  name: string;
-  path: string;
-  size: number;
-  isDirectory: boolean;
-  children?: FileEntry[];
-}
-
-/** Recursively list files in a directory, excluding hidden files and node_modules */
-async function listFiles(dirPath: string, relPrefix: string): Promise<FileEntry[]> {
-  const entries = await readdir(dirPath, { withFileTypes: true });
-  const filtered = entries.filter((e) => !e.name.startsWith('.') && e.name !== 'node_modules');
-
-  const result: FileEntry[] = [];
-  for (const entry of filtered) {
-    const fullPath = join(dirPath, entry.name);
-    const relPath = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
-    try {
-      const fileStat = await statFn(fullPath);
-      if (fileStat.isDirectory()) {
-        const children = await listFiles(fullPath, relPath);
-        result.push({
-          name: entry.name,
-          path: relPath,
-          size: 0,
-          isDirectory: true,
-          children,
-        });
-      } else {
-        result.push({
-          name: entry.name,
-          path: relPath,
-          size: fileStat.size,
-          isDirectory: false,
-        });
-      }
-    } catch {
-      /* skip unreadable entries */
-    }
-  }
-
-  return result.sort((a, b) => {
-    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-    return a.name.localeCompare(b.name);
   });
 }

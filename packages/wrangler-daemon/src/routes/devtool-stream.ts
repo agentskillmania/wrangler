@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import type { ConfigManager } from '../core/config-manager.js';
 import type { DecoratedFastifyInstance, SSEEvent } from '../types.js';
+import { writeSSE, getLastAssistantContent, reviewPasses } from '../utils.js';
 
 /**
  * Map a colts RunStreamEvent to a devtool SSE event.
@@ -40,20 +41,6 @@ export function mapDevtoolStreamEvent(event: RunStreamEvent): SSEEvent | null {
     default:
       return null;
   }
-}
-
-function writeSSE(reply: FastifyReply, event: string, data: unknown): void {
-  reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}
-
-function getLastAssistantContent(state: AgentState): string {
-  const messages = state.context.messages;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === 'assistant') {
-      return messages[i].content;
-    }
-  }
-  return '';
 }
 
 function createDevTool(configManager: ConfigManager): DevTool {
@@ -279,17 +266,6 @@ export async function getRunner(
     default:
       throw new Error(`Unknown prompt: ${promptName}`);
   }
-}
-
-function reviewPasses(report: ReviewReport, threshold: number): boolean {
-  const dims = report.dimensions;
-  return (
-    dims.clarity.score >= threshold &&
-    dims.completeness.score >= threshold &&
-    dims.focus.score >= threshold &&
-    dims.safety.score >= threshold &&
-    dims.efficiency.score >= threshold
-  );
 }
 
 function buildReviewFeedback(report: ReviewReport): string {

@@ -1,27 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import type { DecoratedFastifyInstance } from '../types.js';
-
-/**
- * Write an SSE frame to the raw response stream.
- *
- * @param reply - Fastify reply with raw writable stream
- * @param event - SSE event name
- * @param data - Event payload (will be JSON-serialized)
- */
-function writeSSE(reply: FastifyReply, event: string, data: unknown): void {
-  reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}
-
-/**
- * Write a generic SSE message (no event name) — caught by onmessage.
- *
- * @param reply - Fastify reply with raw writable stream
- * @param data - Event payload (will be JSON-serialized)
- */
-function writeGenericSSE(reply: FastifyReply, data: unknown): void {
-  reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
-}
+import { writeSSE, writeGenericSSE } from '../utils.js';
 
 /**
  * Agent state SSE route — streams cockpit events for a session.

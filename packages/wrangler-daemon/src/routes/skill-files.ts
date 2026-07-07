@@ -1,27 +1,10 @@
 import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
-import { resolve, dirname, relative } from 'node:path';
+import { dirname } from 'node:path';
 
 import type { FastifyInstance } from 'fastify';
 
 import type { DecoratedFastifyInstance } from '../types.js';
-
-/**
- * Resolve a path relative to a root directory, preventing path traversal.
- *
- * @param root - Absolute root path
- * @param relativePath - Relative path to resolve
- * @returns Absolute resolved path within root
- * @throws Error if the resolved path escapes the root
- */
-function resolvePath(root: string, relativePath: string): string {
-  const resolved = resolve(root, relativePath);
-  // SEC9: relative() detects sibling-prefix escapes that startsWith misses.
-  const rel = relative(root, resolved);
-  if (rel.startsWith('..')) {
-    throw new Error('Path outside skill directory');
-  }
-  return resolved;
-}
+import { resolveWithinRoot } from '../utils.js';
 
 /**
  * Skill file CRUD routes.
@@ -69,7 +52,7 @@ export async function skillFileRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const fullPath = resolvePath(detail.path, query.path);
+      const fullPath = resolveWithinRoot(detail.path, query.path);
       const content = await readFile(fullPath, 'utf-8');
       return { content, path: query.path };
     } catch {
@@ -95,7 +78,7 @@ export async function skillFileRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const fullPath = resolvePath(detail.path, body.path);
+      const fullPath = resolveWithinRoot(detail.path, body.path);
       await writeFile(fullPath, body.content, 'utf-8');
       return { ok: true };
     } catch {
@@ -121,7 +104,7 @@ export async function skillFileRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const fullPath = resolvePath(detail.path, body.path);
+      const fullPath = resolveWithinRoot(detail.path, body.path);
       await mkdir(dirname(fullPath), { recursive: true });
       await writeFile(fullPath, body.content ?? '', 'utf-8');
       return { ok: true, path: body.path };
@@ -148,7 +131,7 @@ export async function skillFileRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const fullPath = resolvePath(detail.path, body.path);
+      const fullPath = resolveWithinRoot(detail.path, body.path);
       await unlink(fullPath);
       return { ok: true };
     } catch {

@@ -8,6 +8,7 @@ import type {
   CreateAndChatRequest,
   ResumeChatRequest,
 } from '../types.js';
+import { writeSSE } from '../utils.js';
 
 /** Predefined slash commands for the chat input */
 const COMMANDS = [
@@ -54,13 +55,6 @@ const COMMANDS = [
     description: 'Trigger deep thinking mode',
   },
 ];
-
-/**
- * Write an SSE frame to the raw response stream.
- */
-function writeSSE(reply: FastifyReply, event: string, data: unknown): void {
-  reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}
 
 /**
  * Chat SSE streaming routes.

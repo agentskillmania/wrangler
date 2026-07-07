@@ -1,29 +1,10 @@
 import { readFile, writeFile, unlink, mkdir, readdir, stat } from 'node:fs/promises';
-import { resolve, dirname, basename, relative, join } from 'node:path';
+import { dirname, basename, relative, join } from 'node:path';
 
 import type { FastifyInstance } from 'fastify';
 
 import type { DecoratedFastifyInstance } from '../types.js';
-
-/**
- * Resolve a path relative to the workspace root, preventing path traversal.
- *
- * @param workspaceRoot - Absolute workspace root path
- * @param relativePath - Relative path to resolve
- * @returns Absolute resolved path within workspace
- * @throws Error if the resolved path escapes the workspace root
- */
-function resolvePath(workspaceRoot: string, relativePath: string): string {
-  const resolved = resolve(workspaceRoot, relativePath);
-  // SEC9: use relative() to detect escape — startsWith without trailing
-  // separator allows sibling-prefix dirs (/foo/workspace-evil passes
-  // startsWith('/foo/workspace')).
-  const rel = relative(workspaceRoot, resolved);
-  if (rel.startsWith('..')) {
-    throw new Error('Path outside workspace');
-  }
-  return resolved;
-}
+import { resolveWithinRoot } from '../utils.js';
 
 /**
  * Recursively build a file tree from a directory.
@@ -110,7 +91,7 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
     if (!query.path) return { error: 'path is required' };
 
     try {
-      const fullPath = resolvePath(info.workspacePath, query.path);
+      const fullPath = resolveWithinRoot(info.workspacePath, query.path);
       const content = await readFile(fullPath, 'utf-8');
       return { content, path: query.path };
     } catch {
@@ -131,7 +112,7 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
     if (!info) return { error: 'Session not found' };
     if (!body.path || body.content === undefined) return { error: 'path and content required' };
 
-    const fullPath = resolvePath(info.workspacePath, body.path);
+    const fullPath = resolveWithinRoot(info.workspacePath, body.path);
     await writeFile(fullPath, body.content, 'utf-8');
     return { ok: true };
   });
@@ -149,7 +130,7 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
     if (!info) return { error: 'Session not found' };
     if (!body.path) return { error: 'path is required' };
 
-    const fullPath = resolvePath(info.workspacePath, body.path);
+    const fullPath = resolveWithinRoot(info.workspacePath, body.path);
     await mkdir(dirname(fullPath), { recursive: true });
     await writeFile(fullPath, body.content ?? '', 'utf-8');
     return { ok: true, path: body.path };
@@ -169,7 +150,7 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
     if (!body.path) return { error: 'path is required' };
 
     try {
-      const fullPath = resolvePath(info.workspacePath, body.path);
+      const fullPath = resolveWithinRoot(info.workspacePath, body.path);
       await unlink(fullPath);
       return { ok: true };
     } catch {
