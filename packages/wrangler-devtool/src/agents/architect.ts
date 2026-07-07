@@ -4,33 +4,24 @@
 import type { AgentState } from '@agentskillmania/colts';
 import type { EnhancedRunner } from '@agentskillmania/wrangler';
 
-import { runGenerationWithLoop, createGenerationRunner } from './orchestrator.js';
+import { createGenerationAgent } from './generation-agent.js';
 import type { RunnerConfig } from './orchestrator.js';
 import type { AgentOutput, AgentRunOptions } from './types.js';
 
-/**
- * Run the Agent Architect to generate or modify an agent definition.
- */
+const architect = createGenerationAgent('architect');
+
+/** @inheritDoc GenerationAgent.run */
 export async function runAgentArchitect(
   prompt: string,
   existingContent: string | undefined,
   config: RunnerConfig & AgentRunOptions
 ): Promise<AgentOutput> {
-  const result = await runGenerationWithLoop(
-    'architect',
-    prompt,
-    { llmClient: config.llmClient, workspacePath: config.workspacePath, model: config.model },
-    existingContent,
-    config
-  );
-  return result.output;
+  return architect.run(prompt, existingContent, config);
 }
 
-/**
- * Create an architect runner for streaming usage.
- */
+/** @inheritDoc GenerationAgent.createRunner */
 export async function createArchitectRunner(
   config: RunnerConfig
 ): Promise<{ runner: EnhancedRunner; state: AgentState }> {
-  return createGenerationRunner('architect', config);
+  return architect.createRunner(config);
 }

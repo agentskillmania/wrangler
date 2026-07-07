@@ -1,7 +1,7 @@
 // packages/wrangler-devtool/src/cli/commands/review.ts
 // wrangler-devtool review <path> [--prompt] [--deep]
 
-import { readFile, access, readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, resolve, extname } from 'node:path';
 
 import { parseAgentMd, CrewLoader, resolveDefaultModel } from '@agentskillmania/wrangler';
@@ -9,6 +9,7 @@ import { parseAgentMd, CrewLoader, resolveDefaultModel } from '@agentskillmania/
 import { runReviewer } from '../../agents/reviewer.js';
 import { loadConfig, requireLLMConfig } from '../../config.js';
 import { createLLMClient } from '../../llm.js';
+import { fileExists } from '../../utils/fs.js';
 import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
 
@@ -22,15 +23,6 @@ interface StaticCheckIssue {
 interface StaticReviewResult {
   passed: boolean;
   issues: StaticCheckIssue[];
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function runStaticChecks(targetPath: string): Promise<StaticReviewResult> {

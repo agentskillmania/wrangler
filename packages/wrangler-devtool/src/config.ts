@@ -2,12 +2,13 @@
 // Configuration loader — reads wrangler.yaml or ~/.agentskillmania/wrangler/config.yaml
 
 import { readFile } from 'node:fs/promises';
-import { access } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import type { LLMQuickInit, LLMProviderEntry } from '@agentskillmania/colts';
 import yaml from 'js-yaml';
+
+import { fileExists } from './utils/fs.js';
 
 export type LLMConfig = LLMQuickInit;
 
@@ -15,15 +16,6 @@ export interface DevToolConfig {
   llm?: LLMConfig;
   maxSteps?: number;
   requestTimeout?: number;
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**

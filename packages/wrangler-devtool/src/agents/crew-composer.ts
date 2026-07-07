@@ -4,33 +4,24 @@
 import type { AgentState } from '@agentskillmania/colts';
 import type { EnhancedRunner } from '@agentskillmania/wrangler';
 
-import { runGenerationWithLoop, createGenerationRunner } from './orchestrator.js';
+import { createGenerationAgent } from './generation-agent.js';
 import type { RunnerConfig } from './orchestrator.js';
 import type { AgentOutput, AgentRunOptions } from './types.js';
 
-/**
- * Run the Crew Composer to generate or modify a crew definition.
- */
+const crewComposer = createGenerationAgent('crew-composer');
+
+/** @inheritDoc GenerationAgent.run */
 export async function runCrewComposer(
   prompt: string,
   existingContent: string | undefined,
   config: RunnerConfig & AgentRunOptions
 ): Promise<AgentOutput> {
-  const result = await runGenerationWithLoop(
-    'crew-composer',
-    prompt,
-    { llmClient: config.llmClient, workspacePath: config.workspacePath, model: config.model },
-    existingContent,
-    config
-  );
-  return result.output;
+  return crewComposer.run(prompt, existingContent, config);
 }
 
-/**
- * Create a crew composer runner for streaming usage.
- */
+/** @inheritDoc GenerationAgent.createRunner */
 export async function createCrewComposerRunner(
   config: RunnerConfig
 ): Promise<{ runner: EnhancedRunner; state: AgentState }> {
-  return createGenerationRunner('crew-composer', config);
+  return crewComposer.createRunner(config);
 }

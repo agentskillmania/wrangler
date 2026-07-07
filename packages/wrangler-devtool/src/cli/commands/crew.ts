@@ -1,27 +1,10 @@
 // packages/wrangler-devtool/src/cli/commands/crew.ts
 
-import { readFile } from 'node:fs/promises';
-import { access } from 'node:fs/promises';
-import { join } from 'node:path';
-
-import { resolveDefaultModel } from '@agentskillmania/wrangler';
-
 import { runCrewComposer } from '../../agents/crew-composer.js';
-import { requireLLMConfig } from '../../config.js';
-import { createLLMClient } from '../../llm.js';
 import { createTemplate } from '../../tools/create-template.js';
-import { applyChanges } from '../../utils/file-change.js';
 import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { createWriteSubcommand } from './write-command.js';
 
 export const crewCommand = defineCommand({
   name: 'crew',
@@ -41,68 +24,13 @@ export const crewCommand = defineCommand({
         return ExitCode.Success;
       },
     },
-    write: {
-      name: 'write',
+    write: createWriteSubcommand({
+      targetFileName: 'CREW.md',
       description: 'Generate or modify a crew using Crew Composer',
-      args: '[name]',
-      options: {
-        prompt: {
-          type: 'string',
-          required: true,
-          description: 'User instruction for the crew',
-        },
-        dryRun: {
-          type: 'boolean',
-          default: true,
-          description: 'Preview changes without writing',
-        },
-        apply: {
-          type: 'boolean',
-          default: false,
-          description: 'Apply changes to disk',
-        },
-      },
-      handler: async (args, options) => {
-        const name = args[0];
-        const prompt = options.prompt as string;
-        const apply = (options.apply as boolean) || false;
-        const dryRun = !apply;
-        const cwd = process.cwd();
-
-        const targetFile = join(cwd, 'CREW.md');
-        let existingContent: string | undefined;
-
-        if (await fileExists(targetFile)) {
-          existingContent = await readFile(targetFile, 'utf-8');
-        }
-
-        const fullPrompt = name ? `Crew name: ${name}\n${prompt}` : prompt;
-        const llmConfig = await requireLLMConfig();
-        const llmClient = createLLMClient(llmConfig);
-        const output = await runCrewComposer(fullPrompt, existingContent, {
-          llmClient,
-          workspacePath: cwd,
-          model: resolveDefaultModel(llmConfig.providers),
-        });
-
-        const result = await applyChanges(output.changes, { cwd, dryRun });
-
-        console.log(
-          JSON.stringify({
-            success: result.applied,
-            dryRun,
-            summary: output.summary,
-            changes: output.changes,
-            error: result.error,
-          })
-        );
-
-        if (!result.applied && !dryRun) {
-          return ExitCode.ValidationFailure;
-        }
-
-        return ExitCode.Success;
-      },
-    },
+      // Resolve through the live binding so module-level mocks (vi.spyOn)
+      // are picked up at call time rather than at module-load time.
+      run: (...args) => runCrewComposer(...args),
+      buildNamePrefix: (name) => `Crew name: ${name}`,
+    }),
   },
 });

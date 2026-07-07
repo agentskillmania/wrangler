@@ -1,7 +1,7 @@
 // packages/wrangler-devtool/src/cli/commands/skill.ts
 
 import { readFile } from 'node:fs/promises';
-import { access, mkdir } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { resolveDefaultModel } from '@agentskillmania/wrangler';
@@ -11,17 +11,9 @@ import { requireLLMConfig } from '../../config.js';
 import { createLLMClient } from '../../llm.js';
 import { createTemplate } from '../../tools/create-template.js';
 import { applyChanges } from '../../utils/file-change.js';
+import { fileExists } from '../../utils/fs.js';
 import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export const skillCommand = defineCommand({
   name: 'skill',

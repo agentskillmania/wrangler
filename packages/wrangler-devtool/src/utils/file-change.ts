@@ -1,10 +1,11 @@
 // packages/wrangler-devtool/src/utils/file-change.ts
 // 结构化文件变更应用器（create / edit / delete）
 
-import { readFile, writeFile, unlink, access, realpath } from 'node:fs/promises';
+import { readFile, writeFile, unlink, realpath } from 'node:fs/promises';
 import path, { resolve, dirname } from 'node:path';
 
 import { CliError, ExitCode } from '../cli/options.js';
+import { fileExists } from './fs.js';
 
 export interface FileChange {
   file: string;
@@ -23,15 +24,6 @@ export interface ApplyResult {
   changes?: FileChange[];
   error?: string;
   failedChange?: FileChange;
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function resolveFilePath(file: string, cwd?: string): string {
