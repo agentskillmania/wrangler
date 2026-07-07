@@ -14,7 +14,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc && node -e \"const fs=require('fs'),path=require('path');function copyDir(s,d){if(!fs.existsSync(s))return;fs.mkdirSync(d,{recursive:true});for(const f of fs.readdirSync(s)){const sp=path.join(s,f),dp=path.join(d,f);if(fs.statSync(sp).isDirectory())copyDir(sp,dp);else fs.copyFileSync(sp,dp);}};copyDir(path.join('src','agents','prompts'),path.join('dist','agents','prompts'));copyDir(path.join('src','templates'),path.join('dist','templates'));\"",
+    "build": "tsc && node -e \"const fs=require('fs'),path=require('path');function copyDir(s,d){if(!fs.existsSync(s))return;fs.mkdirSync(d,{recursive:true});for(const f of fs.readdirSync(s)){const sp=path.join(s,f),dp=path.join(d,f);if(fs.statSync(sp).isDirectory())copyDir(sp,dp);else fs.copyFileSync(sp,dp);}};copyDir(path.join('src','skills'),path.join('dist','skills'));copyDir(path.join('src','templates'),path.join('dist','templates'));\"",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:unit": "vitest run test/unit",

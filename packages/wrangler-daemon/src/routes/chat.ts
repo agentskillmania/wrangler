@@ -1,4 +1,5 @@
 import { SessionNotFoundError } from '@agentskillmania/wrangler';
+import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { AgentSession } from '../core/agent-session.js';
@@ -173,7 +174,10 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       agentName: agentDetail.name,
       agentInstructions: agentDetail.instructions,
       model: agentDetail.model,
-      skillDirs: body.config?.skillDirs ?? agentDetail.skillDirs,
+      skillDirs: [
+        ...(body.config?.skillDirs ?? agentDetail.skillDirs ?? []),
+        BUILTIN_SKILLS_DIR, // always include devtool's built-in skills (architect/reviewer/curator)
+      ],
       mcpConfigPaths: body.config?.mcpConfigPaths ?? agentDetail.mcpPaths,
       sessionBaseDir: sessionManager().baseDir,
       sessionManager: sessionManager(),

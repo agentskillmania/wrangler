@@ -356,7 +356,7 @@ describe('Chat API', () => {
 
       const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
       // Session-init: model comes from agent default, not per-request model
-      expect(callArg.skillDirs).toEqual(['./skills']);
+      expect(callArg.skillDirs).toEqual(['./skills', expect.any(String)]);
       expect(callArg.mcpConfigPaths).toEqual(['./mcp.json']);
       expect(callArg.builtinTools).toEqual({ shell: false, fileRead: true });
       expect(callArg.enableSession).toBe(false);
@@ -396,7 +396,7 @@ describe('Chat API', () => {
       const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
       // test agent has no explicit model/skillDirs/mcpPaths, so defaults apply
       expect(callArg.model).toBeUndefined();
-      expect(callArg.skillDirs).toEqual([]);
+      expect(callArg.skillDirs).toEqual([expect.any(String)]);
       expect(callArg.mcpConfigPaths).toEqual([]);
       expect(callArg.sandbox).toBe(false);
 

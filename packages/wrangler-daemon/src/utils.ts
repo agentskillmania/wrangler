@@ -1,8 +1,6 @@
 import { readdir, stat as statFn } from 'node:fs/promises';
 import { resolve, relative, join } from 'node:path';
 
-import type { AgentState } from '@agentskillmania/colts';
-import type { ReviewReport } from '@agentskillmania/wrangler-devtool';
 import type { FastifyReply } from 'fastify';
 
 /**
@@ -90,31 +88,4 @@ export function writeSSE(reply: FastifyReply, event: string, data: unknown): voi
  */
 export function writeGenericSSE(reply: FastifyReply, data: unknown): void {
   reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-
-/**
- * Get the last assistant message content from a state.
- */
-export function getLastAssistantContent(state: AgentState): string {
-  const messages = state.context.messages;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === 'assistant') {
-      return messages[i].content;
-    }
-  }
-  return '';
-}
-
-/**
- * Check if a review report passes the score threshold on all dimensions.
- */
-export function reviewPasses(report: ReviewReport, threshold: number): boolean {
-  const dims = report.dimensions;
-  return (
-    dims.clarity.score >= threshold &&
-    dims.completeness.score >= threshold &&
-    dims.focus.score >= threshold &&
-    dims.safety.score >= threshold &&
-    dims.efficiency.score >= threshold
-  );
 }

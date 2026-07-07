@@ -4,8 +4,8 @@
 import { resolveDefaultModel } from '@agentskillmania/wrangler';
 
 import type { SoftEvaluation, AgentRunOutput } from './types.js';
-import type { LLMConfig } from '../config.js';
-import { createLLMClient } from '../llm.js';
+import type { LLMConfig } from './config.js';
+import { createLLMClient } from './config.js';
 
 export interface SoftEvaluationResult {
   name: string;

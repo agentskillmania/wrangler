@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   evaluateSoft: vi.fn(),
 }));
 
-vi.mock('../../../src/config.js', () => ({
+vi.mock('../../../src/test-runner/config.js', () => ({
   loadConfig: mocks.loadConfig,
 }));
 

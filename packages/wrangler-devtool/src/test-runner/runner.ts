@@ -25,7 +25,7 @@ import type {
   ToolCallRecord,
   RunTestsDeps,
 } from './types.js';
-import { loadConfig } from '../config.js';
+import { loadConfig } from './config.js';
 
 // wrangler imports
 

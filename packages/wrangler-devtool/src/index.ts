@@ -1,26 +1,20 @@
 // @agentskillmania/wrangler-devtool
 // Wrangler development tool library
 
-// ── Primary API ──────────────────────────────────────────────────
-export { DevTool } from './devtool.js';
-export type { DevToolOptions } from './devtool.js';
-
-// ── Low-level exports ────────────────────────────────────────────
-
-export { ExitCode, CliError } from './cli/options.js';
-export type { CliErrorJson } from './cli/options.js';
-
+// ── Scaffolding tools ───────────────────────────────────────────
 export { initProject } from './tools/init-workspace.js';
 export type { InitOptions } from './tools/init-workspace.js';
-
 export { createTemplate } from './tools/create-template.js';
 
-export { forkSession, listSessions } from './tools/session-manager.js';
-export type { ForkOptions, ListOptions } from './tools/session-manager.js';
-
+// ── File changes ────────────────────────────────────────────────
 export { applyChanges } from './utils/file-change.js';
 export type { FileChange, ApplyOptions, ApplyResult } from './utils/file-change.js';
 
+// ── CLI basics ──────────────────────────────────────────────────
+export { ExitCode, CliError } from './cli/options.js';
+export type { CliErrorJson } from './cli/options.js';
+
+// ── test-runner (kept as-is, Phase 2 rework) ────────────────────
 export { runTests, TestRunner } from './test-runner/runner.js';
 export type {
   TestReport,
@@ -41,41 +35,15 @@ export { formatJsonReport } from './test-runner/reporters/json.js';
 export { evaluateSoft } from './test-runner/soft-evaluator.js';
 export type { SoftEvaluationResult } from './test-runner/soft-evaluator.js';
 
-// Phase 3: Config and LLM
-export { loadConfig, requireLLMConfig } from './config.js';
-export type { LLMConfig, DevToolConfig, LoadConfigOptions } from './config.js';
+// ── Built-in skills directory path ──────────────────────────────
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-export { createLLMClient } from './llm.js';
-
-// Phase 3: Agents
-export { runAgentArchitect, createArchitectRunner } from './agents/architect.js';
-export { runSkillDesigner, createSkillDesignerRunner } from './agents/skill-designer.js';
-export { runCrewComposer, createCrewComposerRunner } from './agents/crew-composer.js';
-export { runReviewer, createReviewerRunner } from './agents/reviewer.js';
-export {
-  runSessionCurator,
-  createCuratorRunnerWrapper as createSessionCuratorRunner,
-} from './agents/session-curator.js';
-
-export {
-  loadPromptTemplate,
-  parseAgentOutput,
-  parseReviewReport,
-  createGenerationRunner,
-  createReviewRunner,
-  createCuratorRunner,
-  runGenerationWithLoop,
-  runReview as runReviewAgent,
-  runCurator as runCuratorAgent,
-} from './agents/orchestrator.js';
-export type { RunnerConfig } from './agents/orchestrator.js';
-
-export type {
-  AgentOutput,
-  ReviewReport,
-  ReviewDimension,
-  ReviewIssue,
-  SessionSummary,
-  AgentOptions,
-  AgentRunOptions,
-} from './agents/types.js';
+/**
+ * Absolute path to the built-in skills directory.
+ * Upper-layer applications use this to configure `skillDirs`.
+ */
+export const BUILTIN_SKILLS_DIR: string = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'skills'
+);

@@ -1,130 +1,25 @@
-import { DevTool } from '@agentskillmania/wrangler-devtool';
+import { initProject, createTemplate, applyChanges, runTests } from '@agentskillmania/wrangler-devtool';
 import type { FileChange } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance } from 'fastify';
 
-import type { ConfigManager } from '../core/config-manager.js';
 import type { DecoratedFastifyInstance } from '../types.js';
-
-/**
- * Create a DevTool instance from daemon config.
- */
-function createDevTool(configManager: ConfigManager): DevTool {
-  const config = configManager.get();
-  return new DevTool({ llm: config.llm });
-}
 
 /**
  * Devtool API routes — expose wrangler-devtool capabilities as HTTP endpoints.
  *
- * Each route handler creates a DevTool instance directly from daemon config.
- * No caching or lazy initialization.
+ * Only non-AI operations are exposed here (scaffolding, file changes, tests).
+ * AI generation/review was removed when devtool's agents module was dropped;
+ * upper-layer applications should use AgentSession + load_skill instead.
  */
 export async function devtoolRoutes(fastify: FastifyInstance): Promise<void> {
   const decorated = fastify as unknown as DecoratedFastifyInstance;
-  const getConfig = () => decorated.configManager;
-
-  /**
-   * POST /api/devtool/agent/generate
-   *
-   * Generate or modify an agent definition using LLM.
-   * Body: { prompt: string, existingContent?: string, model?: string }
-   */
-  fastify.post('/api/devtool/agent/generate', async (request, reply) => {
-    const body = request.body as { prompt?: string; existingContent?: string; model?: string };
-    if (!body.prompt) {
-      return reply.code(400).send({ error: 'prompt is required' });
-    }
-
-    try {
-      const devtool = createDevTool(getConfig());
-      const options = body.model ? { model: body.model } : undefined;
-      const result = await devtool.runAgentArchitect(body.prompt, body.existingContent, options);
-      return result;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return reply.code(500).send({ error: message });
-    }
-  });
-
-  /**
-   * POST /api/devtool/skill/generate
-   *
-   * Generate or modify a skill definition using LLM.
-   * Body: { prompt: string, existingContent?: string, model?: string }
-   */
-  fastify.post('/api/devtool/skill/generate', async (request, reply) => {
-    const body = request.body as { prompt?: string; existingContent?: string; model?: string };
-    if (!body.prompt) {
-      return reply.code(400).send({ error: 'prompt is required' });
-    }
-
-    try {
-      const devtool = createDevTool(getConfig());
-      const options = body.model ? { model: body.model } : undefined;
-      const result = await devtool.runSkillDesigner(body.prompt, body.existingContent, options);
-      return result;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return reply.code(500).send({ error: message });
-    }
-  });
-
-  /**
-   * POST /api/devtool/crew/generate
-   *
-   * Generate or modify a crew definition using LLM.
-   * Body: { prompt: string, existingContent?: string, model?: string }
-   */
-  fastify.post('/api/devtool/crew/generate', async (request, reply) => {
-    const body = request.body as { prompt?: string; existingContent?: string; model?: string };
-    if (!body.prompt) {
-      return reply.code(400).send({ error: 'prompt is required' });
-    }
-
-    try {
-      const devtool = createDevTool(getConfig());
-      const options = body.model ? { model: body.model } : undefined;
-      const result = await devtool.runCrewComposer(body.prompt, body.existingContent, options);
-      return result;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return reply.code(500).send({ error: message });
-    }
-  });
-
-  /**
-   * POST /api/devtool/review
-   *
-   * Review an agent, skill, or crew definition.
-   * Body: { targetPath: string, content: string, prompt?: string, model?: string }
-   */
-  fastify.post('/api/devtool/review', async (request, reply) => {
-    const body = request.body as {
-      targetPath?: string;
-      content?: string;
-      prompt?: string;
-      model?: string;
-    };
-    if (!body.targetPath || !body.content) {
-      return reply.code(400).send({ error: 'targetPath and content are required' });
-    }
-
-    try {
-      const devtool = createDevTool(getConfig());
-      const options = body.model ? { model: body.model } : undefined;
-      const result = await devtool.runReviewer(body.targetPath, body.content, body.prompt, options);
-      return result;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return reply.code(500).send({ error: message });
-    }
-  });
+  void decorated; // configManager no longer needed without the DevTool facade
 
   /**
    * POST /api/devtool/workspace/init
    *
    * Initialize a new wrangler project.
-   * Body: { path: string, type: 'agent' | 'crew', noGit?: boolean }
+   * Body: { path: string, type: 'agent' | 'crew' | 'skill', noGit?: boolean }
    */
   fastify.post('/api/devtool/workspace/init', async (request, reply) => {
     const body = request.body as { path?: string; type?: string; noGit?: boolean };
@@ -138,9 +33,8 @@ export async function devtoolRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const devtool = createDevTool(getConfig());
-      await devtool.initProject(body.path, {
-        type: body.type as 'agent' | 'crew',
+      await initProject(body.path, {
+        type: body.type as 'agent' | 'crew' | 'skill',
         noGit: body.noGit,
       });
       return { ok: true };
@@ -168,8 +62,7 @@ export async function devtoolRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const devtool = createDevTool(getConfig());
-      const filePath = await devtool.createTemplate(
+      const filePath = await createTemplate(
         body.type as 'agent' | 'skill' | 'crew' | 'session',
         body.name,
         body.cwd
@@ -198,11 +91,10 @@ export async function devtoolRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const devtool = createDevTool(getConfig());
       const options: Record<string, unknown> = {};
       if (body.cwd) options.cwd = body.cwd;
       if (body.dryRun) options.dryRun = body.dryRun;
-      const result = await devtool.applyChanges(
+      const result = await applyChanges(
         body.changes as FileChange[],
         Object.keys(options).length > 0 ? options : undefined
       );
@@ -226,11 +118,10 @@ export async function devtoolRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      const devtool = createDevTool(getConfig());
       const options: Record<string, unknown> = {};
       if (body.case) options.case = body.case;
       if (body.hardOnly) options.hardOnly = body.hardOnly;
-      const result = await devtool.runTests(body.targetPath, options);
+      const result = await runTests(body.targetPath, options);
       return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';

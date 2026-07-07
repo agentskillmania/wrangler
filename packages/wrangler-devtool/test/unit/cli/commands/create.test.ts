@@ -1,86 +1,94 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
+/**
+ * Unit tests for the merged `create` command (replaces agent/crew/skill create).
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { agentCommand } from '../../../../src/cli/commands/agent.js';
-import { skillCommand } from '../../../../src/cli/commands/skill.js';
-import { crewCommand } from '../../../../src/cli/commands/crew.js';
-import { ExitCode } from '../../../../src/cli/options.js';
 
-describe('create commands', () => {
+const createTemplateMock = vi.hoisted(() => ({ createTemplate: vi.fn() }));
+vi.mock('../../../../src/tools/create-template.js', () => ({
+  createTemplate: createTemplateMock.createTemplate,
+}));
+
+import { createCommand } from '../../../../src/cli/commands/create.js';
+import { CliError, ExitCode } from '../../../../src/cli/options.js';
+
+describe('create command', () => {
   let tempDir: string;
-  let logSpy: ReturnType<typeof vi.spyOn>;
+  let originalCwd: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'wrangler-devtool-test-'));
-    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    tempDir = mkdtempSync(join(tmpdir(), 'create-cmd-test-'));
+    originalCwd = process.cwd();
+    process.chdir(tempDir);
+    createTemplateMock.createTemplate.mockReset();
   });
 
   afterEach(() => {
+    process.chdir(originalCwd);
     rmSync(tempDir, { recursive: true, force: true });
-    logSpy.mockRestore();
   });
 
-  it('agent create should generate AGENT.md', async () => {
-    const originalCwd = process.cwd();
-    process.chdir(tempDir);
+  it('creates an agent template and outputs JSON', async () => {
+    const mockPath = join(tempDir, 'AGENT.md');
+    createTemplateMock.createTemplate.mockResolvedValue(mockPath);
+
+    const exitCode = await createCommand.handler!(['agent', 'my-agent'], {} as never);
+
+    expect(exitCode).toBe(ExitCode.Success);
+    expect(createTemplateMock.createTemplate).toHaveBeenCalledWith(
+      'agent',
+      'my-agent',
+      process.cwd()
+    );
+  });
+
+  it('creates a crew template', async () => {
+    createTemplateMock.createTemplate.mockResolvedValue(join(tempDir, 'CREW.md'));
+    await createCommand.handler!(['crew', 'my-crew'], {} as never);
+    expect(createTemplateMock.createTemplate).toHaveBeenCalledWith(
+      'crew',
+      'my-crew',
+      process.cwd()
+    );
+  });
+
+  it('creates a skill template', async () => {
+    createTemplateMock.createTemplate.mockResolvedValue(join(tempDir, 'SKILL.md'));
+    await createCommand.handler!(['skill', 'my-skill'], {} as never);
+    expect(createTemplateMock.createTemplate).toHaveBeenCalledWith(
+      'skill',
+      'my-skill',
+      process.cwd()
+    );
+  });
+
+  it('throws CliError when type is missing', async () => {
+    await expect(createCommand.handler!([], {} as never)).rejects.toThrow(CliError);
     try {
-      const code = await agentCommand.subcommands!.create.handler!(['my-agent'], {});
-      expect(code).toBe(ExitCode.Success);
-      const content = readFileSync(join(tempDir, 'AGENT.md'), 'utf-8');
-      expect(content).toContain('name: my-agent');
-    } finally {
-      process.chdir(originalCwd);
+      await createCommand.handler!([], {} as never);
+    } catch (e) {
+      expect(e as CliError).toBeInstanceOf(CliError);
+      expect((e as CliError).code).toBe('MISSING_TYPE');
     }
   });
 
-  it('skill create should generate skills/*.md', async () => {
-    mkdirSync(join(tempDir, 'skills'), { recursive: true });
-    const originalCwd = process.cwd();
-    process.chdir(tempDir);
+  it('throws CliError for invalid type', async () => {
+    await expect(createCommand.handler!(['invalid', 'name'], {} as never)).rejects.toThrow(
+      'Invalid type'
+    );
     try {
-      const code = await skillCommand.subcommands!.create.handler!(['my-skill'], {});
-      expect(code).toBe(ExitCode.Success);
-      const content = readFileSync(join(tempDir, 'skills', 'my-skill.md'), 'utf-8');
-      expect(content).toContain('name: my-skill');
-    } finally {
-      process.chdir(originalCwd);
+      await createCommand.handler!(['invalid', 'name'], {} as never);
+    } catch (e) {
+      expect((e as CliError).code).toBe('INVALID_TYPE');
     }
   });
 
-  it('crew create should generate CREW.md', async () => {
-    const originalCwd = process.cwd();
-    process.chdir(tempDir);
-    try {
-      const code = await crewCommand.subcommands!.create.handler!(['my-crew'], {});
-      expect(code).toBe(ExitCode.Success);
-      const content = readFileSync(join(tempDir, 'CREW.md'), 'utf-8');
-      expect(content).toContain('name: my-crew');
-    } finally {
-      process.chdir(originalCwd);
-    }
-  });
-
-  it('should reject missing name', async () => {
-    await expect(agentCommand.subcommands!.create.handler!([], {})).rejects.toThrow();
-  });
-
-  it('should reject duplicate files', async () => {
-    const originalCwd = process.cwd();
-    process.chdir(tempDir);
-    try {
-      await agentCommand.subcommands!.create.handler!(['dup'], {});
-      await expect(agentCommand.subcommands!.create.handler!(['dup'], {})).rejects.toThrow();
-    } finally {
-      process.chdir(originalCwd);
-    }
-  });
-
-  it('should reject missing skill name directly', async () => {
-    await expect(skillCommand.subcommands!.create.handler!([], {})).rejects.toThrow();
-  });
-
-  it('should reject missing crew name directly', async () => {
-    await expect(crewCommand.subcommands!.create.handler!([], {})).rejects.toThrow();
+  it('throws CliError when name is missing', async () => {
+    await expect(createCommand.handler!(['agent'], {} as never)).rejects.toThrow(
+      'Name is required'
+    );
   });
 });

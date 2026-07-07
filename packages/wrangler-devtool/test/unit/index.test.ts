@@ -7,38 +7,32 @@ const TEST_TIMEOUT = 60000;
 
 describe('@agentskillmania/wrangler-devtool', () => {
   it(
-    'exports DevTool class as primary API',
+    'exports scaffolding tools and BUILTIN_SKILLS_DIR',
     async () => {
-      const { DevTool } = await import('../../src/index.js');
+      const mod = await import('../../src/index.js');
 
-      expect(DevTool).toBeTypeOf('function');
-      const tool = new DevTool({
-        llm: {
-          providers: [
-            {
-              name: 'openai',
-              apiKey: 'sk-test',
-              models: [{ modelId: 'gpt-4o' }],
-            },
-          ],
-        },
-      });
-      expect(tool).toBeInstanceOf(DevTool);
-      expect(tool.maxSteps).toBeUndefined();
-      expect(tool.requestTimeout).toBeUndefined();
+      // Scaffolding
+      expect(mod.initProject).toBeTypeOf('function');
+      expect(mod.createTemplate).toBeTypeOf('function');
+      expect(mod.applyChanges).toBeTypeOf('function');
+      // CLI basics
+      expect(mod.CliError).toBeTypeOf('function');
+      expect(mod.ExitCode).toBeDefined();
+      // Skills directory
+      expect(mod.BUILTIN_SKILLS_DIR).toBeTypeOf('string');
+      expect(mod.BUILTIN_SKILLS_DIR.length).toBeGreaterThan(0);
     },
     TEST_TIMEOUT
   );
 
   it(
-    'exports expected public API entries',
+    'does NOT export DevTool or agent functions (removed in refactoring)',
     async () => {
-      const types = await import('../../src/index.js');
-      expect(Object.keys(types).sort()).toEqual(
-        expect.arrayContaining(['DevTool', 'CliError', 'initProject', 'createTemplate'])
-      );
-      expect(types.DevTool).toBeTypeOf('function');
-      expect(types.CliError).toBeTypeOf('function');
+      const mod = await import('../../src/index.js' ) as Record<string, unknown>;
+      expect(mod.DevTool).toBeUndefined();
+      expect(mod.runAgentArchitect).toBeUndefined();
+      expect(mod.runReviewer).toBeUndefined();
+      expect(mod.loadConfig).toBeUndefined();
     },
     TEST_TIMEOUT
   );

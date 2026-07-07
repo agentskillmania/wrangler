@@ -15,7 +15,6 @@ import { chatRoutes } from './routes/chat.js';
 import { configRoutes } from './routes/config.js';
 import { crewFileRoutes } from './routes/crew-files.js';
 import { crewRoutes } from './routes/crews.js';
-import { devtoolStreamRoutes } from './routes/devtool-stream.js';
 import { devtoolRoutes } from './routes/devtool.js';
 import { fileRoutes } from './routes/files.js';
 import { healthRoutes } from './routes/health.js';
@@ -144,7 +143,6 @@ export class Daemon {
     this.fastify.register(crewRoutes);
     this.fastify.register(crewFileRoutes);
     this.fastify.register(devtoolRoutes);
-    this.fastify.register(devtoolStreamRoutes);
     this.fastify.register(specRoutes);
     this.fastify.register(planRoutes);
     this.fastify.register(modelRoutes);

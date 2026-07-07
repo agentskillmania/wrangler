@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SoftEvaluation, AgentRunOutput } from '../../../src/test-runner/types.js';
-import type { LLMConfig } from '../../../src/config.js';
 
-// Mock llm.ts to control LLM responses
+// Mock config.ts (createLLMClient moved here from deleted llm.ts)
 const mockCall = vi.fn();
-vi.mock('../../../src/llm.js', () => ({
+vi.mock('../../../src/test-runner/config.js', () => ({
   createLLMClient: () => ({ call: mockCall }),
 }));
 
