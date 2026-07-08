@@ -57,6 +57,8 @@ export interface EnhancedRunnerOptions {
   confirmTools?: string[];
   thinkingEnabled?: boolean;
   enablePromptThinking?: boolean;
+  /** Sampling temperature (passed through to LLM provider) */
+  temperature?: number;
   requestTimeout?: number;
   maxSteps?: number;
   /** Context compression config (passed to AgentRunner and /compact handler) */

@@ -241,6 +241,12 @@ describe('EnhancedRunner', () => {
     );
   });
 
+  it('should pass temperature to AgentRunner', async () => {
+    await EnhancedRunner.create(makeOptions({ temperature: 0.7 }));
+    const calls = await getAgentRunnerCalls();
+    expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ temperature: 0.7 }));
+  });
+
   it('should not hardcode thinkingEnabled to true', async () => {
     await EnhancedRunner.create(makeOptions({ thinkingEnabled: false }));
     const calls = await getAgentRunnerCalls();

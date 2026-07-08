@@ -448,6 +448,7 @@ export class EnhancedRunner {
       skillDirs: collectSkillDirs(options),
       thinkingEnabled: options.thinkingEnabled,
       enablePromptThinking: options.enablePromptThinking,
+      temperature: options.temperature,
       requestTimeout: options.requestTimeout,
       maxSteps: options.maxSteps,
       compressor: compressorInstance,
