@@ -1,0 +1,5 @@
+# 评估产物（trace + report）
+.eval/
+
+# 依赖
+node_modules/
