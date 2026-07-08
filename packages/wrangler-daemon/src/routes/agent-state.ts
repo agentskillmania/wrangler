@@ -55,10 +55,35 @@ export async function agentStateRoutes(fastify: FastifyInstance): Promise<void> 
       // No in-memory AgentSession — load persisted state from disk
       const store = sessionManager().getSessionStore(info.workspacePath);
       const persistedState = await store.loadState(sessionId);
+      const status = sessionManager().getStatus(sessionId) ?? 'idle';
+      const ctx = persistedState?.context;
+      const tokensIn = ctx?.totalTokens?.input;
+      const tokensOut = ctx?.totalTokens?.output;
       writeSSE(reply, 'agent-diagnostics', {
         runner: { features: null, tools: [], skills: [] },
         agent: persistedState ?? { status: 'no-state' },
         llm: null,
+        session: {
+          overview: {
+            title: info.title,
+            agentName: info.agentName,
+            model: info.runnerConfig?.model,
+            stepCount: ctx?.stepCount ?? 0,
+            messageCount: ctx?.messages?.length ?? 0,
+            tokensIn,
+            tokensOut,
+            tokensTotal:
+              tokensIn != null && tokensOut != null ? tokensIn + tokensOut : undefined,
+            status,
+            createdAt: info.createdAt,
+            updatedAt: info.updatedAt,
+          },
+          info: {
+            sessionId,
+            agentName: info.agentName,
+            workspacePath: info.workspacePath,
+          },
+        },
       });
     }
   });

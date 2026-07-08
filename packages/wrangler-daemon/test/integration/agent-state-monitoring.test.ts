@@ -53,7 +53,22 @@ describe('US-C10: Agent State Monitoring', () => {
     const manager = (fastify as any).sessionManager as SessionManager;
     const store = new SessionStore(sessionsDir, workspacePath);
     await store.createWithId(sessionId, agentName);
+    // createWithId doesn't accept model — persist it via updateMeta so the
+    // degraded SSE path can surface it in session.overview.model.
+    if (model) {
+      await store.updateMeta(sessionId, {
+        runnerConfig: { model },
+      });
+    }
     manager.registerSession(sessionId, workspacePath);
+  }
+
+  /** Parse the first data payload from an SSE response */
+  async function readFirstPayload(res: Response): Promise<Record<string, unknown>> {
+    const text = await readFirstChunk(res);
+    const dataLine = text.split('\n').find((line) => line.startsWith('data: '));
+    if (!dataLine) throw new Error(`No data line in SSE: ${text}`);
+    return JSON.parse(dataLine.slice(6));
   }
 
   /** Read first SSE chunk from a response stream */
@@ -76,9 +91,9 @@ describe('US-C10: Agent State Monitoring', () => {
   });
 
   /**
-   * AC2: Returns SSE stream for valid session with agent-state events.
+   * AC2: Returns SSE stream for valid session with agent-diagnostics events.
    */
-  it('returns SSE stream for valid session with agent-state events', async () => {
+  it('returns SSE stream for valid session with agent-diagnostics events', async () => {
     await createTestSession(join(tempDir, 'ws'), 'stream-id', 'stream-agent');
 
     const res = await fetch(`${getUrl()}/api/agent/stream-id/state`);
@@ -86,37 +101,38 @@ describe('US-C10: Agent State Monitoring', () => {
     expect(res.headers.get('content-type')).toContain('text/event-stream');
 
     const text = await readFirstChunk(res);
-    expect(text).toContain('event: agent-state');
+    expect(text).toContain('event: agent-diagnostics');
   });
 
   /**
-   * AC3: Initial state snapshot includes agentName, model, tokensIn/Out/Total,
-   *      contextLimit, stepCount, skills, tools.
+   * AC3: Initial state snapshot includes runner/agent/llm/session sections.
+   *      session.overview carries agentName, model, tokens, stepCount.
    */
   it('initial state snapshot includes all required fields', async () => {
     await createTestSession(join(tempDir, 'ws'), 'fields-id', 'field-check-agent', 'gpt-4o');
 
     const res = await fetch(`${getUrl()}/api/agent/fields-id/state`);
-    const text = await readFirstChunk(res);
+    const payload = await readFirstPayload(res);
 
-    // Parse the data line from the SSE frame
-    const dataLine = text.split('\n').find((line) => line.startsWith('data: '));
-    expect(dataLine).toBeDefined();
-    const payload = JSON.parse(dataLine!.slice(6));
+    // Three-segment structure (runner / agent / llm) + session metadata
+    expect(payload).toHaveProperty('runner');
+    expect(payload).toHaveProperty('agent');
+    expect(payload).toHaveProperty('llm');
 
-    expect(payload).toHaveProperty('agentName', 'field-check-agent');
-    expect(payload).toHaveProperty('model', 'gpt-4o');
-    expect(payload).toHaveProperty('tokensIn');
-    expect(payload).toHaveProperty('tokensOut');
-    expect(payload).toHaveProperty('tokensTotal');
-    expect(payload).toHaveProperty('contextLimit');
-    expect(payload).toHaveProperty('stepCount');
-    expect(payload).toHaveProperty('skills');
-    expect(payload).toHaveProperty('tools');
+    const overview = (payload.session as Record<string, unknown>)?.overview as Record<string, unknown>;
+    expect(overview).toBeDefined();
+    expect(overview).toHaveProperty('agentName', 'field-check-agent');
+    expect(overview).toHaveProperty('model', 'gpt-4o');
+    expect(overview).toHaveProperty('stepCount');
+    expect(overview).toHaveProperty('status');
+
+    const runner = payload.runner as Record<string, unknown>;
+    expect(runner).toHaveProperty('skills');
+    expect(runner).toHaveProperty('tools');
   });
 
   /**
-   * AC4: Status comes from runtime tracking (updateStatus).
+   * AC4: Status comes from runtime tracking (updateStatus), surfaced in session.overview.status.
    */
   it('status reflects runtime tracking via updateStatus', async () => {
     const manager = (fastify as any).sessionManager as SessionManager;
@@ -125,9 +141,10 @@ describe('US-C10: Agent State Monitoring', () => {
     manager.updateStatus('status-id', 'running');
 
     const res = await fetch(`${getUrl()}/api/agent/status-id/state`);
-    const text = await readFirstChunk(res);
+    const payload = await readFirstPayload(res);
+    const overview = (payload.session as Record<string, unknown>)?.overview as Record<string, unknown>;
 
-    expect(text).toContain('"status":"running"');
+    expect(overview.status).toBe('running');
   });
 
   /**
@@ -137,13 +154,14 @@ describe('US-C10: Agent State Monitoring', () => {
     await createTestSession(join(tempDir, 'ws'), 'default-status-id', 'default-agent');
 
     const res = await fetch(`${getUrl()}/api/agent/default-status-id/state`);
-    const text = await readFirstChunk(res);
+    const payload = await readFirstPayload(res);
+    const overview = (payload.session as Record<string, unknown>)?.overview as Record<string, unknown>;
 
-    expect(text).toContain('"status":"idle"');
+    expect(overview.status).toBe('idle');
   });
 
   /**
-   * AC5: Model comes from session metadata.
+   * AC5: Model comes from session metadata (session.overview.model).
    */
   it('model comes from session metadata', async () => {
     await createTestSession(
@@ -154,42 +172,40 @@ describe('US-C10: Agent State Monitoring', () => {
     );
 
     const res = await fetch(`${getUrl()}/api/agent/model-id/state`);
-    const text = await readFirstChunk(res);
+    const payload = await readFirstPayload(res);
+    const overview = (payload.session as Record<string, unknown>)?.overview as Record<string, unknown>;
 
-    expect(text).toContain('"model":"claude-sonnet-4-20250514"');
+    expect(overview.model).toBe('claude-sonnet-4-20250514');
   });
 
   /**
-   * AC3: Token fields are initialized to zero.
+   * AC3: Token fields are undefined for a fresh session with no LLM calls yet.
    */
-  it('token counts start at zero in the initial snapshot', async () => {
+  it('token counts are undefined in the initial snapshot', async () => {
     await createTestSession(join(tempDir, 'ws'), 'token-id', 'token-agent');
 
     const res = await fetch(`${getUrl()}/api/agent/token-id/state`);
-    const text = await readFirstChunk(res);
+    const payload = await readFirstPayload(res);
+    const overview = (payload.session as Record<string, unknown>)?.overview as Record<string, unknown>;
 
-    const dataLine = text.split('\n').find((line: string) => line.startsWith('data: '));
-    const payload = JSON.parse(dataLine!.slice(6));
-
-    expect(payload.tokensIn).toBe(0);
-    expect(payload.tokensOut).toBe(0);
-    expect(payload.tokensTotal).toBe(0);
+    // Fresh session has no persisted context → tokens are undefined (not 0).
+    expect(overview.tokensIn).toBeUndefined();
+    expect(overview.tokensOut).toBeUndefined();
+    expect(overview.tokensTotal).toBeUndefined();
   });
 
   /**
-   * AC3: Skills and tools arrays are empty in the initial snapshot.
+   * AC3: Skills and tools arrays are empty in the initial snapshot (runner section).
    */
   it('skills and tools arrays are empty in the initial snapshot', async () => {
     await createTestSession(join(tempDir, 'ws'), 'empty-arr-id', 'empty-agent');
 
     const res = await fetch(`${getUrl()}/api/agent/empty-arr-id/state`);
-    const text = await readFirstChunk(res);
+    const payload = await readFirstPayload(res);
+    const runner = payload.runner as Record<string, unknown>;
 
-    const dataLine = text.split('\n').find((line: string) => line.startsWith('data: '));
-    const payload = JSON.parse(dataLine!.slice(6));
-
-    expect(payload.skills).toEqual([]);
-    expect(payload.tools).toEqual([]);
+    expect(runner.skills).toEqual([]);
+    expect(runner.tools).toEqual([]);
   });
 
   /**
@@ -207,11 +223,13 @@ describe('US-C10: Agent State Monitoring', () => {
     expect(resA.status).toBe(200);
     expect(resB.status).toBe(200);
 
-    const textA = await readFirstChunk(resA);
-    const textB = await readFirstChunk(resB);
+    const payloadA = await readFirstPayload(resA);
+    const payloadB = await readFirstPayload(resB);
+    const overviewA = (payloadA.session as Record<string, unknown>)?.overview as Record<string, unknown>;
+    const overviewB = (payloadB.session as Record<string, unknown>)?.overview as Record<string, unknown>;
 
-    expect(textA).toContain('"agentName":"agent-a"');
-    expect(textB).toContain('"agentName":"agent-b"');
+    expect(overviewA.agentName).toBe('agent-a');
+    expect(overviewB.agentName).toBe('agent-b');
   });
 
   /**
