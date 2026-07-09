@@ -24,7 +24,7 @@ describe('initProject', () => {
     expect(entries).toContain('AGENT.md');
     expect(entries).not.toContain('agents');
     expect(entries).toContain('skills');
-    expect(entries).toContain('test');
+    expect(entries).toContain('evals');
     expect(entries).toContain('mcp.json');
     expect(entries).toContain('mcp.json.example');
 
@@ -48,7 +48,7 @@ describe('initProject', () => {
     expect(entries).toContain('CREW.md');
     expect(entries).toContain('agents');
     expect(entries).toContain('skills');
-    expect(entries).toContain('test');
+    expect(entries).toContain('evals');
     expect(entries).toContain('mcp.json');
     expect(entries).toContain('mcp.json.example');
 
@@ -113,9 +113,9 @@ describe('initProject', () => {
     expect(skillMd).toContain('name: example');
     expect(skillMd).toContain('description:');
 
-    const testYaml = readFileSync(join(dir, 'test', 'example.yaml'), 'utf-8');
-    expect(testYaml).toContain('name: example-test');
-    expect(testYaml).toContain('expected:');
+    const evalYaml = readFileSync(join(dir, 'evals', 'example.yaml'), 'utf-8');
+    expect(evalYaml).toContain('name: example-eval');
+    expect(evalYaml).toContain('target:');
   });
 
   it('should create .gitignore with eval artifacts excluded', async () => {
@@ -133,7 +133,7 @@ describe('initProject', () => {
 
     const entries = readdirSync(dir);
     expect(entries).toContain('skills');
-    expect(entries).toContain('test');
+    expect(entries).toContain('evals');
     expect(entries).toContain('mcp.json');
     expect(entries).toContain('mcp.json.example');
     expect(entries).not.toContain('AGENT.md');

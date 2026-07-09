@@ -41,7 +41,8 @@
     "@agentskillmania/llm-client": "link:../../../colts/packages/llm-client",
     "@agentskillmania/wrangler": "workspace:*",
     "isomorphic-git": "^1.38.1",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

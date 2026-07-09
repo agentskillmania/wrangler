@@ -26,12 +26,12 @@ import { testConfig, itif } from './config.js';
 describe('Integration: File Change Application', () => {
   let fastify: FastifyInstance;
   let tempDir: string;
-  let workspaceDir: string;
+  let projectDir: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'daemon-changes-'));
-    workspaceDir = join(tempDir, 'workspace');
-    await mkdir(workspaceDir, { recursive: true });
+    projectDir = join(tempDir, 'project');
+    await mkdir(projectDir, { recursive: true });
 
     const configPath = join(tempDir, 'config.yaml');
     await writeFile(
@@ -85,7 +85,7 @@ describe('Integration: File Change Application', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         changes: [{ file: 'hello.txt', type: 'create', new: 'hello world' }],
-        cwd: workspaceDir,
+        projectDir,
       }),
     });
 
@@ -93,41 +93,41 @@ describe('Integration: File Change Application', () => {
     expect((await res.json()).applied).toBe(true);
 
     // Verify file exists and has correct content
-    const content = await readFile(join(workspaceDir, 'hello.txt'), 'utf-8');
+    const content = await readFile(join(projectDir, 'hello.txt'), 'utf-8');
     expect(content).toBe('hello world');
   });
 
   itif(testConfig.enabled)('edits an existing file on disk', async () => {
-    await writeFile(join(workspaceDir, 'edit.txt'), 'old content', 'utf-8');
+    await writeFile(join(projectDir, 'edit.txt'), 'old content', 'utf-8');
 
     const res = await fetch(`${getUrl()}/api/devtool/changes/apply`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         changes: [{ file: 'edit.txt', type: 'edit', old: 'old content', new: 'new content' }],
-        cwd: workspaceDir,
+        projectDir,
       }),
     });
 
     expect(res.ok).toBe(true);
-    const content = await readFile(join(workspaceDir, 'edit.txt'), 'utf-8');
+    const content = await readFile(join(projectDir, 'edit.txt'), 'utf-8');
     expect(content).toBe('new content');
   });
 
   itif(testConfig.enabled)('deletes a file from disk', async () => {
-    await writeFile(join(workspaceDir, 'del.txt'), 'bye', 'utf-8');
+    await writeFile(join(projectDir, 'del.txt'), 'bye', 'utf-8');
 
     const res = await fetch(`${getUrl()}/api/devtool/changes/apply`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         changes: [{ file: 'del.txt', type: 'delete' }],
-        cwd: workspaceDir,
+        projectDir,
       }),
     });
 
     expect(res.ok).toBe(true);
-    expect(existsSync(join(workspaceDir, 'del.txt'))).toBe(false);
+    expect(existsSync(join(projectDir, 'del.txt'))).toBe(false);
   });
 
   itif(testConfig.enabled)('rejects path escape via ../', async () => {
@@ -136,14 +136,14 @@ describe('Integration: File Change Application', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         changes: [{ file: '../escaped.txt', type: 'create', new: 'x' }],
-        cwd: workspaceDir,
+        projectDir,
       }),
     });
 
     expect(res.ok).toBe(true);
     const body = await res.json();
     expect(body.applied).toBe(false);
-    expect(body.error).toContain('escapes workspace');
+    expect(body.error).toContain('escapes project');
     expect(existsSync(join(tempDir, 'escaped.txt'))).toBe(false);
   });
 
@@ -153,7 +153,7 @@ describe('Integration: File Change Application', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         changes: [{ file: 'dry.txt', type: 'create', new: 'dry' }],
-        cwd: workspaceDir,
+        projectDir,
         dryRun: true,
       }),
     });
@@ -162,11 +162,11 @@ describe('Integration: File Change Application', () => {
     const body = await res.json();
     expect(body.applied).toBe(false);
     expect(body.error).toContain('Dry run');
-    expect(existsSync(join(workspaceDir, 'dry.txt'))).toBe(false);
+    expect(existsSync(join(projectDir, 'dry.txt'))).toBe(false);
   });
 
   itif(testConfig.enabled)('applies multiple changes atomically', async () => {
-    await writeFile(join(workspaceDir, 'multi.txt'), 'original', 'utf-8');
+    await writeFile(join(projectDir, 'multi.txt'), 'original', 'utf-8');
 
     const res = await fetch(`${getUrl()}/api/devtool/changes/apply`, {
       method: 'POST',
@@ -176,12 +176,12 @@ describe('Integration: File Change Application', () => {
           { file: 'multi.txt', type: 'edit', old: 'original', new: 'updated' },
           { file: 'extra.txt', type: 'create', new: 'extra content' },
         ],
-        cwd: workspaceDir,
+        projectDir,
       }),
     });
 
     expect(res.ok).toBe(true);
-    expect(await readFile(join(workspaceDir, 'multi.txt'), 'utf-8')).toBe('updated');
-    expect(await readFile(join(workspaceDir, 'extra.txt'), 'utf-8')).toBe('extra content');
+    expect(await readFile(join(projectDir, 'multi.txt'), 'utf-8')).toBe('updated');
+    expect(await readFile(join(projectDir, 'extra.txt'), 'utf-8')).toBe('extra content');
   });
 });

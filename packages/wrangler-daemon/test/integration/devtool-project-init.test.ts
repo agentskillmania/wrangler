@@ -110,7 +110,7 @@ describe('Integration: Project Initialization', () => {
       // Verify files and directories exist on disk
       expect(existsSync(join(projectDir, 'AGENT.md'))).toBe(true);
       expect(existsSync(join(projectDir, 'skills'))).toBe(true);
-      expect(existsSync(join(projectDir, 'test'))).toBe(true);
+      expect(existsSync(join(projectDir, 'evals'))).toBe(true);
       expect(existsSync(join(projectDir, 'mcp.json'))).toBe(true);
       expect(existsSync(join(projectDir, '.git'))).toBe(true);
 
@@ -137,7 +137,7 @@ describe('Integration: Project Initialization', () => {
       expect(existsSync(join(projectDir, 'CREW.md'))).toBe(true);
       expect(existsSync(join(projectDir, 'agents'))).toBe(true);
       expect(existsSync(join(projectDir, 'skills'))).toBe(true);
-      expect(existsSync(join(projectDir, 'test'))).toBe(true);
+      expect(existsSync(join(projectDir, 'evals'))).toBe(true);
       expect(existsSync(join(projectDir, '.git'))).toBe(true);
 
       const crewContent = await readFile(join(projectDir, 'CREW.md'), 'utf-8');

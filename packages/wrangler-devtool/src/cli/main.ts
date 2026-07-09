@@ -3,14 +3,14 @@
 // CLI 入口
 
 import { createCommand } from './commands/create.js';
+import { evalCommand } from './commands/eval.js';
 import { initCommand } from './commands/init.js';
-import { testCommand } from './commands/test.js';
 import { runCli } from './framework.js';
 
 const commands = {
   init: initCommand,
   create: createCommand,
-  test: testCommand,
+  eval: evalCommand,
 };
 
 async function main(): Promise<void> {

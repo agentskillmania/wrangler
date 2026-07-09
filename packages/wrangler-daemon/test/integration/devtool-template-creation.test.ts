@@ -25,12 +25,12 @@ import { testConfig, itif } from './config.js';
 describe('Integration: Template File Creation', () => {
   let fastify: FastifyInstance;
   let tempDir: string;
-  let workspaceDir: string;
+  let projectDir: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'daemon-template-'));
-    workspaceDir = join(tempDir, 'workspace');
-    await mkdir(workspaceDir, { recursive: true });
+    projectDir = join(tempDir, 'project');
+    await mkdir(projectDir, { recursive: true });
 
     const configPath = join(tempDir, 'config.yaml');
     await writeFile(
@@ -61,19 +61,19 @@ describe('Integration: Template File Creation', () => {
     const res = await fetch(`${getUrl()}/api/devtool/template`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'test', cwd: workspaceDir }),
+      body: JSON.stringify({ name: 'test', projectDir }),
     });
 
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error).toBe('type, name, and cwd are required');
+    expect(body.error).toBe('type, name, and projectDir are required');
   });
 
   it('returns 400 for invalid type', async () => {
     const res = await fetch(`${getUrl()}/api/devtool/template`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'invalid', name: 'test', cwd: workspaceDir }),
+      body: JSON.stringify({ type: 'invalid', name: 'test', projectDir }),
     });
 
     expect(res.status).toBe(400);
@@ -84,7 +84,7 @@ describe('Integration: Template File Creation', () => {
     const res = await fetch(`${getUrl()}/api/devtool/template`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'agent', name: 'my-bot', cwd: workspaceDir }),
+      body: JSON.stringify({ type: 'agent', name: 'my-bot', projectDir }),
     });
 
     expect(res.ok).toBe(true);
@@ -104,7 +104,7 @@ describe('Integration: Template File Creation', () => {
     const res = await fetch(`${getUrl()}/api/devtool/template`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'skill', name: 'search-web', cwd: workspaceDir }),
+      body: JSON.stringify({ type: 'skill', name: 'search-web', projectDir }),
     });
 
     expect(res.ok).toBe(true);
@@ -117,7 +117,7 @@ describe('Integration: Template File Creation', () => {
     const res = await fetch(`${getUrl()}/api/devtool/template`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'crew', name: 'dev-team', cwd: workspaceDir }),
+      body: JSON.stringify({ type: 'crew', name: 'dev-team', projectDir }),
     });
 
     expect(res.ok).toBe(true);

@@ -19,7 +19,7 @@ describe('init command', () => {
     logSpy.mockRestore();
   });
 
-  it('should initialize agent workspace', async () => {
+  it('should initialize agent project', async () => {
     const dir = join(tempDir, 'agent-ws');
     const code = await initCommand.handler!([dir], { type: 'agent' });
     expect(code).toBe(ExitCode.Success);
@@ -27,10 +27,10 @@ describe('init command', () => {
     const entries = readdirSync(dir);
     expect(entries).toContain('AGENT.md');
     expect(entries).toContain('skills');
-    expect(entries).toContain('test');
+    expect(entries).toContain('evals');
   });
 
-  it('should initialize crew workspace', async () => {
+  it('should initialize crew project', async () => {
     const dir = join(tempDir, 'crew-ws');
     const code = await initCommand.handler!([dir], { type: 'crew' });
     expect(code).toBe(ExitCode.Success);
@@ -39,10 +39,10 @@ describe('init command', () => {
     expect(entries).toContain('CREW.md');
     expect(entries).toContain('agents');
     expect(entries).toContain('skills');
-    expect(entries).toContain('test');
+    expect(entries).toContain('evals');
   });
 
-  it('should initialize skill workspace', async () => {
+  it('should initialize skill project', async () => {
     const dir = join(tempDir, 'skill-ws');
     const code = await initCommand.handler!([dir], { type: 'skill' });
     expect(code).toBe(ExitCode.Success);
@@ -51,7 +51,7 @@ describe('init command', () => {
     expect(entries).not.toContain('AGENT.md');
     expect(entries).not.toContain('CREW.md');
     expect(entries).toContain('skills');
-    expect(entries).toContain('test');
+    expect(entries).toContain('evals');
     expect(entries).toContain('mcp.json');
   });
 

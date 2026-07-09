@@ -52,7 +52,7 @@ describe('applyChanges', () => {
     const result = await applyChanges(changes, { cwd: tempDir });
 
     expect(result.applied).toBe(false);
-    expect(result.error).toContain('escapes workspace');
+    expect(result.error).toContain('escapes project');
   });
 
   it('rejects path escape via nested ../', async () => {
@@ -60,7 +60,7 @@ describe('applyChanges', () => {
     const result = await applyChanges(changes, { cwd: tempDir });
 
     expect(result.applied).toBe(false);
-    expect(result.error).toContain('escapes workspace');
+    expect(result.error).toContain('escapes project');
   });
 
   it('allows dot-prefixed filenames like .eslintrc.js', async () => {
@@ -175,6 +175,6 @@ describe('applyChanges', () => {
     const result = await applyChanges(changes, { cwd: tempDir });
 
     expect(result.applied).toBe(false);
-    expect(result.error).toContain('escapes workspace');
+    expect(result.error).toContain('escapes project');
   });
 });

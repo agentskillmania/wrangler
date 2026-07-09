@@ -51,7 +51,7 @@ describe('@agentskillmania/wrangler-devtool', () => {
       expect(existsSync(join(dir, 'mcp.json'))).toBe(true);
       expect(existsSync(join(dir, 'mcp.json.example'))).toBe(true);
       expect(existsSync(join(dir, 'skills'))).toBe(true);
-      expect(existsSync(join(dir, 'test'))).toBe(true);
+      expect(existsSync(join(dir, 'evals'))).toBe(true);
       expect(existsSync(join(dir, '.git'))).toBe(true);
 
       rmSync(dir, { recursive: true, force: true });

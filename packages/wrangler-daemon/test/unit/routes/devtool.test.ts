@@ -6,27 +6,24 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { ConfigManager } from '../../../src/core/config-manager.js';
 import { devtoolRoutes } from '../../../src/routes/devtool.js';
 
-const mockRunAgentArchitect = vi.fn();
-const mockRunSkillDesigner = vi.fn();
-const mockRunCrewComposer = vi.fn();
-const mockRunReviewer = vi.fn();
-const mockInitProject = vi.fn();
-const mockCreateTemplate = vi.fn();
-const mockApplyChanges = vi.fn();
-const mockRunTests = vi.fn();
+const { mockInitProject, mockCreateTemplate, mockApplyChanges, mockLoadSuite, mockRunEval, mockFormatReport, mockFormatJson } = vi.hoisted(() => ({
+  mockInitProject: vi.fn(),
+  mockCreateTemplate: vi.fn(),
+  mockApplyChanges: vi.fn(),
+  mockLoadSuite: vi.fn(),
+  mockRunEval: vi.fn(),
+  mockFormatReport: vi.fn(),
+  mockFormatJson: vi.fn(),
+}));
 
 vi.mock('@agentskillmania/wrangler-devtool', () => ({
-  DevTool: vi.fn().mockImplementation(() => ({
-    runAgentArchitect: mockRunAgentArchitect,
-    runSkillDesigner: mockRunSkillDesigner,
-    runCrewComposer: mockRunCrewComposer,
-    runSessionCurator: vi.fn(),
-    runReviewer: mockRunReviewer,
-    initProject: mockInitProject,
-    createTemplate: mockCreateTemplate,
-    applyChanges: mockApplyChanges,
-    runTests: mockRunTests,
-  })),
+  initProject: mockInitProject,
+  createTemplate: mockCreateTemplate,
+  applyChanges: mockApplyChanges,
+  loadSuite: mockLoadSuite,
+  runEval: mockRunEval,
+  formatEvalReport: mockFormatReport,
+  formatEvalJsonReport: mockFormatJson,
 }));
 
 describe('Devtool API', () => {
@@ -50,14 +47,13 @@ describe('Devtool API', () => {
     await fastify.register(devtoolRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
 
-    mockRunAgentArchitect.mockReset();
-    mockRunSkillDesigner.mockReset();
-    mockRunCrewComposer.mockReset();
-    mockRunReviewer.mockReset();
     mockInitProject.mockReset();
     mockCreateTemplate.mockReset();
     mockApplyChanges.mockReset();
-    mockRunTests.mockReset();
+    mockLoadSuite.mockReset();
+    mockRunEval.mockReset();
+    mockFormatReport.mockReset();
+    mockFormatJson.mockReset();
   });
 
   afterEach(async () => {
@@ -70,347 +66,24 @@ describe('Devtool API', () => {
     return typeof addr === 'string' ? addr : `http://127.0.0.1:${addr.port}`;
   }
 
-  describe('POST /api/devtool/agent/generate', () => {
-    it('returns generated agent changes in response body', async () => {
-      mockRunAgentArchitect.mockResolvedValue({
-        changes: [{ file: 'AGENT.md', type: 'create', new: 'agent content' }],
-        summary: 'Created agent',
-      });
-
-      const res = await fetch(`${getUrl()}/api/devtool/agent/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'Create a helpful assistant' }),
-      });
-
-      expect(res.ok).toBe(true);
-      const body = await res.json();
-      expect(body.summary).toBe('Created agent');
-      expect(body.changes).toEqual([{ file: 'AGENT.md', type: 'create', new: 'agent content' }]);
-    });
-
-    it('calls runAgentArchitect with prompt and no optional args', async () => {
-      mockRunAgentArchitect.mockResolvedValue({
-        changes: [{ file: 'AGENT.md', type: 'create', new: 'agent content' }],
-        summary: 'Created agent',
-      });
-
-      await fetch(`${getUrl()}/api/devtool/agent/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'Create a helpful assistant' }),
-      });
-
-      expect(mockRunAgentArchitect).toHaveBeenCalledWith(
-        'Create a helpful assistant',
-        undefined,
-        undefined
-      );
-    });
-
-    it('passes existingContent and model to DevTool', async () => {
-      mockRunAgentArchitect.mockResolvedValue({
-        changes: [],
-        summary: 'Modified agent',
-      });
-
-      const res = await fetch(`${getUrl()}/api/devtool/agent/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: 'Add tool usage',
-          existingContent: 'old agent content',
-          model: 'gpt-4o',
-        }),
-      });
-
-      expect(res.ok).toBe(true);
-      expect(mockRunAgentArchitect).toHaveBeenCalledWith('Add tool usage', 'old agent content', {
-        model: 'gpt-4o',
-      });
-    });
-
-    it('returns 400 when prompt is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/devtool/agent/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('prompt is required');
-    });
-
-    it('returns 500 when DevTool throws', async () => {
-      mockRunAgentArchitect.mockRejectedValue(new Error('LLM API failure'));
-
-      const res = await fetch(`${getUrl()}/api/devtool/agent/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'Create agent' }),
-      });
-
-      expect(res.status).toBe(500);
-      const body = await res.json();
-      expect(body.error).toBe('LLM API failure');
-    });
-  });
-
-  describe('POST /api/devtool/skill/generate', () => {
-    it('returns generated skill changes in response body', async () => {
-      mockRunSkillDesigner.mockResolvedValue({
-        changes: [{ file: 'SKILL.md', type: 'create', new: 'skill content' }],
-        summary: 'Created skill',
-      });
-
-      const res = await fetch(`${getUrl()}/api/devtool/skill/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'Create a search skill' }),
-      });
-
-      expect(res.ok).toBe(true);
-      const body = await res.json();
-      expect(body.summary).toBe('Created skill');
-      expect(body.changes).toEqual([{ file: 'SKILL.md', type: 'create', new: 'skill content' }]);
-    });
-
-    it('calls runSkillDesigner with prompt and no optional args', async () => {
-      mockRunSkillDesigner.mockResolvedValue({
-        changes: [{ file: 'SKILL.md', type: 'create', new: 'skill content' }],
-        summary: 'Created skill',
-      });
-
-      await fetch(`${getUrl()}/api/devtool/skill/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'Create a search skill' }),
-      });
-
-      expect(mockRunSkillDesigner).toHaveBeenCalledWith(
-        'Create a search skill',
-        undefined,
-        undefined
-      );
-    });
-
-    it('passes existingContent and model to DevTool', async () => {
-      mockRunSkillDesigner.mockResolvedValue({
-        changes: [],
-        summary: 'Modified skill',
-      });
-
-      const res = await fetch(`${getUrl()}/api/devtool/skill/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: 'Add error handling',
-          existingContent: 'old skill',
-          model: 'gpt-4o',
-        }),
-      });
-
-      expect(res.ok).toBe(true);
-      expect(mockRunSkillDesigner).toHaveBeenCalledWith('Add error handling', 'old skill', {
-        model: 'gpt-4o',
-      });
-    });
-
-    it('returns 400 when prompt is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/devtool/skill/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('prompt is required');
-    });
-
-    it('returns 500 when DevTool throws', async () => {
-      mockRunSkillDesigner.mockRejectedValue(new Error('skill gen failed'));
-
-      const res = await fetch(`${getUrl()}/api/devtool/skill/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'Create skill' }),
-      });
-
-      expect(res.status).toBe(500);
-      const body = await res.json();
-      expect(body.error).toBe('skill gen failed');
-    });
-  });
-
-  describe('POST /api/devtool/crew/generate', () => {
-    it('returns generated crew changes in response body', async () => {
-      mockRunCrewComposer.mockResolvedValue({
-        changes: [{ file: 'CREW.md', type: 'create', new: 'crew content' }],
-        summary: 'Created crew',
-      });
-
-      const res = await fetch(`${getUrl()}/api/devtool/crew/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'Create a dev team' }),
-      });
-
-      expect(res.ok).toBe(true);
-      const body = await res.json();
-      expect(body.summary).toBe('Created crew');
-      expect(body.changes).toEqual([{ file: 'CREW.md', type: 'create', new: 'crew content' }]);
-    });
-
-    it('calls runCrewComposer with prompt and no optional args', async () => {
-      mockRunCrewComposer.mockResolvedValue({
-        changes: [{ file: 'CREW.md', type: 'create', new: 'crew content' }],
-        summary: 'Created crew',
-      });
-
-      await fetch(`${getUrl()}/api/devtool/crew/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'Create a dev team' }),
-      });
-
-      expect(mockRunCrewComposer).toHaveBeenCalledWith('Create a dev team', undefined, undefined);
-    });
-
-    it('returns 400 when prompt is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/devtool/crew/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('prompt is required');
-    });
-
-    it('returns 500 when DevTool throws', async () => {
-      mockRunCrewComposer.mockRejectedValue(new Error('crew gen failed'));
-
-      const res = await fetch(`${getUrl()}/api/devtool/crew/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'Create crew' }),
-      });
-
-      expect(res.status).toBe(500);
-      const body = await res.json();
-      expect(body.error).toBe('crew gen failed');
-    });
-  });
-
-  describe('POST /api/devtool/review', () => {
-    it('returns review report', async () => {
-      mockRunReviewer.mockResolvedValue({
-        score: 85,
-        issues: [{ severity: 'warning', message: 'Missing description' }],
-        summary: 'Agent definition looks good overall',
-      });
-
-      const res = await fetch(`${getUrl()}/api/devtool/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targetPath: 'agents/my-agent/AGENT.md',
-          content: '---\nname: test\n---\nInstructions...',
-        }),
-      });
-
-      expect(res.ok).toBe(true);
-      const body = await res.json();
-      expect(body.score).toBe(85);
-      expect(body.issues).toHaveLength(1);
-      expect(mockRunReviewer).toHaveBeenCalledWith(
-        'agents/my-agent/AGENT.md',
-        '---\nname: test\n---\nInstructions...',
-        undefined,
-        undefined
-      );
-    });
-
-    it('passes optional prompt and model', async () => {
-      mockRunReviewer.mockResolvedValue({ score: 90, issues: [], summary: 'ok' });
-
-      const res = await fetch(`${getUrl()}/api/devtool/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targetPath: 'AGENT.md',
-          content: 'content',
-          prompt: 'Focus on security',
-          model: 'gpt-4o',
-        }),
-      });
-
-      expect(res.ok).toBe(true);
-      expect(mockRunReviewer).toHaveBeenCalledWith('AGENT.md', 'content', 'Focus on security', {
-        model: 'gpt-4o',
-      });
-    });
-
-    it('returns 400 when targetPath is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/devtool/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'some content' }),
-      });
-
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('targetPath and content are required');
-    });
-
-    it('returns 400 when content is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/devtool/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetPath: 'AGENT.md' }),
-      });
-
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('targetPath and content are required');
-    });
-
-    it('returns 500 when DevTool throws', async () => {
-      mockRunReviewer.mockRejectedValue(new Error('review failed'));
-
-      const res = await fetch(`${getUrl()}/api/devtool/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetPath: 'AGENT.md', content: 'stuff' }),
-      });
-
-      expect(res.status).toBe(500);
-      const body = await res.json();
-      expect(body.error).toBe('review failed');
-    });
-  });
-
-  describe('POST /api/devtool/workspace/init', () => {
+  describe('POST /api/devtool/project/init', () => {
     it('initializes project and returns ok', async () => {
       mockInitProject.mockResolvedValue(undefined);
 
-      const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
+      const res = await fetch(`${getUrl()}/api/devtool/project/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: '/tmp/my-workspace', type: 'agent' }),
+        body: JSON.stringify({ projectDir: '/tmp/my-project', type: 'agent' }),
       });
 
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.ok).toBe(true);
-      expect(mockInitProject).toHaveBeenCalledWith('/tmp/my-workspace', { type: 'agent' });
+      expect(mockInitProject).toHaveBeenCalledWith('/tmp/my-project', { type: 'agent' });
     });
 
-    it('returns 400 when path is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
+    it('returns 400 when projectDir is missing', async () => {
+      const res = await fetch(`${getUrl()}/api/devtool/project/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'agent' }),
@@ -418,26 +91,26 @@ describe('Devtool API', () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('path and type are required');
+      expect(body.error).toBe('projectDir and type are required');
     });
 
     it('returns 400 when type is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
+      const res = await fetch(`${getUrl()}/api/devtool/project/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: '/tmp/ws' }),
+        body: JSON.stringify({ projectDir: '/tmp/proj' }),
       });
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('path and type are required');
+      expect(body.error).toBe('projectDir and type are required');
     });
 
     it('returns 400 for invalid type', async () => {
-      const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
+      const res = await fetch(`${getUrl()}/api/devtool/project/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: '/tmp/ws', type: 'invalid' }),
+        body: JSON.stringify({ projectDir: '/tmp/proj', type: 'invalid' }),
       });
 
       expect(res.status).toBe(400);
@@ -448,14 +121,14 @@ describe('Devtool API', () => {
     it('passes noGit option', async () => {
       mockInitProject.mockResolvedValue(undefined);
 
-      const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
+      const res = await fetch(`${getUrl()}/api/devtool/project/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: '/tmp/ws', type: 'crew', noGit: true }),
+        body: JSON.stringify({ projectDir: '/tmp/proj', type: 'crew', noGit: true }),
       });
 
       expect(res.ok).toBe(true);
-      expect(mockInitProject).toHaveBeenCalledWith('/tmp/ws', {
+      expect(mockInitProject).toHaveBeenCalledWith('/tmp/proj', {
         type: 'crew',
         noGit: true,
       });
@@ -464,37 +137,37 @@ describe('Devtool API', () => {
 
   describe('POST /api/devtool/template', () => {
     it('creates template and returns filePath', async () => {
-      mockCreateTemplate.mockResolvedValue('/tmp/ws/agents/test-agent/AGENT.md');
+      mockCreateTemplate.mockResolvedValue('/tmp/proj/agents/test-agent/AGENT.md');
 
       const res = await fetch(`${getUrl()}/api/devtool/template`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'agent', name: 'test-agent', cwd: '/tmp/ws' }),
+        body: JSON.stringify({ type: 'agent', name: 'test-agent', projectDir: '/tmp/proj' }),
       });
 
       expect(res.ok).toBe(true);
       const body = await res.json();
-      expect(body.filePath).toBe('/tmp/ws/agents/test-agent/AGENT.md');
-      expect(mockCreateTemplate).toHaveBeenCalledWith('agent', 'test-agent', '/tmp/ws');
+      expect(body.filePath).toBe('/tmp/proj/agents/test-agent/AGENT.md');
+      expect(mockCreateTemplate).toHaveBeenCalledWith('agent', 'test-agent', '/tmp/proj');
     });
 
     it('returns 400 when type is missing', async () => {
       const res = await fetch(`${getUrl()}/api/devtool/template`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'test', cwd: '/tmp/ws' }),
+        body: JSON.stringify({ name: 'test', projectDir: '/tmp/proj' }),
       });
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('type, name, and cwd are required');
+      expect(body.error).toBe('type, name, and projectDir are required');
     });
 
     it('returns 400 for invalid type', async () => {
       const res = await fetch(`${getUrl()}/api/devtool/template`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'invalid', name: 'test', cwd: '/tmp/ws' }),
+        body: JSON.stringify({ type: 'invalid', name: 'test', projectDir: '/tmp/proj' }),
       });
 
       expect(res.status).toBe(400);
@@ -511,13 +184,13 @@ describe('Devtool API', () => {
       const res = await fetch(`${getUrl()}/api/devtool/changes/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ changes, cwd: '/tmp/ws' }),
+        body: JSON.stringify({ changes, projectDir: '/tmp/proj' }),
       });
 
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.applied).toBe(true);
-      expect(mockApplyChanges).toHaveBeenCalledWith(changes, { cwd: '/tmp/ws' });
+      expect(mockApplyChanges).toHaveBeenCalledWith(changes, { cwd: '/tmp/proj' });
     });
 
     it('passes dryRun option', async () => {
@@ -563,71 +236,47 @@ describe('Devtool API', () => {
     });
   });
 
-  describe('POST /api/devtool/test/run', () => {
-    it('returns test report in response body', async () => {
-      mockRunTests.mockResolvedValue({
-        total: 3,
-        passed: 2,
-        failed: 1,
-        results: [
-          { name: 'test1', status: 'passed' },
-          { name: 'test2', status: 'passed' },
-          { name: 'test3', status: 'failed', error: 'Expected X' },
-        ],
-      });
+  describe('POST /api/devtool/eval/run', () => {
+    const mockSuite = { name: 'test', target: { type: 'agent', path: '.', skill: null }, sampling: { runs: 1, passThreshold: 1 }, cases: [] };
+    const mockReport = { suite: 'test', runId: 'r1', totalCases: 1, passed: 1, failed: 0, passRate: 1 };
 
-      const res = await fetch(`${getUrl()}/api/devtool/test/run`, {
+    it('runs eval and returns report', async () => {
+      mockLoadSuite.mockResolvedValue(mockSuite);
+      mockRunEval.mockResolvedValue({ report: mockReport, outputDir: '/tmp/out' });
+      mockFormatJson.mockReturnValue('{"suite":"test"}');
+
+      const res = await fetch(`${getUrl()}/api/devtool/eval/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetPath: 'agents/my-agent' }),
+        body: JSON.stringify({ suitePath: 'evals/baseline.yaml' }),
       });
 
       expect(res.ok).toBe(true);
       const body = await res.json();
-      expect(body.total).toBe(3);
-      expect(body.passed).toBe(2);
-      expect(body.failed).toBe(1);
+      expect(body.report.passed).toBe(1);
+      expect(body.outputDir).toBe('/tmp/out');
+      expect(mockLoadSuite).toHaveBeenCalledWith('evals/baseline.yaml');
     });
 
-    it('calls runTests with targetPath and empty options by default', async () => {
-      mockRunTests.mockResolvedValue({
-        total: 3,
-        passed: 2,
-        failed: 1,
-        results: [],
-      });
+    it('passes runs option', async () => {
+      mockLoadSuite.mockResolvedValue(mockSuite);
+      mockRunEval.mockResolvedValue({ report: mockReport, outputDir: '/tmp/out' });
+      mockFormatJson.mockReturnValue('{}');
 
-      await fetch(`${getUrl()}/api/devtool/test/run`, {
+      await fetch(`${getUrl()}/api/devtool/eval/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetPath: 'agents/my-agent' }),
+        body: JSON.stringify({ suitePath: 'evals/baseline.yaml', runs: 5 }),
       });
 
-      expect(mockRunTests).toHaveBeenCalledWith('agents/my-agent', {});
+      expect(mockRunEval).toHaveBeenCalledWith(
+        mockSuite,
+        expect.objectContaining({ runs: 5 })
+      );
     });
 
-    it('passes case and hardOnly options', async () => {
-      mockRunTests.mockResolvedValue({ total: 1, passed: 1, failed: 0, results: [] });
-
-      const res = await fetch(`${getUrl()}/api/devtool/test/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targetPath: 'agents/my-agent',
-          case: 'should respond politely',
-          hardOnly: true,
-        }),
-      });
-
-      expect(res.ok).toBe(true);
-      expect(mockRunTests).toHaveBeenCalledWith('agents/my-agent', {
-        case: 'should respond politely',
-        hardOnly: true,
-      });
-    });
-
-    it('returns 400 when targetPath is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/devtool/test/run`, {
+    it('returns 400 when suitePath is missing', async () => {
+      const res = await fetch(`${getUrl()}/api/devtool/eval/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -635,19 +284,19 @@ describe('Devtool API', () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('targetPath is required');
+      expect(body.error).toBe('suitePath is required');
     });
   });
 
   // Cross-cutting: error handling for file operation routes
   describe('error handling', () => {
-    it('POST /api/devtool/workspace/init returns 500 on failure', async () => {
+    it('POST /api/devtool/project/init returns 500 on failure', async () => {
       mockInitProject.mockRejectedValue(new Error('disk full'));
 
-      const res = await fetch(`${getUrl()}/api/devtool/workspace/init`, {
+      const res = await fetch(`${getUrl()}/api/devtool/project/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: '/tmp/ws', type: 'agent' }),
+        body: JSON.stringify({ projectDir: '/tmp/proj', type: 'agent' }),
       });
 
       expect(res.status).toBe(500);
@@ -661,7 +310,7 @@ describe('Devtool API', () => {
       const res = await fetch(`${getUrl()}/api/devtool/template`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'agent', name: 'test', cwd: '/tmp/ws' }),
+        body: JSON.stringify({ type: 'agent', name: 'test', projectDir: '/tmp/proj' }),
       });
 
       expect(res.status).toBe(500);
@@ -685,27 +334,27 @@ describe('Devtool API', () => {
       expect(body.error).toBe('write failed');
     });
 
-    it('POST /api/devtool/test/run returns 500 on failure', async () => {
-      mockRunTests.mockRejectedValue(new Error('test crash'));
+    it('POST /api/devtool/eval/run returns 500 on failure', async () => {
+      mockLoadSuite.mockRejectedValue(new Error('eval crash'));
 
-      const res = await fetch(`${getUrl()}/api/devtool/test/run`, {
+      const res = await fetch(`${getUrl()}/api/devtool/eval/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetPath: 'agents/x' }),
+        body: JSON.stringify({ suitePath: 'evals/bad.yaml' }),
       });
 
       expect(res.status).toBe(500);
       const body = await res.json();
-      expect(body.error).toBe('test crash');
+      expect(body.error).toBe('eval crash');
     });
 
     it('returns Unknown error when thrown value is not an Error', async () => {
-      mockRunAgentArchitect.mockRejectedValue('string error');
+      mockInitProject.mockRejectedValue('string error');
 
-      const res = await fetch(`${getUrl()}/api/devtool/agent/generate`, {
+      const res = await fetch(`${getUrl()}/api/devtool/project/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'test' }),
+        body: JSON.stringify({ projectDir: '/tmp/proj', type: 'agent' }),
       });
 
       expect(res.status).toBe(500);

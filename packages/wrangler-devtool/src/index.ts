@@ -2,8 +2,8 @@
 // Wrangler development tool library
 
 // ── Scaffolding tools ───────────────────────────────────────────
-export { initProject } from './tools/init-workspace.js';
-export type { InitOptions } from './tools/init-workspace.js';
+export { initProject } from './tools/init-project.js';
+export type { InitOptions } from './tools/init-project.js';
 export { createTemplate } from './tools/create-template.js';
 
 // ── File changes ────────────────────────────────────────────────
@@ -14,26 +14,30 @@ export type { FileChange, ApplyOptions, ApplyResult } from './utils/file-change.
 export { ExitCode, CliError } from './cli/options.js';
 export type { CliErrorJson } from './cli/options.js';
 
-// ── test-runner (kept as-is, Phase 2 rework) ────────────────────
-export { runTests, TestRunner } from './test-runner/runner.js';
+// ── Evaluation framework ────────────────────────────────────────
+export { runEval, EvalRunner } from './eval/runner.js';
+export type { EvalRunnerOptions, RunResult as EvalRunResult } from './eval/runner.js';
+export { loadSuite } from './eval/loader.js';
+export { EvaluatorRegistry } from './eval/evaluators/index.js';
+export { DeterministicEvaluators } from './eval/evaluators/deterministic.js';
+export { LlmJudgeEvaluator } from './eval/evaluators/llm-judge.js';
+export { printReport as printEvalReport, formatReport as formatEvalReport } from './eval/reporters/console.js';
+export { formatJsonReport as formatEvalJsonReport } from './eval/reporters/json.js';
 export type {
-  TestReport,
-  TestSuite,
-  TestCaseResult,
-  TestSummary,
-  TestCliOptions,
-} from './test-runner/types.js';
-
-export { loadTestCases, loadTestFile, discoverTestFiles } from './test-runner/loader.js';
-export type { TestCase, TestLoaderError } from './test-runner/loader.js';
-
-export { evaluateAssertion } from './test-runner/assertions.js';
-export type { AssertionResult } from './test-runner/types.js';
-
-export { printReport, formatReport } from './test-runner/reporters/console.js';
-export { formatJsonReport } from './test-runner/reporters/json.js';
-export { evaluateSoft } from './test-runner/soft-evaluator.js';
-export type { SoftEvaluationResult } from './test-runner/soft-evaluator.js';
+  EvalSuite,
+  EvalCase,
+  EvalTarget,
+  EvalSampling,
+  EvalTrace,
+  EvalResult,
+  EvalReport,
+  CaseReport,
+  SampleResult,
+  ToolCallRecord,
+  EvaluatorSpec,
+  RubricLevel,
+  Evaluator,
+} from './eval/types.js';
 
 // ── Built-in skills directory path ──────────────────────────────
 import { dirname, join } from 'node:path';

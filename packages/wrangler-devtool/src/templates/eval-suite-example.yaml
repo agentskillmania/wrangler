@@ -1,0 +1,33 @@
+name: example-eval
+description: An example evaluation suite demonstrating the YAML format
+
+target:
+  type: agent              # agent | skill
+  path: ./                 # agent definition directory (for skill: skill parent dir)
+  skill: null              # when type=skill, the skill name to load
+
+sampling:
+  runs: 1                  # number of times to run each case
+  passThreshold: 1         # pass ratio (0–1); 1 = all runs must pass
+  # temperature: 0         # uncomment for deterministic single-run mode
+  # maxSteps: 20           # max agent steps per run
+
+cases:
+  - name: basic-response
+    description: Agent should respond politely
+    input:
+      message: Say hello
+    evaluators:
+      - type: output_contains
+        value: hello
+        caseInsensitive: true
+
+  - name: writes-file
+    description: Agent should create a file when asked
+    input:
+      message: Create a file named greeting.txt with the content "Hello"
+    evaluators:
+      - type: file_exists
+        path: greeting.txt
+      - type: output_contains
+        value: greeting

@@ -88,10 +88,10 @@ export async function initProject(cwd: string, options: InitOptions): Promise<vo
   const skillExample = await loadTemplate('skill-example.md');
   await writeFile(join(dir, 'skills', 'example.md'), skillExample, 'utf-8');
 
-  // Test 目录 + 样例
-  await mkdir(join(dir, 'test'), { recursive: true });
-  const testExample = await loadTemplate('test-example.yaml');
-  await writeFile(join(dir, 'test', 'example.yaml'), testExample, 'utf-8');
+  // Evals 目录 + 样例评估套件
+  await mkdir(join(dir, 'evals'), { recursive: true });
+  const evalExample = await loadTemplate('eval-suite-example.yaml');
+  await writeFile(join(dir, 'evals', 'example.yaml'), evalExample, 'utf-8');
 
   // 模式特定文件
   if (options.type === 'agent') {

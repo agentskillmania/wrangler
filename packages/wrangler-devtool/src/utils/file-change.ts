@@ -34,7 +34,7 @@ function resolveFilePath(file: string, cwd?: string): string {
   const relative = path.relative(cwdResolved, resolved);
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new CliError(
-      `File path escapes workspace: ${file}`,
+      `File path escapes project: ${file}`,
       'PATH_ESCAPE',
       ExitCode.ValidationFailure
     );
@@ -51,12 +51,12 @@ function resolveFilePath(file: string, cwd?: string): string {
 
 /**
  * Resolve symlinks in the file path and verify the real path stays within cwd.
- * SEC11: a symlink inside the workspace could point outside (e.g. to /etc).
+ * SEC11: a symlink inside the project could point outside (e.g. to /etc).
  * path.relative alone cannot detect this — realpath() is needed.
  *
  * For non-existent files (create mode), realpath the parent directory instead.
  */
-async function assertWithinWorkspace(filePath: string, cwd?: string): Promise<void> {
+async function assertWithinProject(filePath: string, cwd?: string): Promise<void> {
   const cwdResolved = cwd ? resolve(cwd) : resolve(process.cwd());
 
   // Try to resolve the file itself; if it doesn't exist (create mode),
@@ -78,7 +78,7 @@ async function assertWithinWorkspace(filePath: string, cwd?: string): Promise<vo
   const rel = path.relative(realCwd, realPath);
   if (rel.startsWith('..') || path.isAbsolute(rel)) {
     throw new CliError(
-      `File path escapes workspace via symlink: ${filePath}`,
+      `File path escapes project via symlink: ${filePath}`,
       'PATH_ESCAPE',
       ExitCode.ValidationFailure
     );
@@ -92,7 +92,7 @@ async function validateChange(
   try {
     const filePath = resolveFilePath(change.file, cwd);
     // SEC11: check symlink escape after path resolution
-    await assertWithinWorkspace(filePath, cwd);
+    await assertWithinProject(filePath, cwd);
 
     switch (change.type) {
       case 'create': {
@@ -141,7 +141,7 @@ async function validateChange(
 async function applySingleChange(change: FileChange, cwd?: string): Promise<void> {
   const filePath = resolveFilePath(change.file, cwd);
   // SEC11: check symlink escape before writing/deleting
-  await assertWithinWorkspace(filePath, cwd);
+  await assertWithinProject(filePath, cwd);
 
   switch (change.type) {
     case 'create':
