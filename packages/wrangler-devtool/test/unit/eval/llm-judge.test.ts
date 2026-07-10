@@ -142,4 +142,16 @@ describe('LlmJudgeEvaluator', () => {
     expect(result.score).toBeUndefined();
     expect(result.message).toContain('parse');
   });
+
+  it('throws if constructed without config or llm', () => {
+    expect(() => new LlmJudgeEvaluator({})).toThrow('requires either config or llm');
+  });
+
+  it('returns error for non-llm-judge spec', async () => {
+    mockJudgeResponse(5, 'ok');
+    const result = await evaluator.evaluate(makeTrace(), { type: 'output_contains', value: 'x' });
+
+    expect(result.passed).toBe(false);
+    expect(result.message).toContain('non-llm-judge');
+  });
 });

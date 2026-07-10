@@ -39,6 +39,8 @@ export interface EvalRunnerOptions {
   projectDir?: string;
   /** Keep temporary workspaces after run (default: false). */
   keepTraces?: boolean;
+  /** Inject a custom adapter (testing). If omitted, agent/skill adapter is auto-selected. */
+  adapter?: ExecutionAdapter;
 }
 
 /** Result of running a suite. */
@@ -76,7 +78,7 @@ export class EvalRunner {
   constructor(suite: EvalSuite, options: EvalRunnerOptions = {}) {
     this.suite = suite;
     this.options = options;
-    this.adapter = suite.target.type === 'skill' ? new SkillAdapter() : new AgentAdapter();
+    this.adapter = options.adapter ?? (suite.target.type === 'skill' ? new SkillAdapter() : new AgentAdapter());
     this.registry = new EvaluatorRegistry();
   }
 
