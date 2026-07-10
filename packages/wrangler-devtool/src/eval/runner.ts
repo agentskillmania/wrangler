@@ -222,7 +222,10 @@ export class EvalRunner {
   }
 
   private async autoLoadJudgeConfig(): Promise<LlmJudgeOptions> {
-    const config = await loadEvalLlmConfig(this.options.projectDir);
-    return { config };
+    const evalConfig = await loadEvalLlmConfig(this.options.projectDir);
+    return {
+      config: { llm: evalConfig.llm },
+      ...(evalConfig.judgeModel ? { model: evalConfig.judgeModel } : {}),
+    };
   }
 }
