@@ -1,9 +1,10 @@
 /**
- * @fileoverview LLM configuration for the judge evaluator.
+ * @fileoverview LLM configuration for eval — both the agent being evaluated
+ * and the judge evaluator.
  *
- * The judge uses a separate LLM config from the agent being evaluated, so you
- * can judge a cheap model's output with a stronger model. Config is read from
- * the project's wrangler.yaml (or global config) — same format wrangler uses.
+ * Loads from the same environment variables as colts/wrangler integration tests:
+ *   OPENAI_API_KEY, OPENAI_BASE_URL, PROVIDER (default 'openai'), MODEL
+ * Falls back to wrangler.yaml / eval-config.yaml / global config if env not set.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -12,34 +13,56 @@ import { homedir } from 'node:os';
 
 import type { LLMQuickInit } from '@agentskillmania/colts';
 
-/** Result of loading judge LLM config. */
+/** Result of loading LLM config. */
 export interface EvalLlmConfig {
   /** LLM provider config (same shape as wrangler's llm field). */
   llm: LLMQuickInit;
 }
 
 export interface LoadEvalLlmConfigOptions {
-  /** Project directory to search first. */
+  /** Project directory to search for YAML configs. */
   projectDir?: string;
   /** Override global config directory (testing). If omitted, uses ~/.agentskillmania/wrangler */
   globalDir?: string;
 }
 
 /**
- * Search for an LLM config in standard locations:
+ * Load LLM config from environment variables first (OPENAI_API_KEY etc.),
+ * then fall back to YAML files.
+ *
+ * Search order:
+ *   0. Environment variables (OPENAI_API_KEY + optional OPENAI_BASE_URL/PROVIDER/MODEL)
  *   1. projectDir/wrangler.yaml
  *   2. projectDir/eval-config.yaml
  *   3. globalDir/config.yaml (default: ~/.agentskillmania/wrangler/)
- *
- * The first file with an `llm.providers` section wins.
  */
 export async function loadEvalLlmConfig(
   projectDirOrOptions?: string | LoadEvalLlmConfigOptions
 ): Promise<EvalLlmConfig> {
-  // Accept both old signature (string) and new (object) for backward compat
   const opts = typeof projectDirOrOptions === 'string'
     ? { projectDir: projectDirOrOptions }
     : projectDirOrOptions ?? {};
+
+  // 0. Environment variables (same convention as colts/wrangler integration tests)
+  if (process.env.OPENAI_API_KEY) {
+    const provider = process.env.PROVIDER ?? 'openai';
+    const model = process.env.MODEL ?? 'gpt-4o';
+    const baseUrl = process.env.OPENAI_BASE_URL;
+    return {
+      llm: {
+        providers: [
+          {
+            name: provider,
+            apiKey: process.env.OPENAI_API_KEY,
+            ...(baseUrl ? { baseUrl } : {}),
+            models: [{ modelId: model }],
+          },
+        ],
+      },
+    };
+  }
+
+  // 1-3. YAML fallback
   const searchPaths: string[] = [];
   if (opts.projectDir) {
     searchPaths.push(join(opts.projectDir, 'wrangler.yaml'));
@@ -63,6 +86,6 @@ export async function loadEvalLlmConfig(
   }
 
   throw new Error(
-    'No LLM config found for eval judge. Create wrangler.yaml or eval-config.yaml with an llm.providers section.'
+    'No LLM config found. Set OPENAI_API_KEY env var or create wrangler.yaml with llm.providers.'
   );
 }

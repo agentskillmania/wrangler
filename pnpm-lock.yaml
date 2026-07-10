@@ -254,6 +254,9 @@ importers:
       '@agentskillmania/wrangler':
         specifier: workspace:*
         version: link:../wrangler
+      dotenv:
+        specifier: ^16.4.0
+        version: 16.6.1
       isomorphic-git:
         specifier: ^1.38.1
         version: 1.38.1

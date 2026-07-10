@@ -40,6 +40,7 @@
     "@agentskillmania/colts": "link:../../../colts/packages/colts",
     "@agentskillmania/llm-client": "link:../../../colts/packages/llm-client",
     "@agentskillmania/wrangler": "workspace:*",
+    "dotenv": "^16.4.0",
     "isomorphic-git": "^1.38.1",
     "js-yaml": "^4.1.0",
     "zod": "^3.25.76"

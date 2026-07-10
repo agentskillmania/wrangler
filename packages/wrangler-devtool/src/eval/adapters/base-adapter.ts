@@ -101,8 +101,13 @@ export abstract class BaseAdapter implements ExecutionAdapter {
 
   /** Create an EnhancedRunner configured for this eval run. */
   protected async createRunner(suite: EvalSuite, workspacePath: string): Promise<EnhancedRunner> {
+    // Load LLM config from project/global — same search as judge config
+    const { loadEvalLlmConfig } = await import('../config.js');
+    const llmConfig = await loadEvalLlmConfig(suite.target.path);
+
     const opts: Record<string, unknown> = {
       workspacePath,
+      llm: llmConfig.llm,
       skillDirs: this.getSkillDirs(suite),
       enableSession: false,
       enableTodolist: false,

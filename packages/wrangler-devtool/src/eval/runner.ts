@@ -206,7 +206,11 @@ export class EvalRunner {
       lines.push(JSON.stringify({ kind: 'tool_result', name: tc.name, result: tc.result, isError: tc.isError }));
     }
 
-    lines.push(JSON.stringify({ kind: 'final', answer: trace.answer, resultType: trace.result.type }));
+    const finalLine: Record<string, unknown> = { kind: 'final', answer: trace.answer, resultType: trace.result.type };
+    if (trace.result.type === 'error' && trace.result.error) {
+      finalLine.error = trace.result.error.message;
+    }
+    lines.push(JSON.stringify(finalLine));
     lines.push(JSON.stringify({ kind: 'stats', steps: trace.steps, duration: trace.duration, tokens: trace.tokens }));
 
     await writeFile(filepath, lines.join('\n') + '\n', 'utf-8');
