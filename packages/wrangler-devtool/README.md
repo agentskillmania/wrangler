@@ -3,114 +3,13 @@
 [![npm version](https://img.shields.io/npm/v/@agentskillmania/wrangler-devtool.svg)](https://www.npmjs.com/package/@agentskillmania/wrangler-devtool)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Wrangler Devtool** is the development toolkit for the Wrangler ecosystem. It provides scaffolding, testing, review, and session management for developers who build agents, skills, and crews.
+**Wrangler Devtool** is the development toolkit for the Wrangler ecosystem. It does three things:
 
-## Features
+1. **Scaffolds** agent/skill project directories
+2. **Provides** built-in skills that upper-layer agents can load
+3. **Evaluates** agents and skills via a YAML-defined test framework
 
-### Scaffolding
-
-Initialize workspaces and generate agent/skill/crew definitions.
-
-```bash
-# Initialize workspace
-wrangler-devtool init --mode agent ./my-agent
-wrangler-devtool init --mode crew ./my-crew
-
-# Generate empty scaffold
-wrangler-devtool agent create coder
-wrangler-devtool skill create writing
-wrangler-devtool crew create research
-```
-
-### AI-Powered Generation
-
-Built-in agents generate or modify definitions from natural language prompts.
-
-```bash
-# Generate agent with AI
-wrangler-devtool agent write --prompt "You are a senior React developer"
-
-# Modify existing agent
-wrangler-devtool agent write coder --prompt "Add TypeScript support"
-
-# Generate skill
-wrangler-devtool skill write --prompt "Handle user refund requests"
-
-# Generate crew
-wrangler-devtool crew write --prompt "A researcher and a writer working together"
-```
-
-**Safety:** Changes use structured `old → new` format with match verification. Default `--dry-run`; `--apply` required to write.
-
-### Testing
-
-Declarative test framework with YAML-based test cases.
-
-```bash
-# Run all tests
-wrangler-devtool test ./my-agent
-
-# Run single case
-wrangler-devtool test ./my-agent --case "basic-math"
-
-# Skip soft evaluations (faster)
-wrangler-devtool test ./my-agent --hard-only
-
-# JSON output
-wrangler-devtool test ./my-agent --reporter json
-```
-
-**Test case format (`test/*.yaml`):**
-
-```yaml
-name: Basic math
-description: Verify agent can calculate
-
-input:
-  message: "Calculate 23 * 47"
-
-expected:
-  hard:
-    - type: output_contains
-      value: "1081"
-    - type: tool_called
-      tool: shell
-  soft:
-    - name: Response is polite
-      criteria: Evaluate whether the response is polite and professional.
-      rubric:
-        - score: 1
-          description: "Rude or aggressive"
-        - score: 5
-          description: "Friendly and professional"
-      minScore: 4
-```
-
-### Review
-
-Read-only quality review of agent/skill/crew definitions.
-
-```bash
-# Static checks only
-wrangler-devtool review ./my-agent
-
-# Deep LLM-based review
-wrangler-devtool review ./my-agent --deep
-
-# Focus on specific aspects
-wrangler-devtool review ./my-agent --deep --prompt "Check for security issues"
-```
-
-### Session Management
-
-```bash
-# List sessions
-wrangler-devtool session list
-wrangler-devtool session list /path/to/project
-
-# Fork session from message N
-wrangler-devtool session fork <session-id> --msg=5
-```
+No AI logic lives in devtool itself — generation, review, and orchestration are handled by the built-in skills, which upper-layer agents (e.g. skill-studio) load via `load_skill`.
 
 ## Installation
 
@@ -124,45 +23,217 @@ Or use directly via npx:
 npx wrangler-devtool --help
 ```
 
+## Commands
+
+### `init` — Initialize a project
+
+Creates a new agent or skill project directory with standard structure (AGENT.md, skills/, evals/, mcp.json, .gitignore, git repo).
+
+```bash
+wrangler-devtool init --type agent ./my-agent
+wrangler-devtool init --type crew ./my-crew
+wrangler-devtool init --type skill ./my-skill
+wrangler-devtool init --type agent --no-git ./my-agent
+```
+
+Generated structure:
+
+```
+my-agent/
+├── AGENT.md          # Agent definition (frontmatter + instructions)
+├── skills/           # Skills this agent can load
+│   └── example.md
+├── evals/            # Evaluation suites
+│   └── example.yaml
+├── mcp.json          # MCP server config
+├── .gitignore        # Ignores .eval/ and node_modules/
+└── .git/
+```
+
+### `create` — Create a scaffold file
+
+Generates an empty agent, skill, or crew template file.
+
+```bash
+wrangler-devtool create agent my-bot
+wrangler-devtool create skill search-web
+wrangler-devtool create crew dev-team
+```
+
+### `eval` — Run evaluation suite
+
+Runs a YAML-defined evaluation suite against an agent or skill. Supports multi-run sampling, deterministic evaluators, and LLM-as-Judge.
+
+```bash
+# Run with defaults
+wrangler-devtool eval evals/baseline.yaml
+
+# Override sampling
+wrangler-devtool eval evals/baseline.yaml --runs 5
+
+# Custom output directory
+wrangler-devtool eval evals/baseline.yaml --output ./reports
+
+# JSON output (for CI)
+wrangler-devtool eval evals/baseline.yaml --reporter json
+```
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--runs N` | Override `sampling.runs` |
+| `--output DIR` | Output directory (default: `.eval/runs/<runId>`) |
+| `--reporter console\|json` | Output format (default: `console`) |
+| `--keep-traces` | Keep temporary workspaces after run |
+
+## Evaluation Framework
+
+### Suite YAML format
+
+```yaml
+name: code-reviewer-eval
+description: Evaluate the code-reviewer agent
+
+target:
+  type: agent              # agent | skill
+  path: ./                 # agent definition dir (for skill: skill parent dir)
+  skill: null              # when type=skill, the skill name to load
+
+sampling:
+  runs: 3                  # run each case 3 times
+  passThreshold: 0.67      # 2/3 passes required
+  # temperature: 0         # uncomment for deterministic single-run mode
+  # maxSteps: 20           # max agent steps per run
+
+cases:
+  - name: detect-sql-injection
+    description: Should detect SQL injection
+    input:
+      message: Review this code for security issues
+    context:
+      files:               # fixture files copied into temp workspace
+        - source: fixtures/vulnerable.py
+          target: src/main.py
+      env:
+        MODE: strict
+    evaluators:
+      - type: output_contains
+        value: "SQL injection"
+        caseInsensitive: true
+      - type: tool_called
+        tool: file_read
+      - type: file_exists
+        path: review.md
+      - type: llm-judge
+        name: thoroughness
+        criteria: Coverage of security, performance, maintainability
+        rubric:
+          - { score: 5, description: Comprehensive }
+          - { score: 1, description: Missing key issues }
+        minScore: 3
+```
+
+### Built-in evaluators
+
+**Deterministic:**
+
+| Type | Description |
+|---|---|
+| `output_contains` / `output_not_contains` | Check answer text (with `caseInsensitive`) |
+| `output_equals` | Exact match |
+| `output_matches` | Regex match (with `flags`) |
+| `tool_called` / `tool_not_called` | Whether a specific tool was invoked |
+| `tool_called_with` | Tool called with matching arguments (subset) |
+| `tool_call_count` | Number of tool calls within `min`/`max` range |
+| `file_exists` / `file_not_exists` | File presence in workspace (with `contentContains`) |
+| `exit_code` | Run result type (`success`, `error`, `max_steps`, etc.) |
+| `step_count` | Steps within `min`/`max` range |
+
+**LLM-as-Judge:**
+
+| Type | Description |
+|---|---|
+| `llm-judge` | LLM evaluates the full trace (answer + tool calls) against `criteria` and `rubric`. Supports `reference` golden answer. Uses `temperature: 0` for determinism. |
+
+### Output structure
+
+```
+.eval/runs/2026-07-14T09-00-00-my-suite/
+├── report.json                          # Structured report
+└── traces/
+    ├── detect-sql-injection.sample-0.jsonl   # Per case × per sample
+    ├── detect-sql-injection.sample-1.jsonl
+    └── detect-sql-injection.sample-2.jsonl
+```
+
+Trace files are JSONL — one JSON event per line (`meta`, `input`, `tool_call`, `tool_result`, `final`, `stats`).
+
+## Built-in Skills
+
+Devtool ships five skills that upper-layer agents can load via `load_skill`:
+
+| Skill | Purpose |
+|---|---|
+| `agent-architect` | Design and write agent definitions |
+| `skill-designer` | Design and write skill definitions |
+| `crew-composer` | Compose multi-agent crew definitions |
+| `definition-reviewer` | Review agent/skill/crew definitions for quality |
+| `session-curator` | Manage and organize conversation sessions |
+
+Upper-layer applications import `BUILTIN_SKILLS_DIR` and add it to `skillDirs`:
+
+```typescript
+import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
+
+const runner = await EnhancedRunner.create({
+  skillDirs: [BUILTIN_SKILLS_DIR],
+  // ...
+});
+```
+
 ## Configuration
 
-Devtool reuses the wrangler CLI configuration (`wrangler.yaml` or `~/.agentskillmania/wrangler/config.yaml`):
+Eval uses the same LLM config as wrangler. Search order (first with `llm.providers` wins):
+
+1. `projectDir/eval-config.yaml` — eval-specific override (supports `judge.model`)
+2. `projectDir/wrangler.yaml` — project config
+3. `~/.agentskillmania/wrangler/config.yaml` — global config
+4. `OPENAI_API_KEY` env var — CI fallback
+
+Example `eval-config.yaml` with separate judge model:
 
 ```yaml
 llm:
-  provider: openai
-  apiKey: sk-your-key
-  model: gpt-4o
+  providers:
+    - name: openai
+      apiKey: sk-your-key
+      baseUrl: https://api.example.com/v1
+      models:
+        - modelId: glm-5.1    # agent being evaluated
+        - modelId: glm-5.2    # available for judge
+
+judge:
+  model: glm-5.2              # use a stronger model for judging
 ```
 
-## CLI Reference
+## Programmatic API
 
-```
-wrangler-devtool <command>
+```typescript
+import { runEval, loadSuite } from '@agentskillmania/wrangler-devtool';
 
-Commands:
-  init --mode <agent|crew|bare> [dir]    Initialize workspace
-  agent create <name>                    Create empty agent scaffold
-  agent write [name] --prompt <text>     Generate/modify agent with AI
-  skill create <name>                    Create empty skill scaffold
-  skill write [name] --prompt <text>     Generate/modify skill with AI
-  crew create <name>                     Create empty crew scaffold
-  crew write [name] --prompt <text>      Generate/modify crew with AI
-  test <path> [options]                  Run declarative tests
-  review <path> [options]                Review quality (read-only)
-  session list [workspace]               List sessions
-  session fork <id> --msg=N              Fork session
-
-Global Options:
-  --help     Show help
-  --version  Show version
+const suite = await loadSuite('./evals/baseline.yaml');
+const { report, outputDir } = await runEval(suite, {
+  runs: 3,
+  outputDir: './reports',
+});
 ```
 
 ## Design Principles
 
-- **Non-interactive by default** — All commands are fully scriptable. No prompts, no menus.
-- **Safe changes** — File modifications use `old → new` match verification. No blind overwrites.
-- **Built-in agents are private** — Prompts bundled as code. Users invoke via CLI, not by editing prompts.
+- **Devtool does no AI** — scaffolding and file ops only; AI capabilities live in built-in skills loaded by upper-layer agents
+- **Non-interactive** — all commands are scriptable, no prompts or menus
+- **Safe changes** — file modifications use `old → new` match verification
 
 ## License
 
