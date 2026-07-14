@@ -148,29 +148,42 @@ export abstract class BaseAdapter implements ExecutionAdapter {
     }
   }
 
-  /** Collect tool:start/tool:end events into ToolCallRecord[]. */
+  /** Collect tool:start/tool:end (and tools:start/tools:end) events. */
   protected collectToolCalls(runner: EnhancedRunner): ToolCallRecord[] {
     const calls: ToolCallRecord[] = [];
-    const pending = new Map<string, ToolCallRecord>();
 
+    // Single tool call
     runner.on('tool:start', (...args: unknown[]) => {
-      const data = args[0] as { action: { id: string; tool: string; arguments: Record<string, unknown> } };
-      const record: ToolCallRecord = {
-        name: data.action.tool,
-        arguments: data.action.arguments,
-      };
-      pending.set(data.action.id, record);
+      const data = args[0] as { action: { tool: string; arguments: Record<string, unknown> } };
+      calls.push({ name: data.action.tool, arguments: data.action.arguments });
+    });
+    runner.on('tool:end', (...args: unknown[]) => {
+      const data = args[0] as { result: unknown; isError?: boolean };
+      for (let i = calls.length - 1; i >= 0; i--) {
+        if (calls[i].result === undefined && !calls[i].isError) {
+          calls[i].result = data.result;
+          calls[i].isError = data.isError;
+          break;
+        }
+      }
     });
 
-    runner.on('tool:end', (...args: unknown[]) => {
-      const data = args[0] as { result: unknown; callId?: string; isError?: boolean };
-      const id = data.callId;
-      if (id) {
-        const record = pending.get(id);
-        if (record) {
-          record.result = data.result;
-          calls.push(record);
-          pending.delete(id);
+    // Parallel/batch tool calls (when agent calls multiple tools at once)
+    runner.on('tools:start', (...args: unknown[]) => {
+      const data = args[0] as { actions: Array<{ tool: string; arguments: Record<string, unknown> }> };
+      for (const action of data.actions) {
+        calls.push({ name: action.tool, arguments: action.arguments });
+      }
+    });
+    runner.on('tools:end', (...args: unknown[]) => {
+      const data = args[0] as { results: Record<string, unknown> };
+      const values = Object.values(data.results);
+      for (const result of values) {
+        for (let i = calls.length - 1; i >= 0; i--) {
+          if (calls[i].result === undefined) {
+            calls[i].result = result;
+            break;
+          }
         }
       }
     });
