@@ -257,7 +257,10 @@ describe('EvalRunner', () => {
     await runner.run();
 
     const content = readFileSync(join(tempDir, 'traces', 'say-hello.sample-0.jsonl'), 'utf-8');
-    const lines = content.trim().split('\n').map((l) => JSON.parse(l));
+    const lines = content
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
     const kinds = lines.map((l) => l.kind);
 
     expect(kinds).toContain('tool_call');

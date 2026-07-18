@@ -7,15 +7,10 @@
  */
 
 import { readFile } from 'node:fs/promises';
+
 import { z } from 'zod';
 
-import type {
-  EvalSuite,
-  EvalCase,
-  EvalTarget,
-  EvalSampling,
-  EvaluatorSpec,
-} from './types.js';
+import type { EvalSuite } from './types.js';
 
 // ─── Zod schemas ────────────────────────────────────────────
 

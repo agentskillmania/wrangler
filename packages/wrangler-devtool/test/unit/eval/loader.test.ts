@@ -194,7 +194,11 @@ cases:
     expect(evals).toHaveLength(12);
     expect(evals[0]).toEqual({ type: 'output_contains', value: 'hello', caseInsensitive: true });
     expect(evals[3]).toEqual({ type: 'output_matches', pattern: '^d+$', flags: 'i' });
-    expect(evals[6]).toEqual({ type: 'tool_called_with', tool: 'file_write', arguments: { path: 'out.txt' } });
+    expect(evals[6]).toEqual({
+      type: 'tool_called_with',
+      tool: 'file_write',
+      arguments: { path: 'out.txt' },
+    });
     expect(evals[7]).toEqual({ type: 'tool_call_count', min: 1, max: 5 });
     expect(evals[10]).toEqual({ type: 'exit_code', equals: 'success' });
     expect(evals[11]).toEqual({ type: 'step_count', max: 10 });

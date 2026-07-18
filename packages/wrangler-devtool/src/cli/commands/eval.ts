@@ -4,9 +4,9 @@
 import { resolve, dirname } from 'node:path';
 
 import { loadSuite } from '../../eval/loader.js';
-import { runEval } from '../../eval/runner.js';
 import { printReport } from '../../eval/reporters/console.js';
 import { formatJsonReport } from '../../eval/reporters/json.js';
+import { runEval } from '../../eval/runner.js';
 import { defineCommand } from '../framework.js';
 import { CliError, ExitCode } from '../options.js';
 

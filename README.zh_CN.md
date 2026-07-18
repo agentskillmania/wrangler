@@ -10,8 +10,8 @@
 | 包 | 说明 |
 |---------|-------------|
 | [`@agentskillmania/wrangler`](./packages/wrangler/) | 核心库 —— 智能体团队编排、`EnhancedRunner`、技能管理、工作空间组合和 MCP 工具集成 |
-| [`@agentskillmania/wrangler-cli`](./packages/wrangler-cli/) | 终端 UI（Ink + React）—— 交互式智能体聊天，支持流式输出、思考显示、设置向导和多会话支持 |
-| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | 开发工具包 —— 脚手架、声明式测试、AI 智能生成、质量评审和会话管理 |
+| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | 开发工具包 —— 项目脚手架、评估框架、内置技能 |
+| [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/) | HTTP API 服务器 —— 通过 REST/SSE 暴露智能体会话、技能管理和 devtool 端点 |
 
 ## 快速开始
 
@@ -74,16 +74,18 @@ pnpm release            # 构建 + 发布
 ## 架构
 
 ```
-wrangler-cli ────depends───► wrangler
+wrangler-daemon ──depends──► wrangler
 wrangler-devtool ─depends──► wrangler
 wrangler ────────depends──► colts, llm-client
 ```
 
 Wrangler 构建在 colts 框架之上：
 
-- **colts** 提供 ReAct 智能体运行器、执行引擎和流式原语
+- **colts** 提供 ReAct 智能体运行器、执行引擎和事件原语
 - **llm-client** 提供统一的大模型访问和并发控制
 - **wrangler** 增加团队编排、智能体加载（从 `AGENT.md`）、团队定义（从 `CREW.md`）、技能组合和 `EnhancedRunner`
+- **wrangler-devtool** 提供构建、测试、评估智能体的开发工具
+- **wrangler-daemon** 提供上层应用使用的 HTTP API 服务器
 - **wrangler-cli** 提供交互式终端 UI
 - **wrangler-devtool** 提供开发工具，用于构建、测试和评审智能体
 

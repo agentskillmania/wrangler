@@ -11,8 +11,8 @@
 | Package | Description |
 |---------|-------------|
 | [`@agentskillmania/wrangler`](./packages/wrangler/) | Core library — agent crew orchestration, `EnhancedRunner`, skill management, workspace composition, and MCP tool integration |
-| [`@agentskillmania/wrangler-cli`](./packages/wrangler-cli/) | Terminal UI (Ink + React) — interactive agent chat with streaming, thinking display, setup wizard, and multi-session support |
-| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | Development toolkit — scaffolding, declarative testing, AI-powered generation, quality review, and session management |
+| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | Development toolkit — project scaffolding, evaluation framework, and built-in skills |
+| [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/) | HTTP API server — exposes agent sessions, skill management, and devtool endpoints via REST/SSE |
 
 ## Quick Start
 
@@ -75,18 +75,18 @@ pnpm release            # Build + publish
 ## Architecture
 
 ```
-wrangler-cli ────depends───► wrangler
+wrangler-daemon ──depends──► wrangler
 wrangler-devtool ─depends──► wrangler
 wrangler ────────depends──► colts, llm-client
 ```
 
 Wrangler sits on top of the colts framework:
 
-- **colts** provides the ReAct agent runner, execution engine, and streaming primitives
+- **colts** provides the ReAct agent runner, execution engine, and event primitives
 - **llm-client** provides unified LLM access with concurrency control
 - **wrangler** adds crew orchestration, agent loading (from `AGENT.md`), crew definition (from `CREW.md`), skill composition, and `EnhancedRunner`
-- **wrangler-cli** provides the terminal UI for interactive use
-- **wrangler-devtool** provides development tooling for building, testing, and reviewing agents
+- **wrangler-devtool** provides development tooling for building, testing, and evaluating agents
+- **wrangler-daemon** provides the HTTP API server for upper-layer applications
 
 ## Requirements
 

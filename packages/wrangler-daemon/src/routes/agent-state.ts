@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 
 import type { DecoratedFastifyInstance } from '../types.js';
 import { writeSSE, writeGenericSSE } from '../utils.js';
@@ -72,8 +72,7 @@ export async function agentStateRoutes(fastify: FastifyInstance): Promise<void> 
             messageCount: ctx?.messages?.length ?? 0,
             tokensIn,
             tokensOut,
-            tokensTotal:
-              tokensIn != null && tokensOut != null ? tokensIn + tokensOut : undefined,
+            tokensTotal: tokensIn != null && tokensOut != null ? tokensIn + tokensOut : undefined,
             status,
             createdAt: info.createdAt,
             updatedAt: info.updatedAt,

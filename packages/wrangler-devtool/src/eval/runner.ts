@@ -9,9 +9,15 @@
  */
 
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
+import { AgentAdapter } from './adapters/agent-adapter.js';
+import { SkillAdapter } from './adapters/skill-adapter.js';
+import type { ExecutionAdapter } from './adapters/types.js';
+import { loadEvalLlmConfig } from './config.js';
+import { EvaluatorRegistry, suiteUsesLlmJudge } from './evaluators/index.js';
+import type { LlmJudgeOptions } from './evaluators/llm-judge.js';
 import type {
   EvalSuite,
   EvalCase,
@@ -20,12 +26,6 @@ import type {
   SampleResult,
   EvalTrace,
 } from './types.js';
-import type { ExecutionAdapter } from './adapters/types.js';
-import { AgentAdapter } from './adapters/agent-adapter.js';
-import { SkillAdapter } from './adapters/skill-adapter.js';
-import { EvaluatorRegistry, suiteUsesLlmJudge } from './evaluators/index.js';
-import type { LlmJudgeOptions } from './evaluators/llm-judge.js';
-import { loadEvalLlmConfig } from './config.js';
 
 /** Options for running an eval suite. */
 export interface EvalRunnerOptions {
@@ -78,7 +78,8 @@ export class EvalRunner {
   constructor(suite: EvalSuite, options: EvalRunnerOptions = {}) {
     this.suite = suite;
     this.options = options;
-    this.adapter = options.adapter ?? (suite.target.type === 'skill' ? new SkillAdapter() : new AgentAdapter());
+    this.adapter =
+      options.adapter ?? (suite.target.type === 'skill' ? new SkillAdapter() : new AgentAdapter());
     this.registry = new EvaluatorRegistry();
   }
 
@@ -157,7 +158,12 @@ export class EvalRunner {
           sampleIndex: i,
           input: caseData.input.message,
           answer: '',
-          result: { type: 'error', error: err instanceof Error ? err : new Error(errorMsg), totalSteps: 0, tokens: { input: 0, output: 0 } },
+          result: {
+            type: 'error',
+            error: err instanceof Error ? err : new Error(errorMsg),
+            totalSteps: 0,
+            tokens: { input: 0, output: 0 },
+          },
           toolCalls: [],
           steps: 0,
           duration: 0,
@@ -197,21 +203,44 @@ export class EvalRunner {
     const filepath = join(outputDir, 'traces', filename);
 
     const lines = [
-      JSON.stringify({ kind: 'meta', caseName: trace.caseName, sampleIndex: trace.sampleIndex, runId }),
+      JSON.stringify({
+        kind: 'meta',
+        caseName: trace.caseName,
+        sampleIndex: trace.sampleIndex,
+        runId,
+      }),
       JSON.stringify({ kind: 'input', message: trace.input }),
     ];
 
     for (const tc of trace.toolCalls) {
       lines.push(JSON.stringify({ kind: 'tool_call', name: tc.name, arguments: tc.arguments }));
-      lines.push(JSON.stringify({ kind: 'tool_result', name: tc.name, result: tc.result, isError: tc.isError }));
+      lines.push(
+        JSON.stringify({
+          kind: 'tool_result',
+          name: tc.name,
+          result: tc.result,
+          isError: tc.isError,
+        })
+      );
     }
 
-    const finalLine: Record<string, unknown> = { kind: 'final', answer: trace.answer, resultType: trace.result.type };
+    const finalLine: Record<string, unknown> = {
+      kind: 'final',
+      answer: trace.answer,
+      resultType: trace.result.type,
+    };
     if (trace.result.type === 'error' && trace.result.error) {
       finalLine.error = trace.result.error.message;
     }
     lines.push(JSON.stringify(finalLine));
-    lines.push(JSON.stringify({ kind: 'stats', steps: trace.steps, duration: trace.duration, tokens: trace.tokens }));
+    lines.push(
+      JSON.stringify({
+        kind: 'stats',
+        steps: trace.steps,
+        duration: trace.duration,
+        tokens: trace.tokens,
+      })
+    );
 
     await writeFile(filepath, lines.join('\n') + '\n', 'utf-8');
   }

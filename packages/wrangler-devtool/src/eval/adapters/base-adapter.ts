@@ -12,9 +12,9 @@
 import { copyFile, mkdir, access } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 
-import { EnhancedRunner } from '@agentskillmania/wrangler';
-import { createAgentState, addUserMessage, type AgentState } from '@agentskillmania/colts';
+import { addUserMessage, type AgentState } from '@agentskillmania/colts';
 import type { RunResult } from '@agentskillmania/colts';
+import { EnhancedRunner } from '@agentskillmania/wrangler';
 
 import type { EvalCase, EvalTrace, EvalSuite, ToolCallRecord } from '../types.js';
 import type { ExecutionAdapter, AdapterExecuteOptions } from './types.js';
@@ -170,7 +170,9 @@ export abstract class BaseAdapter implements ExecutionAdapter {
 
     // Parallel/batch tool calls (when agent calls multiple tools at once)
     runner.on('tools:start', (...args: unknown[]) => {
-      const data = args[0] as { actions: Array<{ tool: string; arguments: Record<string, unknown> }> };
+      const data = args[0] as {
+        actions: Array<{ tool: string; arguments: Record<string, unknown> }>;
+      };
       for (const action of data.actions) {
         calls.push({ name: action.tool, arguments: action.arguments });
       }

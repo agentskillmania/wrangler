@@ -119,7 +119,10 @@ describe('US-C10: Agent State Monitoring', () => {
     expect(payload).toHaveProperty('agent');
     expect(payload).toHaveProperty('llm');
 
-    const overview = (payload.session as Record<string, unknown>)?.overview as Record<string, unknown>;
+    const overview = (payload.session as Record<string, unknown>)?.overview as Record<
+      string,
+      unknown
+    >;
     expect(overview).toBeDefined();
     expect(overview).toHaveProperty('agentName', 'field-check-agent');
     expect(overview).toHaveProperty('model', 'gpt-4o');
@@ -142,7 +145,10 @@ describe('US-C10: Agent State Monitoring', () => {
 
     const res = await fetch(`${getUrl()}/api/agent/status-id/state`);
     const payload = await readFirstPayload(res);
-    const overview = (payload.session as Record<string, unknown>)?.overview as Record<string, unknown>;
+    const overview = (payload.session as Record<string, unknown>)?.overview as Record<
+      string,
+      unknown
+    >;
 
     expect(overview.status).toBe('running');
   });
@@ -155,7 +161,10 @@ describe('US-C10: Agent State Monitoring', () => {
 
     const res = await fetch(`${getUrl()}/api/agent/default-status-id/state`);
     const payload = await readFirstPayload(res);
-    const overview = (payload.session as Record<string, unknown>)?.overview as Record<string, unknown>;
+    const overview = (payload.session as Record<string, unknown>)?.overview as Record<
+      string,
+      unknown
+    >;
 
     expect(overview.status).toBe('idle');
   });
@@ -173,7 +182,10 @@ describe('US-C10: Agent State Monitoring', () => {
 
     const res = await fetch(`${getUrl()}/api/agent/model-id/state`);
     const payload = await readFirstPayload(res);
-    const overview = (payload.session as Record<string, unknown>)?.overview as Record<string, unknown>;
+    const overview = (payload.session as Record<string, unknown>)?.overview as Record<
+      string,
+      unknown
+    >;
 
     expect(overview.model).toBe('claude-sonnet-4-20250514');
   });
@@ -186,7 +198,10 @@ describe('US-C10: Agent State Monitoring', () => {
 
     const res = await fetch(`${getUrl()}/api/agent/token-id/state`);
     const payload = await readFirstPayload(res);
-    const overview = (payload.session as Record<string, unknown>)?.overview as Record<string, unknown>;
+    const overview = (payload.session as Record<string, unknown>)?.overview as Record<
+      string,
+      unknown
+    >;
 
     // Fresh session has no persisted context → tokens are undefined (not 0).
     expect(overview.tokensIn).toBeUndefined();
@@ -225,8 +240,14 @@ describe('US-C10: Agent State Monitoring', () => {
 
     const payloadA = await readFirstPayload(resA);
     const payloadB = await readFirstPayload(resB);
-    const overviewA = (payloadA.session as Record<string, unknown>)?.overview as Record<string, unknown>;
-    const overviewB = (payloadB.session as Record<string, unknown>)?.overview as Record<string, unknown>;
+    const overviewA = (payloadA.session as Record<string, unknown>)?.overview as Record<
+      string,
+      unknown
+    >;
+    const overviewB = (payloadB.session as Record<string, unknown>)?.overview as Record<
+      string,
+      unknown
+    >;
 
     expect(overviewA.agentName).toBe('agent-a');
     expect(overviewB.agentName).toBe('agent-b');

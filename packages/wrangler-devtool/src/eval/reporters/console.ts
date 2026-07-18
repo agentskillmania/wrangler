@@ -14,9 +14,7 @@ export function formatReport(report: EvalReport): string {
     ? `skill/${report.target.skill}`
     : `agent (${report.target.path})`;
 
-  lines.push(
-    `Suite: ${report.suite}  Target: ${target}  Runs: ${report.sampling.runs}`
-  );
+  lines.push(`Suite: ${report.suite}  Target: ${target}  Runs: ${report.sampling.runs}`);
   lines.push('─'.repeat(60));
 
   // Header
@@ -28,13 +26,9 @@ export function formatReport(report: EvalReport): string {
     const passStr = `${caseReport.passCount}/${report.sampling.runs}`;
     const passMarker = caseReport.passed ? '✓' : '✗';
     const scores = formatScores(caseReport);
-    const duration = formatDuration(caseReport);
 
     lines.push(
-      pad(caseReport.name, 32) +
-        pad(`${passStr} ${passMarker}`, 8) +
-        pad(scores, 24) +
-        duration
+      pad(caseReport.name, 32) + pad(`${passStr} ${passMarker}`, 8) + pad(scores, 24) + '-'
     );
   }
 
@@ -70,9 +64,4 @@ function formatScores(caseReport: EvalReport['cases'][number]): string {
     }
   }
   return parts.join(', ') || '(deterministic)';
-}
-
-function formatDuration(caseReport: EvalReport['cases'][number]): string {
-  // Duration isn't in CaseReport directly; we skip it for now
-  return '-';
 }

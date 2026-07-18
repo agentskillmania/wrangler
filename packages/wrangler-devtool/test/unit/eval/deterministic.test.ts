@@ -18,7 +18,12 @@ function makeTrace(overrides: Partial<EvalTrace> = {}): EvalTrace {
     sampleIndex: 0,
     input: 'test input',
     answer: 'Hello World',
-    result: { type: 'success', answer: 'Hello World', totalSteps: 3, tokens: { input: 10, output: 5 } },
+    result: {
+      type: 'success',
+      answer: 'Hello World',
+      totalSteps: 3,
+      tokens: { input: 10, output: 5 },
+    },
     toolCalls: [],
     steps: 3,
     duration: 1000,
@@ -50,19 +55,13 @@ describe('DeterministicEvaluators', () => {
   // output_contains
   describe('output_contains', () => {
     it('passes when answer contains value', async () => {
-      const result = await runEval(
-        { type: 'output_contains', value: 'Hello' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'output_contains', value: 'Hello' }, makeTrace());
       expect(result.passed).toBe(true);
       expect(result.name).toBe('output_contains');
     });
 
     it('fails when answer does not contain value', async () => {
-      const result = await runEval(
-        { type: 'output_contains', value: 'Goodbye' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'output_contains', value: 'Goodbye' }, makeTrace());
       expect(result.passed).toBe(false);
     });
 
@@ -86,18 +85,12 @@ describe('DeterministicEvaluators', () => {
   // output_not_contains
   describe('output_not_contains', () => {
     it('passes when answer does not contain value', async () => {
-      const result = await runEval(
-        { type: 'output_not_contains', value: 'error' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'output_not_contains', value: 'error' }, makeTrace());
       expect(result.passed).toBe(true);
     });
 
     it('fails when answer contains value', async () => {
-      const result = await runEval(
-        { type: 'output_not_contains', value: 'Hello' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'output_not_contains', value: 'Hello' }, makeTrace());
       expect(result.passed).toBe(false);
     });
   });
@@ -105,18 +98,12 @@ describe('DeterministicEvaluators', () => {
   // output_equals
   describe('output_equals', () => {
     it('passes on exact match', async () => {
-      const result = await runEval(
-        { type: 'output_equals', value: 'Hello World' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'output_equals', value: 'Hello World' }, makeTrace());
       expect(result.passed).toBe(true);
     });
 
     it('fails on partial match', async () => {
-      const result = await runEval(
-        { type: 'output_equals', value: 'Hello' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'output_equals', value: 'Hello' }, makeTrace());
       expect(result.passed).toBe(false);
     });
   });
@@ -124,10 +111,7 @@ describe('DeterministicEvaluators', () => {
   // output_matches
   describe('output_matches', () => {
     it('passes when pattern matches', async () => {
-      const result = await runEval(
-        { type: 'output_matches', pattern: '^Hello' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'output_matches', pattern: '^Hello' }, makeTrace());
       expect(result.passed).toBe(true);
     });
 
@@ -186,9 +170,7 @@ describe('DeterministicEvaluators', () => {
           arguments: { path: 'out.txt' },
         },
         makeTrace({
-          toolCalls: [
-            { name: 'file_write', arguments: { path: 'out.txt', content: 'data' } },
-          ],
+          toolCalls: [{ name: 'file_write', arguments: { path: 'out.txt', content: 'data' } }],
         })
       );
       expect(result.passed).toBe(true);
@@ -202,9 +184,7 @@ describe('DeterministicEvaluators', () => {
           arguments: { path: 'other.txt' },
         },
         makeTrace({
-          toolCalls: [
-            { name: 'file_write', arguments: { path: 'out.txt' } },
-          ],
+          toolCalls: [{ name: 'file_write', arguments: { path: 'out.txt' } }],
         })
       );
       expect(result.passed).toBe(false);
@@ -253,18 +233,12 @@ describe('DeterministicEvaluators', () => {
   describe('file_exists', () => {
     it('passes when file exists', async () => {
       writeFileSync(join(tempDir, 'review.md'), '# Review\nAll good');
-      const result = await runEval(
-        { type: 'file_exists', path: 'review.md' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'file_exists', path: 'review.md' }, makeTrace());
       expect(result.passed).toBe(true);
     });
 
     it('fails when file does not exist', async () => {
-      const result = await runEval(
-        { type: 'file_exists', path: 'missing.txt' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'file_exists', path: 'missing.txt' }, makeTrace());
       expect(result.passed).toBe(false);
     });
 
@@ -290,19 +264,13 @@ describe('DeterministicEvaluators', () => {
   // file_not_exists
   describe('file_not_exists', () => {
     it('passes when file does not exist', async () => {
-      const result = await runEval(
-        { type: 'file_not_exists', path: 'nope.txt' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'file_not_exists', path: 'nope.txt' }, makeTrace());
       expect(result.passed).toBe(true);
     });
 
     it('fails when file exists', async () => {
       writeFileSync(join(tempDir, 'temp.txt'), 'data');
-      const result = await runEval(
-        { type: 'file_not_exists', path: 'temp.txt' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'file_not_exists', path: 'temp.txt' }, makeTrace());
       expect(result.passed).toBe(false);
     });
   });
@@ -310,18 +278,12 @@ describe('DeterministicEvaluators', () => {
   // exit_code
   describe('exit_code', () => {
     it('passes when result type matches', async () => {
-      const result = await runEval(
-        { type: 'exit_code', equals: 'success' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'exit_code', equals: 'success' }, makeTrace());
       expect(result.passed).toBe(true);
     });
 
     it('fails when result type differs', async () => {
-      const result = await runEval(
-        { type: 'exit_code', equals: 'error' },
-        makeTrace()
-      );
+      const result = await runEval({ type: 'exit_code', equals: 'error' }, makeTrace());
       expect(result.passed).toBe(false);
     });
   });
@@ -329,18 +291,12 @@ describe('DeterministicEvaluators', () => {
   // step_count
   describe('step_count', () => {
     it('passes within range', async () => {
-      const result = await runEval(
-        { type: 'step_count', max: 5 },
-        makeTrace({ steps: 3 })
-      );
+      const result = await runEval({ type: 'step_count', max: 5 }, makeTrace({ steps: 3 }));
       expect(result.passed).toBe(true);
     });
 
     it('fails when above max', async () => {
-      const result = await runEval(
-        { type: 'step_count', max: 2 },
-        makeTrace({ steps: 5 })
-      );
+      const result = await runEval({ type: 'step_count', max: 2 }, makeTrace({ steps: 5 }));
       expect(result.passed).toBe(false);
     });
   });

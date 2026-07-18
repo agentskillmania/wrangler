@@ -8,12 +8,12 @@
  * Judge always uses temperature: 0 for determinism.
  */
 
+import type { LLMQuickInit, LLMProviderEntry } from '@agentskillmania/colts';
 import { LLMClient } from '@agentskillmania/llm-client';
 import type { LLMResponse } from '@agentskillmania/llm-client';
-import type { LLMQuickInit, LLMProviderEntry } from '@agentskillmania/colts';
 
-import type { Evaluator, EvalTrace, EvaluatorSpec, EvalResult } from '../types.js';
 import type { EvalLlmConfig } from '../config.js';
+import type { Evaluator, EvalTrace, EvaluatorSpec, EvalResult } from '../types.js';
 
 /** Constructor options — either provide a ready config or a raw LLMQuickInit. */
 export interface LlmJudgeOptions {
@@ -89,10 +89,11 @@ export class LlmJudgeEvaluator implements Evaluator {
     };
   }
 
-  private buildPrompt(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'llm-judge' }>): string {
-    const rubricText = spec.rubric
-      .map((r) => `  ${r.score}: ${r.description}`)
-      .join('\n');
+  private buildPrompt(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'llm-judge' }>
+  ): string {
+    const rubricText = spec.rubric.map((r) => `  ${r.score}: ${r.description}`).join('\n');
 
     const toolCallSummary = trace.toolCalls.length
       ? trace.toolCalls.map((tc) => `  - ${tc.name}(${JSON.stringify(tc.arguments)})`).join('\n')

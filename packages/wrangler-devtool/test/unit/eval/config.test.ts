@@ -50,10 +50,16 @@ describe('loadEvalLlmConfig', () => {
   });
 
   it('prefers eval-config.yaml over wrangler.yaml', async () => {
-    writeFileSync(join(tempDir, 'eval-config.yaml'),
-      `llm:\n  providers:\n    - name: eval\n      apiKey: sk-1\n      models: [{ modelId: m1 }]\n`, 'utf-8');
-    writeFileSync(join(tempDir, 'wrangler.yaml'),
-      `llm:\n  providers:\n    - name: wrangler\n      apiKey: sk-2\n      models: [{ modelId: m2 }]\n`, 'utf-8');
+    writeFileSync(
+      join(tempDir, 'eval-config.yaml'),
+      `llm:\n  providers:\n    - name: eval\n      apiKey: sk-1\n      models: [{ modelId: m1 }]\n`,
+      'utf-8'
+    );
+    writeFileSync(
+      join(tempDir, 'wrangler.yaml'),
+      `llm:\n  providers:\n    - name: wrangler\n      apiKey: sk-2\n      models: [{ modelId: m2 }]\n`,
+      'utf-8'
+    );
 
     const config = await loadEvalLlmConfig({ projectDir: tempDir, globalDir: tempDir });
 
@@ -62,8 +68,11 @@ describe('loadEvalLlmConfig', () => {
 
   it('falls back to global config', async () => {
     const globalDir = mkdtempSync(join(tmpdir(), 'eval-global-'));
-    writeFileSync(join(globalDir, 'config.yaml'),
-      `llm:\n  providers:\n    - name: global\n      apiKey: sk-global\n      models: [{ modelId: gm }]\n`, 'utf-8');
+    writeFileSync(
+      join(globalDir, 'config.yaml'),
+      `llm:\n  providers:\n    - name: global\n      apiKey: sk-global\n      models: [{ modelId: gm }]\n`,
+      'utf-8'
+    );
 
     const config = await loadEvalLlmConfig({ globalDir });
     expect(config.llm.providers[0].name).toBe('global');

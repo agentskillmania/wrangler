@@ -5,8 +5,8 @@
  * builds an empty AgentState, and lets the runner execute normally.
  */
 
-import { EnhancedRunner } from '@agentskillmania/wrangler';
 import { createAgentState, type AgentState } from '@agentskillmania/colts';
+import { EnhancedRunner } from '@agentskillmania/wrangler';
 
 import type { EvalSuite } from '../types.js';
 import { BaseAdapter } from './base-adapter.js';
@@ -14,7 +14,7 @@ import { BaseAdapter } from './base-adapter.js';
 export class AgentAdapter extends BaseAdapter {
   protected async buildInitialState(
     _runner: EnhancedRunner,
-    suite: EvalSuite,
+    _suite: EvalSuite,
     _workspacePath: string
   ): Promise<AgentState> {
     // Minimal agent state — the runner's tools and system prompt come from

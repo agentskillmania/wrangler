@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 
-import { EvaluatorRegistry, suiteUsesLlmJudge, requiresLlmJudge } from '../../../src/eval/evaluators/index.js';
+import {
+  EvaluatorRegistry,
+  suiteUsesLlmJudge,
+  requiresLlmJudge,
+} from '../../../src/eval/evaluators/index.js';
 import type { EvalTrace, EvaluatorSpec } from '../../../src/eval/types.js';
 
 function makeTrace(answer: string = 'hello'): EvalTrace {
@@ -68,7 +72,13 @@ describe('suiteUsesLlmJudge', () => {
   it('returns true when any spec is llm-judge', () => {
     const specs: EvaluatorSpec[] = [
       { type: 'output_contains', value: 'x' },
-      { type: 'llm-judge', name: 'q', criteria: 'c', rubric: [{ score: 1, description: 'd' }], minScore: 1 },
+      {
+        type: 'llm-judge',
+        name: 'q',
+        criteria: 'c',
+        rubric: [{ score: 1, description: 'd' }],
+        minScore: 1,
+      },
     ];
     expect(suiteUsesLlmJudge(specs)).toBe(true);
   });
@@ -88,7 +98,9 @@ describe('suiteUsesLlmJudge', () => {
 
 describe('requiresLlmJudge', () => {
   it('returns true for llm-judge spec', () => {
-    expect(requiresLlmJudge({ type: 'llm-judge', name: 'q', criteria: 'c', rubric: [], minScore: 1 })).toBe(true);
+    expect(
+      requiresLlmJudge({ type: 'llm-judge', name: 'q', criteria: 'c', rubric: [], minScore: 1 })
+    ).toBe(true);
   });
 
   it('returns false for deterministic spec', () => {

@@ -1,6 +1,6 @@
 import { SessionNotFoundError } from '@agentskillmania/wrangler';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 
 import { AgentSession } from '../core/agent-session.js';
 import type { AgentSessionOptions } from '../core/agent-session.js';

@@ -7,8 +7,8 @@
  * the LLM to autonomously call load_skill).
  */
 
-import { EnhancedRunner } from '@agentskillmania/wrangler';
 import { createAgentState, addUserMessage, type AgentState } from '@agentskillmania/colts';
+import { EnhancedRunner } from '@agentskillmania/wrangler';
 
 import type { EvalSuite } from '../types.js';
 import { BaseAdapter } from './base-adapter.js';
@@ -44,7 +44,10 @@ export class SkillAdapter extends BaseAdapter {
 
     // Pre-inject a message instructing the agent to load the skill.
     // The runner's load_skill tool will handle this on the first turn.
-    state = addUserMessage(state, `Load the skill "${skillName}" using the load_skill tool, then complete the task.`);
+    state = addUserMessage(
+      state,
+      `Load the skill "${skillName}" using the load_skill tool, then complete the task.`
+    );
 
     return state;
   }

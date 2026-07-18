@@ -221,15 +221,20 @@ describe('SkillAdapter', () => {
   });
 
   it('injects load_skill instruction into initial state', async () => {
-    mockRun.mockImplementation(async (state: { context: { messages: Array<{ content: string }> } }) => {
-      // Verify the load_skill instruction is in the conversation
-      const messages = state.context?.messages ?? [];
-      const hasLoadInstruction = messages.some((m) =>
-        typeof m.content === 'string' && m.content.includes('load_skill') && m.content.includes('my-skill')
-      );
-      expect(hasLoadInstruction).toBe(true);
-      return mockSuccessResult('ok');
-    });
+    mockRun.mockImplementation(
+      async (state: { context: { messages: Array<{ content: string }> } }) => {
+        // Verify the load_skill instruction is in the conversation
+        const messages = state.context?.messages ?? [];
+        const hasLoadInstruction = messages.some(
+          (m) =>
+            typeof m.content === 'string' &&
+            m.content.includes('load_skill') &&
+            m.content.includes('my-skill')
+        );
+        expect(hasLoadInstruction).toBe(true);
+        return mockSuccessResult('ok');
+      }
+    );
 
     const adapter = new SkillAdapter();
     const suite = makeSuite({

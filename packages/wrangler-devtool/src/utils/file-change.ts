@@ -4,8 +4,8 @@
 import { readFile, writeFile, unlink, realpath } from 'node:fs/promises';
 import path, { resolve, dirname } from 'node:path';
 
-import { CliError, ExitCode } from '../cli/options.js';
 import { fileExists } from './fs.js';
+import { CliError, ExitCode } from '../cli/options.js';
 
 export interface FileChange {
   file: string;

@@ -10,8 +10,8 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 import type { LLMQuickInit } from '@agentskillmania/colts';
 
@@ -39,9 +39,10 @@ export interface LoadEvalLlmConfigOptions {
 export async function loadEvalLlmConfig(
   projectDirOrOptions?: string | LoadEvalLlmConfigOptions
 ): Promise<EvalLlmConfig> {
-  const opts = typeof projectDirOrOptions === 'string'
-    ? { projectDir: projectDirOrOptions }
-    : projectDirOrOptions ?? {};
+  const opts =
+    typeof projectDirOrOptions === 'string'
+      ? { projectDir: projectDirOrOptions }
+      : (projectDirOrOptions ?? {});
 
   // 1-3. YAML files
   const searchPaths: string[] = [];

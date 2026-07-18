@@ -28,7 +28,7 @@ describe('@agentskillmania/wrangler-devtool', () => {
   it(
     'does NOT export DevTool or agent functions (removed in refactoring)',
     async () => {
-      const mod = await import('../../src/index.js' ) as Record<string, unknown>;
+      const mod = (await import('../../src/index.js')) as Record<string, unknown>;
       expect(mod.DevTool).toBeUndefined();
       expect(mod.runAgentArchitect).toBeUndefined();
       expect(mod.runReviewer).toBeUndefined();

@@ -15,7 +15,7 @@
   "type": "module",
   "scripts": {
     "preinstall": "npx only-allow pnpm",
-    "build": "pnpm --filter @agentskillmania/wrangler build && pnpm --filter @agentskillmania/wrangler-cli build && pnpm --filter @agentskillmania/wrangler-devtool build && pnpm --filter @agentskillmania/wrangler-daemon build",
+    "build": "pnpm --filter @agentskillmania/wrangler build && pnpm --filter @agentskillmania/wrangler-devtool build && pnpm --filter @agentskillmania/wrangler-daemon build",
     "dev": "pnpm -r dev",
     "test": "pnpm -r test",
     "test:unit": "pnpm -r test:unit",

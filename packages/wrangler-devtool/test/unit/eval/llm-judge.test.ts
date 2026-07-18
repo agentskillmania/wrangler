@@ -68,9 +68,7 @@ describe('LlmJudgeEvaluator', () => {
     // Construct with a mock config — actual LLM calls are mocked above.
     evaluator = new LlmJudgeEvaluator({
       llm: {
-        providers: [
-          { name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4o' }] },
-        ],
+        providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4o' }] }],
       },
     });
   });
@@ -111,10 +109,7 @@ describe('LlmJudgeEvaluator', () => {
 
   it('includes reference answer in prompt when provided', async () => {
     mockJudgeResponse(5, 'Matches reference');
-    await evaluator.evaluate(
-      makeTrace(),
-      judgeSpec({ reference: 'Should mention SQL injection' })
-    );
+    await evaluator.evaluate(makeTrace(), judgeSpec({ reference: 'Should mention SQL injection' }));
 
     const callArg = mockCall.mock.calls[0][0] as { messages: Array<{ content: string }> };
     const prompt = callArg.messages.map((m) => m.content).join('\n');

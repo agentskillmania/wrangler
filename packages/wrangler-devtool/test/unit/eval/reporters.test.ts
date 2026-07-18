@@ -19,9 +19,7 @@ function makeReport(overrides: Partial<EvalReport> = {}): EvalReport {
           {
             sampleIndex: 0,
             passed: true,
-            results: [
-              { name: 'output_contains', passed: true, message: 'ok' },
-            ],
+            results: [{ name: 'output_contains', passed: true, message: 'ok' }],
           },
         ],
         passCount: 1,
@@ -60,7 +58,11 @@ describe('console reporter', () => {
         {
           name: 'case-fail',
           samples: [
-            { sampleIndex: 0, passed: false, results: [{ name: 'output_contains', passed: false, message: 'no match' }] },
+            {
+              sampleIndex: 0,
+              passed: false,
+              results: [{ name: 'output_contains', passed: false, message: 'no match' }],
+            },
           ],
           passCount: 0,
           passed: false,
@@ -83,9 +85,11 @@ describe('console reporter', () => {
   });
 
   it('shows skill name in target when evaluating skill', () => {
-    const output = formatReport(makeReport({
-      target: { type: 'skill', path: './skills', skill: 'my-skill' },
-    }));
+    const output = formatReport(
+      makeReport({
+        target: { type: 'skill', path: './skills', skill: 'my-skill' },
+      })
+    );
     expect(output).toContain('skill/my-skill');
   });
 
@@ -98,9 +102,7 @@ describe('console reporter', () => {
             {
               sampleIndex: 0,
               passed: true,
-              results: [
-                { name: 'thoroughness', passed: true, score: 4, message: 'good' },
-              ],
+              results: [{ name: 'thoroughness', passed: true, score: 4, message: 'good' }],
             },
           ],
           passCount: 1,
@@ -141,9 +143,7 @@ describe('json reporter', () => {
             {
               sampleIndex: 0,
               passed: true,
-              results: [
-                { name: 'quality', passed: true, score: 5, message: 'excellent' },
-              ],
+              results: [{ name: 'quality', passed: true, score: 5, message: 'excellent' }],
             },
           ],
           passCount: 1,

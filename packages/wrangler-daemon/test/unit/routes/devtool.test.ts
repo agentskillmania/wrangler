@@ -6,7 +6,15 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { ConfigManager } from '../../../src/core/config-manager.js';
 import { devtoolRoutes } from '../../../src/routes/devtool.js';
 
-const { mockInitProject, mockCreateTemplate, mockApplyChanges, mockLoadSuite, mockRunEval, mockFormatReport, mockFormatJson } = vi.hoisted(() => ({
+const {
+  mockInitProject,
+  mockCreateTemplate,
+  mockApplyChanges,
+  mockLoadSuite,
+  mockRunEval,
+  mockFormatReport,
+  mockFormatJson,
+} = vi.hoisted(() => ({
   mockInitProject: vi.fn(),
   mockCreateTemplate: vi.fn(),
   mockApplyChanges: vi.fn(),
@@ -237,8 +245,20 @@ describe('Devtool API', () => {
   });
 
   describe('POST /api/devtool/eval/run', () => {
-    const mockSuite = { name: 'test', target: { type: 'agent', path: '.', skill: null }, sampling: { runs: 1, passThreshold: 1 }, cases: [] };
-    const mockReport = { suite: 'test', runId: 'r1', totalCases: 1, passed: 1, failed: 0, passRate: 1 };
+    const mockSuite = {
+      name: 'test',
+      target: { type: 'agent', path: '.', skill: null },
+      sampling: { runs: 1, passThreshold: 1 },
+      cases: [],
+    };
+    const mockReport = {
+      suite: 'test',
+      runId: 'r1',
+      totalCases: 1,
+      passed: 1,
+      failed: 0,
+      passRate: 1,
+    };
 
     it('runs eval and returns report', async () => {
       mockLoadSuite.mockResolvedValue(mockSuite);
@@ -269,10 +289,7 @@ describe('Devtool API', () => {
         body: JSON.stringify({ suitePath: 'evals/baseline.yaml', runs: 5 }),
       });
 
-      expect(mockRunEval).toHaveBeenCalledWith(
-        mockSuite,
-        expect.objectContaining({ runs: 5 })
-      );
+      expect(mockRunEval).toHaveBeenCalledWith(mockSuite, expect.objectContaining({ runs: 5 }));
     });
 
     it('returns 400 when suitePath is missing', async () => {

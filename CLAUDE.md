@@ -24,7 +24,6 @@ pnpm release            # Build + changeset publish
 
 # Run a single test file
 pnpm --filter @agentskillmania/wrangler vitest run test/unit/runner/enhanced-runner.test.ts
-pnpm --filter @agentskillmania/wrangler-cli vitest run test/unit/hooks/use-agent.test.ts
 pnpm --filter @agentskillmania/wrangler-daemon vitest run test/unit/daemon.test.ts
 
 # Run demos (from packages/wrangler)
@@ -41,17 +40,16 @@ Wrangler is a pnpm monorepo that orchestrates agents, skills, and tools into a w
 ### Dependency graph
 
 ```
-wrangler-cli ──────depends───► wrangler ────depends───► colts, llm-client, sandbox
 wrangler-daemon ───depends───► wrangler, wrangler-devtool
 wrangler-devtool ──depends───► wrangler
+wrangler ──────────depends───► colts, llm-client, sandbox
 ```
 
 ### Packages
 
 - **`packages/wrangler`** — Core library. Agent crew orchestration, EnhancedRunner, skill management, workspace composition, MCP tool integration, session persistence, spec/plan documents, todolist.
-- **`packages/wrangler-cli`** — Terminal UI built with Ink + React 18. Interactive agent chat with streaming, thinking display, setup wizard, and multi-session crew mode. Entry point is the `wrangler` CLI binary.
-- **`packages/wrangler-daemon`** — HTTP service (Fastify) exposing agent sessions, skill/agent management, workspace file ops, and devtool capabilities as REST + SSE API. Includes playground UI. Entry point is the `wrangler-daemon` CLI binary.
-- **`packages/wrangler-devtool`** — Placeholder package for future development tooling.
+- **`packages/wrangler-daemon`** — HTTP service (Fastify) exposing agent sessions, skill/agent management, workspace file ops, and devtool capabilities as REST + SSE API. Entry point is the `wrangler-daemon` CLI binary.
+- **`packages/wrangler-devtool`** — Development toolkit: project scaffolding, evaluation framework, built-in skills. Entry point is the `wrangler-devtool` CLI binary.
 
 ### Core source layout (`packages/wrangler/src/`)
 
@@ -64,13 +62,6 @@ wrangler-devtool ──depends───► wrangler
 - **`session/`** — Session persistence with `SessionStore`, transcript serialization, meta.yaml read/write.
 - **`spec-plan/`** — Spec and Plan document stores with skill-based workflows (write-spec, review-spec, write-plan, review-plan, execute-plan).
 - **`todolist/`** — Task management with `todo-tool`, `todo-middleware`, and `todo-state`. Integrated into crew orchestration for task tracking.
-
-### CLI source layout (`packages/wrangler-cli/src/`)
-
-- **`components/`** — Ink React components: `app.tsx` (root), `main-tui.tsx` (layout), `timeline-panel.tsx` (scrollable history), `input-bar.tsx`, `status-bar.tsx`, `ask-dialog.tsx`, `confirm-dialog.tsx`, `setup/setup-wizard.tsx`.
-- **`hooks/`** — `use-agent.ts` (core agent lifecycle), `use-stream-consumer.ts` (stream buffering and entry merging), `use-session-manager.ts` (crew mode multi-session).
-- **`config.ts`** — YAML config loading, search order: `./wrangler.yaml` → `~/.agentskillmania/wrangler/config.yaml`.
-- **`detect-mode.ts`** — Detects agent mode (AGENT.md), crew mode (CREW.md / crew.yaml), or bare mode.
 
 ### Agent and crew definition files
 

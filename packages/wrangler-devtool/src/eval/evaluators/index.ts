@@ -5,7 +5,7 @@
  * LlmJudgeEvaluator handles 'llm-judge' types and is lazily created (needs LLM config).
  */
 
-import type { Evaluator, EvalTrace, EvaluatorSpec, EvalResult } from '../types.js';
+import type { EvalTrace, EvaluatorSpec, EvalResult } from '../types.js';
 import { DeterministicEvaluators } from './deterministic.js';
 import { LlmJudgeEvaluator, type LlmJudgeOptions } from './llm-judge.js';
 

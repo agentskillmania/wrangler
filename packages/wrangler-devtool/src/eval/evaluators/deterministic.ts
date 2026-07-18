@@ -15,7 +15,10 @@ import type { Evaluator, EvalTrace, EvaluatorSpec, EvalResult } from '../types.j
  * Check if an object contains all key/value pairs from a subset (shallow).
  * Used by tool_called_with for argument subset matching.
  */
-function matchesSubset(actual: Record<string, unknown>, expected: Record<string, unknown>): boolean {
+function matchesSubset(
+  actual: Record<string, unknown>,
+  expected: Record<string, unknown>
+): boolean {
   for (const [key, value] of Object.entries(expected)) {
     if (actual[key] !== value) return false;
   }
@@ -65,7 +68,10 @@ export class DeterministicEvaluators implements Evaluator {
     }
   }
 
-  private outputContains(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'output_contains' }>): EvalResult {
+  private outputContains(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'output_contains' }>
+  ): EvalResult {
     const text = spec.caseInsensitive ? trace.answer.toLowerCase() : trace.answer;
     const needle = spec.caseInsensitive ? spec.value.toLowerCase() : spec.value;
     const passed = text.includes(needle);
@@ -78,7 +84,10 @@ export class DeterministicEvaluators implements Evaluator {
     };
   }
 
-  private outputNotContains(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'output_not_contains' }>): EvalResult {
+  private outputNotContains(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'output_not_contains' }>
+  ): EvalResult {
     const text = spec.caseInsensitive ? trace.answer.toLowerCase() : trace.answer;
     const needle = spec.caseInsensitive ? spec.value.toLowerCase() : spec.value;
     const passed = !text.includes(needle);
@@ -91,7 +100,10 @@ export class DeterministicEvaluators implements Evaluator {
     };
   }
 
-  private outputEquals(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'output_equals' }>): EvalResult {
+  private outputEquals(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'output_equals' }>
+  ): EvalResult {
     const answer = spec.caseInsensitive ? trace.answer.toLowerCase() : trace.answer;
     const expected = spec.caseInsensitive ? spec.value.toLowerCase() : spec.value;
     const passed = answer === expected;
@@ -104,7 +116,10 @@ export class DeterministicEvaluators implements Evaluator {
     };
   }
 
-  private outputMatches(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'output_matches' }>): EvalResult {
+  private outputMatches(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'output_matches' }>
+  ): EvalResult {
     let regex: RegExp;
     try {
       regex = new RegExp(spec.pattern, spec.flags);
@@ -121,18 +136,22 @@ export class DeterministicEvaluators implements Evaluator {
     };
   }
 
-  private toolCalled(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'tool_called' }>): EvalResult {
+  private toolCalled(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'tool_called' }>
+  ): EvalResult {
     const passed = trace.toolCalls.some((tc) => tc.name === spec.tool);
     return {
       name: 'tool_called',
       passed,
-      message: passed
-        ? `Tool "${spec.tool}" was called`
-        : `Tool "${spec.tool}" was not called`,
+      message: passed ? `Tool "${spec.tool}" was called` : `Tool "${spec.tool}" was not called`,
     };
   }
 
-  private toolNotCalled(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'tool_not_called' }>): EvalResult {
+  private toolNotCalled(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'tool_not_called' }>
+  ): EvalResult {
     const passed = !trace.toolCalls.some((tc) => tc.name === spec.tool);
     return {
       name: 'tool_not_called',
@@ -143,7 +162,10 @@ export class DeterministicEvaluators implements Evaluator {
     };
   }
 
-  private toolCalledWith(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'tool_called_with' }>): EvalResult {
+  private toolCalledWith(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'tool_called_with' }>
+  ): EvalResult {
     const match = trace.toolCalls.find(
       (tc) => tc.name === spec.tool && matchesSubset(tc.arguments, spec.arguments)
     );
@@ -156,7 +178,10 @@ export class DeterministicEvaluators implements Evaluator {
     };
   }
 
-  private toolCallCount(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'tool_call_count' }>): EvalResult {
+  private toolCallCount(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'tool_call_count' }>
+  ): EvalResult {
     const count = trace.toolCalls.length;
     const aboveMin = spec.min === undefined || count >= spec.min;
     const belowMax = spec.max === undefined || count <= spec.max;
@@ -171,7 +196,10 @@ export class DeterministicEvaluators implements Evaluator {
     };
   }
 
-  private async fileExists(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'file_exists' }>): Promise<EvalResult> {
+  private async fileExists(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'file_exists' }>
+  ): Promise<EvalResult> {
     const fullPath = join(trace.workspacePath, spec.path);
     if (!existsSync(fullPath)) {
       return {
@@ -206,7 +234,10 @@ export class DeterministicEvaluators implements Evaluator {
     };
   }
 
-  private fileNotExists(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'file_not_exists' }>): EvalResult {
+  private fileNotExists(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'file_not_exists' }>
+  ): EvalResult {
     const fullPath = join(trace.workspacePath, spec.path);
     const passed = !existsSync(fullPath);
     return {
@@ -218,7 +249,10 @@ export class DeterministicEvaluators implements Evaluator {
     };
   }
 
-  private exitCode(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'exit_code' }>): EvalResult {
+  private exitCode(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'exit_code' }>
+  ): EvalResult {
     const passed = trace.result.type === spec.equals;
     return {
       name: 'exit_code',
@@ -229,7 +263,10 @@ export class DeterministicEvaluators implements Evaluator {
     };
   }
 
-  private stepCount(trace: EvalTrace, spec: Extract<EvaluatorSpec, { type: 'step_count' }>): EvalResult {
+  private stepCount(
+    trace: EvalTrace,
+    spec: Extract<EvaluatorSpec, { type: 'step_count' }>
+  ): EvalResult {
     const aboveMin = spec.min === undefined || trace.steps >= spec.min;
     const belowMax = spec.max === undefined || trace.steps <= spec.max;
     const passed = aboveMin && belowMax;

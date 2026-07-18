@@ -1,4 +1,12 @@
-import { initProject, createTemplate, applyChanges, loadSuite, runEval, formatEvalReport, formatEvalJsonReport } from '@agentskillmania/wrangler-devtool';
+import {
+  initProject,
+  createTemplate,
+  applyChanges,
+  loadSuite,
+  runEval,
+  formatEvalReport,
+  formatEvalJsonReport,
+} from '@agentskillmania/wrangler-devtool';
 import type { FileChange } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance } from 'fastify';
 
