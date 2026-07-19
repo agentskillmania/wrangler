@@ -95,24 +95,9 @@ export { WRITE_SPEC_CONTENT, REVIEW_SPEC_CONTENT } from './spec-plan/index.js';
 export { WRITE_PLAN_CONTENT, REVIEW_PLAN_CONTENT } from './spec-plan/index.js';
 export { EXECUTE_PLAN_CONTENT, CONCEIVE_CONTENT } from './spec-plan/index.js';
 
-// Crew (Layer 8)
-export { Crew } from './crew/index.js';
-export { AgentInstance, MessageRouter, CrewLoader } from './crew/index.js';
-export { createCreateTaskTool, createSendMessageTool } from './crew/index.js';
-export type {
-  CrewConfig,
-  CrewState,
-  CrewInput,
-  CrewOutputEvent,
-  CrewEventHandler,
-  AgentRole,
-  AgentInstanceInfo,
-  TaskStatus,
-  TaskInfo,
-  CrewOptions,
-  CrewToolInvokedEvent,
-  CrewToolCompletedEvent,
-} from './crew/index.js';
+// Crew (Layer 8) — config loader only
+export { CrewLoader, crewToRunnerOptions } from './crew/index.js';
+export type { CrewConfig, CrewRunnerOptions } from './crew/index.js';
 
 // Loader (Layer 4)
 export { AgentLoader } from './loader/index.js';

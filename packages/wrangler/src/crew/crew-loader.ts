@@ -2,6 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import yaml from 'js-yaml';
+import type { SubAgentConfig } from '@agentskillmania/colts';
 
 import type { CrewConfig } from './types.js';
 import { parseAgentMd } from '../agent/agent-parser.js';
@@ -124,3 +125,72 @@ export class CrewLoader {
     return skillDirs;
   }
 }
+
+// ─── Crew → Runner config conversion ─────────────────────────
+
+/**
+ * Runner options derived from a CrewConfig.
+ * Used to create an EnhancedRunner that supports crew delegation.
+ */
+export interface CrewRunnerOptions {
+  /** System prompt for the primary agent (includes crew memory + agent catalog) */
+  systemPrompt: string;
+  /** Sub-agent configs for non-primary agents (enables delegate tool) */
+  subAgents: SubAgentConfig[];
+  /** Primary agent name */
+  primaryAgent: string;
+  /** Model override from primary agent definition */
+  model?: string;
+  /** Sandbox setting */
+  sandbox?: boolean;
+  /** Skill directories */
+  skillDirs: string[];
+}
+
+/**
+ * Convert a loaded CrewConfig into EnhancedRunner-compatible options.
+ *
+ * The primary agent becomes the main runner; all other agents become
+ * sub-agents accessible via the delegate tool. CREW.md body (memory)
+ * is injected into the system prompt as shared context.
+ */
+export function crewToRunnerOptions(crew: CrewConfig): CrewRunnerOptions {
+  const primaryName = crew.meta.primaryAgent;
+  const primaryDef = crew.agentDefs[primaryName];
+  const workerEntries = Object.entries(crew.agentDefs).filter(
+    ([name]) => name !== primaryName
+  );
+
+  const subAgents: SubAgentConfig[] = workerEntries.map(([name, def]) => ({
+    name,
+    description: def.description ?? `${name} agent`,
+    config: {
+      name,
+      instructions: def.instructions,
+      tools: [],
+    },
+  }));
+
+  // Build system prompt: crew memory + primary instructions + agent catalog
+  const catalogText = workerEntries.length > 0
+    ? '\n\n## Available Sub-Agents\n' +
+      workerEntries
+        .map(([name, def]) => `- **${name}**: ${def.description ?? name}`)
+        .join('\n')
+    : '';
+
+  const primaryInstructions = primaryDef?.instructions ?? '';
+  const systemPrompt = [crew.memory, primaryInstructions, catalogText]
+    .filter(Boolean)
+    .join('\n\n');
+
+  return {
+    systemPrompt,
+    subAgents,
+    primaryAgent: primaryName,
+    model: primaryDef?.model,
+    sandbox: crew.meta.sandbox,
+    skillDirs: [...crew.skillDirs],
+  };
+}
+

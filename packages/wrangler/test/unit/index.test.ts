@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   EnhancedRunner,
   AgentLoader,
-  Crew,
+  CrewLoader,
   SessionStore,
   createBuiltinTools,
   parseCommand,
@@ -25,8 +25,8 @@ describe('@agentskillmania/wrangler exports', () => {
     expect(AgentLoader.name).toBe('AgentLoader');
 
     // Crew is a class
-    expect(Crew).toBeInstanceOf(Function);
-    expect(Crew.name).toBe('Crew');
+    expect(CrewLoader).toBeInstanceOf(Function);
+    expect(CrewLoader.name).toBe('CrewLoader');
 
     // SessionStore is a class
     expect(SessionStore).toBeInstanceOf(Function);
