@@ -4,13 +4,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![中文文档](https://img.shields.io/badge/docs-中文-blue.svg)](./README.zh_CN.md)
 
-**Wrangler** is a pnpm-based TypeScript monorepo providing agent crew orchestration, skill management, development tooling, and an interactive TUI — the abstraction layer between the [colts](https://github.com/agentskillmania/colts) ReAct framework and a usable multi-agent system.
+**Wrangler** is a pnpm-based TypeScript monorepo providing agent configuration, multi-agent crews, skill management, and development tooling — the abstraction layer between the [colts](https://github.com/agentskillmania/colts) ReAct framework and a usable multi-agent system.
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
-| [`@agentskillmania/wrangler`](./packages/wrangler/) | Core library — agent crew orchestration, `EnhancedRunner`, skill management, workspace composition, and MCP tool integration |
+| [`@agentskillmania/wrangler`](./packages/wrangler/) | Core library — agent & crew configuration loading, `EnhancedRunner`, skill management, workspace composition, and MCP tool integration |
 | [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | Development toolkit — project scaffolding, evaluation framework, and built-in skills |
 | [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/) | HTTP API server — exposes agent sessions, skill management, and devtool endpoints via REST/SSE |
 
@@ -25,11 +25,11 @@ pnpm install
 # Build all packages
 pnpm build
 
-# Launch the TUI (first run opens setup wizard for LLM config)
-npx wrangler .
+# Start the HTTP API server (exposes agent sessions + devtool endpoints)
+npx wrangler-daemon
 ```
 
-The setup wizard writes to `~/.agentskillmania/wrangler/config.yaml`. Alternatively, place a `wrangler.yaml` in your project directory:
+Place a `wrangler.yaml` in your project directory (or `~/.agentskillmania/wrangler/config.yaml`):
 
 ```yaml
 llm:
@@ -82,9 +82,9 @@ wrangler ────────depends──► colts, llm-client
 
 Wrangler sits on top of the colts framework:
 
-- **colts** provides the ReAct agent runner, execution engine, and event primitives
+- **colts** provides the ReAct agent runner, execution engine, sub-agent delegation, and event primitives
 - **llm-client** provides unified LLM access with concurrency control
-- **wrangler** adds crew orchestration, agent loading (from `AGENT.md`), crew definition (from `CREW.md`), skill composition, and `EnhancedRunner`
+- **wrangler** adds agent loading (from `AGENT.md`), crew definition (from `CREW.md`), skill composition, and `EnhancedRunner`. A crew is not a runtime orchestrator — `CrewLoader.load()` parses a crew directory and `crewToRunnerOptions()` converts it into `EnhancedRunner.create({ subAgents })` options. The `CREW.md` body is injected into the primary agent's system prompt, and non-primary agents become sub-agents reachable via colts' `delegate` tool.
 - **wrangler-devtool** provides development tooling for building, testing, and evaluating agents
 - **wrangler-daemon** provides the HTTP API server for upper-layer applications
 

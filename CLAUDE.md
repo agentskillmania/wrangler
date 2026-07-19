@@ -35,7 +35,7 @@ pnpm --filter @agentskillmania/wrangler demo:newsroom
 
 ## Architecture
 
-Wrangler is a pnpm monorepo that orchestrates agents, skills, and tools into a working crew on top of the [colts](https://github.com/agentskillmania/colts) ReAct framework.
+Wrangler is a pnpm monorepo that configures agents, skills, tools, and multi-agent crews on top of the [colts](https://github.com/agentskillmania/colts) ReAct framework.
 
 ### Dependency graph
 
@@ -47,21 +47,21 @@ wrangler ──────────depends───► colts, llm-client, sa
 
 ### Packages
 
-- **`packages/wrangler`** — Core library. Agent crew orchestration, EnhancedRunner, skill management, workspace composition, MCP tool integration, session persistence, spec/plan documents, todolist.
+- **`packages/wrangler`** — Core library. Agent & crew configuration loading, EnhancedRunner, skill management, workspace composition, MCP tool integration, session persistence, spec/plan documents, todolist.
 - **`packages/wrangler-daemon`** — HTTP service (Fastify) exposing agent sessions, skill/agent management, workspace file ops, and devtool capabilities as REST + SSE API. Entry point is the `wrangler-daemon` CLI binary.
 - **`packages/wrangler-devtool`** — Development toolkit: project scaffolding, evaluation framework, built-in skills. Entry point is the `wrangler-devtool` CLI binary.
 
 ### Core source layout (`packages/wrangler/src/`)
 
 - **`runner/`** — `EnhancedRunner` wraps colts AgentRunner with builtin tools, MCP tools, session support, and todolist. `markdown-assembler.ts` handles context engineering. `system-prompt.ts` builds system prompts from agent config.
-- **`crew/`** — Crew orchestration with three agent roles: **Primary** (entry point, creates tasks), **Liaison** (routes messages between Primary and Worker), **Worker** (executes tasks). `crew-loader.ts` parses CREW.md. `message-router.ts` handles inter-agent routing. `agent-instance.ts` manages individual agent lifecycles.
+- **`crew/`** — Crew configuration loader. `crew-loader.ts` exposes `CrewLoader.load()` (parses CREW.md + per-agent AGENT.md) and `crewToRunnerOptions()` (converts a loaded crew into `EnhancedRunner.create({ subAgents })` options). The primary agent becomes the main runner; non-primary agents become sub-agents reachable via colts' `delegate` tool. The CREW.md body is injected into the primary agent's system prompt. There is no runtime crew orchestrator, message router, or agent-instance manager.
 - **`agent/`** — `agent-loader.ts` parses AGENT.md files with YAML frontmatter (name, description, model, thinking settings, instructions).
 - **`loader/`** — Higher-level agent loading from directory structures.
 - **`tools/builtin/`** — Workspace-scoped tools: file-read, file-write, file-edit, shell, glob, grep, web-fetch, web-search. All depend on `WorkspaceToolDeps` for path resolution with security boundaries.
 - **`tools/mcp/`** — MCP tool loading: `mcp-loader.ts` discovers MCP servers, `tool-converter.ts` converts JSON Schema to Zod, `config-merger.ts` merges MCP configs from multiple sources.
 - **`session/`** — Session persistence with `SessionStore`, transcript serialization, meta.yaml read/write.
 - **`spec-plan/`** — Spec and Plan document stores with skill-based workflows (write-spec, review-spec, write-plan, review-plan, execute-plan).
-- **`todolist/`** — Task management with `todo-tool`, `todo-middleware`, and `todo-state`. Integrated into crew orchestration for task tracking.
+- **`todolist/`** — Task management with `todo-tool`, `todo-middleware`, and `todo-state`. Integrated into agent execution for task tracking.
 
 ### Agent and crew definition files
 
@@ -80,7 +80,7 @@ crew/
 
 - **colts integration**: Wrangler wraps colts' `AgentRunner`, adding tools, session, and todolist. The `AgentContext` is augmented with `todoList?` via Immer (see `types/colts-augmentation.ts`).
 - **Zod for tool schemas**: All builtin and MCP tools use `Tool<ZodTypeAny>`. MCP tools convert JSON Schema → Zod via `jsonSchemaToZod`.
-- **Event-driven crew**: `Crew` emits typed events for all state changes. Agent advancement is fire-and-forget with callbacks.
+- **Crew via sub-agents, not orchestration**: a crew is configuration only. `crewToRunnerOptions()` produces `subAgents` for `EnhancedRunner.create()`. Inter-agent delegation happens through colts' `delegate` tool, which emits `subagent:start` / `subagent:token` / `subagent:thinking` / `subagent:tool:start` / `subagent:tool:end` / `subagent:end` events that bubble up to the runner's single EventEmitter. There is no message router or fire-and-forget advancement.
 - **Stateless runner**: EnhancedRunner is stateless; state is managed externally via colts' immutable state model.
 
 ## Conventions

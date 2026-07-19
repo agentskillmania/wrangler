@@ -4,19 +4,18 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![English Documentation](https://img.shields.io/badge/docs-English-blue.svg)](./README.md)
 
-Agent Crew 编排核心库 —— [colts](https://github.com/agentskillmania/colts) ReAct 框架与可用多 Agent 系统之间的抽象层。
+智能体配置与多 Agent 团队核心库 —— [colts](https://github.com/agentskillmania/colts) ReAct 框架与可用多 Agent 系统之间的抽象层。
 
 ## 功能特性
 
 - **EnhancedRunner** — 在 colts `AgentRunner` 基础上扩展 workspace 组合、Skill 目录、Thinking 支持和 Markdown 上下文组装
-- **Crew 编排** — 多 Agent Crew 执行，支持消息路由、共享 Todolist 和联络员协调
+- **Crew 即配置** — 加载团队目录（`CREW.md` + 各 Agent 的 `AGENT.md`），转换为 `EnhancedRunner.create({ subAgents })` 选项。主 Agent 成为主 Runner，其余 Agent 成为可通过 colts `delegate` 工具调用的子代理。`CREW.md` 正文注入主 Agent 的 system prompt。
 - **Agent 加载** — 解析 `AGENT.md` 文件定义 Agent 身份、指令和 Skill 目录
-- **Crew 加载** — 加载 `crew.yaml` 定义，包含 Agent 角色和 Agent 间通信工具
 - **Session 管理** — Session 存储、对话格式化和元数据管理
 - **内置工具** — 文件读写编辑、grep、glob、shell、web-fetch、web-search，带 workspace 沙箱
 - **MCP 集成** — 通过 `loadMCPTools` 从 MCP 服务器加载工具
 - **Spec/Plan 系统** — 面向复杂工作流的结构化规格和计划文档
-- **Todolist 支持** — Agent 和 Crew 共享的 Todo 状态
+- **Todolist 支持** — Agent 共享的 Todo 状态
 
 ## 架构层级
 
@@ -26,7 +25,7 @@ Agent Crew 编排核心库 —— [colts](https://github.com/agentskillmania/col
 | 3 | `todolist/` | 共享 Todolist 状态 |
 | 4 | `spec-plan/`、`loader/` | Spec/Plan 文档、AgentLoader |
 | 5 | `agent/` | AGENT.md 解析 |
-| 8 | `crew/` | 完整的 Crew 编排 |
+| 8 | `crew/` | 团队配置加载器（`CrewLoader` → `crewToRunnerOptions`） |
 
 ## 安装
 
@@ -56,10 +55,32 @@ const runner = await EnhancedRunner.create({
 });
 
 const state = runner.createState();
-const stream = runner.runStream(state);
-for await (const event of stream) {
-  console.log(event.type, event);
-}
+
+// 通过 EventEmitter 消费执行过程（唯一观测通道）
+runner.on('token', (e) => process.stdout.write(e.token));
+runner.on('subagent:token', (e) => process.stdout.write(e.token)); // 子代理实时输出
+
+const { result } = await runner.run(state);
+console.log('完成:', result.type);
+```
+
+## 加载团队
+
+团队是配置目录，而非运行时编排器。`CrewLoader.load()` 解析 `CREW.md` 和各 Agent 的 `AGENT.md`；`crewToRunnerOptions()` 将其转换为 `EnhancedRunner.create({ subAgents })` 选项。Agent 间的协作通过 `delegate` 工具完成，子代理事件以 `subagent:` 前缀冒泡到 Runner 的 EventEmitter。
+
+```typescript
+import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
+
+const crew = await new CrewLoader('./my-crew').load();
+const opts = crewToRunnerOptions(crew);
+
+const runner = await EnhancedRunner.create({
+  llmClient,
+  model: opts.model ?? 'gpt-4o',
+  systemPrompt: opts.systemPrompt,
+  subAgents: opts.subAgents,
+  skillDirectories: opts.skillDirs,
+});
 ```
 
 ## 依赖

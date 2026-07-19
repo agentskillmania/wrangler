@@ -3,13 +3,13 @@
 [![npm version](https://img.shields.io/npm/v/@agentskillmania/wrangler.svg)](https://www.npmjs.com/package/@agentskillmania/wrangler)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Wrangler** 是一个基于 pnpm 的 TypeScript  monorepo，提供智能体团队编排、技能管理、开发工具和交互式 TUI —— 是 [colts](https://github.com/agentskillmania/colts) ReAct 框架与可用多智能体系统之间的抽象层。
+**Wrangler** 是一个基于 pnpm 的 TypeScript  monorepo，提供智能体配置、多智能体团队、技能管理和开发工具 —— 是 [colts](https://github.com/agentskillmania/colts) ReAct 框架与可用多智能体系统之间的抽象层。
 
 ## 包
 
 | 包 | 说明 |
 |---------|-------------|
-| [`@agentskillmania/wrangler`](./packages/wrangler/) | 核心库 —— 智能体团队编排、`EnhancedRunner`、技能管理、工作空间组合和 MCP 工具集成 |
+| [`@agentskillmania/wrangler`](./packages/wrangler/) | 核心库 —— 智能体与团队配置加载、`EnhancedRunner`、技能管理、工作空间组合和 MCP 工具集成 |
 | [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | 开发工具包 —— 项目脚手架、评估框架、内置技能 |
 | [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/) | HTTP API 服务器 —— 通过 REST/SSE 暴露智能体会话、技能管理和 devtool 端点 |
 
@@ -24,11 +24,11 @@ pnpm install
 # 构建所有包
 pnpm build
 
-# 启动 TUI（首次运行会打开 LLM 配置设置向导）
-npx wrangler .
+# 启动 HTTP API 服务器（暴露智能体会话 + devtool 端点）
+npx wrangler-daemon
 ```
 
-设置向导会写入 `~/.agentskillmania/wrangler/config.yaml`。或者在你的项目目录中放置 `wrangler.yaml`：
+在你的项目目录放置 `wrangler.yaml`（或 `~/.agentskillmania/wrangler/config.yaml`）：
 
 ```yaml
 llm:
@@ -81,13 +81,11 @@ wrangler ────────depends──► colts, llm-client
 
 Wrangler 构建在 colts 框架之上：
 
-- **colts** 提供 ReAct 智能体运行器、执行引擎和事件原语
+- **colts** 提供 ReAct 智能体运行器、执行引擎、子代理委派和事件原语
 - **llm-client** 提供统一的大模型访问和并发控制
-- **wrangler** 增加团队编排、智能体加载（从 `AGENT.md`）、团队定义（从 `CREW.md`）、技能组合和 `EnhancedRunner`
+- **wrangler** 增加智能体加载（从 `AGENT.md`）、团队定义（从 `CREW.md`）、技能组合和 `EnhancedRunner`。团队不再是运行时编排器 —— `CrewLoader.load()` 解析团队目录，`crewToRunnerOptions()` 将其转换为 `EnhancedRunner.create({ subAgents })` 的选项。`CREW.md` 正文注入主智能体的 system prompt，非主智能体成为可通过 colts `delegate` 工具调用的子代理。
 - **wrangler-devtool** 提供构建、测试、评估智能体的开发工具
 - **wrangler-daemon** 提供上层应用使用的 HTTP API 服务器
-- **wrangler-cli** 提供交互式终端 UI
-- **wrangler-devtool** 提供开发工具，用于构建、测试和评审智能体
 
 ## 要求
 

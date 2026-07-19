@@ -3,19 +3,18 @@
 [![npm version](https://img.shields.io/npm/v/@agentskillmania/wrangler.svg)](https://www.npmjs.com/package/@agentskillmania/wrangler)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Core library for agent crew orchestration — the abstraction layer between the [colts](https://github.com/agentskillmania/colts) ReAct framework and a usable multi-agent system.
+Core library for agent configuration and multi-agent crews — the abstraction layer between the [colts](https://github.com/agentskillmania/colts) ReAct framework and a usable multi-agent system.
 
 ## Features
 
 - **EnhancedRunner** — extends colts `AgentRunner` with workspace composition, skill directories, thinking support, and Markdown context assembly
-- **Crew orchestration** — multi-agent crew execution with message routing, shared todolist, and liaison coordination
+- **Crew as configuration** — load a crew directory (`CREW.md` + per-agent `AGENT.md`) and convert it into `EnhancedRunner.create({ subAgents })` options. The primary agent becomes the main runner; other agents become sub-agents reachable via colts' `delegate` tool. `CREW.md` body is injected into the primary agent's system prompt.
 - **Agent loading** — parse `AGENT.md` files to define agent identity, instructions, and skill directories
-- **Crew loading** — load `crew.yaml` definitions with agent roles and inter-agent tools
 - **Session management** — session store, transcript formatting, and conversation metadata
 - **Builtin tools** — file read/write/edit, grep, glob, shell, web-fetch, web-search with workspace sandboxing
 - **MCP integration** — load tools from MCP servers via `loadMCPTools`
 - **Spec/Plan system** — structured specification and plan documents for complex workflows
-- **Todolist support** — shared todo state for agents and crews
+- **Todolist support** — shared todo state for agents
 
 ## Architecture Layers
 
@@ -25,7 +24,7 @@ Core library for agent crew orchestration — the abstraction layer between the 
 | 3 | `todolist/` | Shared todolist state |
 | 4 | `spec-plan/`, `loader/` | Spec/Plan documents, AgentLoader |
 | 5 | `agent/` | AGENT.md parsing |
-| 8 | `crew/` | Full crew orchestration |
+| 8 | `crew/` | Crew config loader (`CrewLoader` → `crewToRunnerOptions`) |
 
 ## Installation
 
@@ -55,10 +54,32 @@ const runner = await EnhancedRunner.create({
 });
 
 const state = runner.createState();
-const stream = runner.runStream(state);
-for await (const event of stream) {
-  console.log(event.type, event);
-}
+
+// Consume execution via the EventEmitter (single observability channel)
+runner.on('token', (e) => process.stdout.write(e.token));
+runner.on('subagent:token', (e) => process.stdout.write(e.token)); // live sub-agent output
+
+const { result } = await runner.run(state);
+console.log('Done:', result.type);
+```
+
+## Loading a Crew
+
+A crew is a directory of configuration, not a runtime orchestrator. `CrewLoader.load()` parses `CREW.md` and the per-agent `AGENT.md` files; `crewToRunnerOptions()` turns that into `EnhancedRunner.create({ subAgents })` options. Inter-agent work happens through the `delegate` tool, and sub-agent events bubble up to the runner's EventEmitter with a `subagent:` prefix.
+
+```typescript
+import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
+
+const crew = await new CrewLoader('./my-crew').load();
+const opts = crewToRunnerOptions(crew);
+
+const runner = await EnhancedRunner.create({
+  llmClient,
+  model: opts.model ?? 'gpt-4o',
+  systemPrompt: opts.systemPrompt,
+  subAgents: opts.subAgents,
+  skillDirectories: opts.skillDirs,
+});
 ```
 
 ## Dependencies
