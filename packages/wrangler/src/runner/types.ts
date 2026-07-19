@@ -6,6 +6,7 @@ import type {
   CompressionConfig,
   IContextCompressor,
   LLMQuickInit,
+  SubAgentConfig,
 } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
 
@@ -59,6 +60,8 @@ export interface EnhancedRunnerOptions {
   enablePromptThinking?: boolean;
   /** Sampling temperature (passed through to LLM provider) */
   temperature?: number;
+  /** Sub-agent configs — enables the 'delegate' tool for task delegation */
+  subAgents?: SubAgentConfig[];
   requestTimeout?: number;
   maxSteps?: number;
   /** Context compression config (passed to AgentRunner and /compact handler) */

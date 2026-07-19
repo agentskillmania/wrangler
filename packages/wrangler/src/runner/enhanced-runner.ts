@@ -449,6 +449,7 @@ export class EnhancedRunner {
       thinkingEnabled: options.thinkingEnabled,
       enablePromptThinking: options.enablePromptThinking,
       temperature: options.temperature,
+      subAgents: options.subAgents,
       requestTimeout: options.requestTimeout,
       maxSteps: options.maxSteps,
       compressor: compressorInstance,
