@@ -550,17 +550,6 @@ export class EnhancedRunner {
   }
 
   /**
-   * Stream agent execution until completion
-   *
-   * @param state - Current agent state
-   * @param options - Optional run configuration (maxSteps, signal, thinkingEnabled, model)
-   * @returns Async generator of run stream events
-   */
-  runStream(state: AgentState, options?: RunOptions): AsyncIterable<unknown> {
-    return this.innerRunner.runStream(state, options);
-  }
-
-  /**
    * Register event listener on the underlying runner
    *
    * @param event - Event name (keyof RunnerEventMap)
@@ -569,6 +558,14 @@ export class EnhancedRunner {
    */
   on<K extends keyof RunnerEventMap>(event: K, handler: (...args: unknown[]) => void): this {
     this.innerRunner.on(event, handler);
+    return this;
+  }
+
+  /**
+   * Remove an event listener from the underlying runner.
+   */
+  off<K extends keyof RunnerEventMap>(event: K, handler: (...args: unknown[]) => void): this {
+    this.innerRunner.off(event, handler);
     return this;
   }
 }

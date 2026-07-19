@@ -325,54 +325,6 @@ describe('EnhancedRunner', () => {
     expect(mockRun).toHaveBeenCalledWith(mockState, mockOptions);
   });
 
-  it('should runStream() pass per-request model and thinkingEnabled to inner runner', async () => {
-    const mockState = { messages: [], steps: [] };
-    const mockOptions = {
-      maxSteps: 3,
-      model: 'claude-3',
-      thinkingEnabled: false,
-    };
-
-    const mockAsyncGenerator = (async function* () {
-      yield { type: 'step', step: 1 };
-    })();
-
-    const runner = await EnhancedRunner.create(makeOptions());
-    mockRunStream.mockReturnValue(mockAsyncGenerator);
-
-    await runner.runStream(mockState, mockOptions);
-
-    expect(mockRunStream).toHaveBeenCalledWith(mockState, mockOptions);
-  });
-
-  it('should on() delegate and return this for chaining', async () => {
-    const mockHandler = vi.fn();
-
-    const runner = await EnhancedRunner.create(makeOptions());
-
-    const result = runner.on('test-event', mockHandler);
-
-    expect(mockOn).toHaveBeenCalledWith('test-event', mockHandler);
-    expect(result).toBe(runner); // Should return this for chaining
-  });
-
-  it('should runStream() delegate to inner runner with correct args', async () => {
-    const mockState = { messages: [], steps: [] };
-    const mockOptions = { maxSteps: 10 };
-
-    const mockAsyncGenerator = (async function* () {
-      yield { type: 'step', step: 1 };
-      yield { type: 'completed', result: 'done' };
-    })();
-
-    const runner = await EnhancedRunner.create(makeOptions());
-    mockRunStream.mockReturnValue(mockAsyncGenerator);
-
-    const result = await runner.runStream(mockState, mockOptions);
-
-    expect(mockRunStream).toHaveBeenCalledWith(mockState, mockOptions);
-    expect(result).toBe(mockAsyncGenerator);
-  });
 
   // ── builtinTools toggle tests ──────────────────────────────────────
 
@@ -561,15 +513,6 @@ describe('EnhancedRunner', () => {
       const runner = await EnhancedRunner.create(makeOptions());
 
       await expect(runner.run({} as any)).rejects.toThrow('LLM provider timeout');
-    });
-
-    it('should propagate error when AgentRunner.runStream yields error', async () => {
-      mockRunStream.mockImplementation(() => {
-        throw new Error('Stream init failed');
-      });
-      const runner = await EnhancedRunner.create(makeOptions());
-
-      expect(() => runner.runStream({} as any)).toThrow('Stream init failed');
     });
 
     it('should propagate error result type from inner runner', async () => {

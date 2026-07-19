@@ -6,7 +6,7 @@
  */
 
 import { createAgentState, addUserMessage, updateState } from '@agentskillmania/colts';
-import type { AgentState, RunStreamEvent, RunOptions } from '@agentskillmania/colts';
+import type { AgentState, RunStreamEvent, RunOptions, RunnerEventMap } from '@agentskillmania/colts';
 import type { AskHumanHandler, HumanResponse } from '@agentskillmania/colts';
 import type { LLMClient } from '@agentskillmania/llm-client';
 import {
@@ -510,25 +510,28 @@ export class AgentSession {
     this.eventWaiters = [];
     this.eventHistory = [];
     this.lastSystemPrompt = null;
+    this.doneFlag = false;
 
     this.bridge.sseSender = (event: SSEEvent) => this.pushEvent(event);
     this.state = addUserMessage(this.state, message);
 
     const consumeStream = async () => {
-      try {
-        const runOpts: RunOptions = { signal: this.abortController!.signal };
-        if (options?.thinkingEnabled !== undefined) {
-          runOpts.thinkingEnabled = options.thinkingEnabled;
-        }
-        if (options?.model !== undefined) {
-          runOpts.model = options.model;
-        }
-        const stream = this.runner.runStream(this.state, runOpts);
+      // Register EventEmitter listeners for all event types
+      const eventTypes = [
+        'step:start', 'step:end', 'phase-change', 'token', 'thinking',
+        'tool:start', 'tools:start', 'tool:end', 'tools:end',
+        'skill:loading', 'skill:loaded', 'skill:start', 'skill:end',
+        'subagent:start', 'subagent:end',
+        'llm:request', 'llm:response',
+        'compressing', 'compressed', 'waiting-human',
+        'complete', 'error',
+      ];
 
-        const iterator = stream[Symbol.asyncIterator]();
-        let iterResult = await iterator.next();
-        while (!iterResult.done) {
-          const mapped = AgentSession.mapEvent(iterResult.value as RunStreamEvent);
+      const handlers: Record<string, (data: unknown) => void> = {};
+      for (const type of eventTypes) {
+        handlers[type] = (data: unknown) => {
+          const eventObj = data && typeof data === 'object' ? { type, ...data } : { type };
+          const mapped = AgentSession.mapEvent(eventObj as RunStreamEvent);
           const events = Array.isArray(mapped) ? mapped : [mapped];
           for (const sse of events) {
             this.pushEvent(sse);
@@ -546,7 +549,6 @@ export class AgentSession {
                   tools: Array.isArray(d.tools) ? d.tools : undefined,
                   skill: typeof d.skill === 'string' ? d.skill : undefined,
                 };
-                // Extract system prompt (first message content)
                 const firstMsg = d.messages[0] as Record<string, unknown> | undefined;
                 if (firstMsg && typeof firstMsg.content === 'string') {
                   this.lastSystemPrompt = firstMsg.content;
@@ -554,12 +556,20 @@ export class AgentSession {
               }
             }
           }
-          iterResult = await iterator.next();
+        };
+        this.runner.on(type as keyof RunnerEventMap, handlers[type] as (...args: unknown[]) => void);
+      }
+
+      try {
+        const runOpts: RunOptions = { signal: this.abortController!.signal };
+        if (options?.thinkingEnabled !== undefined) {
+          runOpts.thinkingEnabled = options.thinkingEnabled;
         }
-        // Generator return value contains final state
-        if (iterResult.value?.state) {
-          this.state = iterResult.value.state;
+        if (options?.model !== undefined) {
+          runOpts.model = options.model;
         }
+        const { state: finalState } = await this.runner.run(this.state, runOpts);
+        this.state = finalState;
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') {
           this.pushEvent({ event: 'done', data: { aborted: true } });
@@ -567,6 +577,10 @@ export class AgentSession {
           this.pushEvent({ event: 'error', data: { message: String(err) } });
         }
       } finally {
+        // Unregister all listeners to avoid leaks on subsequent runs
+        for (const type of eventTypes) {
+          this.runner.off(type as keyof RunnerEventMap, handlers[type] as (...args: unknown[]) => void);
+        }
         await this.saveState().catch(() => {});
         this._busy = false;
         this.sendStateSnapshot();
@@ -609,12 +623,18 @@ export class AgentSession {
     if (this.eventQueue.length > 0) {
       return Promise.resolve(this.eventQueue.shift()!);
     }
+    if (this.doneFlag) {
+      return Promise.resolve(null);
+    }
     return new Promise((resolve) => {
       this.eventWaiters.push(resolve);
     });
   }
 
+  private doneFlag = false;
+
   private signalDone(): void {
+    this.doneFlag = true;
     while (this.eventWaiters.length > 0) {
       const resolve = this.eventWaiters.shift()!;
       resolve(null);

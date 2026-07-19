@@ -3,30 +3,122 @@ import { AgentSession } from '../../src/core/agent-session.js';
 import type { AgentSessionOptions } from '../../src/core/agent-session.js';
 import type { SSEEvent } from '../../src/types.js';
 
-const { mockEnhancedRunnerCreate, mockEnhancedRunnerResume, mockRunnerRunStream } = vi.hoisted(
-  () => ({
-    mockEnhancedRunnerCreate: vi.fn().mockResolvedValue({
-      runStream: vi.fn(),
+/**
+ * Shared mock-runner factory.
+ *
+ * agent-session.handleMessage no longer consumes an AsyncGenerator from
+ * runStream(). Instead it calls runner.on(type, handler) to subscribe,
+ * then runner.run(state, opts) which returns Promise<{ state, result }>.
+ * Events flow through the registered EventEmitter handlers during run().
+ *
+ * This helper returns a mock runner plus a handle to the handlers map so
+ * individual tests can simulate runner.emit(...) by invoking handlers
+ * directly from inside their run() implementation.
+ */
+function createMockRunner(overrides: {
+  run?: ReturnType<typeof vi.fn>;
+  getToolInfo?: ReturnType<typeof vi.fn>;
+  getSkillInfo?: ReturnType<typeof vi.fn>;
+  getConfig?: ReturnType<typeof vi.fn>;
+} = {}) {
+  const eventHandlers: Record<string, (...args: unknown[]) => void> = {};
+  const on = vi.fn((type: string, handler: (...args: unknown[]) => void) => {
+    eventHandlers[type] = handler;
+  });
+  const off = vi.fn((type: string, _handler: (...args: unknown[]) => void) => {
+    delete eventHandlers[type];
+  });
+  const emit = (type: string, ...args: unknown[]) => eventHandlers[type]?.(...args);
+  const runner = {
+    run:
+      overrides.run ??
+      vi.fn().mockResolvedValue({
+        state: {
+          id: 'test-state',
+          config: { name: 'test', instructions: '', tools: [] },
+          context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+        },
+        result: {
+          type: 'success',
+          answer: '',
+          totalSteps: 1,
+          tokens: { input: 0, output: 0 },
+        },
+      }),
+    on,
+    off,
+    getToolInfo: overrides.getToolInfo ?? vi.fn().mockReturnValue([]),
+    getSkillInfo: overrides.getSkillInfo ?? vi.fn().mockReturnValue([]),
+    getConfig:
+      overrides.getConfig ?? vi.fn().mockReturnValue({ model: 'test-model' }),
+  };
+  return { runner, on, off, emit };
+}
+
+/**
+ * Convenience: build a mock runner whose run() emits a sequence of events
+ * (defaulting to just `complete`) before resolving with the given finalState.
+ * The runner is wired into mockEnhancedRunnerCreate.
+ *
+ * @param eventsToEmit - array of [type, payload?] tuples to emit before resolving
+ * @param finalState   - the `state` returned by run(); defaults to a minimal state
+ * @param overrides    - extra runner overrides (getToolInfo, getConfig, ...)
+ */
+function mockRunnerWithEvents(
+  eventsToEmit: Array<[string, unknown?]> = [['complete']],
+  finalState: Record<string, unknown> = {
+    id: 'test-state',
+    config: { name: 'test', instructions: '', tools: [] },
+    context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+  },
+  overrides: {
+    getToolInfo?: ReturnType<typeof vi.fn>;
+    getSkillInfo?: ReturnType<typeof vi.fn>;
+    getConfig?: ReturnType<typeof vi.fn>;
+  } = {}
+) {
+  const mock = createMockRunner({
+    run: vi.fn().mockImplementation(async () => {
+      for (const [type, payload] of eventsToEmit) {
+        if (payload === undefined) mock.emit(type);
+        else mock.emit(type, payload);
+      }
+      return {
+        state: finalState,
+        result: {
+          type: 'success',
+          answer: '',
+          totalSteps: 1,
+          tokens: { input: 0, output: 0 },
+        },
+      };
+    }),
+    getToolInfo: overrides.getToolInfo,
+    getSkillInfo: overrides.getSkillInfo,
+    getConfig: overrides.getConfig,
+  });
+  mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+  return mock;
+}
+
+const { mockEnhancedRunnerCreate, mockEnhancedRunnerResume } = vi.hoisted(() => ({
+  mockEnhancedRunnerCreate: vi.fn(),
+  mockEnhancedRunnerResume: vi.fn().mockResolvedValue({
+    runner: {
+      run: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
       getToolInfo: vi.fn().mockReturnValue([]),
       getSkillInfo: vi.fn().mockReturnValue([]),
       getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
-    }),
-    mockEnhancedRunnerResume: vi.fn().mockResolvedValue({
-      runner: {
-        runStream: vi.fn(),
-        getToolInfo: vi.fn().mockReturnValue([]),
-        getSkillInfo: vi.fn().mockReturnValue([]),
-        getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
-      },
-      state: {
-        id: 'resumed-state-id',
-        config: { name: 'resumed-agent', instructions: '', tools: [] },
-        context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
-      },
-    }),
-    mockRunnerRunStream: vi.fn(),
-  })
-);
+    },
+    state: {
+      id: 'resumed-state-id',
+      config: { name: 'resumed-agent', instructions: '', tools: [] },
+      context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+    },
+  }),
+}));
 vi.mock('@agentskillmania/wrangler', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agentskillmania/wrangler')>();
   return {
@@ -348,14 +440,30 @@ describe('AgentSession', () => {
 
   describe('handleMessage() options parameter', () => {
     let session: AgentSession;
+    let runnerEmit: (type: string, ...args: unknown[]) => void;
 
     beforeEach(async () => {
-      mockEnhancedRunnerCreate.mockResolvedValue({
-        runStream: mockRunnerRunStream,
-        getToolInfo: vi.fn().mockReturnValue([]),
-        getSkillInfo: vi.fn().mockReturnValue([]),
-        getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
+      const mock = createMockRunner({
+        run: vi.fn().mockImplementation(async () => {
+          // Simulate the runner emitting a `complete` event, then resolving.
+          runnerEmit('complete');
+          return {
+            state: {
+              id: 'test-state',
+              config: { name: 'test', instructions: '', tools: [] },
+              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+            },
+            result: {
+              type: 'success',
+              answer: '',
+              totalSteps: 1,
+              tokens: { input: 0, output: 0 },
+            },
+          };
+        }),
       });
+      runnerEmit = mock.emit;
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
       session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
         testConfig
@@ -363,14 +471,6 @@ describe('AgentSession', () => {
     });
 
     it('accepts options parameter with thinkingEnabled', async () => {
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* stream() {
-          yield { type: 'complete' } as any;
-          return { state: { id: 'test-state' } };
-        }
-        return stream();
-      });
-
       const events: SSEEvent[] = [];
       for await (const event of session.handleMessage('hello', { thinkingEnabled: true })) {
         events.push(event);
@@ -380,14 +480,6 @@ describe('AgentSession', () => {
     });
 
     it('accepts options parameter without thinkingEnabled', async () => {
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* stream() {
-          yield { type: 'complete' } as any;
-          return { state: { id: 'test-state' } };
-        }
-        return stream();
-      });
-
       const events: SSEEvent[] = [];
       for await (const event of session.handleMessage('hello', {})) {
         events.push(event);
@@ -397,14 +489,6 @@ describe('AgentSession', () => {
     });
 
     it('handles undefined options parameter', async () => {
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* stream() {
-          yield { type: 'complete' } as any;
-          return { state: { id: 'test-state' } };
-        }
-        return stream();
-      });
-
       const events: SSEEvent[] = [];
       for await (const event of session.handleMessage('hello', undefined)) {
         events.push(event);
@@ -414,16 +498,25 @@ describe('AgentSession', () => {
     });
 
     it('passes thinkingEnabled option to runner when provided', async () => {
-      const mockRunStream = vi.fn().mockImplementation(async function* () {
-        yield { type: 'complete' } as any;
-        return { state: { id: 'test-state' } };
+      const mock = createMockRunner({
+        run: vi.fn().mockImplementation(async () => {
+          mock.emit('complete');
+          return {
+            state: {
+              id: 'test-state',
+              config: { name: 'test', instructions: '', tools: [] },
+              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+            },
+            result: {
+              type: 'success',
+              answer: '',
+              totalSteps: 1,
+              tokens: { input: 0, output: 0 },
+            },
+          };
+        }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue({
-        runStream: mockRunStream,
-        getToolInfo: vi.fn().mockReturnValue([]),
-        getSkillInfo: vi.fn().mockReturnValue([]),
-        getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
-      });
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       const testSession = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -435,8 +528,8 @@ describe('AgentSession', () => {
         // drain
       }
 
-      // Verify runStream was called with thinkingEnabled
-      expect(mockRunStream).toHaveBeenCalledWith(
+      // Verify run was called with thinkingEnabled
+      expect(mock.runner.run).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           signal: expect.any(AbortSignal),
@@ -446,16 +539,25 @@ describe('AgentSession', () => {
     });
 
     it('omits thinkingEnabled from runner options when not provided', async () => {
-      const mockRunStream = vi.fn().mockImplementation(async function* () {
-        yield { type: 'complete' } as any;
-        return { state: { id: 'test-state' } };
+      const mock = createMockRunner({
+        run: vi.fn().mockImplementation(async () => {
+          mock.emit('complete');
+          return {
+            state: {
+              id: 'test-state',
+              config: { name: 'test', instructions: '', tools: [] },
+              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+            },
+            result: {
+              type: 'success',
+              answer: '',
+              totalSteps: 1,
+              tokens: { input: 0, output: 0 },
+            },
+          };
+        }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue({
-        runStream: mockRunStream,
-        getToolInfo: vi.fn().mockReturnValue([]),
-        getSkillInfo: vi.fn().mockReturnValue([]),
-        getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
-      });
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       const testSession = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -467,14 +569,14 @@ describe('AgentSession', () => {
         // drain
       }
 
-      // Verify runStream was called without thinkingEnabled
-      expect(mockRunStream).toHaveBeenCalledWith(
+      // Verify run was called without thinkingEnabled
+      expect(mock.runner.run).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           signal: expect.any(AbortSignal),
         })
       );
-      const callOptions = mockRunStream.mock.calls[0][1] as Record<string, unknown>;
+      const callOptions = mock.runner.run.mock.calls[0][1] as Record<string, unknown>;
       expect(callOptions.thinkingEnabled).toBeUndefined();
     });
   });
@@ -572,29 +674,32 @@ describe('AgentSession', () => {
 
   describe('handleMessage() concurrency guard', () => {
     let session: AgentSession;
-    let streamResolve: () => void;
-
-    beforeEach(async () => {
-      mockEnhancedRunnerCreate.mockResolvedValue({
-        runStream: mockRunnerRunStream,
-        getToolInfo: vi.fn().mockReturnValue([]),
-        getSkillInfo: vi.fn().mockReturnValue([]),
-        getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
-      });
-    });
 
     it('rejects concurrent handleMessage with error event', async () => {
       let resolveFirst: () => void;
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* blockingStream() {
+      const mock = createMockRunner({
+        run: vi.fn().mockImplementation(async () => {
+          // Block until resolveFirst() is called, simulating a long-running agent round.
           await new Promise<void>((resolve) => {
             resolveFirst = resolve;
           });
-          yield { type: 'complete' } as any;
-          return { state: { id: 'test-state' } };
-        }
-        return blockingStream();
+          mock.emit('complete');
+          return {
+            state: {
+              id: 'test-state',
+              config: { name: 'test', instructions: '', tools: [] },
+              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+            },
+            result: {
+              type: 'success',
+              answer: '',
+              totalSteps: 1,
+              tokens: { input: 0, output: 0 },
+            },
+          };
+        }),
       });
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -624,23 +729,29 @@ describe('AgentSession', () => {
     });
 
     it('allows sequential messages after first completes', async () => {
-      mockRunnerRunStream
-        .mockImplementationOnce(() => {
-          async function* stream1() {
-            yield { type: 'token', token: 'a' } as any;
-            yield { type: 'complete' } as any;
-            return { state: { id: 's1' } };
-          }
-          return stream1();
-        })
-        .mockImplementationOnce(() => {
-          async function* stream2() {
-            yield { type: 'token', token: 'b' } as any;
-            yield { type: 'complete' } as any;
-            return { state: { id: 's2' } };
-          }
-          return stream2();
-        });
+      let callCount = 0;
+      const mock = createMockRunner({
+        run: vi.fn().mockImplementation(async () => {
+          callCount += 1;
+          // Emit a distinct token per call, then complete.
+          mock.emit('token', { token: callCount === 1 ? 'a' : 'b' });
+          mock.emit('complete');
+          return {
+            state: {
+              id: callCount === 1 ? 's1' : 's2',
+              config: { name: 'test', instructions: '', tools: [] },
+              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+            },
+            result: {
+              type: 'success',
+              answer: '',
+              totalSteps: 1,
+              tokens: { input: 0, output: 0 },
+            },
+          };
+        }),
+      });
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -662,13 +773,25 @@ describe('AgentSession', () => {
     });
 
     it('busy flag resets after stream completes', async () => {
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* quickStream() {
-          yield { type: 'complete' } as any;
-          return { state: { id: 'test-state' } };
-        }
-        return quickStream();
+      const mock = createMockRunner({
+        run: vi.fn().mockImplementation(async () => {
+          mock.emit('complete');
+          return {
+            state: {
+              id: 'test-state',
+              config: { name: 'test', instructions: '', tools: [] },
+              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+            },
+            result: {
+              type: 'success',
+              answer: '',
+              totalSteps: 1,
+              tokens: { input: 0, output: 0 },
+            },
+          };
+        }),
       });
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -688,20 +811,10 @@ describe('AgentSession', () => {
 
   describe('cockpit event forwarding', () => {
     it('forwards all mapped events to cockpit during handleMessage', async () => {
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* stream() {
-          yield { type: 'token', token: 'hi' } as any;
-          yield { type: 'complete' } as any;
-          return {
-            state: {
-              id: 'test-state',
-              config: { name: 'test', instructions: '', tools: [] },
-              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
-            },
-          };
-        }
-        return stream();
-      });
+      mockRunnerWithEvents([
+        ['token', { token: 'hi' }],
+        ['complete'],
+      ]);
 
       const session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -721,18 +834,14 @@ describe('AgentSession', () => {
     });
 
     it('sends agent-diagnostics to cockpit after round completes', async () => {
-      const finalState = {
-        id: 'test-state',
-        config: { name: 'test', instructions: '', tools: [] },
-        context: { messages: [], stepCount: 5, createdAt: 0, updatedAt: 0 },
-      };
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* stream() {
-          yield { type: 'complete' } as any;
-          return { state: finalState };
+      mockRunnerWithEvents(
+        [['complete']],
+        {
+          id: 'test-state',
+          config: { name: 'test', instructions: '', tools: [] },
+          context: { messages: [], stepCount: 5, createdAt: 0, updatedAt: 0 },
         }
-        return stream();
-      });
+      );
 
       const session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -759,13 +868,7 @@ describe('AgentSession', () => {
     async function captureLastDiagnostics(
       finalState: Record<string, unknown>
     ): Promise<Record<string, unknown>> {
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* stream() {
-          yield { type: 'complete' } as any;
-          return { state: finalState };
-        }
-        return stream();
-      });
+      mockRunnerWithEvents([['complete']], finalState);
 
       const session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -829,13 +932,7 @@ describe('AgentSession', () => {
     });
 
     it('forwards emitCockpitEvent to all registered senders (multicast)', async () => {
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* stream() {
-          yield { type: 'complete' } as any;
-          return { state: { id: 'test-state' } };
-        }
-        return stream();
-      });
+      mockRunnerWithEvents([['complete']]);
 
       const session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -860,13 +957,7 @@ describe('AgentSession', () => {
     });
 
     it('removing one cockpit sender does not affect others', async () => {
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* stream() {
-          yield { type: 'complete' } as any;
-          return { state: { id: 'test-state' } };
-        }
-        return stream();
-      });
+      mockRunnerWithEvents([['complete']]);
 
       const session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -892,14 +983,10 @@ describe('AgentSession', () => {
     });
 
     it('does not forward events after cockpitSender cleared', async () => {
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* stream() {
-          yield { type: 'token', token: 'hi' } as any;
-          yield { type: 'complete' } as any;
-          return { state: { id: 'test-state' } };
-        }
-        return stream();
-      });
+      mockRunnerWithEvents([
+        ['token', { token: 'hi' }],
+        ['complete'],
+      ]);
 
       const session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -921,38 +1008,33 @@ describe('AgentSession', () => {
     });
 
     async function captureRunnerDiagnostics(): Promise<Record<string, unknown>> {
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* stream() {
-          yield { type: 'complete' } as any;
-          return { state: { id: 'test-state' } };
-        }
-        return stream();
-      });
-
-      mockEnhancedRunnerCreate.mockResolvedValue({
-        runStream: mockRunnerRunStream,
-        getToolInfo: vi
-          .fn()
-          .mockReturnValue([
+      mockRunnerWithEvents(
+        [['complete']],
+        {
+          id: 'test-state',
+          config: { name: 'test', instructions: '', tools: [] },
+          context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+        },
+        {
+          getToolInfo: vi.fn().mockReturnValue([
             { name: 'file_read', description: 'Read files', type: 'builtin', enabled: true },
           ]),
-        getSkillInfo: vi
-          .fn()
-          .mockReturnValue([
+          getSkillInfo: vi.fn().mockReturnValue([
             { name: 'spec-plan', description: 'Plan specs', source: '/skills/spec-plan' },
           ]),
-        getConfig: vi.fn().mockReturnValue({
-          model: 'test-model',
-          sandbox: true,
-          thinkingEnabled: false,
-          enablePromptThinking: false,
-          a2ui: { enabled: true },
-          compressorEnabled: true,
-          enableSession: true,
-          enableTodolist: false,
-          enableCommands: true,
-        }),
-      });
+          getConfig: vi.fn().mockReturnValue({
+            model: 'test-model',
+            sandbox: true,
+            thinkingEnabled: false,
+            enablePromptThinking: false,
+            a2ui: { enabled: true },
+            compressorEnabled: true,
+            enableSession: true,
+            enableTodolist: false,
+            enableCommands: true,
+          }),
+        }
+      );
 
       const session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -1001,18 +1083,7 @@ describe('AgentSession', () => {
     });
 
     it('handles missing a2ui config gracefully in features', async () => {
-      mockRunnerRunStream.mockImplementationOnce(() => {
-        async function* stream() {
-          yield { type: 'complete' } as any;
-          return { state: { id: 'test-state' } };
-        }
-        return stream();
-      });
-
-      mockEnhancedRunnerCreate.mockResolvedValue({
-        runStream: mockRunnerRunStream,
-        getToolInfo: vi.fn().mockReturnValue([]),
-        getSkillInfo: vi.fn().mockReturnValue([]),
+      mockRunnerWithEvents([['complete']], undefined, {
         getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
       });
 
