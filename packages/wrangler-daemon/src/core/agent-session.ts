@@ -522,6 +522,7 @@ export class AgentSession {
         'tool:start', 'tools:start', 'tool:end', 'tools:end',
         'skill:loading', 'skill:loaded', 'skill:start', 'skill:end',
         'subagent:start', 'subagent:end',
+        'subagent:token', 'subagent:thinking', 'subagent:tool:start', 'subagent:tool:end',
         'llm:request', 'llm:response',
         'compressing', 'compressed', 'waiting-human',
         'complete', 'error',
@@ -652,7 +653,10 @@ export class AgentSession {
    * @param event - A colts RunStreamEvent from the runner stream
    * @returns Mapped SSEEvent(s)
    */
-  static mapEvent(event: RunStreamEvent): SSEEvent | SSEEvent[] {
+  static mapEvent(event: { type: string; [key: string]: unknown }): SSEEvent | SSEEvent[] {
+    // Cast to RunStreamEvent for known event field access; subagent: events
+    // are accessed via the loose type directly.
+    
     switch (event.type) {
       case 'step:start':
         return { event: 'step-start', data: { step: event.step } };
@@ -673,14 +677,14 @@ export class AgentSession {
         return {
           event: 'tool-start',
           data: {
-            id: event.action.id,
-            name: event.action.tool,
-            args: event.action.arguments,
+            id: (event as any).action.id,
+            name: (event as any).action.tool,
+            args: (event as any).action.arguments,
           },
         };
 
       case 'tools:start':
-        return event.actions.map((action) => ({
+        return ((event as any).actions as Array<{ id: string; tool: string; arguments: unknown }>).map((action) => ({
           event: 'tool-start' as const,
           data: { id: action.id, name: action.tool, args: action.arguments },
         }));
@@ -698,7 +702,7 @@ export class AgentSession {
         };
 
       case 'tools:end':
-        return Object.entries(event.results).map(([callId, result]) => ({
+        return Object.entries((event as any).results as Record<string, unknown>).map(([callId, result]) => ({
           event: 'tool-end' as const,
           data: {
             callId,
@@ -730,13 +734,53 @@ export class AgentSession {
           },
         };
 
+      case 'subagent:token':
+        return {
+          event: 'subagent-token',
+          data: {
+            subtaskId: event.subtaskId,
+            name: event.subagentName,
+            delta: event.token,
+          },
+        };
+
+      case 'subagent:thinking':
+        return {
+          event: 'subagent-thinking',
+          data: {
+            subtaskId: event.subtaskId,
+            name: event.subagentName,
+            content: event.content,
+          },
+        };
+
+      case 'subagent:tool:start':
+        return {
+          event: 'subagent-tool-start',
+          data: {
+            subtaskId: event.subtaskId,
+            name: event.subagentName,
+            action: (event as any).action,
+          },
+        };
+
+      case 'subagent:tool:end':
+        return {
+          event: 'subagent-tool-end',
+          data: {
+            subtaskId: event.subtaskId,
+            name: event.subagentName,
+            result: event.result,
+          },
+        };
+
       case 'llm:request':
         return {
           event: 'llm-request',
           data: {
-            messages: event.messages,
-            tools: event.tools,
-            skill: event.skill,
+            messages: (event as any).messages,
+            tools: (event as any).tools,
+            skill: (event as any).skill,
           },
         };
 
@@ -765,7 +809,10 @@ export class AgentSession {
         return { event: 'done', data: {} };
 
       case 'error':
-        return { event: 'error', data: { message: event.error.message } };
+        return { event: 'error', data: { message: (event as any).error.message } };
+
+      default:
+        return { event: event.type, data: event };
     }
   }
 
