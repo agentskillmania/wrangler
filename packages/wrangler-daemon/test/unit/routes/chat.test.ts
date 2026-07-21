@@ -671,9 +671,10 @@ describe('Chat API', () => {
       await store.updateMeta('crew-resume-session', {
         runnerConfig: { model: 'test-model', crewId: 'resume-crew' },
       });
-      (
-        fastify as unknown as { sessionManager: SessionManager }
-      ).sessionManager.registerSession('crew-resume-session', join(tempDir, 'workspace'));
+      (fastify as unknown as { sessionManager: SessionManager }).sessionManager.registerSession(
+        'crew-resume-session',
+        join(tempDir, 'workspace')
+      );
 
       mockAgentSessionResume.mockResolvedValue(mockSession);
       mockHandleMessage.mockImplementation(async function* () {

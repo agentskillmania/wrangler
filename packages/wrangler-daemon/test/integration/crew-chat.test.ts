@@ -189,7 +189,7 @@ describe('Integration: Crew chat', () => {
       // researcher (not the orchestrator) produced the streamed output.
       const subagentTokens = events
         .filter((e) => e.event === 'subagent-token')
-        .map((e) => ((e.data as { delta?: string }).delta ?? ''))
+        .map((e) => (e.data as { delta?: string }).delta ?? '')
         .join('');
       expect(subagentTokens).toMatch(/RESEARCHER_OK/);
     }
@@ -261,7 +261,7 @@ describe('Integration: Crew chat', () => {
 
       const subagentTokens = resumeEvents
         .filter((e) => e.event === 'subagent-token')
-        .map((e) => ((e.data as { delta?: string }).delta ?? ''))
+        .map((e) => (e.data as { delta?: string }).delta ?? '')
         .join('');
       expect(subagentTokens).toMatch(/RESEARCHER_OK/);
     }

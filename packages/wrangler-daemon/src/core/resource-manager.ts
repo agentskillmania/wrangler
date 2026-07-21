@@ -1,9 +1,9 @@
 import { readdir, mkdir, rm, stat as statFn, writeFile, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
+import type { CrewConfig } from '@agentskillmania/wrangler';
 import { AgentLoader } from '@agentskillmania/wrangler';
 import { CrewLoader } from '@agentskillmania/wrangler';
-import type { CrewConfig } from '@agentskillmania/wrangler';
 import { parseAgentMd } from '@agentskillmania/wrangler';
 import yaml from 'js-yaml';
 

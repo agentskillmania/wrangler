@@ -325,7 +325,6 @@ describe('EnhancedRunner', () => {
     expect(mockRun).toHaveBeenCalledWith(mockState, mockOptions);
   });
 
-
   // ── builtinTools toggle tests ──────────────────────────────────────
 
   it('should include all builtin tools when builtinTools is not provided', async () => {

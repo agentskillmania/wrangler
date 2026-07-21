@@ -15,12 +15,14 @@ import type { SSEEvent } from '../../src/types.js';
  * individual tests can simulate runner.emit(...) by invoking handlers
  * directly from inside their run() implementation.
  */
-function createMockRunner(overrides: {
-  run?: ReturnType<typeof vi.fn>;
-  getToolInfo?: ReturnType<typeof vi.fn>;
-  getSkillInfo?: ReturnType<typeof vi.fn>;
-  getConfig?: ReturnType<typeof vi.fn>;
-} = {}) {
+function createMockRunner(
+  overrides: {
+    run?: ReturnType<typeof vi.fn>;
+    getToolInfo?: ReturnType<typeof vi.fn>;
+    getSkillInfo?: ReturnType<typeof vi.fn>;
+    getConfig?: ReturnType<typeof vi.fn>;
+  } = {}
+) {
   const eventHandlers: Record<string, (...args: unknown[]) => void> = {};
   const on = vi.fn((type: string, handler: (...args: unknown[]) => void) => {
     eventHandlers[type] = handler;
@@ -49,8 +51,7 @@ function createMockRunner(overrides: {
     off,
     getToolInfo: overrides.getToolInfo ?? vi.fn().mockReturnValue([]),
     getSkillInfo: overrides.getSkillInfo ?? vi.fn().mockReturnValue([]),
-    getConfig:
-      overrides.getConfig ?? vi.fn().mockReturnValue({ model: 'test-model' }),
+    getConfig: overrides.getConfig ?? vi.fn().mockReturnValue({ model: 'test-model' }),
   };
   return { runner, on, off, emit };
 }
@@ -837,10 +838,7 @@ describe('AgentSession', () => {
 
   describe('cockpit event forwarding', () => {
     it('forwards all mapped events to cockpit during handleMessage', async () => {
-      mockRunnerWithEvents([
-        ['token', { token: 'hi' }],
-        ['complete'],
-      ]);
+      mockRunnerWithEvents([['token', { token: 'hi' }], ['complete']]);
 
       const session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -860,14 +858,11 @@ describe('AgentSession', () => {
     });
 
     it('sends agent-diagnostics to cockpit after round completes', async () => {
-      mockRunnerWithEvents(
-        [['complete']],
-        {
-          id: 'test-state',
-          config: { name: 'test', instructions: '', tools: [] },
-          context: { messages: [], stepCount: 5, createdAt: 0, updatedAt: 0 },
-        }
-      );
+      mockRunnerWithEvents([['complete']], {
+        id: 'test-state',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: { messages: [], stepCount: 5, createdAt: 0, updatedAt: 0 },
+      });
 
       const session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -1009,10 +1004,7 @@ describe('AgentSession', () => {
     });
 
     it('does not forward events after cockpitSender cleared', async () => {
-      mockRunnerWithEvents([
-        ['token', { token: 'hi' }],
-        ['complete'],
-      ]);
+      mockRunnerWithEvents([['token', { token: 'hi' }], ['complete']]);
 
       const session = await AgentSession.create(
         { workspacePath: '/tmp/test', agentName: 'test' },
@@ -1042,12 +1034,16 @@ describe('AgentSession', () => {
           context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
         },
         {
-          getToolInfo: vi.fn().mockReturnValue([
-            { name: 'file_read', description: 'Read files', type: 'builtin', enabled: true },
-          ]),
-          getSkillInfo: vi.fn().mockReturnValue([
-            { name: 'spec-plan', description: 'Plan specs', source: '/skills/spec-plan' },
-          ]),
+          getToolInfo: vi
+            .fn()
+            .mockReturnValue([
+              { name: 'file_read', description: 'Read files', type: 'builtin', enabled: true },
+            ]),
+          getSkillInfo: vi
+            .fn()
+            .mockReturnValue([
+              { name: 'spec-plan', description: 'Plan specs', source: '/skills/spec-plan' },
+            ]),
           getConfig: vi.fn().mockReturnValue({
             model: 'test-model',
             sandbox: true,

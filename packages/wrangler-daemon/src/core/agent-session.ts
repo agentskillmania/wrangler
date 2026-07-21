@@ -6,7 +6,12 @@
  */
 
 import { createAgentState, addUserMessage, updateState } from '@agentskillmania/colts';
-import type { AgentState, RunStreamEvent, RunOptions, RunnerEventMap } from '@agentskillmania/colts';
+import type {
+  AgentState,
+  RunStreamEvent,
+  RunOptions,
+  RunnerEventMap,
+} from '@agentskillmania/colts';
 import type { AskHumanHandler, HumanResponse, SubAgentConfig } from '@agentskillmania/colts';
 import type { LLMClient } from '@agentskillmania/llm-client';
 import {
@@ -527,14 +532,32 @@ export class AgentSession {
     const consumeStream = async () => {
       // Register EventEmitter listeners for all event types
       const eventTypes = [
-        'step:start', 'step:end', 'phase-change', 'token', 'thinking',
-        'tool:start', 'tools:start', 'tool:end', 'tools:end',
-        'skill:loading', 'skill:loaded', 'skill:start', 'skill:end',
-        'subagent:start', 'subagent:end',
-        'subagent:token', 'subagent:thinking', 'subagent:tool:start', 'subagent:tool:end',
-        'llm:request', 'llm:response',
-        'compressing', 'compressed', 'waiting-human',
-        'complete', 'error',
+        'step:start',
+        'step:end',
+        'phase-change',
+        'token',
+        'thinking',
+        'tool:start',
+        'tools:start',
+        'tool:end',
+        'tools:end',
+        'skill:loading',
+        'skill:loaded',
+        'skill:start',
+        'skill:end',
+        'subagent:start',
+        'subagent:end',
+        'subagent:token',
+        'subagent:thinking',
+        'subagent:tool:start',
+        'subagent:tool:end',
+        'llm:request',
+        'llm:response',
+        'compressing',
+        'compressed',
+        'waiting-human',
+        'complete',
+        'error',
       ];
 
       const handlers: Record<string, (data: unknown) => void> = {};
@@ -567,7 +590,10 @@ export class AgentSession {
             }
           }
         };
-        this.runner.on(type as keyof RunnerEventMap, handlers[type] as (...args: unknown[]) => void);
+        this.runner.on(
+          type as keyof RunnerEventMap,
+          handlers[type] as (...args: unknown[]) => void
+        );
       }
 
       try {
@@ -589,7 +615,10 @@ export class AgentSession {
       } finally {
         // Unregister all listeners to avoid leaks on subsequent runs
         for (const type of eventTypes) {
-          this.runner.off(type as keyof RunnerEventMap, handlers[type] as (...args: unknown[]) => void);
+          this.runner.off(
+            type as keyof RunnerEventMap,
+            handlers[type] as (...args: unknown[]) => void
+          );
         }
         await this.saveState().catch(() => {});
         this._busy = false;
@@ -665,7 +694,7 @@ export class AgentSession {
   static mapEvent(event: { type: string; [key: string]: unknown }): SSEEvent | SSEEvent[] {
     // Cast to RunStreamEvent for known event field access; subagent: events
     // are accessed via the loose type directly.
-    
+
     switch (event.type) {
       case 'step:start':
         return { event: 'step-start', data: { step: event.step } };
@@ -686,14 +715,18 @@ export class AgentSession {
         return {
           event: 'tool-start',
           data: {
-            id: (event as any).action.id,
-            name: (event as any).action.tool,
-            args: (event as any).action.arguments,
+            id: (event as unknown as { action: { id: string } }).action.id,
+            name: (event as unknown as { action: { tool: string } }).action.tool,
+            args: (event as unknown as { action: { arguments: unknown } }).action.arguments,
           },
         };
 
       case 'tools:start':
-        return ((event as any).actions as Array<{ id: string; tool: string; arguments: unknown }>).map((action) => ({
+        return (
+          event as unknown as {
+            actions: Array<{ id: string; tool: string; arguments: unknown }>;
+          }
+        ).actions.map((action) => ({
           event: 'tool-start' as const,
           data: { id: action.id, name: action.tool, args: action.arguments },
         }));
@@ -711,7 +744,9 @@ export class AgentSession {
         };
 
       case 'tools:end':
-        return Object.entries((event as any).results as Record<string, unknown>).map(([callId, result]) => ({
+        return Object.entries(
+          (event as unknown as { results: Record<string, unknown> }).results
+        ).map(([callId, result]) => ({
           event: 'tool-end' as const,
           data: {
             callId,
@@ -769,7 +804,7 @@ export class AgentSession {
           data: {
             subtaskId: event.subtaskId,
             name: event.subagentName,
-            action: (event as any).action,
+            action: (event as unknown as { action: unknown }).action,
           },
         };
 
@@ -787,9 +822,9 @@ export class AgentSession {
         return {
           event: 'llm-request',
           data: {
-            messages: (event as any).messages,
-            tools: (event as any).tools,
-            skill: (event as any).skill,
+            messages: (event as unknown as { messages: unknown }).messages,
+            tools: (event as unknown as { tools: unknown }).tools,
+            skill: (event as unknown as { skill: unknown }).skill,
           },
         };
 
@@ -818,7 +853,12 @@ export class AgentSession {
         return { event: 'done', data: {} };
 
       case 'error':
-        return { event: 'error', data: { message: (event as any).error.message } };
+        return {
+          event: 'error',
+          data: {
+            message: (event as unknown as { error: { message: string } }).error.message,
+          },
+        };
 
       default:
         return { event: event.type, data: event };

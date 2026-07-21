@@ -1,8 +1,8 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-import yaml from 'js-yaml';
 import type { SubAgentConfig } from '@agentskillmania/colts';
+import yaml from 'js-yaml';
 
 import type { CrewConfig } from './types.js';
 import { parseAgentMd } from '../agent/agent-parser.js';
@@ -157,9 +157,7 @@ export interface CrewRunnerOptions {
 export function crewToRunnerOptions(crew: CrewConfig): CrewRunnerOptions {
   const primaryName = crew.meta.primaryAgent;
   const primaryDef = crew.agentDefs[primaryName];
-  const workerEntries = Object.entries(crew.agentDefs).filter(
-    ([name]) => name !== primaryName
-  );
+  const workerEntries = Object.entries(crew.agentDefs).filter(([name]) => name !== primaryName);
 
   const subAgents: SubAgentConfig[] = workerEntries.map(([name, def]) => ({
     name,
@@ -172,17 +170,14 @@ export function crewToRunnerOptions(crew: CrewConfig): CrewRunnerOptions {
   }));
 
   // Build system prompt: crew memory + primary instructions + agent catalog
-  const catalogText = workerEntries.length > 0
-    ? '\n\n## Available Sub-Agents\n' +
-      workerEntries
-        .map(([name, def]) => `- **${name}**: ${def.description ?? name}`)
-        .join('\n')
-    : '';
+  const catalogText =
+    workerEntries.length > 0
+      ? '\n\n## Available Sub-Agents\n' +
+        workerEntries.map(([name, def]) => `- **${name}**: ${def.description ?? name}`).join('\n')
+      : '';
 
   const primaryInstructions = primaryDef?.instructions ?? '';
-  const systemPrompt = [crew.memory, primaryInstructions, catalogText]
-    .filter(Boolean)
-    .join('\n\n');
+  const systemPrompt = [crew.memory, primaryInstructions, catalogText].filter(Boolean).join('\n\n');
 
   return {
     systemPrompt,
@@ -193,4 +188,3 @@ export function crewToRunnerOptions(crew: CrewConfig): CrewRunnerOptions {
     skillDirs: [...crew.skillDirs],
   };
 }
-
