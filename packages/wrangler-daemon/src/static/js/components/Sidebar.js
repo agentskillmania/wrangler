@@ -39,6 +39,7 @@ export function Sidebar(props) {
       label: 'Conversation',
       items: [
         { id: 'chat', label: 'Chat' },
+        { id: 'crew-chat', label: 'Crew Chat' },
         { id: 'sessions', label: 'Sessions' },
       ],
     },

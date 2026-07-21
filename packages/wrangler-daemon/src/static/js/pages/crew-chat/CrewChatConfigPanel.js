@@ -1,14 +1,14 @@
 /* eslint-disable */
-// ── Component: ChatConfigPanel ──
-// Left column: agent selection, workspace path, runner config, AskHuman response.
+// ── Component: CrewChatConfigPanel ──
+// Left column: crew selection, workspace path, runner config, AskHuman response.
 
 import { html } from '../../utils.js';
 import { SessionSelector } from '../../components/SessionSelector.js';
 
-export function ChatConfigPanel(props) {
-  var agents = props.agents;
-  var selectedAgent = props.selectedAgent;
-  var setSelectedAgent = props.setSelectedAgent;
+export function CrewChatConfigPanel(props) {
+  var crews = props.crews;
+  var selectedCrew = props.selectedCrew;
+  var setSelectedCrew = props.setSelectedCrew;
   var workspacePath = props.workspacePath;
   var setWorkspacePath = props.setWorkspacePath;
   var sessionId = props.sessionId;
@@ -61,20 +61,20 @@ export function ChatConfigPanel(props) {
   return html`
     <div class="chat-left" style=${sessionId ? 'opacity:0.5;pointer-events:none;' : ''}>
       <div class="field">
-        <label>Agent</label>
+        <label>Crew</label>
         <select
           class="input"
-          value=${selectedAgent}
+          value=${selectedCrew}
           onChange=${function (e) {
-            setSelectedAgent(e.target.value);
+            setSelectedCrew(e.target.value);
           }}
         >
-          <option value="">Choose an agent...</option>
-          ${agents.map(
-            function (a) {
+          <option value="">Choose a crew...</option>
+          ${crews.map(
+            function (c) {
               return html`
-                <option key=${a.id} value=${a.id}>
-                  ${a.name || a.id}
+                <option key=${c.id} value=${c.id}>
+                  ${c.name || c.id}
                 </option>
               `;
             }

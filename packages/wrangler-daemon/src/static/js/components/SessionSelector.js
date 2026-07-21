@@ -51,7 +51,11 @@ export function SessionSelector(props) {
             <optgroup key=${gk} label=${gk}>
               ${groups[gk].map(
                 function (sess) {
-                  var label = (sess.agentName || 'unknown') + ' — ' + (sess.id || '-');
+                  // Crew sessions carry crewId on runnerConfig; surface it so
+                  // the picker distinguishes 'crew/foo — id' from 'agent — id'.
+                  var crewId = sess.runnerConfig && sess.runnerConfig.crewId;
+                  var prefix = crewId ? 'crew/' + crewId : (sess.agentName || 'unknown');
+                  var label = prefix + ' — ' + (sess.id || '-');
                   return html`
                     <option key=${sess.id} value=${sess.id}>
                       ${label}

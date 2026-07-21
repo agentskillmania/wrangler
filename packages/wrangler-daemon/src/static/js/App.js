@@ -3,6 +3,7 @@
 import { html, useState, useEffect } from './utils.js';
 import { Sidebar } from './components/Sidebar.js';
 import { ChatPage } from './pages/ChatPage.js';
+import { CrewChatPage } from './pages/CrewChatPage.js';
 import { AgentsPage } from './pages/AgentsPage.js';
 import { SkillsPage } from './pages/SkillsPage.js';
 import { CrewsPage } from './pages/CrewsPage.js';
@@ -14,7 +15,7 @@ import { PlansPage } from './pages/PlansPage.js';
 import { ConfigPage } from './pages/ConfigPage.js';
 
 // ── Hash Router Utility ──
-var VALID_PAGES = ['chat', 'agents', 'skills', 'crews', 'sessions', 'state', 'files', 'specs', 'plans', 'config'];
+var VALID_PAGES = ['chat', 'crew-chat', 'agents', 'skills', 'crews', 'sessions', 'state', 'files', 'specs', 'plans', 'config'];
 
 function readHashPage() {
   var h = window.location.hash.replace('#', '');
@@ -48,6 +49,8 @@ function App() {
     switch (currentPage) {
       case 'chat':
         return html`<${ChatPage} />`;
+      case 'crew-chat':
+        return html`<${CrewChatPage} />`;
       case 'agents':
         return html`<${AgentsPage} />`;
       case 'skills':

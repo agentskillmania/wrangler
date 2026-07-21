@@ -36,6 +36,8 @@ export function eventToTag(ev) {
   if (ev === 'phase-change') return 'phase';
   if (ev === 'llm-request' || ev === 'llm-response') return 'llm';
   if (ev === 'subagent-start' || ev === 'subagent-end') return 'subagent';
+  if (ev === 'subagent-token' || ev === 'subagent-thinking') return 'subagent';
+  if (ev === 'subagent-tool-start' || ev === 'subagent-tool-end') return 'subagent';
   if (ev === 'compressing' || ev === 'compressed') return 'step';
   if (ev === 'waiting-human' || ev === 'human-input' || ev === 'human-input-resolved') return 'ask';
   if (ev === 'error') return 'error';
@@ -79,6 +81,19 @@ export function formatEventData(ev, p) {
   if (ev === 'llm-response') return 'LLM response received';
   if (ev === 'subagent-start') return 'Sub-agent: ' + p.name + (p.task ? '\n' + p.task : '');
   if (ev === 'subagent-end') return 'Sub-agent done: ' + p.name + (p.result ? '\n' + String(p.result) : '');
+  if (ev === 'subagent-token') return p.delta || '';
+  if (ev === 'subagent-thinking') return p.content || '';
+  if (ev === 'subagent-tool-start') {
+    var saAction = p.action || {};
+    var saName = p.subagentName || p.name || 'subagent';
+    var saArgsStr = saAction.arguments ? JSON.stringify(saAction.arguments, null, 2) : '{}';
+    return '[' + saName + '] ' + (saAction.tool || saAction.name || 'tool') + '\n' + saArgsStr;
+  }
+  if (ev === 'subagent-tool-end') {
+    var saEndName = p.subagentName || p.name || 'subagent';
+    var saResultStr = p.result != null ? String(p.result) : '(no result)';
+    return '[' + saEndName + '] ' + (p.callId || 'tool') + ' -> result:\n' + saResultStr;
+  }
   if (ev === 'compressing') return 'Compressing context...';
   if (ev === 'compressed') return 'Context compressed: ' + (p.summary || '') + ' (' + (p.removedCount || 0) + ' removed)';
   if (ev === 'waiting-human') return 'Waiting for human input: ' + JSON.stringify(p.request || {});
@@ -107,6 +122,12 @@ export function formatEventData(ev, p) {
 
 function tagStyle(tag) {
   var c = TAG_COLORS[tag];
+  if (!c) {
+    // Namespaced tags like 'subagent-token:researcher' fall back to their
+    // prefix ('subagent') so they pick up that color rather than the default grey.
+    var prefix = tag.split(':')[0];
+    c = TAG_COLORS[prefix];
+  }
   return c
     ? 'background:' + c.bg + ';color:' + c.fg
     : 'background:rgba(139,148,158,0.06);color:var(--text-muted)';
@@ -114,6 +135,17 @@ function tagStyle(tag) {
 
 function tagLabel(tag) {
   var c = TAG_COLORS[tag];
+  if (!c) {
+    var prefix = tag.split(':')[0];
+    var prefixC = TAG_COLORS[prefix];
+    // For namespaced sub-agent tags, show a readable label like
+    // 'subagent:researcher' instead of the raw 'subagent-token:researcher'.
+    if (prefixC) {
+      var colonIdx = tag.indexOf(':');
+      var ns = colonIdx >= 0 ? tag.slice(colonIdx + 1) : '';
+      return prefixC.label + (ns ? ':' + ns : '');
+    }
+  }
   return c ? c.label : tag;
 }
 

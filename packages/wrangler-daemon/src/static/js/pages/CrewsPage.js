@@ -7,6 +7,7 @@ import { api } from '../api.js';
 import { ResourceList } from '../components/ResourceList.js';
 import { DetailDrawer } from '../components/DetailDrawer.js';
 import { InlineEditor } from '../components/InlineEditor.js';
+import { JsonTree } from '../components/JsonTree.js';
 
 // ── Page: Crews ──
 export function CrewsPage() {
@@ -216,7 +217,7 @@ export function CrewsPage() {
           </div>
           <div class="detail-label">Details</div>
           <${JsonTree} data=${selected} open=${1} />
-          <${InlineFileEditor}
+          <${InlineEditor}
             resourceType="crews"
             resourceId=${selected.name}
           />
