@@ -643,6 +643,60 @@ describe('Chat API', () => {
       const callArg = mockAgentSessionResume.mock.calls[0][0] as string;
       expect(callArg).toContain('existing-session');
     });
+
+    it('reloads crew subAgents on resume when meta.runnerConfig.crewId is set', async () => {
+      // Seed a crew on disk so loadCrewConfig + crewToRunnerOptions produce subAgents
+      const crewsDir = join(tempDir, 'crews');
+      const crewDir = join(crewsDir, 'resume-crew');
+      const { mkdir, writeFile: wf } = await import('node:fs/promises');
+      await mkdir(join(crewDir, 'agents'), { recursive: true });
+      await wf(
+        join(crewDir, 'CREW.md'),
+        '---\nname: resume-crew\nprimary-agent: orchestrator\n---\n\nMemory.\n'
+      );
+      await wf(
+        join(crewDir, 'agents', 'orchestrator.md'),
+        '---\nname: orchestrator\n---\n\nLead.\n'
+      );
+      await wf(
+        join(crewDir, 'agents', 'researcher.md'),
+        '---\nname: researcher\n---\n\nResearch.\n'
+      );
+
+      // Create a session whose meta.yaml carries crewId, so resume detects it
+      const store = (
+        fastify as unknown as { sessionManager: SessionManager }
+      ).sessionManager.getSessionStore(join(tempDir, 'workspace'));
+      await store.createWithId('crew-resume-session', 'orchestrator');
+      await store.updateMeta('crew-resume-session', {
+        runnerConfig: { model: 'test-model', crewId: 'resume-crew' },
+      });
+      (
+        fastify as unknown as { sessionManager: SessionManager }
+      ).sessionManager.registerSession('crew-resume-session', join(tempDir, 'workspace'));
+
+      mockAgentSessionResume.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      const res = await fetch(`${getUrl()}/api/chat/crew-resume-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'follow up' }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockAgentSessionResume).toHaveBeenCalledTimes(1);
+
+      // The options passed to AgentSession.resume should contain the
+      // subAgents rebuilt from the crew config (researcher is non-primary).
+      const resumeOpts = mockAgentSessionResume.mock.calls[0][1] as {
+        subAgents?: Array<{ name: string }>;
+      };
+      expect(resumeOpts.subAgents).toBeDefined();
+      expect(resumeOpts.subAgents!.map((s) => s.name)).toEqual(['researcher']);
+    });
   });
 
   // ─── POST /api/crews/:id/chat (NEW crew conversation) ───

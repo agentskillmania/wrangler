@@ -3,7 +3,7 @@ import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { AgentSession } from '../core/agent-session.js';
-import type { AgentSessionOptions } from '../core/agent-session.js';
+import type { AgentSessionOptions, AgentSessionResumeOptions } from '../core/agent-session.js';
 import type {
   DecoratedFastifyInstance,
   CreateAndChatRequest,
@@ -238,6 +238,23 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       const sessionDir = store.getSessionDir(sessionId);
       const config = configManager().get();
 
+      // Crew session: if the persisted runnerConfig carried a crewId, reload
+      // the crew config and rebuild subAgents so the delegate tool is wired
+      // on resume. Non-crew sessions have no crewId → subAgents stays
+      // undefined and behavior is unchanged.
+      let resumeSubAgents: AgentSessionResumeOptions['subAgents'];
+      const crewId = info.runnerConfig?.crewId;
+      if (crewId) {
+        try {
+          const crewConfig = await resourceManager().loadCrewConfig(crewId);
+          resumeSubAgents = crewToRunnerOptions(crewConfig).subAgents;
+        } catch {
+          // Crew was deleted between session creation and resume — proceed
+          // without subAgents. The primary agent still runs; it just can't
+          // delegate. Surface the situation in logs later if needed.
+        }
+      }
+
       try {
         agentSession = await AgentSession.resume(
           sessionDir,
@@ -248,6 +265,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
             agentConfigPath: agentDetail?.path,
             sessionStore: store,
             sessionManager: sessionManager(),
+            subAgents: resumeSubAgents,
           },
           config
         );
