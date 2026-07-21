@@ -93,6 +93,8 @@ export interface EnhancedRunnerOptions {
   enableCommands?: boolean;
   /** Source of session creation — automatically set by AgentLoader when loading from agent directory */
   source?: SessionSource;
+  /** Crew identifier — persisted into runnerConfig snapshot so resume can reload crew config */
+  crewId?: string;
 }
 
 /**
@@ -156,4 +158,6 @@ export interface ResumeOptions {
   thinkingEnabled?: boolean;
   /** AskHuman handler for human-in-the-loop */
   askHumanHandler?: AskHumanHandler;
+  /** Sub-agent configs to rebuild crew delegation on resume */
+  subAgents?: SubAgentConfig[];
 }

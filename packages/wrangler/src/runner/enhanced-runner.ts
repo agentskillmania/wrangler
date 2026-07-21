@@ -245,6 +245,7 @@ export class EnhancedRunner {
             enableSpecPlan: options.enableSpecPlan,
             enableCommands: options.enableCommands,
             a2ui: options.a2ui,
+            crewId: options.crewId,
           },
           source: options.source,
         })
@@ -530,6 +531,7 @@ export class EnhancedRunner {
       a2ui: rc.a2ui,
       sessionBaseDir: path.dirname(path.dirname(sessionDir)),
       source: meta.source,
+      subAgents: options.subAgents,
     });
 
     const newState = produce(state, (draft) => {

@@ -2,6 +2,8 @@ import { readdir, mkdir, rm, stat as statFn, writeFile, readFile } from 'node:fs
 import { join, resolve } from 'node:path';
 
 import { AgentLoader } from '@agentskillmania/wrangler';
+import { CrewLoader } from '@agentskillmania/wrangler';
+import type { CrewConfig } from '@agentskillmania/wrangler';
 import { parseAgentMd } from '@agentskillmania/wrangler';
 import yaml from 'js-yaml';
 
@@ -321,6 +323,18 @@ export class ResourceManager {
     this.validateName(id);
     const crewDir = join(this.crewsDir, id);
     await rm(crewDir, { recursive: true, force: true });
+  }
+
+  /**
+   * Load the full CrewConfig for execution. Uses wrangler's CrewLoader so the
+   * result is identical to what EnhancedRunner.create needs via
+   * crewToRunnerOptions(). Throws on missing/invalid crew (caller maps to 404).
+   */
+  async loadCrewConfig(id: string): Promise<CrewConfig> {
+    this.validateName(id);
+    const crewDir = join(this.crewsDir, id);
+    const loader = new CrewLoader(crewDir);
+    return loader.load();
   }
 
   /** Helper: list subdirectories */

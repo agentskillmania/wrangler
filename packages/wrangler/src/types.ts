@@ -33,6 +33,8 @@ export interface RunnerConfigSnapshot {
   enableCommands?: boolean;
   /** A2UI support */
   a2ui?: { enabled: boolean };
+  /** Crew identifier — set when this session runs a crew (used to reload crew config on resume) */
+  crewId?: string;
 }
 
 /** Source of session creation — how the runner was initialized */

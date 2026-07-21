@@ -611,4 +611,61 @@ describe('ResourceManager', () => {
       expect(crews).toHaveLength(0);
     });
   });
+
+  describe('loadCrewConfig', () => {
+    it('throws when crew directory does not exist', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      await expect(manager.loadCrewConfig('non-existent')).rejects.toThrow(
+        /Crew directory not found/
+      );
+    });
+
+    it('throws when CREW.md is missing', async () => {
+      await mkdir(join(crewsDir, 'empty'), { recursive: true });
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      await expect(manager.loadCrewConfig('empty')).rejects.toThrow(/CREW.md not found/);
+    });
+
+    it('validates name to prevent path traversal', async () => {
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      await expect(manager.loadCrewConfig('../escape')).rejects.toThrow(
+        /path separators or traversal sequences/
+      );
+    });
+
+    it('returns full CrewConfig for a valid crew with primary + worker agent', async () => {
+      // Build a minimal crew on disk
+      await mkdir(join(crewsDir, 'demo-crew'), { recursive: true });
+      await mkdir(join(crewsDir, 'demo-crew', 'agents'), { recursive: true });
+      await writeFile(
+        join(crewsDir, 'demo-crew', 'CREW.md'),
+        '---\nname: demo-crew\nprimary-agent: orchestrator\n---\n\nShared crew memory.\n'
+      );
+      await writeFile(
+        join(crewsDir, 'demo-crew', 'agents', 'orchestrator.md'),
+        '---\nname: orchestrator\ndescription: primary coordinator\n---\n\nOrchestrate tasks.\n'
+      );
+      await writeFile(
+        join(crewsDir, 'demo-crew', 'agents', 'researcher.md'),
+        '---\nname: researcher\ndescription: research helper\n---\n\nResearch topics.\n'
+      );
+
+      const manager = new ResourceManager(agentsDir, skillsDir, crewsDir);
+      await manager.init();
+
+      const config = await manager.loadCrewConfig('demo-crew');
+
+      expect(config.meta.name).toBe('demo-crew');
+      expect(config.meta.primaryAgent).toBe('orchestrator');
+      expect(config.memory).toContain('Shared crew memory');
+      expect(Object.keys(config.agentDefs).sort()).toEqual(['orchestrator', 'researcher']);
+      expect(config.agentDefs.orchestrator.instructions).toContain('Orchestrate tasks');
+    });
+  });
 });

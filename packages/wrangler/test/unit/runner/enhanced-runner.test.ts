@@ -1027,6 +1027,31 @@ describe('EnhancedRunner', () => {
     });
   });
 
+  // ── crewId snapshot tests ───────────────────────────────────────────
+
+  describe('crewId snapshot', () => {
+    it('create() omits crewId from snapshot when not provided', async () => {
+      const { createSessionSupport } = await import('../../../src/session/support.js');
+      vi.mocked(createSessionSupport).mockClear();
+
+      await EnhancedRunner.create(makeOptions());
+
+      const snapshot = createSessionSupport.mock.calls.at(-1)?.[0]?.runnerConfigSnapshot;
+      expect(snapshot).toBeDefined();
+      expect(snapshot.crewId).toBeUndefined();
+    });
+
+    it('create() writes crewId into runnerConfigSnapshot when provided', async () => {
+      const { createSessionSupport } = await import('../../../src/session/support.js');
+      vi.mocked(createSessionSupport).mockClear();
+
+      await EnhancedRunner.create(makeOptions({ crewId: 'my-crew' }));
+
+      const snapshot = createSessionSupport.mock.calls.at(-1)?.[0]?.runnerConfigSnapshot;
+      expect(snapshot?.crewId).toBe('my-crew');
+    });
+  });
+
   describe('resume', () => {
     it('resumes from session directory', async () => {
       const sessionId = '1745800000-resume-test';
@@ -1163,6 +1188,54 @@ describe('EnhancedRunner', () => {
           },
         })
       ).rejects.toThrow('Session not found or incomplete');
+    });
+
+    it('resume forwards subAgents to the reconstructed runner (crew session)', async () => {
+      const sessionId = '1745800000-resume-crew';
+      const store = new SessionStore(testBaseDir, '/test/workspace');
+      await store.createWithId(sessionId, 'test-agent');
+      await store.updateMeta(sessionId, {
+        runnerConfig: { model: 'gpt-4', crewId: 'my-crew' },
+      });
+      const agentState = createAgentState({ name: 'test-agent', tools: [] });
+      await store.saveState(sessionId, agentState);
+
+      const dir = store.getSessionDir(sessionId);
+      const subAgents = [
+        {
+          name: 'researcher',
+          description: 'research helper',
+          config: { name: 'researcher', instructions: 'be helpful', tools: [] },
+        },
+      ];
+
+      const { runner } = await EnhancedRunner.resume(dir, {
+        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+        subAgents,
+      });
+
+      const calls = await getAgentRunnerCalls();
+      const resumeCall = calls[calls.length - 1][0];
+      expect(resumeCall.subAgents).toEqual(subAgents);
+      expect(runner).toBeInstanceOf(EnhancedRunner);
+    });
+
+    it('resume omits subAgents when not provided (non-crew session unchanged)', async () => {
+      const sessionId = '1745800000-resume-nocrew';
+      const store = new SessionStore(testBaseDir, '/test/workspace');
+      await store.createWithId(sessionId, 'test-agent');
+      await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
+      const agentState = createAgentState({ name: 'test-agent', tools: [] });
+      await store.saveState(sessionId, agentState);
+
+      const dir = store.getSessionDir(sessionId);
+      await EnhancedRunner.resume(dir, {
+        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+      });
+
+      const calls = await getAgentRunnerCalls();
+      const resumeCall = calls[calls.length - 1][0];
+      expect(resumeCall.subAgents).toBeUndefined();
     });
   });
 });
