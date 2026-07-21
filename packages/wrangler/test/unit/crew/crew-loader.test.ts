@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
-import { CrewLoader } from '../../../src/crew/crew-loader.js';
+import { CrewLoader, crewToRunnerOptions } from '../../../src/crew/crew-loader.js';
 
 const FIXTURE_DIR = join(__dirname, '../../fixtures/crew');
 
@@ -240,7 +240,72 @@ describe('CrewLoader', () => {
       expect(config.agentDefs.plain.name).toBe('plain');
       expect(config.agentDefs.plain.instructions).toBe('Just instructions without frontmatter');
     } finally {
-      await rm(tmpDir, { recursive: true });
+      await rm(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('crewToRunnerOptions', () => {
+  it('sets inheritParentTools=true and inheritParentSkills=true on each sub-agent by default', async () => {
+    // Build a minimal crew config inline — crewToRunnerOptions is pure
+    // over CrewConfig, so no disk I/O needed.
+    const crewConfig = {
+      meta: {
+        name: 'test-crew',
+        description: 'd',
+        primaryAgent: 'orchestrator',
+      },
+      memory: 'shared memory',
+      agentDefs: {
+        orchestrator: {
+          name: 'orchestrator',
+          instructions: 'You orchestrate.',
+        },
+        researcher: {
+          name: 'researcher',
+          description: 'Research helper',
+          instructions: 'You research.',
+        },
+        coder: {
+          name: 'coder',
+          description: 'Code writer',
+          instructions: 'You write code.',
+        },
+      },
+      skillDirs: [],
+    };
+
+    const opts = crewToRunnerOptions(crewConfig as never);
+
+    expect(opts.subAgents).toHaveLength(2);
+    for (const sa of opts.subAgents) {
+      expect(sa.inheritParentTools).toBe(true);
+      expect(sa.inheritParentSkills).toBe(true);
+    }
+    expect(opts.subAgents.map((s) => s.name).sort()).toEqual(['coder', 'researcher']);
+    expect(opts.primaryAgent).toBe('orchestrator');
+  });
+
+  it('composes system prompt from memory + primary instructions + sub-agent catalog', () => {
+    const crewConfig = {
+      meta: { name: 'c', description: '', primaryAgent: 'lead' },
+      memory: 'CREW MEMORY HERE',
+      agentDefs: {
+        lead: { name: 'lead', instructions: 'LEAD INSTRUCTIONS' },
+        worker: {
+          name: 'worker',
+          description: 'WORKER DESC',
+          instructions: 'work',
+        },
+      },
+      skillDirs: [],
+    };
+
+    const opts = crewToRunnerOptions(crewConfig as never);
+
+    expect(opts.systemPrompt).toContain('CREW MEMORY HERE');
+    expect(opts.systemPrompt).toContain('LEAD INSTRUCTIONS');
+    expect(opts.systemPrompt).toContain('Available Sub-Agents');
+    expect(opts.systemPrompt).toContain('**worker**: WORKER DESC');
   });
 });

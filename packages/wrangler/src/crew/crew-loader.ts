@@ -162,6 +162,13 @@ export function crewToRunnerOptions(crew: CrewConfig): CrewRunnerOptions {
   const subAgents: SubAgentConfig[] = workerEntries.map(([name, def]) => ({
     name,
     description: def.description ?? `${name} agent`,
+    // Crew sub-agents inherit the parent runner's full tool set and skill
+    // provider by default, so a researcher can read files / load skills /
+    // run shell commands without the user redeclaring every tool per agent.
+    // Either flag can be turned off in the SubAgentConfig if a crew wants
+    // an isolated sub-agent.
+    inheritParentTools: true,
+    inheritParentSkills: true,
     config: {
       name,
       instructions: def.instructions,
