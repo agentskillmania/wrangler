@@ -7,7 +7,7 @@
 
 import { createAgentState, addUserMessage, updateState } from '@agentskillmania/colts';
 import type { AgentState, RunStreamEvent, RunOptions, RunnerEventMap } from '@agentskillmania/colts';
-import type { AskHumanHandler, HumanResponse } from '@agentskillmania/colts';
+import type { AskHumanHandler, HumanResponse, SubAgentConfig } from '@agentskillmania/colts';
 import type { LLMClient } from '@agentskillmania/llm-client';
 import {
   EnhancedRunner,
@@ -49,6 +49,8 @@ export interface AgentSessionResumeOptions {
   agentConfigPath?: string;
   sessionStore?: SessionStore;
   sessionManager?: { getStatus(id: string): string };
+  /** Sub-agent configs to rebuild crew delegation on resume */
+  subAgents?: SubAgentConfig[];
 }
 
 /** Options for creating an AgentSession */
@@ -85,6 +87,10 @@ export interface AgentSessionOptions {
   sandbox?: boolean;
   thinkingEnabled?: boolean;
   a2ui?: { enabled: boolean };
+  /** Sub-agent configs — enables the 'delegate' tool for crew delegation */
+  subAgents?: SubAgentConfig[];
+  /** Crew identifier — persisted into runnerConfig snapshot so resume can reload crew config */
+  crewId?: string;
 }
 
 /** Default agent instructions when none provided */
@@ -183,6 +189,8 @@ export class AgentSession {
       mcpConfigPaths: options.mcpConfigPaths ?? [],
       sessionBaseDir: options.sessionBaseDir,
       askHumanHandler,
+      subAgents: options.subAgents,
+      crewId: options.crewId,
     });
 
     // Build tool definitions from runner for state synchronization
@@ -242,6 +250,7 @@ export class AgentSession {
       llmClient,
       model: llmModel,
       askHumanHandler,
+      subAgents: options.subAgents,
     });
 
     const session = new AgentSession(runner, state, bridge, {

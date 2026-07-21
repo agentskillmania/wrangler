@@ -670,6 +670,32 @@ describe('AgentSession', () => {
         expect.objectContaining({ mcpConfigPaths: [] })
       );
     });
+
+    it('passes subAgents to EnhancedRunner when provided (crew session)', async () => {
+      const subAgents = [
+        {
+          name: 'researcher',
+          description: 'research helper',
+          config: { name: 'researcher', instructions: 'be helpful', tools: [] },
+        },
+      ];
+      await AgentSession.create({ ...baseOptions, subAgents }, testConfig);
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(expect.objectContaining({ subAgents }));
+    });
+
+    it('passes crewId to EnhancedRunner when provided (crew session)', async () => {
+      await AgentSession.create({ ...baseOptions, crewId: 'demo-crew' }, testConfig);
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ crewId: 'demo-crew' })
+      );
+    });
+
+    it('omits subAgents and crewId for non-crew session (backward compat)', async () => {
+      await AgentSession.create(baseOptions, testConfig);
+      const call = mockEnhancedRunnerCreate.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(call.subAgents).toBeUndefined();
+      expect(call.crewId).toBeUndefined();
+    });
   });
 
   describe('handleMessage() concurrency guard', () => {
@@ -1145,6 +1171,50 @@ describe('AgentSession', () => {
           testConfig
         )
       ).rejects.toThrow('Session not found');
+    });
+
+    it('passes subAgents through to EnhancedRunner.resume() when provided', async () => {
+      mockEnhancedRunnerResume.mockClear();
+      const subAgents = [
+        {
+          name: 'researcher',
+          description: 'research helper',
+          config: { name: 'researcher', instructions: 'be helpful', tools: [] },
+        },
+      ];
+
+      await AgentSession.resume(
+        '/tmp/crew-session',
+        {
+          sessionId: 'crew-session',
+          workspacePath: '/tmp/workspace',
+          agentName: 'orchestrator',
+          subAgents,
+        },
+        testConfig
+      );
+
+      expect(mockEnhancedRunnerResume).toHaveBeenCalledWith(
+        '/tmp/crew-session',
+        expect.objectContaining({ subAgents })
+      );
+    });
+
+    it('omits subAgents on resume when not provided (non-crew session)', async () => {
+      mockEnhancedRunnerResume.mockClear();
+
+      await AgentSession.resume(
+        '/tmp/plain-session',
+        {
+          sessionId: 'plain-session',
+          workspacePath: '/tmp/workspace',
+          agentName: 'plain-agent',
+        },
+        testConfig
+      );
+
+      const call = mockEnhancedRunnerResume.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+      expect(call.subAgents).toBeUndefined();
     });
   });
 });
