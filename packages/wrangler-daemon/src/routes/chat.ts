@@ -1,4 +1,4 @@
-import { SessionNotFoundError } from '@agentskillmania/wrangler';
+import { SessionNotFoundError, crewToRunnerOptions } from '@agentskillmania/wrangler';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
@@ -277,6 +277,79 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       sessionManager: sessionManager(),
       // Resume does NOT emit session-start (the client already has the id).
       emitSessionStart: false,
+    });
+  });
+
+  /**
+   * POST /api/crews/:id/chat — NEW conversation driven by a crew config
+   *
+   * Loads CREW.md + agents/*.md via CrewLoader, converts to runner options
+   * via crewToRunnerOptions (system prompt = crew memory + primary
+   * instructions + sub-agent catalog; subAgents = non-primary agents;
+   * enables the delegate tool), then constructs AgentSession the same way
+   * the single-agent route does. crewId is persisted into runnerConfig so
+   * the resume path can reload crew config.
+   */
+  fastify.post('/api/crews/:id/chat', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as CreateAndChatRequest;
+
+    if (!body.message?.trim()) {
+      reply.code(400).send({ error: 'message is required' });
+      return;
+    }
+
+    if (!body.workspacePath?.trim()) {
+      reply.code(400).send({ error: 'workspacePath is required' });
+      return;
+    }
+
+    let crewConfig;
+    try {
+      crewConfig = await resourceManager().loadCrewConfig(id);
+    } catch {
+      reply.code(404).send({ error: 'Crew not found' });
+      return;
+    }
+
+    const runnerOpts = crewToRunnerOptions(crewConfig);
+    const workspacePath = body.workspacePath;
+
+    const sessionOptions: AgentSessionOptions = {
+      workspacePath,
+      agentName: runnerOpts.primaryAgent,
+      // The crew's composed system prompt (memory + primary instructions +
+      // sub-agent catalog) is injected as the primary agent's instructions.
+      agentInstructions: runnerOpts.systemPrompt,
+      subAgents: runnerOpts.subAgents,
+      crewId: id,
+      model: body.model ?? runnerOpts.model,
+      sandbox: runnerOpts.sandbox ?? body.config?.sandbox ?? true,
+      skillDirs: [...(runnerOpts.skillDirs ?? []), BUILTIN_SKILLS_DIR],
+      mcpConfigPaths: body.config?.mcpConfigPaths ?? [],
+      sessionBaseDir: sessionManager().baseDir,
+      sessionManager: sessionManager(),
+      builtinTools: body.config?.builtinTools as AgentSessionOptions['builtinTools'],
+      enableSession: body.config?.enableSession,
+      enableTodolist: body.config?.enableTodolist,
+      enableCommands: body.config?.enableCommands,
+      a2ui: body.config?.a2ui,
+    };
+
+    const config = configManager().get();
+    const agentSession = await AgentSession.create(sessionOptions, config);
+    const sessionId = agentSession.sessionId;
+
+    sessionManager().registerSession(sessionId, workspacePath);
+    sessionManager().setAgentSession(sessionId, agentSession);
+    sessionManager().updateStatus(sessionId, 'running');
+
+    await streamAgentSession(reply, agentSession, body.message, {
+      thinkingEnabled: body.thinkingEnabled,
+      model: body.model,
+      sessionId,
+      sessionManager: sessionManager(),
+      emitSessionStart: true,
     });
   });
 }

@@ -644,4 +644,154 @@ describe('Chat API', () => {
       expect(callArg).toContain('existing-session');
     });
   });
+
+  // ─── POST /api/crews/:id/chat (NEW crew conversation) ───
+
+  describe('POST /api/crews/:id/chat', () => {
+    beforeEach(async () => {
+      // Seed a demo crew with primary (orchestrator) + worker (researcher)
+      const crewsDir = join(tempDir, 'crews');
+      const crewDir = join(crewsDir, 'demo-crew');
+      const { mkdir, writeFile: wf } = await import('node:fs/promises');
+      await mkdir(join(crewDir, 'agents'), { recursive: true });
+      await wf(
+        join(crewDir, 'CREW.md'),
+        '---\nname: demo-crew\nprimary-agent: orchestrator\n---\n\nShared crew memory.\n'
+      );
+      await wf(
+        join(crewDir, 'agents', 'orchestrator.md'),
+        '---\nname: orchestrator\ndescription: primary coordinator\n---\n\nOrchestrate.\n'
+      );
+      await wf(
+        join(crewDir, 'agents', 'researcher.md'),
+        '---\nname: researcher\ndescription: research helper\n---\n\nResearch topics.\n'
+      );
+    });
+
+    it('returns 400 when message missing', async () => {
+      const res = await fetch(`${getUrl()}/api/crews/demo-crew/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspacePath: '/tmp' }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('message is required');
+    });
+
+    it('returns 400 when workspacePath missing', async () => {
+      const res = await fetch(`${getUrl()}/api/crews/demo-crew/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello' }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('workspacePath is required');
+    });
+
+    it('returns 404 when crew not found', async () => {
+      const res = await fetch(`${getUrl()}/api/crews/nonexistent-crew/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp' }),
+      });
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('Crew not found');
+    });
+
+    it('streams SSE events for valid crew chat', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'token', data: { delta: 'crew reply' } };
+        yield { event: 'done', data: {} };
+      });
+
+      const res = await fetch(`${getUrl()}/api/crews/demo-crew/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('text/event-stream');
+
+      const raw = await res.text();
+      const events = parseSSE(raw);
+      const eventTypes = events.map((e) => e.event);
+
+      expect(eventTypes).toContain('session-start');
+      expect(eventTypes).toContain('token');
+      expect(eventTypes).toContain('done');
+
+      expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes crewId, subAgents, primary agent name, and crew system prompt to AgentSession.create', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      const res = await fetch(`${getUrl()}/api/crews/demo-crew/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
+
+      const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
+
+      // crewId is persisted to runnerConfig snapshot
+      expect(callArg.crewId).toBe('demo-crew');
+      // agentName is the primary agent of the crew
+      expect(callArg.agentName).toBe('orchestrator');
+      // subAgents are non-primary agents (researcher)
+      const subAgents = callArg.subAgents as Array<{ name: string }>;
+      expect(Array.isArray(subAgents)).toBe(true);
+      expect(subAgents.map((s) => s.name)).toEqual(['researcher']);
+      // agentInstructions carry the composed crew system prompt (memory + primary instructions + catalog)
+      const instructions = callArg.agentInstructions as string;
+      expect(instructions).toContain('Shared crew memory');
+      expect(instructions).toContain('Orchestrate');
+      // BUILTIN_SKILLS_DIR is appended
+      expect(callArg.skillDirs).toEqual([expect.any(String)]);
+    });
+
+    it('emits session-start, forwards client disconnect to agentSession.stop()', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      let unblock: () => void = () => {};
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'token', data: { delta: 'partial' } };
+        await new Promise<void>((resolve) => {
+          unblock = resolve;
+        });
+        yield { event: 'done', data: {} };
+      });
+
+      const controller = new AbortController();
+      const res = await fetch(`${getUrl()}/api/crews/demo-crew/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
+        signal: controller.signal,
+      });
+
+      const reader = res.body!.getReader();
+      await reader.read();
+      controller.abort();
+      try {
+        await reader.read();
+      } catch {
+        // expected
+      }
+
+      await new Promise((r) => setTimeout(r, 100));
+      expect(mockSession.stop).toHaveBeenCalledTimes(1);
+      unblock();
+    });
+  });
 });
