@@ -10,13 +10,20 @@ import type { TokenStats } from '@agentskillmania/llm-client';
 
 // ─── Target ─────────────────────────────────────────────────
 
-/** What is being evaluated — an agent definition or a skill. */
+/** What is being evaluated — an agent definition, a skill, or a crew. */
 export interface EvalTarget {
-  /** 'agent' evaluates an AGENT.md definition; 'skill' evaluates a SKILL.md. */
-  type: 'agent' | 'skill';
-  /** Directory containing the AGENT.md / CREW.md (for agent) or the skill parent dir (for skill). */
+  /**
+   * 'agent' evaluates an AGENT.md definition.
+   * 'skill' evaluates a SKILL.md (target.skill names which skill).
+   * 'crew' evaluates a CREW.md + agents/*.md crew definition.
+   */
+  type: 'agent' | 'skill' | 'crew';
+  /**
+   * Directory containing AGENT.md (for agent), CREW.md + agents/ (for crew),
+   * or the skill parent dir (for skill).
+   */
   path: string;
-  /** When type=skill, the skill name to load via load_skill. Null for type=agent. */
+  /** When type=skill, the skill name to load via load_skill. Null otherwise. */
   skill: string | null;
 }
 

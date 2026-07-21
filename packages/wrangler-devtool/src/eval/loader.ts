@@ -15,7 +15,7 @@ import type { EvalSuite } from './types.js';
 // ─── Zod schemas ────────────────────────────────────────────
 
 const targetSchema = z.object({
-  type: z.literal('agent').or(z.literal('skill')),
+  type: z.literal('agent').or(z.literal('skill')).or(z.literal('crew')),
   path: z.string().min(1),
   skill: z.string().nullable(),
 });

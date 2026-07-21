@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { AgentAdapter } from './adapters/agent-adapter.js';
+import { CrewAdapter } from './adapters/crew-adapter.js';
 import { SkillAdapter } from './adapters/skill-adapter.js';
 import type { ExecutionAdapter } from './adapters/types.js';
 import { loadEvalLlmConfig } from './config.js';
@@ -66,6 +67,19 @@ export async function runEval(
 }
 
 /**
+ * Pick the adapter for a target type.
+ *
+ * - agent → AgentAdapter (default, evaluates AGENT.md)
+ * - skill → SkillAdapter (auto-loads the named skill)
+ * - crew  → CrewAdapter (loads CREW.md + agents/*.md, enables sub-agents)
+ */
+function createAdapter(type: EvalSuite['target']['type']): ExecutionAdapter {
+  if (type === 'skill') return new SkillAdapter();
+  if (type === 'crew') return new CrewAdapter();
+  return new AgentAdapter();
+}
+
+/**
  * Stateful runner — useful when you need to inspect intermediate state.
  * Most callers should use the `runEval` function instead.
  */
@@ -78,8 +92,7 @@ export class EvalRunner {
   constructor(suite: EvalSuite, options: EvalRunnerOptions = {}) {
     this.suite = suite;
     this.options = options;
-    this.adapter =
-      options.adapter ?? (suite.target.type === 'skill' ? new SkillAdapter() : new AgentAdapter());
+    this.adapter = options.adapter ?? createAdapter(suite.target.type);
     this.registry = new EvaluatorRegistry();
   }
 

@@ -10,9 +10,14 @@ import type { EvalReport } from '../types.js';
 export function formatReport(report: EvalReport): string {
   const lines: string[] = [];
 
-  const target = report.target.skill
-    ? `skill/${report.target.skill}`
-    : `agent (${report.target.path})`;
+  let target: string;
+  if (report.target.type === 'crew') {
+    target = `crew (${report.target.path})`;
+  } else if (report.target.skill) {
+    target = `skill/${report.target.skill}`;
+  } else {
+    target = `agent (${report.target.path})`;
+  }
 
   lines.push(`Suite: ${report.suite}  Target: ${target}  Runs: ${report.sampling.runs}`);
   lines.push('─'.repeat(60));

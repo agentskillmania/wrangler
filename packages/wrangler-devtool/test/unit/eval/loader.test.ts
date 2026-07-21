@@ -86,6 +86,31 @@ cases:
     expect(suite.sampling.passThreshold).toBe(0.67);
   });
 
+  it('parses crew target with a crew directory path', async () => {
+    const path = writeYaml(`
+name: crew-eval
+target:
+  type: crew
+  path: ./my-crew
+  skill: null
+sampling:
+  runs: 1
+  passThreshold: 1
+cases:
+  - name: delegates
+    input:
+      message: Hello
+    evaluators:
+      - type: tool_called
+        tool: delegate
+`);
+    const suite = await loadSuite(path);
+
+    expect(suite.target.type).toBe('crew');
+    expect(suite.target.path).toBe('./my-crew');
+    expect(suite.target.skill).toBeNull();
+  });
+
   it('parses context with files and env', async () => {
     const path = writeYaml(`
 name: ctx

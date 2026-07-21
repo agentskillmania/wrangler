@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { EvalRunner } from '../../../src/eval/runner.js';
+import { CrewAdapter } from '../../../src/eval/adapters/crew-adapter.js';
+import { SkillAdapter } from '../../../src/eval/adapters/skill-adapter.js';
+import { AgentAdapter } from '../../../src/eval/adapters/agent-adapter.js';
 import type { ExecutionAdapter } from '../../../src/eval/adapters/types.js';
 import type { EvalSuite, EvalTrace, EvaluatorSpec } from '../../../src/eval/types.js';
 
@@ -284,5 +287,46 @@ describe('EvalRunner', () => {
     expect(new Date(report.finishedAt).getTime()).toBeGreaterThanOrEqual(
       new Date(report.startedAt).getTime()
     );
+  });
+
+  // ─── Adapter dispatch by target.type ─────────────────────────
+
+  describe('adapter dispatch', () => {
+    // The constructor exposes the chosen adapter for inspection via this
+    // cast — it's private at the type level but accessible at runtime.
+    function getAdapter(runner: EvalRunner): ExecutionAdapter {
+      return (runner as unknown as { adapter: ExecutionAdapter }).adapter;
+    }
+
+    it('selects AgentAdapter for type=agent', () => {
+      const suite = makeSuite({ target: { type: 'agent', path: './', skill: null } });
+      const runner = new EvalRunner(suite, { outputDir: tempDir });
+      expect(getAdapter(runner)).toBeInstanceOf(AgentAdapter);
+    });
+
+    it('selects SkillAdapter for type=skill', () => {
+      const suite = makeSuite({
+        target: { type: 'skill', path: './skills', skill: 'my-skill' },
+      });
+      const runner = new EvalRunner(suite, { outputDir: tempDir });
+      expect(getAdapter(runner)).toBeInstanceOf(SkillAdapter);
+    });
+
+    it('selects CrewAdapter for type=crew', () => {
+      const suite = makeSuite({
+        target: { type: 'crew', path: './my-crew', skill: null },
+      });
+      const runner = new EvalRunner(suite, { outputDir: tempDir });
+      expect(getAdapter(runner)).toBeInstanceOf(CrewAdapter);
+    });
+
+    it('explicit options.adapter overrides auto-dispatch', () => {
+      const suite = makeSuite({
+        target: { type: 'crew', path: './my-crew', skill: null },
+      });
+      const custom: ExecutionAdapter = { execute: async () => makeTrace('x', 0, 'x') };
+      const runner = new EvalRunner(suite, { outputDir: tempDir, adapter: custom });
+      expect(getAdapter(runner)).toBe(custom);
+    });
   });
 });

@@ -2,8 +2,8 @@ name: example-eval
 description: An example evaluation suite demonstrating the YAML format
 
 target:
-  type: agent              # agent | skill
-  path: ./                 # agent definition directory (for skill: skill parent dir)
+  type: agent              # agent | skill | crew
+  path: ./                 # agent definition directory (for skill: skill parent dir; for crew: crew directory containing CREW.md)
   skill: null              # when type=skill, the skill name to load
 
 sampling:
@@ -31,3 +31,29 @@ cases:
         path: greeting.txt
       - type: output_contains
         value: greeting
+
+# ─── Crew example (uncomment to evaluate a crew) ─────────────────────
+# A crew target points at a directory containing CREW.md + agents/*.md.
+# CrewAdapter loads the crew via CrewLoader, constructs an EnhancedRunner
+# with subAgents enabled, and runs the case. Use tool_called / tool_called_with
+# on 'delegate' to assert the primary agent delegated to the right sub-agent.
+#
+# name: crew-eval
+# description: Evaluate a crew's delegation behavior
+# target:
+#   type: crew
+#   path: ./my-crew
+#   skill: null
+# sampling:
+#   runs: 3
+#   passThreshold: 0.66
+# cases:
+#   - name: delegates-to-researcher
+#     input:
+#       message: What is X?
+#     evaluators:
+#       - type: tool_called_with
+#         tool: delegate
+#         arguments: { agent: researcher }
+#       - type: output_contains
+#         value: RESEARCHER_OK
