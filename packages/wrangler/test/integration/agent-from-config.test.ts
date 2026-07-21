@@ -177,6 +177,6 @@ You are a helpful assistant. Answer in one short sentence.`
       expect(result.result.type).toBe('success');
       expect(result.result.answer).toBeTruthy();
     },
-    60000
+    120000
   );
 });

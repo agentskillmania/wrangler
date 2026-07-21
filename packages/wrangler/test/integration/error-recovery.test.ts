@@ -59,7 +59,7 @@ describe('Error Recovery Integration Tests', () => {
         const toolMessages = finalState.context.messages.filter((m) => m.role === 'tool');
         expect(toolMessages.length).toBeGreaterThanOrEqual(1);
       },
-      60000
+      120000
     );
 
     itif(testConfig.enabled)(
@@ -82,7 +82,7 @@ describe('Error Recovery Integration Tests', () => {
         const toolMessages = finalState.context.messages.filter((m) => m.role === 'tool');
         expect(toolMessages.length).toBeGreaterThanOrEqual(1);
       },
-      60000
+      120000
     );
   });
 
@@ -107,7 +107,7 @@ describe('Error Recovery Integration Tests', () => {
         // Result should be abort or success (if LLM was fast enough)
         expect(['abort', 'success']).toContain(result.type);
       },
-      30000
+      120000
     );
   });
 });

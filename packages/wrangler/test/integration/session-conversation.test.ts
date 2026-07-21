@@ -152,6 +152,6 @@ describe('US2: SessionStore conversation model', () => {
       const raw = await readFile(join(dir, 'session.jsonl'), 'utf-8');
       expect(raw.length).toBeGreaterThan(0);
     },
-    60000
+    120000
   );
 });

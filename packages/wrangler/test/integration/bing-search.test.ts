@@ -40,7 +40,7 @@ describe('BingScrapeSearchProvider (live)', () => {
       );
       expect(hasTypeScript).toBe(true);
     },
-    30000
+    120000
   );
 
   itif(ENABLE_NETWORK_TESTS)(
@@ -54,7 +54,7 @@ describe('BingScrapeSearchProvider (live)', () => {
         expect(r.url).toMatch(/^https?:\/\//);
       }
     },
-    30000
+    120000
   );
 
   itif(ENABLE_NETWORK_TESTS)(
@@ -68,7 +68,7 @@ describe('BingScrapeSearchProvider (live)', () => {
         expect(r.url).toMatch(/^https?:\/\//);
       }
     },
-    30000
+    120000
   );
 
   itif(ENABLE_NETWORK_TESTS)(
@@ -82,7 +82,7 @@ describe('BingScrapeSearchProvider (live)', () => {
       // but this verifies the provider doesn't crash on unusual responses
       expect(Array.isArray(results)).toBe(true);
     },
-    30000
+    120000
   );
 
   itif(ENABLE_NETWORK_TESTS)(
@@ -110,7 +110,7 @@ describe('BingScrapeSearchProvider (live)', () => {
       // Allow some overlap but not all identical
       expect(overlap.length).toBeLessThan(results1.length);
     },
-    30000
+    120000
   );
 });
 
@@ -207,6 +207,6 @@ describe('web_search with BingScrapeSearchProvider (LLM E2E)', () => {
         `Expected response to mention Rust characteristics, but got: ${responseText.slice(0, 300)}`
       ).toBe(true);
     },
-    60000
+    120000
   );
 });

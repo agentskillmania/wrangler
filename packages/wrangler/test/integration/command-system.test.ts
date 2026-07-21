@@ -85,7 +85,7 @@ describe('Command System Integration Tests', () => {
     expect(result.data).toBe('Session cleared.');
     expect(result.totalSteps).toBe(1);
     expect(finalState.context.messages).toHaveLength(0);
-  }, 30000);
+  }, 120000);
 
   /**
    * Test 2: /skill:name with body — skill loaded, LLM continues
@@ -113,7 +113,7 @@ describe('Command System Integration Tests', () => {
 
     expect(result.type).toBe('success');
     expect(result.answer).toBeTruthy();
-  }, 30000);
+  }, 120000);
 
   /**
    * Test 3: /skill:name without body — skill loaded, run stops
@@ -142,7 +142,7 @@ describe('Command System Integration Tests', () => {
     expect(result.type).toBe('stopped');
     expect(result.data).toContain('test-skill');
     expect(finalState.context.skillState?.current).toBe('test-skill');
-  }, 30000);
+  }, 120000);
 
   /**
    * Test 4: /compact command — messages compressed
@@ -198,7 +198,7 @@ describe('Command System Integration Tests', () => {
     expect(result.type).toBe('stopped');
     expect(result.data).toContain('compressed');
     expect(finalState.context.compression).toHaveProperty('removedTokenCount');
-  }, 30000);
+  }, 120000);
 
   /**
    * Test 5: Unknown command — normal LLM flow
@@ -222,7 +222,7 @@ describe('Command System Integration Tests', () => {
 
     expect(result.type).toBe('success');
     expect(result.answer).toBeTruthy();
-  }, 30000);
+  }, 120000);
 
   /**
    * Test 6: Custom command overriding built-in
@@ -261,7 +261,7 @@ describe('Command System Integration Tests', () => {
 
     expect(result.type).toBe('stopped');
     expect(result.data).toBe('Custom clear executed!');
-  }, 30000);
+  }, 120000);
 
   /**
    * Test 7: /skills command lists available skills
@@ -289,7 +289,7 @@ describe('Command System Integration Tests', () => {
 
     expect(result.type).toBe('stopped');
     expect(result.data).toContain('test-skill');
-  }, 30000);
+  }, 120000);
 
   /**
    * Test 8: Non-slash message passes through to LLM
@@ -313,5 +313,5 @@ describe('Command System Integration Tests', () => {
 
     expect(result.type).toBe('success');
     expect(result.answer).toBeTruthy();
-  }, 30000);
+  }, 120000);
 });

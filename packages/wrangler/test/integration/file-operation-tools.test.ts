@@ -125,7 +125,7 @@ describe('File Operation Tools E2E', () => {
       const readFileCalls = toolCalls.filter((tc) => tc.name === 'file_read');
       expect(readFileCalls.length).toBeGreaterThan(0);
     },
-    60000
+    120000
   );
 
   /**
@@ -199,7 +199,7 @@ describe('File Operation Tools E2E', () => {
       expect(writeFileCalls.length).toBeGreaterThan(0);
       expect(readFileCalls.length).toBeGreaterThan(0);
     },
-    60000
+    120000
   );
 
   /**
@@ -258,7 +258,7 @@ describe('File Operation Tools E2E', () => {
       expect(readFileCalls.length).toBeGreaterThan(0);
       expect(editFileCalls.length).toBeGreaterThan(0);
     },
-    60000
+    120000
   );
 
   /**
@@ -321,7 +321,7 @@ describe('File Operation Tools E2E', () => {
       const globCalls = toolCalls.filter((tc) => tc.name === 'glob');
       expect(globCalls.length).toBeGreaterThan(0);
     },
-    60000
+    120000
   );
 
   /**
@@ -386,6 +386,6 @@ describe('File Operation Tools E2E', () => {
       const grepCalls = toolCalls.filter((tc) => tc.name === 'grep');
       expect(grepCalls.length).toBeGreaterThan(0);
     },
-    60000
+    120000
   );
 });

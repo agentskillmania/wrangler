@@ -209,7 +209,7 @@ Report what you did and confirm each step succeeded.
 
         expect(specPlanTools).toHaveLength(0);
       },
-      30000
+      120000
     );
   });
 });

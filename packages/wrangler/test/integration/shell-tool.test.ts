@@ -88,7 +88,7 @@ describe('US1: LLM executes shell command and reports result', () => {
       const shellCalls = toolCalls.filter((tc) => tc.name === 'shell');
       expect(shellCalls.length).toBeGreaterThan(0);
     },
-    60000
+    120000
   );
 });
 
@@ -141,7 +141,7 @@ describe('US2: LLM uses shell tool for computation', () => {
       const shellCalls = toolCalls.filter((tc) => tc.name === 'shell');
       expect(shellCalls.length).toBeGreaterThan(0);
     },
-    60000
+    120000
   );
 });
 
@@ -198,6 +198,6 @@ describe('US3: LLM handles shell command failure gracefully', () => {
       const shellCalls = toolCalls.filter((tc) => tc.name === 'shell');
       expect(shellCalls.length).toBeGreaterThan(0);
     },
-    60000
+    120000
   );
 });
