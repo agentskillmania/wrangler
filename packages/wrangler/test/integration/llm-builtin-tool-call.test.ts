@@ -98,7 +98,7 @@ describe('LLM tool calling: builtin tools', () => {
           : JSON.stringify(lastAssistant!.content);
       expect(responseText.toLowerCase()).toContain('existing');
     },
-    120000
+    180000
   );
 
   itif(enabled)(
@@ -133,7 +133,7 @@ describe('LLM tool calling: builtin tools', () => {
       expect(edited).not.toContain('1.0.0');
       expect(edited).toContain('my-app');
     },
-    120000
+    180000
   );
 
   itif(enabled)(
@@ -178,7 +178,7 @@ describe('LLM tool calling: builtin tools', () => {
         typeof lastMsg!.content === 'string' ? lastMsg!.content : JSON.stringify(lastMsg!.content);
       expect(responseText.toLowerCase()).toContain('user');
     },
-    120000
+    180000
   );
 
   itif(enabled)(
@@ -208,7 +208,7 @@ describe('LLM tool calling: builtin tools', () => {
         typeof lastMsg!.content === 'string' ? lastMsg!.content : JSON.stringify(lastMsg!.content);
       expect(responseText.length).toBeGreaterThan(20);
     },
-    120000
+    180000
   );
 
   itif(enabled)(
@@ -238,6 +238,6 @@ describe('LLM tool calling: builtin tools', () => {
       expect(typeof summary).toBe('string');
       expect(summary!.toLowerCase()).toContain('5');
     },
-    120000
+    180000
   );
 });

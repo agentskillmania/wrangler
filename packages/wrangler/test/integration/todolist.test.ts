@@ -93,7 +93,7 @@ describe('US1: LLM creates todo tasks from natural language', () => {
       expect(hasCount).toBe(true);
       expect(hasEvenOdd).toBe(true);
     },
-    60000
+    180000
   );
 });
 
@@ -134,7 +134,7 @@ describe('US2: LLM executes todo list and marks items completed', () => {
       );
       expect(allCompleted).toBe(true);
     },
-    60000
+    180000
   );
 });
 
@@ -272,6 +272,6 @@ describe('US4: LLM sees todo list in system prompt', () => {
       // This proves the ## Current Task List section was rendered in the system prompt
       // and the LLM saw and understood the todo items
     },
-    60000
+    180000
   );
 });
