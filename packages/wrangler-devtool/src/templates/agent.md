@@ -25,6 +25,6 @@ Describe the expected output structure with placeholders.
 
 ## Constraints
 
-- Available tools: `file_read`, `file_write`, `file_edit`, `shell`, `glob`, `grep`, `web_fetch`, `web_search`, `ask_human`
+- Available tools: `file_read`, `file_write`, `file_edit`, `glob`, `grep`, `shell`, `python`, `git`, `web_search`, `web_fetch`, `ask_human`, `load_skill` (+ `todo_create` / `todo_update` / `todo_read` when todolist is enabled, `delegate` when this agent runs inside a crew with sub-agents)
 - Do not perform destructive operations
 - Always read a file before modifying it
