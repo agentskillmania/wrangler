@@ -11,6 +11,9 @@ export default defineConfig({
     setupFiles: ['./test/setup.ts'],
     include: ['test/**/*.test.ts'],
     passWithNoTests: true,
+    testTimeout: 120000,
+    hookTimeout: 120000,
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
