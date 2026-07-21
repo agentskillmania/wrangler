@@ -1,6 +1,6 @@
 import { SessionNotFoundError } from '@agentskillmania/wrangler';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { AgentSession } from '../core/agent-session.js';
 import type { AgentSessionOptions } from '../core/agent-session.js';
@@ -200,53 +200,13 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     sessionManager().setAgentSession(sessionId, agentSession);
     sessionManager().updateStatus(sessionId, 'running');
 
-    reply.hijack();
-    reply.raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
+    await streamAgentSession(reply, agentSession, body.message, {
+      thinkingEnabled: body.thinkingEnabled,
+      model: body.model,
+      sessionId,
+      sessionManager: sessionManager(),
+      emitSessionStart: true,
     });
-
-    // CONC5: if the client drops the connection (page close, network loss,
-    // or premature EventSource close), abort the agent so it stops burning
-    // tokens and the session returns to idle instead of hanging in running.
-    // We listen on reply.raw (the socket) rather than request.raw, because
-    // once the request body is consumed request.raw has nothing left to
-    // signal — reply.raw is what actually reflects socket lifecycle.
-    // `settled` distinguishes a client disconnect (still streaming) from the
-    // natural end of the stream, which also closes reply.raw.
-    let clientGone = false;
-    let settled = false;
-    const onDisconnect = () => {
-      if (!settled && !clientGone) {
-        clientGone = true;
-        agentSession.stop();
-      }
-    };
-    reply.raw.on('close', onDisconnect);
-
-    // Send sessionId as first event so client can save it
-    writeSSE(reply, 'session-start', { sessionId });
-    agentSession.emitCockpitEvent({ event: 'session-start', data: { sessionId } });
-
-    try {
-      for await (const sse of agentSession.handleMessage(body.message, {
-        thinkingEnabled: body.thinkingEnabled,
-        model: body.model,
-      })) {
-        if (clientGone) break;
-        writeSSE(reply, sse.event, sse.data);
-      }
-      if (!clientGone) sessionManager().updateStatus(sessionId, 'idle');
-    } catch {
-      if (!clientGone) {
-        writeSSE(reply, 'error', { message: 'Internal server error' });
-        sessionManager().updateStatus(sessionId, 'error');
-      }
-    } finally {
-      settled = true;
-      if (!clientGone) reply.raw.end();
-    }
   });
 
   /**
@@ -310,43 +270,85 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     sessionManager().updateStatus(sessionId, 'running');
 
-    reply.hijack();
-    reply.raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
+    await streamAgentSession(reply, agentSession, body.message, {
+      thinkingEnabled: body.thinkingEnabled,
+      model: body.model,
+      sessionId,
+      sessionManager: sessionManager(),
+      // Resume does NOT emit session-start (the client already has the id).
+      emitSessionStart: false,
     });
-
-    // CONC5: stop the agent if the client drops the connection mid-stream.
-    // See new-conversation route above for why reply.raw (not request.raw)
-    // and why the `settled` guard is required.
-    let clientGone = false;
-    let settled = false;
-    const onDisconnect = () => {
-      if (!settled && !clientGone) {
-        clientGone = true;
-        agentSession.stop();
-      }
-    };
-    reply.raw.on('close', onDisconnect);
-
-    try {
-      for await (const sse of agentSession.handleMessage(body.message, {
-        thinkingEnabled: body.thinkingEnabled,
-        model: body.model,
-      })) {
-        if (clientGone) break;
-        writeSSE(reply, sse.event, sse.data);
-      }
-      if (!clientGone) sessionManager().updateStatus(sessionId, 'idle');
-    } catch {
-      if (!clientGone) {
-        writeSSE(reply, 'error', { message: 'Internal server error' });
-        sessionManager().updateStatus(sessionId, 'error');
-      }
-    } finally {
-      settled = true;
-      if (!clientGone) reply.raw.end();
-    }
   });
+}
+
+/**
+ * Shared SSE streaming helper for both new-conversation and resume routes.
+ *
+ * Responsibilities:
+ * 1. Hijack the reply and open a `text/event-stream`.
+ * 2. Optionally emit `session-start` as the first event (new chats only).
+ * 3. Forward each event from `agentSession.handleMessage` to the client.
+ * 4. CONC5: abort the agent when the client drops the connection mid-stream
+ *    so the runner does not keep burning tokens after the user navigates away.
+ * 5. Update SessionManager status to idle/error and close the stream cleanly.
+ *
+ * The `settled` flag distinguishes a client disconnect from the natural end
+ * of the stream — both close `reply.raw`, so we need it to avoid calling
+ * `stop()` after the run already finished.
+ */
+async function streamAgentSession(
+  reply: FastifyReply,
+  agentSession: AgentSession,
+  message: string,
+  opts: {
+    thinkingEnabled?: boolean;
+    model?: string;
+    sessionId: string;
+    sessionManager: DecoratedFastifyInstance['sessionManager'];
+    emitSessionStart: boolean;
+  }
+): Promise<void> {
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  let clientGone = false;
+  let settled = false;
+  const onDisconnect = () => {
+    if (!settled && !clientGone) {
+      clientGone = true;
+      agentSession.stop();
+    }
+  };
+  reply.raw.on('close', onDisconnect);
+
+  if (opts.emitSessionStart) {
+    writeSSE(reply, 'session-start', { sessionId: opts.sessionId });
+    agentSession.emitCockpitEvent({
+      event: 'session-start',
+      data: { sessionId: opts.sessionId },
+    });
+  }
+
+  try {
+    for await (const sse of agentSession.handleMessage(message, {
+      thinkingEnabled: opts.thinkingEnabled,
+      model: opts.model,
+    })) {
+      if (clientGone) break;
+      writeSSE(reply, sse.event, sse.data);
+    }
+    if (!clientGone) opts.sessionManager.updateStatus(opts.sessionId, 'idle');
+  } catch {
+    if (!clientGone) {
+      writeSSE(reply, 'error', { message: 'Internal server error' });
+      opts.sessionManager.updateStatus(opts.sessionId, 'error');
+    }
+  } finally {
+    settled = true;
+    if (!clientGone) reply.raw.end();
+  }
 }
