@@ -123,7 +123,7 @@ describe('US2: SessionStore conversation model', () => {
         sessionBaseDir: testBaseDir,
       });
 
-      const runner = makeRunner(session.tools, [session.middleware]);
+      const runner = makeRunner(session.tools, session.middlewares);
 
       let state = createAgentState({
         name: 'test-agent',

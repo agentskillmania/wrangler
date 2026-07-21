@@ -162,7 +162,7 @@ describe('US3: Todo state persists across sessions', () => {
       // Round 1: Create todos
       const runner1 = makeRunner(
         [...session.tools, ...todolistSupport.tools],
-        [session.middleware, todolistSupport.middleware]
+        [session.middlewares[0], todolistSupport.middleware]
       );
 
       let state1 = createAgentState({
@@ -189,7 +189,7 @@ describe('US3: Todo state persists across sessions', () => {
 
       const runner2 = makeRunner(
         [...session.tools, ...todolistSupport.tools],
-        [session.middleware, todolistSupport.middleware]
+        [session.middlewares[0], todolistSupport.middleware]
       );
 
       const state2 = addUserMessage(loaded!, 'What tasks are in my todo list?');

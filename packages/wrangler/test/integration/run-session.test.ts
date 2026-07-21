@@ -69,7 +69,7 @@ describe('US1: Create Runner and execute single-turn conversation', () => {
         sessionBaseDir: testBaseDir,
       });
 
-      const runner = makeRunner(session.tools, [session.middleware]);
+      const runner = makeRunner(session.tools, session.middlewares);
 
       let state = createAgentState({
         name: 'test-agent',
@@ -113,7 +113,7 @@ describe('US1: Create Runner and execute single-turn conversation', () => {
         sessionBaseDir: testBaseDir,
       });
 
-      const runner = makeRunner(session.tools, [session.middleware]);
+      const runner = makeRunner(session.tools, session.middlewares);
 
       let state = createAgentState({
         name: 'math-agent',
@@ -163,7 +163,7 @@ describe('US2: Resume Session and continue conversation', () => {
       });
 
       // Round 1
-      const runner1 = makeRunner(session.tools, [session.middleware]);
+      const runner1 = makeRunner(session.tools, session.middlewares);
 
       let state = createAgentState(agentConfig);
       state = addUserMessage(state, 'My name is Alice. Remember it.');
@@ -174,7 +174,7 @@ describe('US2: Resume Session and continue conversation', () => {
       const loaded = await session.store.loadState(sessionId);
       expect(loaded).toHaveProperty('id');
 
-      const runner2 = makeRunner(session.tools, [session.middleware]);
+      const runner2 = makeRunner(session.tools, session.middlewares);
 
       const resumedState = addUserMessage(loaded!, 'What is my name?');
       const { state: finalState } = await runner2.run(resumedState);

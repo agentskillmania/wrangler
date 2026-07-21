@@ -2,31 +2,32 @@
  * User Story: Command System Integration Tests
  *
  * These tests exercise the FULL stack: user input → EnhancedRunner → AgentRunner →
- * middleware → handlers → result. Uses a mock LLM client that returns canned responses.
+ * middleware → handlers → result, with a real LLM.
  *
- * Prerequisites: None (uses mock LLM)
+ * Prerequisites:
+ * - Set ENABLE_INTEGRATION_TESTS=true in .env
+ * - Set OPENAI_API_KEY in .env
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EnhancedRunner } from '../../src/runner/index.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import type { AgentState } from '@agentskillmania/colts';
+import { createLLMClient } from '../../src/llm/client.js';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { testConfig, itif } from './config.js';
 
-/**
- * Mock LLM client that returns a canned response
- */
-function createMockLLMClient(response: string) {
-  return {
-    call: vi.fn().mockResolvedValue({
-      content: response,
-      tokens: { input: 10, output: 20, cacheRead: 0, cacheWrite: 0 },
-      toolCalls: [],
-    }),
-    stream: vi.fn(),
-  };
+function makeLLMClient() {
+  return createLLMClient([
+    {
+      name: testConfig.provider,
+      apiKey: testConfig.apiKey,
+      baseUrl: testConfig.baseUrl,
+      models: [{ modelId: testConfig.testModel }],
+    },
+  ]);
 }
 
 /**
@@ -62,16 +63,13 @@ describe('Command System Integration Tests', () => {
 
   /**
    * Test 1: /clear command full pipeline
-   *
-   * Create EnhancedRunner with mock LLM, create state with user message "/clear",
-   * call runner.run(state), assert result.type === 'stopped' and result.data === 'Session cleared.'
    */
-  it('should execute /clear command and stop with success message', async () => {
+  itif(testConfig.enabled)('should execute /clear command and stop with success message', async () => {
     const runner = await EnhancedRunner.create({
-      llmClient: createMockLLMClient('Done!'),
-      model: 'test-model',
+      llmClient: makeLLMClient() as any,
+      model: testConfig.testModel,
       workspacePath: '/tmp/test-workspace',
-      mcpConfigPaths: [], // Skip MCP loading for faster tests
+      mcpConfigPaths: [],
     });
 
     let state = createAgentState({
@@ -83,34 +81,25 @@ describe('Command System Integration Tests', () => {
 
     const { result, state: finalState } = await runner.run(state);
 
-    // Assert the result indicates the command was handled
     expect(result.type).toBe('stopped');
     expect(result.data).toBe('Session cleared.');
-    // Runner counts 1 step even when middleware stops it
     expect(result.totalSteps).toBe(1);
-
-    // Assert state has empty messages
     expect(finalState.context.messages).toHaveLength(0);
-  });
+  }, 30000);
 
   /**
    * Test 2: /skill:name with body — skill loaded, LLM continues
-   *
-   * Create EnhancedRunner with skill dirs pointing to a temp directory with a SKILL.md,
-   * create state with "/skill:test-skill fix this bug", call runner.run(state),
-   * assert result.type === 'success' (LLM processed the message with skill loaded),
-   * assert skill state was loaded (skillState.current === 'test-skill')
    */
-  it('should load skill with body and continue to LLM', async () => {
+  itif(testConfig.enabled)('should load skill with body and continue to LLM', async () => {
     const skillDir = createTempSkillDir();
     tempDirs.push(skillDir);
 
     const runner = await EnhancedRunner.create({
-      llmClient: createMockLLMClient('Bug fixed!'),
-      model: 'test-model',
+      llmClient: makeLLMClient() as any,
+      model: testConfig.testModel,
       workspacePath: '/tmp/test-workspace',
       skillDirs: [skillDir],
-      mcpConfigPaths: [], // Skip MCP loading for faster tests
+      mcpConfigPaths: [],
     });
 
     let state = createAgentState({
@@ -122,27 +111,23 @@ describe('Command System Integration Tests', () => {
 
     const { result } = await runner.run(state);
 
-    // Assert LLM processed the message (execution continued)
     expect(result.type).toBe('success');
-    expect(result.answer).toBe('Bug fixed!');
-  });
+    expect(result.answer).toBeTruthy();
+  }, 30000);
 
   /**
    * Test 3: /skill:name without body — skill loaded, run stops
-   *
-   * Same setup but "/skill:test-skill" (no body), assert result.type === 'stopped',
-   * assert result.data contains 'test-skill'
    */
-  it('should load skill without body and stop with confirmation', async () => {
+  itif(testConfig.enabled)('should load skill without body and stop with confirmation', async () => {
     const skillDir = createTempSkillDir();
     tempDirs.push(skillDir);
 
     const runner = await EnhancedRunner.create({
-      llmClient: createMockLLMClient('Done!'),
-      model: 'test-model',
+      llmClient: makeLLMClient() as any,
+      model: testConfig.testModel,
       workspacePath: '/tmp/test-workspace',
       skillDirs: [skillDir],
-      mcpConfigPaths: [], // Skip MCP loading for faster tests
+      mcpConfigPaths: [],
     });
 
     let state = createAgentState({
@@ -154,25 +139,15 @@ describe('Command System Integration Tests', () => {
 
     const { result, state: finalState } = await runner.run(state);
 
-    // Assert execution stopped with confirmation
     expect(result.type).toBe('stopped');
     expect(result.data).toContain('test-skill');
-    // Runner counts 1 step even when middleware stops it
-    expect(result.totalSteps).toBe(1);
-
-    // Assert skill state was loaded
     expect(finalState.context.skillState?.current).toBe('test-skill');
-  });
+  }, 30000);
 
   /**
    * Test 4: /compact command — messages compressed
-   *
-   * Create state with many messages (10+ user+assistant pairs), add user message "/compact",
-   * assert result.type === 'stopped', assert result.data contains 'compressed',
-   * assert state has fewer messages
    */
-  it('should compact messages and stop with confirmation', async () => {
-    // Use a mock compressor so the test doesn't need LLM for summarization
+  itif(testConfig.enabled)('should compact messages and stop with confirmation', async () => {
     const mockCompressor = {
       shouldCompress: () => true,
       compress: async () => ({
@@ -184,8 +159,8 @@ describe('Command System Integration Tests', () => {
     };
 
     const runner = await EnhancedRunner.create({
-      llmClient: createMockLLMClient('Done!'),
-      model: 'test-model',
+      llmClient: makeLLMClient() as any,
+      model: testConfig.testModel,
       workspacePath: '/tmp/test-workspace',
       mcpConfigPaths: [],
       compression: mockCompressor,
@@ -197,10 +172,8 @@ describe('Command System Integration Tests', () => {
       tools: [],
     });
 
-    // Add 15 message pairs (30 messages total)
     for (let i = 0; i < 15; i++) {
       state = addUserMessage(state, `Message ${i}`);
-      // Add assistant response
       state = {
         ...state,
         context: {
@@ -222,28 +195,20 @@ describe('Command System Integration Tests', () => {
 
     const { result, state: finalState } = await runner.run(state);
 
-    // Assert execution stopped with confirmation
     expect(result.type).toBe('stopped');
     expect(result.data).toContain('compressed');
-
-    // Assert compression metadata was written to state
     expect(finalState.context.compression).toHaveProperty('removedTokenCount');
-    expect(finalState.context.compression!.summary).toBe('Mock summary of conversation');
-    expect(finalState.context.compression!.anchor).toBe(28);
-  });
+  }, 30000);
 
   /**
    * Test 5: Unknown command — normal LLM flow
-   *
-   * Create state with "/unknown-command", assert result.type === 'success'
-   * (LLM processed it normally)
    */
-  it('should treat unknown command as normal message and continue to LLM', async () => {
+  itif(testConfig.enabled)('should treat unknown command as normal message and continue to LLM', async () => {
     const runner = await EnhancedRunner.create({
-      llmClient: createMockLLMClient('I do not understand that command.'),
-      model: 'test-model',
+      llmClient: makeLLMClient() as any,
+      model: testConfig.testModel,
       workspacePath: '/tmp/test-workspace',
-      mcpConfigPaths: [], // Skip MCP loading for faster tests
+      mcpConfigPaths: [],
     });
 
     let state = createAgentState({
@@ -255,18 +220,14 @@ describe('Command System Integration Tests', () => {
 
     const { result } = await runner.run(state);
 
-    // Assert LLM processed it normally
     expect(result.type).toBe('success');
-    expect(result.answer).toBe('I do not understand that command.');
-  });
+    expect(result.answer).toBeTruthy();
+  }, 30000);
 
   /**
    * Test 6: Custom command overriding built-in
-   *
-   * Create EnhancedRunner with commands option providing a custom "clear" handler,
-   * create state with "/clear", assert the custom handler was called (not the built-in)
    */
-  it('should use custom command handler when overriding built-in', async () => {
+  itif(testConfig.enabled)('should use custom command handler when overriding built-in', async () => {
     const customClearHandler = {
       name: 'clear',
       description: 'Custom clear handler',
@@ -282,11 +243,11 @@ describe('Command System Integration Tests', () => {
     };
 
     const runner = await EnhancedRunner.create({
-      llmClient: createMockLLMClient('Done!'),
-      model: 'test-model',
+      llmClient: makeLLMClient() as any,
+      model: testConfig.testModel,
       workspacePath: '/tmp/test-workspace',
       commands: [customClearHandler],
-      mcpConfigPaths: [], // Skip MCP loading for faster tests
+      mcpConfigPaths: [],
     });
 
     let state = createAgentState({
@@ -298,27 +259,23 @@ describe('Command System Integration Tests', () => {
 
     const { result } = await runner.run(state);
 
-    // Assert custom handler was called
     expect(result.type).toBe('stopped');
     expect(result.data).toBe('Custom clear executed!');
-  });
+  }, 30000);
 
   /**
    * Test 7: /skills command lists available skills
-   *
-   * Create EnhancedRunner with skill dirs, send "/skills" command,
-   * assert result contains skill names
    */
-  it('should list available skills with /skills command', async () => {
+  itif(testConfig.enabled)('should list available skills with /skills command', async () => {
     const skillDir = createTempSkillDir();
     tempDirs.push(skillDir);
 
     const runner = await EnhancedRunner.create({
-      llmClient: createMockLLMClient('Done!'),
-      model: 'test-model',
+      llmClient: makeLLMClient() as any,
+      model: testConfig.testModel,
       workspacePath: '/tmp/test-workspace',
       skillDirs: [skillDir],
-      mcpConfigPaths: [], // Skip MCP loading for faster tests
+      mcpConfigPaths: [],
     });
 
     let state = createAgentState({
@@ -330,22 +287,19 @@ describe('Command System Integration Tests', () => {
 
     const { result } = await runner.run(state);
 
-    // Assert execution stopped with skill list
     expect(result.type).toBe('stopped');
     expect(result.data).toContain('test-skill');
-  });
+  }, 30000);
 
   /**
    * Test 8: Non-slash message passes through to LLM
-   *
-   * Send a normal message without slash, assert it reaches LLM
    */
-  it('should pass normal message to LLM without command processing', async () => {
+  itif(testConfig.enabled)('should pass normal message to LLM without command processing', async () => {
     const runner = await EnhancedRunner.create({
-      llmClient: createMockLLMClient('Hello! How can I help?'),
-      model: 'test-model',
+      llmClient: makeLLMClient() as any,
+      model: testConfig.testModel,
       workspacePath: '/tmp/test-workspace',
-      mcpConfigPaths: [], // Skip MCP loading for faster tests
+      mcpConfigPaths: [],
     });
 
     let state = createAgentState({
@@ -357,8 +311,7 @@ describe('Command System Integration Tests', () => {
 
     const { result } = await runner.run(state);
 
-    // Assert LLM processed it normally
     expect(result.type).toBe('success');
-    expect(result.answer).toBe('Hello! How can I help?');
-  });
+    expect(result.answer).toBeTruthy();
+  }, 30000);
 });

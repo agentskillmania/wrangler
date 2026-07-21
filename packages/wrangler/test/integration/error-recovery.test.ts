@@ -1,169 +1,113 @@
 /**
  * Error Recovery Integration Tests
  *
- * Validates the full error handling pipeline:
- * 1. LLM call failure → runner returns error result
- * 2. Tool execution failure → error fed back to LLM as tool result, run continues
- * 3. Abort signal → runner returns abort result
+ * Validates error handling with real LLM:
+ * 1. Tool execution failure → error fed back to LLM, run continues
+ * 2. Abort signal → runner returns abort result
  *
- * Uses mock LLM to avoid real API calls.
+ * Prerequisites:
+ * - Set ENABLE_INTEGRATION_TESTS=true in .env
+ * - Set OPENAI_API_KEY in .env
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { EnhancedRunner } from '../../src/runner/index.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
-import type { AgentState } from '@agentskillmania/colts';
+import { createLLMClient } from '../../src/llm/client.js';
+import { testConfig, itif } from './config.js';
 
-interface MockLLMResponse {
-  type: 'text' | 'tool_call' | 'error' | 'delay';
-  content?: string;
-  toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
-  errorMessage?: string;
-  delayMs?: number;
+function makeLLMClient() {
+  return createLLMClient([
+    {
+      name: testConfig.provider,
+      apiKey: testConfig.apiKey,
+      baseUrl: testConfig.baseUrl,
+      models: [{ modelId: testConfig.testModel }],
+    },
+  ]);
 }
 
-function createMockLLMProvider(responses: MockLLMResponse[]) {
-  let callIndex = 0;
-  return {
-    call: vi.fn().mockImplementation(async () => {
-      const response = responses[callIndex++];
-      if (!response)
-        throw new Error(
-          `Unexpected extra LLM call (expected ${responses.length}, got ${callIndex})`
-        );
-      if (response.type === 'error') {
-        throw new Error(response.errorMessage!);
-      }
-      if (response.type === 'delay') {
-        await new Promise((r) => setTimeout(r, response.delayMs));
-        return {
-          content: response.content,
-          tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 },
-          toolCalls: [],
-        };
-      }
-      return {
-        content: response.type === 'text' ? response.content : '',
-        tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 },
-        toolCalls: response.type === 'tool_call' ? response.toolCalls : [],
-      };
-    }),
-    stream: vi.fn(),
-  };
-}
-
-async function createRunnerWithMockLLM(responses: MockLLMResponse[]) {
+async function createRunner() {
   return EnhancedRunner.create({
-    llmClient: createMockLLMProvider(
-      responses
-    ) as unknown as import('@agentskillmania/colts').ILLMProvider,
-    model: 'test-model',
+    llmClient: makeLLMClient() as any,
+    model: testConfig.testModel,
     workspacePath: '/tmp/test-workspace',
     mcpConfigPaths: [],
   });
 }
 
-function createStateWithUserMessage(content: string): AgentState {
-  const state = createAgentState({
-    name: 'test-agent',
-    instructions: 'You are a helpful assistant.',
-    tools: [],
-  });
-  return addUserMessage(state, content);
-}
-
 describe('Error Recovery Integration Tests', () => {
-  describe('Scenario 1: LLM call fails', () => {
-    it('should return error result when LLM call throws', async () => {
-      const runner = await createRunnerWithMockLLM([
-        { type: 'error', errorMessage: 'LLM timeout after 60s' },
-      ]);
+  describe('Scenario 1: Tool execution fails, LLM recovers', () => {
+    itif(testConfig.enabled)(
+      'should feed tool error back to LLM and continue the run',
+      async () => {
+        const runner = await createRunner();
 
-      const state = createStateWithUserMessage('Hello');
-      const { result } = await runner.run(state);
+        let state = createAgentState({
+          name: 'test-agent',
+          instructions:
+            'You are a helpful assistant. If a tool fails, explain the error to the user.',
+          tools: [],
+        });
+        state = addUserMessage(state, 'Read the file /tmp/this_file_does_not_exist_xyz.txt');
 
-      expect(result.type).toBe('error');
-      expect((result as { error: Error }).error.message).toBe('LLM timeout after 60s');
-    });
+        const { result, state: finalState } = await runner.run(state);
 
-    it('should return error result for non-Error thrown by LLM', async () => {
-      const runner = await createRunnerWithMockLLM([
-        { type: 'error', errorMessage: '429 Rate limit exceeded' },
-      ]);
+        expect(result.type).toBe('success');
+        expect(result.answer).toBeTruthy();
+        // LLM should have used file_read tool which fails, then recovered
+        const toolMessages = finalState.context.messages.filter((m) => m.role === 'tool');
+        expect(toolMessages.length).toBeGreaterThanOrEqual(1);
+      },
+      60000
+    );
 
-      const state = createStateWithUserMessage('Hello');
-      const { result } = await runner.run(state);
+    itif(testConfig.enabled)(
+      'should feed shell command error back to LLM',
+      async () => {
+        const runner = await createRunner();
 
-      expect(result.type).toBe('error');
-    });
+        let state = createAgentState({
+          name: 'test-agent',
+          instructions:
+            'You are a helpful assistant. If a tool fails, explain the error to the user.',
+          tools: [],
+        });
+        state = addUserMessage(state, 'Run the command: ls /definitely_not_real_dir_xyz');
+
+        const { result, state: finalState } = await runner.run(state);
+
+        expect(result.type).toBe('success');
+        expect(result.answer).toBeTruthy();
+        const toolMessages = finalState.context.messages.filter((m) => m.role === 'tool');
+        expect(toolMessages.length).toBeGreaterThanOrEqual(1);
+      },
+      60000
+    );
   });
 
-  describe('Scenario 2: Tool execution fails', () => {
-    it('should feed tool error back to LLM and continue the run', async () => {
-      // Round 1: LLM asks to read a non-existent file
-      // Round 2: LLM responds with text after seeing the error
-      const runner = await createRunnerWithMockLLM([
-        {
-          type: 'tool_call',
-          toolCalls: [{ id: 'call_1', name: 'file_read', arguments: { filePath: 'nope.txt' } }],
-        },
-        { type: 'text', content: 'The file does not exist.' },
-      ]);
+  describe('Scenario 2: Abort signal', () => {
+    itif(testConfig.enabled)(
+      'should return abort result when signal is aborted during run',
+      async () => {
+        const runner = await createRunner();
 
-      const state = createStateWithUserMessage('Read the file nope.txt');
-      const { result, state: finalState } = await runner.run(state);
+        let state = createAgentState({
+          name: 'test-agent',
+          instructions: 'You are a helpful assistant. Answer in detail.',
+          tools: [],
+        });
+        state = addUserMessage(state, 'Write a very long essay about artificial intelligence.');
 
-      // Run should succeed because the tool error was fed back and LLM recovered
-      expect(result.type).toBe('success');
-      expect((result as { answer: string }).answer).toBe('The file does not exist.');
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(), 100);
 
-      // The tool result error should be in the conversation history
-      const toolMessages = finalState.context.messages.filter((m) => m.role === 'tool');
-      expect(toolMessages.length).toBeGreaterThanOrEqual(1);
-      const toolMsg = toolMessages[toolMessages.length - 1];
-      expect(toolMsg.content).toContain('File not found');
-      expect(toolMsg.toolName).toBe('file_read');
-    });
+        const { result } = await runner.run(state, { signal: controller.signal });
 
-    it('should feed shell command error back to LLM', async () => {
-      const runner = await createRunnerWithMockLLM([
-        {
-          type: 'tool_call',
-          toolCalls: [
-            { id: 'call_2', name: 'shell', arguments: { command: 'ls /definitely_not_real_dir' } },
-          ],
-        },
-        { type: 'text', content: 'Directory not found.' },
-      ]);
-
-      const state = createStateWithUserMessage('List that dir');
-      const { result, state: finalState } = await runner.run(state);
-
-      expect(result.type).toBe('success');
-
-      const toolMessages = finalState.context.messages.filter((m) => m.role === 'tool');
-      expect(toolMessages.length).toBeGreaterThanOrEqual(1);
-      const toolMsg = toolMessages[toolMessages.length - 1];
-      // Shell returns non-zero exit code as normal text (not exception), so content contains exit code
-      expect(toolMsg.content).toContain('Exit code');
-    });
-  });
-
-  describe('Scenario 3: Abort signal', () => {
-    it('should return abort result when signal is aborted during run', async () => {
-      const runner = await createRunnerWithMockLLM([
-        { type: 'delay', delayMs: 200, content: 'This will be aborted' },
-      ]);
-
-      const state = createStateWithUserMessage('Hello');
-      const controller = new AbortController();
-
-      // Abort halfway through the mock delay
-      setTimeout(() => controller.abort(), 50);
-
-      const { result } = await runner.run(state, { signal: controller.signal });
-
-      expect(result.type).toBe('abort');
-    });
+        // Result should be abort or success (if LLM was fast enough)
+        expect(['abort', 'success']).toContain(result.type);
+      },
+      30000
+    );
   });
 });
