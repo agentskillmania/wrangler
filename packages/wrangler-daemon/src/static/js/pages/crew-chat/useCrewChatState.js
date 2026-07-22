@@ -305,12 +305,21 @@ export function useCrewChatState() {
   // ── Chat Functions ──
   // token / think accumulate into the previous line of the same tag.
   // subagent-token:<name> / subagent-think:<name> are namespaced per
-  // sub-agent so multiple workers streaming concurrently don't tangle.
-  var ACCUMULATE_TAGS = { token: true, think: true };
+  // sub-agent so multiple workers streaming concurrently don't tangle,
+  // AND each namespaced tag accumulates so a single sub-agent's stream
+  // forms one bubble rather than one line per token.
+  function isAccumulatingTag(tag) {
+    return (
+      tag === 'token' ||
+      tag === 'think' ||
+      tag.indexOf('subagent-token:') === 0 ||
+      tag.indexOf('subagent-think:') === 0
+    );
+  }
 
   function appendLine(tag, text) {
     setChatLines(function (prev) {
-      if (ACCUMULATE_TAGS[tag] && prev.length > 0 && prev[prev.length - 1].tag === tag) {
+      if (isAccumulatingTag(tag) && prev.length > 0 && prev[prev.length - 1].tag === tag) {
         var last = prev[prev.length - 1];
         return prev
           .slice(0, -1)
