@@ -41,17 +41,18 @@ llm:
 ## 使用 Devtool 开发
 
 ```bash
-# 初始化 agent 项目
-npx wrangler-devtool init --mode agent ./my-agent
+# 初始化项目（agent | crew | skill）
+npx wrangler-devtool init --type agent ./my-agent
+npx wrangler-devtool init --type crew ./my-crew
 
-# 用 AI 生成 agent
-npx wrangler-devtool agent write --prompt "你是一个资深 React 开发者"
+# 创建资源
+npx wrangler-devtool create agent my-bot
+npx wrangler-devtool create skill search-web
+npx wrangler-devtool create crew dev-team
 
-# 运行测试
-npx wrangler-devtool test ./my-agent
-
-# 质量评审
-npx wrangler-devtool review ./my-agent --deep
+# 运行评估套件
+npx wrangler-devtool eval evals/baseline.yaml
+npx wrangler-devtool eval evals/baseline.yaml --runs 5 --reporter json
 ```
 
 完整 CLI 参考见 [`wrangler-devtool` 文档](./packages/wrangler-devtool/)。

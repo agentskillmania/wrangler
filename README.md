@@ -42,17 +42,18 @@ llm:
 ## Development with Devtool
 
 ```bash
-# Initialize an agent project
-npx wrangler-devtool init --mode agent ./my-agent
+# Initialize a project (agent | crew | skill)
+npx wrangler-devtool init --type agent ./my-agent
+npx wrangler-devtool init --type crew ./my-crew
 
-# Generate agent with AI
-npx wrangler-devtool agent write --prompt "You are a senior React developer"
+# Create resources
+npx wrangler-devtool create agent my-bot
+npx wrangler-devtool create skill search-web
+npx wrangler-devtool create crew dev-team
 
-# Run tests
-npx wrangler-devtool test ./my-agent
-
-# Review quality
-npx wrangler-devtool review ./my-agent --deep
+# Run eval suites
+npx wrangler-devtool eval evals/baseline.yaml
+npx wrangler-devtool eval evals/baseline.yaml --runs 5 --reporter json
 ```
 
 See [`wrangler-devtool` documentation](./packages/wrangler-devtool/) for full CLI reference.

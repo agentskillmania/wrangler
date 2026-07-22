@@ -70,6 +70,7 @@ console.log('完成:', result.type);
 
 ```typescript
 import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
+import { createAgentState } from '@agentskillmania/colts';
 
 const crew = await new CrewLoader('./my-crew').load();
 const opts = crewToRunnerOptions(crew);
@@ -77,9 +78,29 @@ const opts = crewToRunnerOptions(crew);
 const runner = await EnhancedRunner.create({
   llmClient,
   model: opts.model ?? 'gpt-4o',
-  systemPrompt: opts.systemPrompt,
+  // 团队的合成 prompt（memory + 主 Agent 指令 + 子代理目录）通过
+  // agentInstructions → AgentState.config.instructions 传递
   subAgents: opts.subAgents,
-  skillDirectories: opts.skillDirs,
+  skillDirs: opts.skillDirs,
+  crewId: 'my-crew', // 写入 runnerConfig 快照，resume 时据此识别团队会话
+});
+
+// 主 Agent 的指令来自 opts.systemPrompt —— 与单 Agent 一样传给 createAgentState
+const state = createAgentState({
+  name: opts.primaryAgent,
+  instructions: opts.systemPrompt,
+  tools: runner.getToolInfo(),
+});
+```
+
+### 恢复团队会话
+
+`EnhancedRunner.resume()` 从持久化的 `meta.yaml` 快照重建 Runner。快照不存储 `subAgents`（属于运行时概念），因此需要通过 `ResumeOptions.subAgents` 重新传入 —— 通常的做法是用创建时写入快照的 `crewId` 重新加载团队配置：
+
+```typescript
+const { runner, state } = await EnhancedRunner.resume(sessionDir, {
+  llmClient,
+  subAgents: opts.subAgents, // 由 CrewLoader + crewToRunnerOptions 重建
 });
 ```
 

@@ -69,6 +69,7 @@ A crew is a directory of configuration, not a runtime orchestrator. `CrewLoader.
 
 ```typescript
 import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
+import { createAgentState } from '@agentskillmania/colts';
 
 const crew = await new CrewLoader('./my-crew').load();
 const opts = crewToRunnerOptions(crew);
@@ -76,9 +77,30 @@ const opts = crewToRunnerOptions(crew);
 const runner = await EnhancedRunner.create({
   llmClient,
   model: opts.model ?? 'gpt-4o',
-  systemPrompt: opts.systemPrompt,
+  // crew's composed prompt (memory + primary instructions + sub-agent
+  // catalog) rides through agentInstructions → AgentState.config.instructions
   subAgents: opts.subAgents,
-  skillDirectories: opts.skillDirs,
+  skillDirs: opts.skillDirs,
+  crewId: 'my-crew', // persisted into runnerConfig snapshot so resume can detect crew sessions
+});
+
+// The primary agent's instructions come from opts.systemPrompt — pass them
+// into createAgentState the same way you would for a single agent.
+const state = createAgentState({
+  name: opts.primaryAgent,
+  instructions: opts.systemPrompt,
+  tools: runner.getToolInfo(),
+});
+```
+
+### Resuming a crew session
+
+`EnhancedRunner.resume()` reconstructs the runner from the persisted `meta.yaml` snapshot. The snapshot does not store `subAgents` (they are a runtime concept), so you must pass them back in via `ResumeOptions.subAgents` — typically by reloading the crew config with the `crewId` that was written into the snapshot at create time:
+
+```typescript
+const { runner, state } = await EnhancedRunner.resume(sessionDir, {
+  llmClient,
+  subAgents: opts.subAgents, // rebuilt from CrewLoader + crewToRunnerOptions
 });
 ```
 
