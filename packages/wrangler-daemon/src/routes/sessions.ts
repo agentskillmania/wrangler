@@ -49,12 +49,6 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
     const forkedState = { ...state, id: newId };
     await store.saveState(newId, forkedState);
 
-    // Copy conversation entries
-    const entries = await store.readEntries(id);
-    for (const entry of entries) {
-      await store.appendEntry(newId, entry);
-    }
-
     manager().registerSession(newId, info.workspacePath);
 
     return { id: newId };

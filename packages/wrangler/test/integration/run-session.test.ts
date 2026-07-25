@@ -83,7 +83,6 @@ describe('US1: Create Runner and execute single-turn conversation', () => {
       expect(result.type).toBe('success');
 
       const sessionId = state.id;
-      const dir = session.store.getSessionDir(sessionId);
 
       // Verify state.json
       const loaded = await session.store.loadState(sessionId);
@@ -98,17 +97,15 @@ describe('US1: Create Runner and execute single-turn conversation', () => {
       expect(meta!.agentName).toBe('test-agent');
       expect(typeof meta!.updatedAt).toBe('string');
 
-      // Verify session.jsonl via readEntries
-      const entries = await session.store.readEntries(sessionId);
-      expect(entries.length).toBeGreaterThanOrEqual(1);
-      const assistantEntries = entries.filter((e) => e.role === 'assistant');
-      expect(assistantEntries.length).toBeGreaterThan(0);
+      // Verify state.json persisted the assistant turn (entries no longer exist).
+      const assistantMessages = loaded!.context.messages.filter((m) => m.role === 'assistant');
+      expect(assistantMessages.length).toBeGreaterThan(0);
     },
     120000
   );
 
   itif(testConfig.enabled)(
-    'should handle calculator tool call and persist session entries',
+    'should handle calculator tool call and persist session state',
     async () => {
       const session = createSessionSupport({
         workspacePath: '/test/workspace',
@@ -181,10 +178,12 @@ describe('US2: Resume Session and continue conversation', () => {
       const resumedState = addUserMessage(loaded!, 'What is my name?');
       const { state: finalState } = await runner2.run(resumedState);
 
-      // Verify session entries have entries from both rounds
-      const entries = await session.store.readEntries(sessionId);
-      const assistantEntries = entries.filter((e) => e.role === 'assistant');
-      expect(assistantEntries.length).toBeGreaterThanOrEqual(2);
+      // Verify the final state was persisted (entries no longer exist; state.json
+      // is the sole conversation record) and holds assistant turns from both rounds.
+      const finalLoaded = await session.store.loadState(sessionId);
+      expect(finalLoaded).not.toBeNull();
+      const assistantMessages = finalLoaded!.context.messages.filter((m) => m.role === 'assistant');
+      expect(assistantMessages.length).toBeGreaterThanOrEqual(2);
 
       // Verify state contains both user messages
       const userContents = finalState.context.messages

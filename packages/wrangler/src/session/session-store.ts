@@ -10,7 +10,6 @@ import type { AgentState } from '@agentskillmania/colts';
 
 import { writeMeta, readMeta } from './meta.js';
 import type { SessionMeta } from '../types.js';
-import type { SessionEntry } from './types.js';
 
 /**
  * Compute MD5 hash of workspace path for session directory grouping.
@@ -29,8 +28,7 @@ function hashWorkspacePath(workspacePath: string): string {
  * Directory structure:
  * {baseDir}/{md5(workspacePath)}/{sessionId}/
  *   ├── meta.yaml
- *   ├── state.json      (snapshot format)
- *   └── session.jsonl
+ *   └── state.json
  */
 export class SessionStore {
   private readonly workspaceHash: string;
@@ -57,7 +55,7 @@ export class SessionStore {
 
   /**
    * Serialize all writes for a given session to prevent race conditions.
-   * Concurrent writes to state.json / session.jsonl / meta.yaml
+   * Concurrent writes to state.json / meta.yaml
    * can corrupt files or lose updates.
    */
   private async serialize<T>(key: string, operation: () => Promise<T>): Promise<T> {
@@ -150,30 +148,6 @@ export class SessionStore {
     }
   }
 
-  /** Append a SessionEntry to session.jsonl */
-  async appendEntry(sessionId: string | undefined, entry: SessionEntry): Promise<void> {
-    return this.serialize(this.getQueueKey(sessionId), async () => {
-      const dir = this.getSessionDir(sessionId);
-      const line = JSON.stringify(entry) + '\n';
-      await writeFile(join(dir, 'session.jsonl'), line, { flag: 'a', encoding: 'utf-8' });
-    });
-  }
-
-  /** Read all SessionEntries from session.jsonl */
-  async readEntries(sessionId?: string): Promise<SessionEntry[]> {
-    try {
-      const dir = this.getSessionDir(sessionId);
-      const content = await readFile(join(dir, 'session.jsonl'), 'utf-8');
-      return content
-        .trim()
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line) as SessionEntry);
-    } catch {
-      return [];
-    }
-  }
-
   /** Update partial fields of session metadata */
   async updateMeta(sessionId: string | undefined, updates: Partial<SessionMeta>): Promise<void> {
     return this.serialize(this.getQueueKey(sessionId), async () => {
@@ -219,17 +193,14 @@ export class SessionStore {
   }
 
   /**
-   * Resume an existing session by loading state, meta, and recent entries.
+   * Resume an existing session by loading state and meta.
    * Returns null if the session does not exist or state.json is missing.
    */
-  async resume(
-    sessionId: string
-  ): Promise<{ state: AgentState; meta: SessionMeta; recentEntries: SessionEntry[] } | null> {
+  async resume(sessionId: string): Promise<{ state: AgentState; meta: SessionMeta } | null> {
     const meta = await this.getMeta(sessionId);
     if (!meta) return null;
     const state = await this.loadState(sessionId);
     if (!state) return null;
-    const recentEntries = await this.readEntries(sessionId);
-    return { state, meta, recentEntries };
+    return { state, meta };
   }
 }

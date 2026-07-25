@@ -4,9 +4,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createSessionMiddleware } from '../../../src/middleware/session-middleware.js';
 import { SessionStore } from '../../../src/session/session-store.js';
-import { createAgentState, addUserMessage, addAssistantMessage } from '@agentskillmania/colts';
-import type { AgentMiddleware, StepResult, RunnerOptions } from '@agentskillmania/colts';
-import type { SessionEntry } from '../../../src/session/types.js';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+import type { AgentMiddleware, RunnerOptions } from '@agentskillmania/colts';
 
 const mockRunnerOptions: Readonly<RunnerOptions> = {
   model: 'GLM-4.7',
@@ -61,7 +60,7 @@ describe('createSessionMiddleware', () => {
       expect(meta!.runnerConfig.skillDirs).toEqual(['/test/skills']);
     });
 
-    it('should create session and record user message with colts id', async () => {
+    it('should create session for state that includes user messages', async () => {
       let state = createAgentState({ name: 'test-agent', instructions: 'test', tools: [] });
       state = addUserMessage(state, 'Hello agent');
       await middleware.beforeRun!({
@@ -70,11 +69,9 @@ describe('createSessionMiddleware', () => {
       });
 
       expect(await store.existsAsync(state.id)).toBe(true);
-      const entries = await store.readEntries(state.id);
-      expect(entries).toHaveLength(1);
-      expect(entries[0].role).toBe('user');
-      expect(entries[0].content).toBe('Hello agent');
-      expect(entries[0].id).toBe(state.context.messages[0].id);
+      const meta = await store.getMeta(state.id);
+      expect(meta).not.toBeNull();
+      expect(meta!.id).toBe(state.id);
     });
 
     it('should store agentName in SessionMeta', async () => {
@@ -83,167 +80,11 @@ describe('createSessionMiddleware', () => {
       const meta = await store.getMeta(state.id);
       expect(meta!.agentName).toBe('my-agent');
     });
-
-    it('should not record user entry when no user messages exist', async () => {
-      const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await middleware.beforeRun!({ state, runnerOptions: mockRunnerOptions });
-      const entries = await store.readEntries(state.id);
-      expect(entries).toHaveLength(0);
-    });
   });
 
-  describe('afterStep', () => {
-    it('should write tool SessionEntry for continue result', async () => {
-      const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'test');
-      const stepResult: StepResult = {
-        type: 'continue',
-        toolResult: 'file content here',
-        actions: [{ id: 'tc1', tool: 'file_read', arguments: { path: 'src/app.ts' } }],
-        tokens: { input: 100, output: 50 },
-      };
-      await middleware.afterStep!({
-        state,
-        result: stepResult,
-        stepNumber: 0,
-        runnerOptions: mockRunnerOptions,
-      });
-      const entries = await store.readEntries(state.id);
-      expect(entries).toHaveLength(1);
-      expect(entries[0].role).toBe('tool');
-      expect(entries[0].toolName).toBe('file_read');
-      expect(entries[0].content).toBe('file content here');
-      expect(entries[0].toolArguments).toBe(JSON.stringify({ path: 'src/app.ts' }));
-      expect(entries[0].id).toBeDefined();
-    });
-
-    it('should write assistant SessionEntry for done result', async () => {
-      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'test');
-      state = addAssistantMessage(state, 'previous response');
-      const stepResult: StepResult = {
-        type: 'done',
-        answer: 'Here is the answer.',
-        tokens: { input: 100, output: 50 },
-      };
-      await middleware.afterStep!({
-        state,
-        result: stepResult,
-        stepNumber: 0,
-        runnerOptions: mockRunnerOptions,
-      });
-      const entries = await store.readEntries(state.id);
-      expect(entries).toHaveLength(1);
-      expect(entries[0].role).toBe('assistant');
-      expect(entries[0].content).toBe('Here is the answer.');
-      const lastMsg = state.context.messages.filter((m) => m.role === 'assistant').at(-1);
-      expect(entries[0].id).toBe(lastMsg!.id);
-    });
-
-    it('should write assistant entry with random UUID when no assistant message in state', async () => {
-      const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'test');
-      const stepResult: StepResult = {
-        type: 'done',
-        answer: 'Short answer.',
-        tokens: { input: 100, output: 50 },
-      };
-      await middleware.afterStep!({
-        state,
-        result: stepResult,
-        stepNumber: 0,
-        runnerOptions: mockRunnerOptions,
-      });
-      const entries = await store.readEntries(state.id);
-      expect(entries).toHaveLength(1);
-      expect(entries[0].role).toBe('assistant');
-      expect(entries[0].id).toBeDefined();
-    });
-
-    it('should write error SessionEntry for error result', async () => {
-      const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'test');
-      const stepResult: StepResult = {
-        type: 'error',
-        error: new Error('LLM call failed'),
-        tokens: { input: 0, output: 0 },
-      };
-      await middleware.afterStep!({
-        state,
-        result: stepResult,
-        stepNumber: 0,
-        runnerOptions: mockRunnerOptions,
-      });
-      const entries = await store.readEntries(state.id);
-      expect(entries).toHaveLength(1);
-      expect(entries[0].role).toBe('error');
-      expect(entries[0].errorMessage).toBe('LLM call failed');
-      expect(entries[0].content).toBe('LLM call failed');
-      expect(entries[0].id).toBeDefined();
-    });
-
-    it('should stringify non-string toolResult in continue result', async () => {
-      const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'test');
-      const stepResult: StepResult = {
-        type: 'continue',
-        toolResult: { files: ['a.ts', 'b.ts'] },
-        actions: [{ id: 'tc1', tool: 'file_list', arguments: { dir: 'src' } }],
-        tokens: { input: 100, output: 50 },
-      };
-      await middleware.afterStep!({
-        state,
-        result: stepResult,
-        stepNumber: 0,
-        runnerOptions: mockRunnerOptions,
-      });
-      const entries = await store.readEntries(state.id);
-      expect(entries[0].content).toBe(JSON.stringify({ files: ['a.ts', 'b.ts'] }));
-    });
-
-    it('should handle null toolResult in continue result', async () => {
-      const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'test');
-      const stepResult: StepResult = {
-        type: 'continue',
-        toolResult: null as unknown as string,
-        actions: [{ id: 'tc1', tool: 'noop', arguments: {} }],
-        tokens: { input: 0, output: 0 },
-      };
-      await middleware.afterStep!({
-        state,
-        result: stepResult,
-        stepNumber: 0,
-        runnerOptions: mockRunnerOptions,
-      });
-      const entries = await store.readEntries(state.id);
-      expect(entries[0].content).toBe('""');
-    });
-
-    it('should write multiple entries for multiple actions', async () => {
-      const state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
-      await store.createWithId(state.id, 'test');
-      const stepResult: StepResult = {
-        type: 'continue',
-        toolResult: 'ok',
-        actions: [
-          { id: 'tc1', tool: 'file_read', arguments: { path: 'a.ts' } },
-          { id: 'tc2', tool: 'file_read', arguments: { path: 'b.ts' } },
-        ],
-        tokens: { input: 100, output: 50 },
-      };
-      await middleware.afterStep!({
-        state,
-        result: stepResult,
-        stepNumber: 0,
-        runnerOptions: mockRunnerOptions,
-      });
-      const entries = await store.readEntries(state.id);
-      expect(entries).toHaveLength(2);
-      expect(entries[0].toolName).toBe('file_read');
-      expect(entries[1].toolName).toBe('file_read');
-    });
-  });
+  // NOTE: afterStep describe block was removed.
+  // session-middleware no longer writes SessionEntry to session.jsonl on each step;
+  // state.json (full AgentState snapshot) is saved once in afterRun.
 
   describe('afterRun', () => {
     it('should save state and update meta', async () => {

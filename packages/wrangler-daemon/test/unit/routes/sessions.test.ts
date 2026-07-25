@@ -55,31 +55,18 @@ describe('Unit: Session Routes', () => {
     const store = sessionManager.getSessionStore(wsPath);
     await store.createWithId(sessionId, 'test-agent');
 
-    // Save a minimal AgentState
-    const state = {
-      id: sessionId,
-      config: {
-        name: 'test-agent',
-        instructions: 'You are a test agent.',
-        tools: [],
-      },
-      context: {
-        messages: [],
-        stepCount: 0,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
-    };
-    await store.saveState(sessionId, state);
+    // Save a minimal AgentState with a user message so the forked
+    // session carries verifiable conversation history in state.json.
+    const { createAgentState, addUserMessage } = await import('@agentskillmania/colts');
+    let state = createAgentState({
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      tools: [],
+    });
+    // Override id to match the session id on disk
+    state = addUserMessage({ ...state, id: sessionId }, 'Hello, world!');
 
-    // Append a conversation entry
-    const entry = {
-      id: 'msg-001',
-      role: 'user' as const,
-      content: 'Hello, world!',
-      timestamp: Date.now(),
-    };
-    await store.appendEntry(sessionId, entry);
+    await store.saveState(sessionId, state);
 
     return wsPath;
   }
@@ -149,6 +136,14 @@ describe('Unit: Session Routes', () => {
     const forkInfo = await sessionManager.getInfo(body.id);
     expect(forkInfo).not.toBeNull();
     expect(forkInfo!.agentName).toBe('test-agent');
+
+    // Verify the forked session copied the agent state (state.json),
+    // including the seeded conversation history.
+    const forkStore = sessionManager.getSessionStore(forkInfo!.workspacePath);
+    const forkState = await forkStore.loadState(body.id);
+    expect(forkState).not.toBeNull();
+    expect(forkState!.context.messages).toHaveLength(1);
+    expect(forkState!.context.messages[0].content).toBe('Hello, world!');
   });
 
   // Test 6: POST /api/sessions/:id/fork returns error for non-existent session

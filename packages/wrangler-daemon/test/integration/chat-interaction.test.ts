@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { SessionStore } from '@agentskillmania/wrangler';
+import { createAgentState, addUserMessage, addAssistantMessage } from '@agentskillmania/colts';
 import { SessionManager } from '../../src/core/session-manager.js';
 import { ResourceManager } from '../../src/core/resource-manager.js';
 import { ConfigManager } from '../../src/core/config-manager.js';
@@ -203,49 +204,40 @@ describe('US-C4: Agent Chat Interaction', () => {
       expect(body.messages).toEqual([]);
     });
 
-    it('returns persisted entries written via SessionStore', async () => {
+    it('returns persisted messages written via state.json', async () => {
       const wsPath = join(tempDir, 'workspace');
       await createTestSession(wsPath, 'history-session', 'test-agent');
 
-      // Write entries directly through SessionStore (simulates what a real
-      // agent run would persist on disk).
+      // Persist an AgentState with a short conversation history (simulates
+      // what wrangler writes to state.json after a real agent run).
       const manager = (fastify as any).sessionManager as SessionManager;
       const store = manager.getSessionStore(wsPath);
-      await store.appendEntry('history-session', {
-        id: 'msg-1',
-        role: 'user',
-        content: 'What is the weather today?',
-        timestamp: new Date().toISOString(),
+
+      let state = createAgentState({
+        name: 'test-agent',
+        instructions: 'be helpful',
+        tools: [],
       });
-      await store.appendEntry('history-session', {
-        id: 'msg-2',
-        role: 'assistant',
-        content: 'It looks sunny with a high of 72F.',
-        timestamp: new Date().toISOString(),
-      });
-      await store.appendEntry('history-session', {
-        id: 'msg-3',
-        role: 'user',
-        content: 'Thanks!',
-        timestamp: new Date().toISOString(),
-      });
+      // Override id to match the session id on disk
+      state = { ...state, id: 'history-session' };
+      state = addUserMessage(state, 'What is the weather today?');
+      state = addAssistantMessage(state, 'It looks sunny with a high of 72F.');
+      state = addUserMessage(state, 'Thanks!');
+      await store.saveState('history-session', state);
 
       const res = await fetch(`${getUrl()}/api/chat/history-session/messages`);
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.messages).toHaveLength(3);
       expect(body.messages[0]).toMatchObject({
-        id: 'msg-1',
         role: 'user',
         content: 'What is the weather today?',
       });
       expect(body.messages[1]).toMatchObject({
-        id: 'msg-2',
         role: 'assistant',
         content: 'It looks sunny with a high of 72F.',
       });
       expect(body.messages[2]).toMatchObject({
-        id: 'msg-3',
         role: 'user',
         content: 'Thanks!',
       });
@@ -258,22 +250,28 @@ describe('US-C4: Agent Chat Interaction', () => {
       const manager = (fastify as any).sessionManager as SessionManager;
       const store = manager.getSessionStore(wsPath);
 
-      // Write multiple entries rapidly to test ordering stability
+      // Build a 5-message conversation alternating user/assistant, then
+      // persist once. Insertion order is preserved by the messages array.
+      let state = createAgentState({
+        name: 'test-agent',
+        instructions: 'be helpful',
+        tools: [],
+      });
+      state = { ...state, id: 'order-session' };
       for (let i = 0; i < 5; i++) {
-        await store.appendEntry('order-session', {
-          id: `seq-${i}`,
-          role: i % 2 === 0 ? 'user' : 'assistant',
-          content: `message ${i}`,
-          timestamp: new Date().toISOString(),
-        });
+        state =
+          i % 2 === 0
+            ? addUserMessage(state, `message ${i}`)
+            : addAssistantMessage(state, `message ${i}`);
       }
+      await store.saveState('order-session', state);
 
       const res = await fetch(`${getUrl()}/api/chat/order-session/messages`);
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.messages).toHaveLength(5);
-      const ids = body.messages.map((m: any) => m.id);
-      expect(ids).toEqual(['seq-0', 'seq-1', 'seq-2', 'seq-3', 'seq-4']);
+      const contents = body.messages.map((m: any) => m.content);
+      expect(contents).toEqual(['message 0', 'message 1', 'message 2', 'message 3', 'message 4']);
     });
   });
 

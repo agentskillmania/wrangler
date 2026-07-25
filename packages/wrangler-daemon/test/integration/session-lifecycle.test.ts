@@ -117,23 +117,18 @@ describe('Integration: Session Lifecycle', () => {
 
     const store = getManager().getSessionStore(wsPath);
 
-    // Write state and entries (simulating what wrangler does after a run)
-    const { createAgentState } = await import('@agentskillmania/colts');
-    const state = createAgentState({ name: 'test-agent', tools: [], instructions: 'be helpful' });
+    // Write state (simulating what wrangler does after a run)
+    const { createAgentState, addUserMessage, addAssistantMessage } =
+      await import('@agentskillmania/colts');
+    let state = createAgentState({
+      name: 'test-agent',
+      tools: [],
+      instructions: 'be helpful',
+    });
+    state = { ...state, id: 'fork-src' };
+    state = addUserMessage(state, 'Hello from original');
+    state = addAssistantMessage(state, 'Hi there');
     await store.saveState('fork-src', state);
-
-    await store.appendEntry('fork-src', {
-      id: '1',
-      role: 'user',
-      content: 'Hello from original',
-      timestamp: new Date().toISOString(),
-    });
-    await store.appendEntry('fork-src', {
-      id: '2',
-      role: 'assistant',
-      content: 'Hi there',
-      timestamp: new Date().toISOString(),
-    });
 
     // Fork
     const res = await fetch(`${getUrl()}/api/sessions/fork-src/fork`, { method: 'POST' });
@@ -142,11 +137,13 @@ describe('Integration: Session Lifecycle', () => {
     expect(body.id).toBeTruthy();
     expect(body.id).not.toBe('fork-src');
 
-    // Verify forked session has same conversation entries
-    const forkedEntries = await store.readEntries(body.id);
-    expect(forkedEntries).toHaveLength(2);
-    expect(forkedEntries[0].content).toBe('Hello from original');
-    expect(forkedEntries[1].content).toBe('Hi there');
+    // Verify forked session copied the agent state (state.json),
+    // including the conversation history.
+    const forkState = await store.loadState(body.id);
+    expect(forkState).not.toBeNull();
+    expect(forkState!.context.messages).toHaveLength(2);
+    expect(forkState!.context.messages[0].content).toBe('Hello from original');
+    expect(forkState!.context.messages[1].content).toBe('Hi there');
   });
 
   it('returns error when forking session without state', async () => {

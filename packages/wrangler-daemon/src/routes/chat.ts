@@ -85,7 +85,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
    * GET /api/chat/:sessionId/messages
    *
    * Returns chat message history for a session.
-   * Reads persisted entries from SessionStore.
+   * Reads the full AgentState from state.json — includes thinking,
+   * tool calls, and tool results (unlike the old session.jsonl format).
    */
   fastify.get('/api/chat/:sessionId/messages', async (request) => {
     const { sessionId } = request.params as { sessionId: string };
@@ -96,9 +97,12 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     const store = sessionManager().getSessionStore(info.workspacePath);
-    const entries = await store.readEntries(sessionId);
+    const state = await store.loadState(sessionId);
+    if (!state) {
+      return { messages: [] };
+    }
 
-    return { messages: entries };
+    return { messages: state.context.messages };
   });
 
   /**

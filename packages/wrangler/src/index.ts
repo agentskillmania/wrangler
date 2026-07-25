@@ -5,7 +5,7 @@
 import './types/colts-augmentation.js';
 
 // Types
-export type { SessionMeta, SessionEntry, SessionSource, RunnerConfigSnapshot } from './types.js';
+export type { SessionMeta, SessionSource, RunnerConfigSnapshot } from './types.js';
 
 // Session support
 export { createSessionSupport } from './session/support.js';

@@ -1,6 +1,6 @@
 // packages/core/src/types.ts
 
-export type { SessionEntry } from './session/types.js';
+// SessionEntry type removed — session.jsonl deleted
 
 /**
  * Session metadata — persisted in meta.yaml
