@@ -29,6 +29,14 @@ vi.mock('@agentskillmania/colts', async (importOriginal) => {
       run: mockRun,
       runStream: mockRunStream,
       on: mockOn,
+      emit: vi.fn(),
+      registerTool: vi.fn(),
+      getToolRegistry: vi.fn().mockReturnValue({
+        getAll: vi.fn().mockReturnValue([]),
+        get: vi.fn(),
+        register: vi.fn(),
+      }),
+      skillProvider: undefined,
       ...options,
     })),
     ToolRegistry: vi.fn().mockImplementation(() => ({
@@ -1189,7 +1197,7 @@ describe('EnhancedRunner', () => {
       ).rejects.toThrow('Session not found or incomplete');
     });
 
-    it('resume forwards subAgents to the reconstructed runner (crew session)', async () => {
+    it('resume creates runner with subAgents (delegate tool registered post-construction)', async () => {
       const sessionId = '1745800000-resume-crew';
       const store = new SessionStore(testBaseDir, '/test/workspace');
       await store.createWithId(sessionId, 'test-agent');
@@ -1213,13 +1221,16 @@ describe('EnhancedRunner', () => {
         subAgents,
       });
 
+      // subAgents are no longer passed to AgentRunner constructor (colts no
+      // longer knows about sub-agents). The delegate tool is registered via
+      // runner.registerTool() after construction.
       const calls = await getAgentRunnerCalls();
       const resumeCall = calls[calls.length - 1][0];
-      expect(resumeCall.subAgents).toEqual(subAgents);
+      expect(resumeCall.subAgents).toBeUndefined();
       expect(runner).toBeInstanceOf(EnhancedRunner);
     });
 
-    it('resume omits subAgents when not provided (non-crew session unchanged)', async () => {
+    it('resume creates runner without delegate tool when subAgents not provided', async () => {
       const sessionId = '1745800000-resume-nocrew';
       const store = new SessionStore(testBaseDir, '/test/workspace');
       await store.createWithId(sessionId, 'test-agent');

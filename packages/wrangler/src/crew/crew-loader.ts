@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-import type { SubAgentConfig } from '@agentskillmania/colts';
+import type { SubAgentConfig } from '../subagent/types.js';
 import yaml from 'js-yaml';
 
 import type { CrewConfig } from './types.js';

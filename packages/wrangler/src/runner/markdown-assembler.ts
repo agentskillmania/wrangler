@@ -22,6 +22,7 @@ import type {
 import type { Message as PiAIMessage, TextContent, ToolCall } from '@mariozechner/pi-ai';
 
 import { shiftHeadings } from './shift-headings.js';
+import type { SubAgentConfig } from '../subagent/types.js';
 
 /** Status-to-checkbox mapping for todolist display */
 const STATUS_CHECK: Record<string, string> = {
@@ -38,6 +39,19 @@ const STATUS_CHECK: Record<string, string> = {
  * is a properly structured markdown document with heading hierarchy.
  */
 export class MarkdownMessageAssembler implements IMessageAssembler {
+  /** Sub-agent configs injected into the static system document (constructor-scoped) */
+  private subAgentConfigs?: ReadonlyMap<string, SubAgentConfig>;
+
+  /**
+   * @param subAgentConfigs - Optional sub-agent config map. When provided,
+   *   the sub-agent list is injected into the static system document.
+   *   This is constructor-scoped (not per-build) because sub-agents don't
+   *   change within a session, keeping the static prefix cache-friendly.
+   */
+  constructor(subAgentConfigs?: ReadonlyMap<string, SubAgentConfig>) {
+    this.subAgentConfigs = subAgentConfigs;
+  }
+
   build(state: AgentState, opts: BuildMessagesOptions): PiAIMessage[] {
     const messages: PiAIMessage[] = [];
     const now = Date.now();
@@ -250,12 +264,9 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
     }
 
     // Sub-Agents section
-    if (opts.subAgentConfigs && opts.subAgentConfigs.size > 0) {
-      const subAgentLines = Array.from(opts.subAgentConfigs.values())
-        .map((sa: unknown) => {
-          const agent = sa as { name: string; description: string };
-          return `- ${agent.name}: ${agent.description}`;
-        })
+    if (this.subAgentConfigs && this.subAgentConfigs.size > 0) {
+      const subAgentLines = Array.from(this.subAgentConfigs.values())
+        .map((sa) => `- ${sa.name}: ${sa.description}`)
         .join('\n');
       sections.push(
         `## Sub-Agents\n\n${subAgentLines}\n\nUse the delegate tool to delegate tasks to specialized sub-agents.`

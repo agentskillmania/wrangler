@@ -26,6 +26,7 @@ import type { ZodTypeAny } from 'zod';
 
 import { MarkdownMessageAssembler } from './markdown-assembler.js';
 import { buildTimeContext } from './system-prompt.js';
+import { createDelegateTool } from '../subagent/delegate-tool.js';
 import type {
   EnhancedRunnerOptions,
   ResolvedRunnerConfig,
@@ -271,6 +272,15 @@ export class EnhancedRunner {
     const a2uiTools = a2uiEnabled ? createA2UITools() : [];
     const a2uiMiddleware = a2uiEnabled ? [new A2UIMiddleware()] : [];
 
+    // Sub-agent delegation support (conditional)
+    // When subAgents are configured, a delegate tool is created and registered
+    // AFTER the AgentRunner is built (so it can close over the runner's registry
+    // and EventEmitter). See the post-construction registration below.
+    const subAgentConfigs =
+      options.subAgents && options.subAgents.length > 0
+        ? new Map(options.subAgents.map((sa) => [sa.name, sa]))
+        : undefined;
+
     const allTools: Tool<ZodTypeAny>[] = [
       ...sessionSupport.tools,
       ...filteredBuiltinTools,
@@ -450,12 +460,30 @@ export class EnhancedRunner {
       thinkingEnabled: options.thinkingEnabled,
       enablePromptThinking: options.enablePromptThinking,
       temperature: options.temperature,
-      subAgents: options.subAgents,
       requestTimeout: options.requestTimeout,
       maxSteps: options.maxSteps,
       compressor: compressorInstance,
-      messageAssembler: new MarkdownMessageAssembler(),
+      messageAssembler: new MarkdownMessageAssembler(subAgentConfigs),
     });
+
+    // Register the delegate tool after construction so it can close over the
+    // runner's tool registry (for tool inheritance) and EventEmitter (for
+    // sub-agent event forwarding). colts no longer handles this.
+    if (subAgentConfigs) {
+      const delegateTool = createDelegateTool({
+        subAgentConfigs,
+        llmProvider: llmClient,
+        model: resolvedModel,
+        parentToolRegistry: runner.getToolRegistry(),
+        parentSkillProvider: runner.skillProvider,
+        thinkingEnabled: options.thinkingEnabled,
+        temperature: options.temperature,
+        emit: (type: string, data: Record<string, unknown>) => {
+          runner.emit(type as keyof RunnerEventMap, data as never);
+        },
+      });
+      runner.registerTool(delegateTool);
+    }
 
     const resolvedConfig: ResolvedRunnerConfig = {
       model: resolvedModel,

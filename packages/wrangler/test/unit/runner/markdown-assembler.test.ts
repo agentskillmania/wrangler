@@ -121,16 +121,15 @@ describe('MarkdownMessageAssembler', () => {
   });
 
   it('produces ## Sub-Agents when sub-agents configured', () => {
-    const assembler = new MarkdownMessageAssembler();
-    const state = makeState({ instructions: 'Be helpful.' });
     const subAgentMap = new Map();
     subAgentMap.set('coder', {
       name: 'coder',
       description: 'Writes code',
     });
+    const assembler = new MarkdownMessageAssembler(subAgentMap);
+    const state = makeState({ instructions: 'Be helpful.' });
     const opts = makeOpts({
       systemPrompt: '---\ntime: now\n---',
-      subAgentConfigs: subAgentMap,
     });
 
     const messages = assembler.build(state, opts);
@@ -380,16 +379,15 @@ describe('MarkdownMessageAssembler', () => {
   });
 
   it('section order in static prefix is: Instructions → Skills → Sub-Agents → Thinking', () => {
-    const assembler = new MarkdownMessageAssembler();
-    const state = makeState({ instructions: 'Be helpful.' });
     const subAgentMap = new Map();
     subAgentMap.set('agent1', { name: 'agent1', description: 'An agent' });
+    const assembler = new MarkdownMessageAssembler(subAgentMap);
+    const state = makeState({ instructions: 'Be helpful.' });
     const opts = makeOpts({
       systemPrompt: '---\ntime: now\n---',
       skillProvider: {
         listSkills: () => [{ name: 'test', description: 'A skill' }],
       } as any,
-      subAgentConfigs: subAgentMap,
       enablePromptThinking: true,
     });
 

@@ -12,7 +12,7 @@ import type {
   RunOptions,
   RunnerEventMap,
 } from '@agentskillmania/colts';
-import type { AskHumanHandler, HumanResponse, SubAgentConfig } from '@agentskillmania/colts';
+import type { AskHumanHandler, HumanResponse } from '@agentskillmania/colts';
 import type { LLMClient } from '@agentskillmania/llm-client';
 import {
   EnhancedRunner,
@@ -20,6 +20,7 @@ import {
   createLLMClient,
   resolveDefaultModel,
 } from '@agentskillmania/wrangler';
+import type { SubAgentConfig } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';

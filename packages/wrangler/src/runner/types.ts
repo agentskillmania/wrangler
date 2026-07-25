@@ -6,13 +6,13 @@ import type {
   CompressionConfig,
   IContextCompressor,
   LLMQuickInit,
-  SubAgentConfig,
 } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
 
 import type { CommandHandler } from '../command/types.js';
 import type { SearchProvider } from '../tools/builtin/index.js';
 import type { SessionSource } from '../types.js';
+import type { SubAgentConfig } from '../subagent/types.js';
 
 // ---- Tool & Skill metadata for diagnostics ----
 

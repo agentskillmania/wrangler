@@ -21,6 +21,11 @@ export type { SessionNamingDeps } from './middleware/session-naming-middleware.j
 export { EnhancedRunner, buildTimeContext } from './runner/index.js';
 export type { EnhancedRunnerOptions } from './runner/index.js';
 
+// Sub-agent delegation (Layer 2 — wrangler owns sub-agent mechanism)
+export type { SubAgentConfig, DelegateResult } from './subagent/index.js';
+export { createDelegateTool } from './subagent/index.js';
+export type { DelegateToolDeps } from './subagent/index.js';
+
 // LLM client factory
 export { createLLMClient, resolveDefaultModel } from './llm/client.js';
 
