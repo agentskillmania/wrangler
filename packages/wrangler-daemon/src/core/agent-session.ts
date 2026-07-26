@@ -692,6 +692,18 @@ export class AgentSession {
    * @param event - A colts RunStreamEvent from the runner stream
    * @returns Mapped SSEEvent(s)
    */
+  /**
+   * Safely parse JSON, returning null on failure.
+   * @internal
+   */
+  private static safeJsonParse(s: string): unknown {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return null;
+    }
+  }
+
   static mapEvent(event: { type: string; [key: string]: unknown }): SSEEvent | SSEEvent[] {
     // Cast to RunStreamEvent for known event field access; subagent: events
     // are accessed via the loose type directly.
@@ -701,7 +713,14 @@ export class AgentSession {
         return { event: 'step-start', data: { step: event.step } };
 
       case 'step:end':
-        return { event: 'step-end', data: { step: event.step } };
+        return {
+          event: 'step-end',
+          data: {
+            step: event.step,
+            tokens: (event as unknown as { result: { tokens?: unknown } }).result?.tokens,
+            duration: (event as unknown as { result: { duration?: unknown } }).result?.duration,
+          },
+        };
 
       case 'phase-change':
         return { event: 'phase-change', data: { from: event.from, to: event.to } };
@@ -768,16 +787,33 @@ export class AgentSession {
         return { event: 'skill-end', data: { name: event.name, result: event.result } };
 
       case 'subagent:start':
-        return { event: 'subagent-start', data: { name: event.name, task: event.task } };
+        return {
+          event: 'subagent-start',
+          data: { name: event.name, task: event.task, subtaskId: event.subtaskId },
+        };
 
-      case 'subagent:end':
+      case 'subagent:end': {
+        // DelegateResult carries tokens + duration; surface them alongside status
+        const rawResult = event.result as Record<string, unknown> | string;
+        const parsed =
+          typeof rawResult === 'string'
+            ? (AgentSession.safeJsonParse(rawResult) as Record<string, unknown> | null)
+            : rawResult;
         return {
           event: 'subagent-end',
           data: {
             name: event.name,
-            result: typeof event.result === 'string' ? event.result : JSON.stringify(event.result),
+            subtaskId: event.subtaskId,
+            status: parsed?.status ?? 'unknown',
+            answer: parsed?.answer,
+            error: parsed?.error,
+            totalSteps: parsed?.totalSteps,
+            tokens: parsed?.tokens,
+            duration: parsed?.duration,
+            result: typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult),
           },
         };
+      }
 
       case 'subagent:token':
         return {
@@ -835,6 +871,7 @@ export class AgentSession {
           data: {
             text: event.text,
             toolCalls: event.toolCalls,
+            tokens: (event as unknown as { tokens?: unknown }).tokens,
           },
         };
 
@@ -850,8 +887,21 @@ export class AgentSession {
       case 'waiting-human':
         return { event: 'waiting-human', data: { request: event.request } };
 
-      case 'complete':
-        return { event: 'done', data: {} };
+      case 'complete': {
+        // RunResult carries tokens, totalSteps, duration, and (for success) the answer.
+        // Surface them so the client can display final metrics.
+        const result = (event as unknown as { result: Record<string, unknown> }).result;
+        return {
+          event: 'done',
+          data: {
+            type: result?.type,
+            answer: result?.answer,
+            totalSteps: result?.totalSteps,
+            tokens: result?.tokens,
+            duration: result?.duration,
+          },
+        };
+      }
 
       case 'error':
         return {

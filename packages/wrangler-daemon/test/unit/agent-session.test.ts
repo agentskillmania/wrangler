@@ -387,24 +387,44 @@ describe('AgentSession', () => {
       expect(result).toEqual({ event: 'subagent-start', data: { name: 'helper', task: 'assist' } });
     });
 
-    it('maps subagent:end event', () => {
+    it('maps subagent:end event with DelegateResult object', () => {
       const result = AgentSession.mapEvent({
         type: 'subagent:end',
         name: 'helper',
-        result: { answer: 'ok', totalSteps: 3, finalState: null },
+        subtaskId: 'helper-123',
+        result: {
+          status: 'success',
+          answer: 'ok',
+          totalSteps: 3,
+          tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0 },
+          duration: 5000,
+        },
       } as any);
       expect(result!.event).toBe('subagent-end');
-      const data = result!.data as { name: string; result: string };
-      expect(data.result).toContain('answer');
+      const data = result!.data as Record<string, unknown>;
+      expect(data.name).toBe('helper');
+      expect(data.subtaskId).toBe('helper-123');
+      expect(data.status).toBe('success');
+      expect(data.answer).toBe('ok');
+      expect(data.totalSteps).toBe(3);
+      expect(data.tokens).toEqual({ input: 100, output: 50, cacheRead: 0, cacheWrite: 0 });
+      expect(data.duration).toBe(5000);
     });
 
-    it('maps subagent:end with string result', () => {
+    it('maps subagent:end with non-JSON string result', () => {
       const result = AgentSession.mapEvent({
         type: 'subagent:end',
         name: 'helper',
+        subtaskId: 'helper-456',
         result: 'done',
       } as any);
-      expect(result).toEqual({ event: 'subagent-end', data: { name: 'helper', result: 'done' } });
+      expect(result!.event).toBe('subagent-end');
+      const data = result!.data as Record<string, unknown>;
+      expect(data.name).toBe('helper');
+      expect(data.subtaskId).toBe('helper-456');
+      expect(data.result).toBe('done');
+      // Non-JSON string → status unknown, structured fields absent
+      expect(data.status).toBe('unknown');
     });
 
     it('maps tools:end with object result', () => {
