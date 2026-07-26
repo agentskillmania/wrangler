@@ -217,7 +217,13 @@ describe('createDelegateTool — custom factory injection', () => {
       on: vi.fn(),
       run: vi.fn().mockResolvedValue({
         state: {} as AgentState,
-        result: { type: 'success', answer: 'custom', totalSteps: 1 } as RunResult,
+        result: {
+          type: 'success',
+          answer: 'custom',
+          totalSteps: 1,
+          tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0 },
+          duration: 5000,
+        } as RunResult,
       }),
     }));
 
@@ -260,7 +266,14 @@ describe('createDelegateTool — custom factory injection', () => {
     // The default createSubAgentRunner should NOT have been called
     expect(mockCreateSubAgentRunner).not.toHaveBeenCalled();
     // Result comes from the custom factory's run()
-    expect(result).toEqual({ status: 'success', answer: 'custom', totalSteps: 1 });
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        answer: 'custom',
+        totalSteps: 1,
+        tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0 },
+      })
+    );
   });
 
   it('falls back to default createSubAgentRunner when no factory provided', async () => {

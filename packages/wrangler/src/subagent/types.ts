@@ -5,7 +5,7 @@
  * requires wrangler concerns: buildTimeContext, MarkdownMessageAssembler,
  * todolist — things a bare colts AgentRunner cannot provide.
  */
-import type { AgentConfig } from '@agentskillmania/colts';
+import type { AgentConfig, TokenStats } from '@agentskillmania/colts';
 
 /**
  * Sub-agent configuration
@@ -44,11 +44,11 @@ export interface SubAgentConfig {
  * branch on status to decide retry/fallback/report.
  */
 export type DelegateResult =
-  | { status: 'success'; answer: string; totalSteps: number }
-  | { status: 'max_steps'; lastAnswer: string; totalSteps: number }
-  | { status: 'error'; error: string; totalSteps: number }
-  | { status: 'abort'; totalSteps: number }
-  | { status: 'timeout'; partialResult: string; totalSteps: number };
+  | { status: 'success'; answer: string; totalSteps: number; tokens: TokenStats; duration: number }
+  | { status: 'max_steps'; lastAnswer: string; totalSteps: number; tokens: TokenStats; duration: number }
+  | { status: 'error'; error: string; totalSteps: number; tokens: TokenStats; duration: number }
+  | { status: 'abort'; totalSteps: number; tokens: TokenStats; duration: number }
+  | { status: 'timeout'; partialResult: string; totalSteps: number; tokens: TokenStats; duration: number };
 
 /** Default max steps for a sub-agent when not specified in SubAgentConfig */
 export const DEFAULT_SUBAGENT_MAX_STEPS = 500;

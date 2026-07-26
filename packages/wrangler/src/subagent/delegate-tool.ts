@@ -112,6 +112,8 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool<ZodTypeAny> {
           status: 'error',
           error: `Unknown sub-agent '${agent}'. Available: ${available}`,
           totalSteps: 0,
+          tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          duration: 0,
         } satisfies DelegateResult;
       }
 
@@ -176,13 +178,16 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool<ZodTypeAny> {
       }
 
       // Emit subagent:start before running
-      deps.emit('subagent:start', { name: agent, task, subtaskId, timestamp: Date.now() });
+      const subStartTime = Date.now();
+      deps.emit('subagent:start', { name: agent, task, subtaskId, timestamp: subStartTime });
 
       // Check abort signal before running
       if (options?.signal?.aborted) {
         return {
           status: 'abort',
           totalSteps: 0,
+          tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          duration: 0,
         } satisfies DelegateResult;
       }
 
@@ -210,29 +215,55 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool<ZodTypeAny> {
 
       // Check if timeout caused the abort
       if (result.type === 'abort' && timeoutMs && timeoutController.signal.aborted) {
-        deps.emit('subagent:end', {
-          name: agent,
-          result: { status: 'timeout', partialResult: '', totalSteps: result.totalSteps },
-          subtaskId,
-          timestamp: Date.now(),
-        });
-        return {
+        const timeoutResult: DelegateResult = {
           status: 'timeout',
           partialResult: '',
           totalSteps: result.totalSteps,
-        } satisfies DelegateResult;
+          tokens: result.tokens,
+          duration: Date.now() - subStartTime,
+        };
+        deps.emit('subagent:end', {
+          name: agent,
+          result: timeoutResult,
+          subtaskId,
+          timestamp: Date.now(),
+        });
+        return timeoutResult;
       }
 
-      // Build the structured result
+      // Build the structured result — tokens and duration flow up from the sub-agent's RunResult
       let delegateResult: DelegateResult;
       if (result.type === 'abort') {
-        delegateResult = { status: 'abort', totalSteps: result.totalSteps };
+        delegateResult = {
+          status: 'abort',
+          totalSteps: result.totalSteps,
+          tokens: result.tokens,
+          duration: Date.now() - subStartTime,
+        };
       } else if (result.type === 'success') {
-        delegateResult = { status: 'success', answer: result.answer, totalSteps: result.totalSteps };
+        delegateResult = {
+          status: 'success',
+          answer: result.answer,
+          totalSteps: result.totalSteps,
+          tokens: result.tokens,
+          duration: Date.now() - subStartTime,
+        };
       } else if (result.type === 'error') {
-        delegateResult = { status: 'error', error: result.error.message, totalSteps: result.totalSteps };
+        delegateResult = {
+          status: 'error',
+          error: result.error.message,
+          totalSteps: result.totalSteps,
+          tokens: result.tokens,
+          duration: Date.now() - subStartTime,
+        };
       } else {
-        delegateResult = { status: 'max_steps', lastAnswer: result.type === 'stopped' ? (result.data ?? '') : '', totalSteps: result.totalSteps };
+        delegateResult = {
+          status: 'max_steps',
+          lastAnswer: result.type === 'stopped' ? (result.data ?? '') : '',
+          totalSteps: result.totalSteps,
+          tokens: result.tokens,
+          duration: Date.now() - subStartTime,
+        };
       }
 
       // Emit subagent:end with the result
