@@ -478,6 +478,7 @@ export class EnhancedRunner {
         parentSkillProvider: runner.skillProvider,
         thinkingEnabled: options.thinkingEnabled,
         temperature: options.temperature,
+        subAgentRunnerFactory: options.subAgentRunnerFactory,
         emit: (type: string, data: Record<string, unknown>) => {
           runner.emit(type as keyof RunnerEventMap, data as never);
         },

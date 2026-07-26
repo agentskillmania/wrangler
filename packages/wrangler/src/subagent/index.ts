@@ -9,4 +9,4 @@
 export type { SubAgentConfig, DelegateResult } from './types.js';
 export { DEFAULT_SUBAGENT_MAX_STEPS } from './types.js';
 export { createDelegateTool } from './delegate-tool.js';
-export type { DelegateToolDeps } from './delegate-tool.js';
+export type { DelegateToolDeps, SubAgentRunnerFactory } from './delegate-tool.js';

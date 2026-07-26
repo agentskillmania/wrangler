@@ -13,6 +13,7 @@ import type { CommandHandler } from '../command/types.js';
 import type { SearchProvider } from '../tools/builtin/index.js';
 import type { SessionSource } from '../types.js';
 import type { SubAgentConfig } from '../subagent/types.js';
+import type { SubAgentRunnerFactory } from '../subagent/delegate-tool.js';
 
 // ---- Tool & Skill metadata for diagnostics ----
 
@@ -62,6 +63,14 @@ export interface EnhancedRunnerOptions {
   temperature?: number;
   /** Sub-agent configs — enables the 'delegate' tool for task delegation */
   subAgents?: SubAgentConfig[];
+  /**
+   * Custom sub-agent runner factory. Defaults to the built-in
+   * `createSubAgentRunner` (buildTimeContext + MarkdownMessageAssembler +
+   * todolist + tool/skill inheritance). Inject a custom factory to override
+   * sub-agent runner construction (add middleware, swap assembler, pool
+   * runners, etc.). Only effective when `subAgents` is non-empty.
+   */
+  subAgentRunnerFactory?: SubAgentRunnerFactory;
   requestTimeout?: number;
   maxSteps?: number;
   /** Context compression config (passed to AgentRunner and /compact handler) */

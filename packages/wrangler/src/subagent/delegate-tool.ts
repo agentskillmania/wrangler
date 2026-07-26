@@ -12,16 +12,29 @@
 
 import { z } from 'zod';
 
-import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import type { ILLMProvider, IToolRegistry, ISkillProvider, Tool } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
 
-import { createSubAgentRunner } from '../runner/sub-agent-runner.js';
+import { createSubAgentRunner, type SubAgentRunnerOptions } from '../runner/sub-agent-runner.js';
 import type {
   SubAgentConfig,
   DelegateResult,
 } from './types.js';
 import { DEFAULT_SUBAGENT_MAX_STEPS } from './types.js';
+
+/**
+ * Factory signature for creating a sub-agent runner.
+ *
+ * Replaces colts' `ISubAgentFactory`. The default implementation
+ * ({@link createSubAgentRunner}) wires up buildTimeContext, MarkdownMessageAssembler,
+ * todolist, and tool/skill inheritance. Inject a custom factory to override
+ * any of that (pool runners, add middleware, swap assembler, etc.).
+ *
+ * Receives the already-resolved inherited tools (filtered for delegate/load_skill)
+ * so the factory doesn't have to re-implement tool inheritance logic.
+ */
+export type SubAgentRunnerFactory = (options: SubAgentRunnerOptions) => AgentRunner;
 
 /**
  * Dependency injection interface for the delegate tool
@@ -44,6 +57,11 @@ export interface DelegateToolDeps {
   thinkingEnabled?: boolean;
   /** Parent runner's temperature setting (forwarded to sub-agent) */
   temperature?: number;
+  /**
+   * Custom sub-agent runner factory. Defaults to {@link createSubAgentRunner}.
+   * Override to customize how sub-agent runners are built.
+   */
+  subAgentRunnerFactory?: SubAgentRunnerFactory;
   /**
    * Event emitter callback — forwards sub-agent events to the parent runner's EventEmitter.
    * Called with (type, data) for each event the sub-agent produces.
@@ -71,6 +89,7 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool<ZodTypeAny> {
     parentSkillProvider,
     thinkingEnabled,
     temperature,
+    subAgentRunnerFactory = createSubAgentRunner,
   } = deps;
 
   return {
@@ -107,22 +126,35 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool<ZodTypeAny> {
       const subState = createAgentState(subConfig);
       const stateWithTask = addUserMessage(subState, task);
 
-      // Resolve inherited tools from the parent registry.
-      // Filter out tools the SubAgentRunner wires up itself:
-      // - `delegate`: would be recursive
-      // - `load_skill`: auto-registered by AgentRunner when skillProvider is present
+      // Resolve tools for the sub-agent runner.
       const inheritTools = config.inheritParentTools !== false;
       const inheritSkills = config.inheritParentSkills !== false;
       let inheritedTools: Tool<ZodTypeAny>[] = [];
       if (inheritTools) {
+        // Path A (default): inherit the parent runner's full tool set.
+        // Filter out tools the SubAgentRunner wires up itself:
+        // - `delegate`: would be recursive (and sub-agents can't delegate)
+        // - `load_skill`: auto-registered by AgentRunner when skillProvider is present
         const all = parentToolRegistry.getAll?.() ?? [];
         inheritedTools = all.filter(
           (t) => t.name !== 'delegate' && t.name !== 'load_skill'
         );
+      } else {
+        // Path B (opt-in minimal): only register tools explicitly declared in
+        // config.config.tools. This gives "least-privilege" sub-agents — e.g.
+        // a researcher that only has web_search, not shell/file_write.
+        for (const toolDef of config.config.tools) {
+          // `delegate` is never inherited — sub-agents cannot delegate (no recursion)
+          if (toolDef.name === 'delegate') continue;
+          const parentTool = parentToolRegistry.get(toolDef.name);
+          if (parentTool) {
+            inheritedTools.push(parentTool);
+          }
+        }
       }
 
-      // Create a SubAgentRunner for this delegation
-      const subRunner = createSubAgentRunner({
+      // Create a sub-agent runner for this delegation (custom or default factory)
+      const subRunner = subAgentRunnerFactory({
         model: model ?? 'sub-agent',
         llmClient: llmProvider,
         inheritedTools,
