@@ -192,6 +192,15 @@ describe('Integration: Crew chat', () => {
         .map((e) => (e.data as { delta?: string }).delta ?? '')
         .join('');
       expect(subagentTokens).toMatch(/RESEARCHER_OK/);
+
+      // subagent-end must carry structured metrics (tokens + duration)
+      const subagentEnd = events.find((e) => e.event === 'subagent-end');
+      expect(subagentEnd).toBeDefined();
+      const endData = subagentEnd!.data as Record<string, unknown>;
+      expect(endData.tokens).toBeDefined();
+      expect((endData.tokens as { input: number }).input).toBeGreaterThanOrEqual(0);
+      expect(endData.duration).toBeDefined();
+      expect(endData.duration as number).toBeGreaterThanOrEqual(0);
     }
   );
 

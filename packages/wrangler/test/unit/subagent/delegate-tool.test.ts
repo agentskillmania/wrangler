@@ -272,6 +272,7 @@ describe('createDelegateTool — custom factory injection', () => {
         answer: 'custom',
         totalSteps: 1,
         tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0 },
+        duration: expect.any(Number),
       })
     );
   });

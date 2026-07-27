@@ -203,9 +203,25 @@ describe('AgentSession', () => {
       expect(data.result).toContain('error');
     });
 
-    it('maps complete event', () => {
-      const result = AgentSession.mapEvent({ type: 'complete' } as any);
-      expect(result).toEqual({ event: 'done', data: {} });
+    it('maps complete event with RunResult fields', () => {
+      const result = AgentSession.mapEvent({
+        type: 'complete',
+        result: {
+          type: 'success',
+          answer: '42',
+          totalSteps: 3,
+          tokens: { input: 100, output: 50, cacheRead: 10, cacheWrite: 5 },
+          duration: 5000,
+        },
+        timestamp: 0,
+      } as any);
+      expect(result!.event).toBe('done');
+      const data = result!.data as Record<string, unknown>;
+      expect(data.type).toBe('success');
+      expect(data.answer).toBe('42');
+      expect(data.totalSteps).toBe(3);
+      expect(data.tokens).toEqual({ input: 100, output: 50, cacheRead: 10, cacheWrite: 5 });
+      expect(data.duration).toBe(5000);
     });
 
     it('maps error event', () => {
@@ -223,14 +239,23 @@ describe('AgentSession', () => {
       expect(result).toEqual({ event: 'step-start', data: { step: 3 } });
     });
 
-    it('maps step:end event', () => {
+    it('maps step:end event with tokens and duration', () => {
       const result = AgentSession.mapEvent({
         type: 'step:end',
         step: 3,
-        result: {},
+        result: {
+          type: 'done',
+          answer: 'ok',
+          tokens: { input: 50, output: 20, cacheRead: 0, cacheWrite: 0 },
+          duration: 1500,
+        },
         timestamp: 0,
       } as any);
-      expect(result).toEqual({ event: 'step-end', data: { step: 3 } });
+      expect(result!.event).toBe('step-end');
+      const data = result!.data as Record<string, unknown>;
+      expect(data.step).toBe(3);
+      expect(data.tokens).toEqual({ input: 50, output: 20, cacheRead: 0, cacheWrite: 0 });
+      expect(data.duration).toBe(1500);
     });
 
     it('maps phase-change event', () => {
@@ -278,17 +303,19 @@ describe('AgentSession', () => {
       expect(data.tools).toEqual(['read_file']);
     });
 
-    it('maps llm:response event', () => {
+    it('maps llm:response event with tokens', () => {
       const result = AgentSession.mapEvent({
         type: 'llm:response',
         text: 'hello',
         toolCalls: null,
+        tokens: { input: 30, output: 10, cacheRead: 5, cacheWrite: 0 },
         timestamp: 0,
       } as any);
-      expect(result).toEqual({
-        event: 'llm-response',
-        data: { text: 'hello', toolCalls: null },
-      });
+      expect(result!.event).toBe('llm-response');
+      const data = result!.data as Record<string, unknown>;
+      expect(data.text).toBe('hello');
+      expect(data.toolCalls).toBeNull();
+      expect(data.tokens).toEqual({ input: 30, output: 10, cacheRead: 5, cacheWrite: 0 });
     });
 
     it('maps llm:response event with toolCalls', () => {
@@ -296,11 +323,13 @@ describe('AgentSession', () => {
         type: 'llm:response',
         text: '',
         toolCalls: [{ id: 'c1', name: 'read_file', arguments: { path: '/tmp' } }],
+        tokens: { input: 20, output: 0, cacheRead: 0, cacheWrite: 0 },
         timestamp: 0,
       } as any);
       expect(result!.event).toBe('llm-response');
-      const data = result!.data as { toolCalls: unknown[] };
+      const data = result!.data as { toolCalls: unknown[]; tokens: { input: number } };
       expect(data.toolCalls).toHaveLength(1);
+      expect(data.tokens.input).toBe(20);
     });
 
     it('maps waiting-human event', () => {
@@ -425,6 +454,61 @@ describe('AgentSession', () => {
       expect(data.result).toBe('done');
       // Non-JSON string → status unknown, structured fields absent
       expect(data.status).toBe('unknown');
+    });
+
+    it('maps subagent:end with error DelegateResult', () => {
+      const result = AgentSession.mapEvent({
+        type: 'subagent:end',
+        name: 'coder',
+        subtaskId: 'coder-1',
+        result: JSON.stringify({
+          status: 'error',
+          error: 'TypeError: undefined',
+          totalSteps: 2,
+          tokens: { input: 200, output: 50, cacheRead: 0, cacheWrite: 0 },
+          duration: 3000,
+        }),
+      } as any);
+      const data = result!.data as Record<string, unknown>;
+      expect(data.status).toBe('error');
+      expect(data.error).toBe('TypeError: undefined');
+      expect(data.totalSteps).toBe(2);
+    });
+
+    it('maps subagent:end with max_steps DelegateResult', () => {
+      const result = AgentSession.mapEvent({
+        type: 'subagent:end',
+        name: 'writer',
+        subtaskId: 'writer-1',
+        result: JSON.stringify({
+          status: 'max_steps',
+          lastAnswer: 'partial work',
+          totalSteps: 50,
+          tokens: { input: 5000, output: 2000, cacheRead: 0, cacheWrite: 0 },
+          duration: 120000,
+        }),
+      } as any);
+      const data = result!.data as Record<string, unknown>;
+      expect(data.status).toBe('max_steps');
+      expect(data.totalSteps).toBe(50);
+    });
+
+    it('maps subagent:end with timeout DelegateResult', () => {
+      const result = AgentSession.mapEvent({
+        type: 'subagent:end',
+        name: 'analyst',
+        subtaskId: 'analyst-1',
+        result: JSON.stringify({
+          status: 'timeout',
+          partialResult: 'incomplete analysis',
+          totalSteps: 12,
+          tokens: { input: 1000, output: 300, cacheRead: 0, cacheWrite: 0 },
+          duration: 60000,
+        }),
+      } as any);
+      const data = result!.data as Record<string, unknown>;
+      expect(data.status).toBe('timeout');
+      expect(data.duration).toBe(60000);
     });
 
     it('maps tools:end with object result', () => {
