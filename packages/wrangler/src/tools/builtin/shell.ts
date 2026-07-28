@@ -13,9 +13,13 @@ const MAX_OUTPUT = 50_000;
 export function createShellTool(deps: ToolDeps): Tool<ZodTypeAny> {
   const shellHint = deps.shell ? ` Current shell: ${deps.shell.name} (${deps.shell.path}).` : '';
 
+  const sandboxHint = deps.isSandboxed
+    ? ` Commands run inside a sandboxed environment. The workspace is mounted at ${deps.workspaceRoot}. You cannot access files outside ${deps.workspaceRoot} — paths like ../ or /etc/ will not work. Only use relative paths or paths within ${deps.workspaceRoot}.`
+    : ` Commands run in ${deps.workspaceRoot}.`;
+
   return {
     name: 'shell',
-    description: `Execute shell commands in the workspace.${shellHint}`,
+    description: `Execute shell commands in the workspace.${shellHint}${sandboxHint}`,
     parameters: ShellSchema,
     async execute(args: z.infer<typeof ShellSchema>) {
       const result = await deps.exec(args.command);
