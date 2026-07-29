@@ -40,70 +40,177 @@ export interface A2UIConfig {
   enabled: boolean;
 }
 
-export interface EnhancedRunnerOptions {
+// ── Builtin tool filter ──────────────────────────────────────────
+
+export interface BuiltinToolFilter {
+  fileRead?: boolean;
+  fileWrite?: boolean;
+  fileEdit?: boolean;
+  glob?: boolean;
+  grep?: boolean;
+  shell?: boolean;
+  webSearch?: boolean;
+  webFetch?: boolean;
+  python?: boolean;
+  git?: boolean;
+}
+
+// ── Structured config groups ─────────────────────────────────────
+
+export interface LLMConfig {
   /** LLM provider instance (injection mode) */
-  llmClient?: ILLMProvider;
+  client?: ILLMProvider;
   /** LLM quick initialization config (multi-provider, one apiKey per provider) */
-  llm?: LLMQuickInit;
+  quickInit?: LLMQuickInit;
+  /** Model identifier */
   model?: string;
-  workspacePath?: string;
-  extraTools?: Tool<ZodTypeAny>[];
-  /** Search provider instance or name. Defaults to 'sogou'. */
-  searchProvider?: SearchProvider | 'bing' | 'sogou';
-  sandbox?: boolean;
-  mcpConfigPaths?: string[];
-  sessionBaseDir?: string;
-  skillDirs?: string[];
-  askHumanHandler?: AskHumanHandler;
-  confirmHandler?: ConfirmHandler;
-  confirmTools?: string[];
-  thinkingEnabled?: boolean;
-  enablePromptThinking?: boolean;
   /** Sampling temperature (passed through to LLM provider) */
   temperature?: number;
-  /** Sub-agent configs — enables the 'delegate' tool for task delegation */
-  subAgents?: SubAgentConfig[];
-  /**
-   * Custom sub-agent runner factory. Defaults to the built-in
-   * `createSubAgentRunner` (buildTimeContext + MarkdownMessageAssembler +
-   * todolist + tool/skill inheritance). Inject a custom factory to override
-   * sub-agent runner construction (add middleware, swap assembler, pool
-   * runners, etc.). Only effective when `subAgents` is non-empty.
-   */
-  subAgentRunnerFactory?: SubAgentRunnerFactory;
+  /** Request timeout in ms */
   requestTimeout?: number;
+}
+
+export interface SkillsConfig {
+  /** Skill directories to scan for SKILL.md files */
+  dirs?: string[];
+}
+
+export interface ToolsConfig {
+  /** Builtin tool whitelist. Omit to load all; pass to filter. */
+  builtinFilter?: BuiltinToolFilter;
+  /** MCP config file paths */
+  mcpConfigPaths?: string[];
+  /** Extra custom tools */
+  extra?: Tool<ZodTypeAny>[];
+  /** AskHuman handler for human-in-the-loop */
+  askHumanHandler?: AskHumanHandler;
+  /** Confirm handler for tool confirmation */
+  confirmHandler?: ConfirmHandler;
+  /** Tool names that require confirmation */
+  confirmTools?: string[];
+}
+
+export interface SandboxConfig {
+  /** Enable WASM sandbox (default: true) */
+  enabled?: boolean;
+}
+
+export interface ThinkingConfig {
+  /** Enable thinking/reasoning mode */
+  enabled?: boolean;
+  /** Add thinking guidance to system prompt */
+  promptLevel?: boolean;
+}
+
+export interface SessionConfig {
+  /** Enable session persistence (default: true) */
+  enabled?: boolean;
+  /** Session storage root directory */
+  baseDir?: string;
+}
+
+export interface DelegationConfig {
+  /** Sub-agent configs — enables the 'delegate' tool */
+  subAgents?: SubAgentConfig[];
+  /** Custom sub-agent runner factory */
+  runnerFactory?: SubAgentRunnerFactory;
+}
+
+export interface SearchConfig {
+  /** Search provider instance or name. Defaults to 'sogou'. */
+  provider?: SearchProvider | 'bing' | 'sogou';
+}
+
+export interface LimitsConfig {
+  /** Maximum execution steps */
   maxSteps?: number;
-  /** Context compression config (passed to AgentRunner and /compact handler) */
+}
+
+// ── Main options interface ───────────────────────────────────────
+
+export interface EnhancedRunnerOptions {
+  // ── Core ──
+  workspacePath?: string;
+
+  // ── Structured groups (preferred) ──
+  llm?: LLMConfig;
+  skills?: SkillsConfig;
+  tools?: ToolsConfig;
+  /** Sandbox config. Accepts boolean (legacy) or { enabled } object. */
+  sandbox?: SandboxConfig | boolean;
+  thinking?: ThinkingConfig;
+  session?: SessionConfig;
+  delegation?: DelegationConfig;
+  search?: SearchConfig;
+  limits?: LimitsConfig;
+
+  /** Todolist support (default: enabled) */
+  todolist?: { enabled?: boolean };
+  /** Spec-plan tools (default: enabled) */
+  specPlan?: { enabled?: boolean };
+  /** Command middleware (default: enabled) */
+  commands?: { enabled?: boolean; extra?: CommandHandler[] };
+  /** A2UI support */
+  a2ui?: { enabled?: boolean };
+
+  /** Context compression config */
   compression?: CompressionConfig | IContextCompressor;
-  /** Custom command handlers (override built-in if same name) */
-  commands?: CommandHandler[];
-  /** A2UI support configuration */
-  a2ui?: A2UIConfig;
-  /** Builtin tool toggles. Omit to load all; pass empty {} to load none. */
-  builtinTools?: {
-    fileRead?: boolean;
-    fileWrite?: boolean;
-    fileEdit?: boolean;
-    glob?: boolean;
-    grep?: boolean;
-    shell?: boolean;
-    webSearch?: boolean;
-    webFetch?: boolean;
-    python?: boolean;
-    git?: boolean;
-  };
-  /** Whether to enable session support (default: true) */
-  enableSession?: boolean;
-  /** Whether to enable todolist support (default: true) */
-  enableTodolist?: boolean;
-  /** Whether to enable spec-plan tools (default: true) */
-  enableSpecPlan?: boolean;
-  /** Whether to enable command middleware (default: true) */
-  enableCommands?: boolean;
-  /** Source of session creation — automatically set by AgentLoader when loading from agent directory */
+
+  /** Session metadata */
   source?: SessionSource;
-  /** Crew identifier — persisted into runnerConfig snapshot so resume can reload crew config */
   crewId?: string;
+
+  // ── Deprecated flat fields (backward compat — migrated internally) ──
+  /** @deprecated use llm.client */
+  llmClient?: ILLMProvider;
+  /** @deprecated use llm.quickInit */
+  llm2?: LLMQuickInit;
+  /** @deprecated use llm.model */
+  model?: string;
+  /** @deprecated use llm.temperature */
+  temperature?: number;
+  /** @deprecated use llm.requestTimeout */
+  requestTimeout?: number;
+  /** @deprecated use tools.extra */
+  extraTools?: Tool<ZodTypeAny>[];
+  /** @deprecated use search.provider */
+  searchProvider?: SearchProvider | 'bing' | 'sogou';
+  /** @deprecated use sandbox.enabled */
+  sandboxEnabled?: boolean;
+  /** @deprecated use tools.mcpConfigPaths */
+  mcpConfigPaths?: string[];
+  /** @deprecated use session.baseDir */
+  sessionBaseDir?: string;
+  /** @deprecated use skills.dirs */
+  skillDirs?: string[];
+  /** @deprecated use tools.askHumanHandler */
+  askHumanHandler?: AskHumanHandler;
+  /** @deprecated use tools.confirmHandler */
+  confirmHandler?: ConfirmHandler;
+  /** @deprecated use tools.confirmTools */
+  confirmTools?: string[];
+  /** @deprecated use thinking.enabled */
+  thinkingEnabled?: boolean;
+  /** @deprecated use thinking.promptLevel */
+  enablePromptThinking?: boolean;
+  /** @deprecated use delegation.subAgents */
+  subAgents?: SubAgentConfig[];
+  /** @deprecated use delegation.runnerFactory */
+  subAgentRunnerFactory?: SubAgentRunnerFactory;
+  /** @deprecated use limits.maxSteps */
+  maxSteps?: number;
+  /** @deprecated use commands.extra */
+  commandsExtra?: CommandHandler[];
+  /** @deprecated use tools.builtinFilter */
+  builtinTools?: BuiltinToolFilter;
+  /** @deprecated use session.enabled */
+  enableSession?: boolean;
+  /** @deprecated use todolist.enabled */
+  enableTodolist?: boolean;
+  /** @deprecated use specPlan.enabled */
+  enableSpecPlan?: boolean;
+  /** @deprecated use commands.enabled */
+  enableCommands?: boolean;
 }
 
 /**
