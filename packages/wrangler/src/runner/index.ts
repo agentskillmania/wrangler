@@ -7,4 +7,6 @@ export type {
   ToolMetadata,
   SkillMetadata,
   ResumeOptions,
+  LimitsConfig,
+  BuiltinToolFilter,
 } from './types.js';

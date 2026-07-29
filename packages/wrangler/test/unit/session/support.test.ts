@@ -25,7 +25,9 @@ describe('createSessionSupport', () => {
     vi.restoreAllMocks();
   });
 
-  it('should return middlewares, store, and tools', () => {
+  it('should return middlewares and store (no tools — moved to builtin)', () => {
+    // calculate and ask_human were moved from session support to createBuiltinTools.
+    // createSessionSupport now returns only { middlewares, store }.
     const result = createSessionSupport({
       workspacePath: '/test',
       sessionBaseDir: testBaseDir,
@@ -36,39 +38,8 @@ describe('createSessionSupport', () => {
     expect(result.middlewares[1].name).toBe('session-naming');
     expect(result.store).toBeInstanceOf(SessionStore);
     expect(result.store.exists('never-created')).toBe(false);
-    expect(result.tools).toHaveLength(1);
-  });
-
-  it('should include calculator tool', () => {
-    const result = createSessionSupport({
-      workspacePath: '/test',
-      sessionBaseDir: testBaseDir,
-    });
-
-    const toolNames = result.tools.map((t) => t.name);
-    expect(toolNames).toContain('calculate');
-  });
-
-  it('should include ask_human tool when handler provided', () => {
-    const handler = vi.fn().mockResolvedValue({ response: 'ok' });
-    const result = createSessionSupport({
-      workspacePath: '/test',
-      sessionBaseDir: testBaseDir,
-      askHumanHandler: handler as any,
-    });
-
-    const toolNames = result.tools.map((t) => t.name);
-    expect(toolNames).toContain('ask_human');
-  });
-
-  it('should not include ask_human tool when no handler', () => {
-    const result = createSessionSupport({
-      workspacePath: '/test',
-      sessionBaseDir: testBaseDir,
-    });
-
-    const toolNames = result.tools.map((t) => t.name);
-    expect(toolNames).not.toContain('ask_human');
+    // No tools property — tools are now registered via createBuiltinTools
+    expect((result as { tools?: unknown }).tools).toBeUndefined();
   });
 
   it('should create session files when store is used directly', async () => {

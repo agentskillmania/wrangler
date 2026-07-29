@@ -118,6 +118,7 @@ function migrateOptions(raw: EnhancedRunnerOptions): EnhancedRunnerOptions {
 
   const limits = raw.limits ?? {};
   if (raw.maxSteps !== undefined) limits.maxSteps ??= raw.maxSteps;
+  if (raw.requestTimeout !== undefined) { limits.requestTimeout ??= raw.requestTimeout; llm.requestTimeout ??= raw.requestTimeout; }
 
   return {
     ...raw,
@@ -276,6 +277,8 @@ export class EnhancedRunner {
       searchProvider,
       sandbox: sandboxInstance,
       askHumanHandler: options.tools?.askHumanHandler,
+      maxToolOutput: options.limits?.maxToolOutput,
+      toolTimeout: options.limits?.toolTimeout,
     });
 
     // Filter builtin tools based on toggle options.
@@ -475,12 +478,14 @@ export class EnhancedRunner {
       for (const cmd of (typeof options.commands === 'object' ? options.commands?.extra : undefined) ?? []) {
         commandRegistry.register(cmd);
       }
-      // Create compressor instance for both AgentRunner auto-compression and /compact command
-      if (options.compression) {
-        if (typeof options.compression === 'object' && 'shouldCompress' in options.compression) {
+      // Create compressor instance for both AgentRunner auto-compression and /compact command.
+      // Default: enabled (compression !== false). If no config provided, auto-detect
+      // contextWindowSize from model metadata; fall back to message-count threshold.
+      if (options.compression !== false) {
+        if (options.compression && typeof options.compression === 'object' && 'shouldCompress' in options.compression) {
           compressorInstance = options.compression as IContextCompressor;
         } else {
-          const compressionConfig = { ...(options.compression as CompressionConfig) };
+          const compressionConfig = { ...((options.compression as CompressionConfig) ?? {}) };
           // Auto-detect context window size from pre-resolved model metadata
           if (!compressionConfig.contextWindowSize && modelMeta) {
             compressionConfig.contextWindowSize = modelMeta.contextWindow;

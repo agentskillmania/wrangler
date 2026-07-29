@@ -207,11 +207,18 @@ export class HostToolDeps implements ToolDeps {
   readonly workspaceRoot: string;
   readonly maxOutputSize: number;
   readonly shell: ShellInfo;
+  private readonly defaultTimeout: number;
 
-  constructor(workspaceRoot: string, maxOutputSize: number = 1024 * 1024, shell?: ShellInfo) {
+  constructor(
+    workspaceRoot: string,
+    maxOutputSize: number = 1024 * 1024,
+    shell?: ShellInfo,
+    defaultTimeout: number = 600_000
+  ) {
     this.workspaceRoot = workspaceRoot;
     this.maxOutputSize = maxOutputSize;
     this.shell = shell ?? detectShell();
+    this.defaultTimeout = defaultTimeout;
   }
 
   resolvePath(filePath: string): string {
@@ -224,7 +231,7 @@ export class HostToolDeps implements ToolDeps {
   }
 
   async exec(command: string, options?: { timeout?: number }): Promise<ExecResult> {
-    const timeout = options?.timeout ?? 30000;
+    const timeout = options?.timeout ?? this.defaultTimeout;
     try {
       const { stdout, stderr } = await execAsync(command, {
         timeout,
@@ -256,7 +263,7 @@ export class HostToolDeps implements ToolDeps {
     args: string[],
     options?: { timeout?: number }
   ): Promise<ExecResult> {
-    const timeout = options?.timeout ?? 30000;
+    const timeout = options?.timeout ?? this.defaultTimeout;
     try {
       const { stdout, stderr } = await execFileAsync(exe, args, {
         timeout,
@@ -396,10 +403,14 @@ export class SandboxToolDeps implements ToolDeps {
   private readonly sandbox: Sandbox;
   private readonly defaultTimeout: number;
 
-  constructor(sandbox: Sandbox, maxOutputSize: number = 1024 * 1024) {
+  constructor(
+    sandbox: Sandbox,
+    maxOutputSize: number = 1024 * 1024,
+    defaultTimeout: number = 600_000
+  ) {
     this.sandbox = sandbox;
     this.maxOutputSize = maxOutputSize;
-    this.defaultTimeout = 30000;
+    this.defaultTimeout = defaultTimeout;
   }
 
   resolvePath(filePath: string): string {
@@ -495,9 +506,7 @@ export class SandboxToolDeps implements ToolDeps {
   }
 
   async glob(pattern: string, options?: { cwd?: string }): Promise<string[]> {
-    const cwd = options?.cwd
-      ? this.resolvePath(options.cwd.replace(/^\/workspace\/?/, ''))
-      : '/workspace';
+    const cwd = options?.cwd ? this.resolvePath(options.cwd) : '/';
     // find is not available in busybox-wasi; use ls -R instead
     // SEC5: use execArray (no shell) so cwd path is a literal argv element
     const result = await this.execArray('ls', ['-R', cwd]);

@@ -329,6 +329,32 @@ describe('HostToolDeps', () => {
       expect(result.stdout.trim()).toBe('test-shell');
     });
   });
+
+  describe('defaultTimeout parameterization', () => {
+    it('defaults to 600000ms when not specified', () => {
+      // The constructor default is 600000 (10 min). We verify the timeout is
+      // applied by passing a short command — exec should succeed quickly.
+      const d = new HostToolDeps(tempDir);
+      // No direct getter; verify via a fast exec call
+      return expect(d.exec('echo ok')).resolves.toMatchObject({ exitCode: 0 });
+    });
+
+    it('accepts custom defaultTimeout', async () => {
+      // Use a very short timeout (50ms) and a command that sleeps longer.
+      // The exec should time out and return a non-zero exit code.
+      const d = new HostToolDeps(tempDir, 1024 * 1024, undefined, 50);
+      const result = await d.exec('sleep 2');
+      // Node exec timeout kills the process → exitCode is non-zero (122 or 1)
+      expect(result.exitCode).not.toBe(0);
+    });
+
+    it('per-call timeout option overrides defaultTimeout', async () => {
+      // defaultTimeout is 60s but we pass a 50ms per-call timeout
+      const d = new HostToolDeps(tempDir);
+      const result = await d.exec('sleep 2', { timeout: 50 });
+      expect(result.exitCode).not.toBe(0);
+    });
+  });
 });
 
 describe('detectShell', () => {

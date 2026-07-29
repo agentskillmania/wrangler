@@ -8,9 +8,14 @@ const ShellSchema = z.object({
   command: z.string().describe('Shell command to execute'),
 });
 
-const MAX_OUTPUT = 50_000;
-
-export function createShellTool(deps: ToolDeps): Tool<ZodTypeAny> {
+/**
+ * Create the shell execution tool.
+ *
+ * @param deps - Tool dependencies (host or sandbox)
+ * @param maxOutput - Maximum output length in characters before truncation.
+ *   Defaults to 100000 (matches limits.maxToolOutput default).
+ */
+export function createShellTool(deps: ToolDeps, maxOutput = 100_000): Tool<ZodTypeAny> {
   const shellHint = deps.shell ? ` Current shell: ${deps.shell.name} (${deps.shell.path}).` : '';
 
   return {
@@ -30,8 +35,8 @@ export function createShellTool(deps: ToolDeps): Tool<ZodTypeAny> {
         output = parts.join('');
       }
 
-      if (output.length > MAX_OUTPUT) {
-        output = output.slice(0, MAX_OUTPUT) + '\n...(output truncated)';
+      if (output.length > maxOutput) {
+        output = output.slice(0, maxOutput) + '\n...(output truncated)';
       }
 
       return output;

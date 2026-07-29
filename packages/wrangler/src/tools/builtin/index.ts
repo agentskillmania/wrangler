@@ -27,12 +27,18 @@ export interface BuiltinToolsOptions {
   sandbox?: Sandbox;
   /** When provided, registers the ask_human tool */
   askHumanHandler?: AskHumanHandler;
+  /** Maximum tool output length in characters (default 100000). */
+  maxToolOutput?: number;
+  /** Default tool execution timeout in ms (default 600000 = 10min). */
+  toolTimeout?: number;
 }
 
 export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAny>[] {
+  const maxOutputSize = options.maxOutputSize ?? 1024 * 1024;
+  const toolTimeout = options.toolTimeout ?? 600_000;
   const deps: ToolDeps = options.sandbox
-    ? new SandboxToolDeps(options.sandbox, options.maxOutputSize ?? 1024 * 1024)
-    : new HostToolDeps(options.workspacePath, options.maxOutputSize ?? 1024 * 1024);
+    ? new SandboxToolDeps(options.sandbox, maxOutputSize, toolTimeout)
+    : new HostToolDeps(options.workspacePath, maxOutputSize, undefined, toolTimeout);
 
   const searchProvider = options.searchProvider ?? new BingScrapeSearchProvider();
 
@@ -48,7 +54,7 @@ export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAn
     createFileEditTool(deps),
     createGlobTool(deps),
     createGrepTool(deps),
-    createShellTool(deps),
+    createShellTool(deps, options.maxToolOutput),
     createPythonTool(deps),
     createGitTool(deps),
     createWebFetchTool(deps),

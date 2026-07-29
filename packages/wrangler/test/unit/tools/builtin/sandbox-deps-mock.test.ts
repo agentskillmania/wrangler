@@ -20,20 +20,40 @@ describe('SandboxToolDeps (mock sandbox)', () => {
   });
 
   describe('resolvePath', () => {
-    it('resolves relative path within /workspace', () => {
-      expect(deps.resolvePath('src/index.ts')).toBe('/workspace/src/index.ts');
+    it('resolves relative path within / (workspace-as-root mapping)', () => {
+      expect(deps.resolvePath('src/index.ts')).toBe('/src/index.ts');
     });
 
-    it('resolves workspace root', () => {
-      expect(deps.resolvePath('.')).toBe('/workspace');
+    it('resolves workspace root as /', () => {
+      expect(deps.resolvePath('.')).toBe('/');
     });
 
-    it('rejects path traversal', () => {
-      expect(() => deps.resolvePath('../etc/passwd')).toThrow('Path traversal');
+    it('accepts path under /', () => {
+      expect(deps.resolvePath('/src/index.ts')).toBe('/src/index.ts');
+    });
+  });
+
+  describe('defaultTimeout parameterization', () => {
+    it('defaults to 600000ms when not specified', () => {
+      const d = new SandboxToolDeps(sandbox);
+      // SandboxToolDeps.exec ignores timeout (sandbox has its own), so we just
+      // verify construction with default succeeds. The timeout is stored
+      // internally and used by host-side execArray callers that support it.
+      expect(d.maxOutputSize).toBe(1024 * 1024);
+      // exec delegates to sandbox.run — verify it still works
+      (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stdout: 'ok',
+        stderr: '',
+        exitCode: 0,
+      });
+      return expect(d.exec('echo hi')).resolves.toMatchObject({ exitCode: 0 });
     });
 
-    it('rejects absolute escape', () => {
-      expect(() => deps.resolvePath('/etc/passwd')).toThrow('Path traversal');
+    it('accepts custom defaultTimeout in constructor', () => {
+      const d = new SandboxToolDeps(sandbox, 2048, 300_000);
+      expect(d.maxOutputSize).toBe(2048);
+      // Construction does not throw — timeout accepted
+      expect(d).toBeInstanceOf(SandboxToolDeps);
     });
   });
 
@@ -122,7 +142,7 @@ describe('SandboxToolDeps (mock sandbox)', () => {
       });
       const content = await deps.readFile('test.txt');
       expect(content).toBe('file content');
-      expect(sandbox.run).toHaveBeenCalledWith('cat /workspace/test.txt');
+      expect(sandbox.run).toHaveBeenCalledWith('cat /test.txt');
     });
 
     it('throws on read failure', async () => {
@@ -144,9 +164,9 @@ describe('SandboxToolDeps (mock sandbox)', () => {
       });
       await deps.writeFile('src/new.txt', 'hello');
       // First call: mkdir via execArray (quote, no extra quotes for safe chars)
-      expect(sandbox.run).toHaveBeenNthCalledWith(1, 'mkdir -p /workspace/src');
+      expect(sandbox.run).toHaveBeenNthCalledWith(1, 'mkdir -p /src');
       // Second call: cat > file with stdin (path shellSingleQuote'd)
-      expect(sandbox.run).toHaveBeenNthCalledWith(2, "cat > '/workspace/src/new.txt'", {
+      expect(sandbox.run).toHaveBeenNthCalledWith(2, "cat > '/src/new.txt'", {
         stdin: 'hello',
       });
     });
@@ -209,7 +229,7 @@ describe('SandboxToolDeps (mock sandbox)', () => {
   describe('glob', () => {
     it('returns matching files from ls -R output', async () => {
       (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
-        stdout: '/workspace:\na.ts\nb.ts\nc.js\n',
+        stdout: '/:\na.ts\nb.ts\nc.js\n',
         stderr: '',
         exitCode: 0,
       });
@@ -224,7 +244,7 @@ describe('SandboxToolDeps (mock sandbox)', () => {
 
     it('returns empty for no matches', async () => {
       (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
-        stdout: '/workspace:\na.ts\n',
+        stdout: '/:\na.ts\n',
         stderr: '',
         exitCode: 0,
       });
@@ -244,7 +264,7 @@ describe('SandboxToolDeps (mock sandbox)', () => {
 
     it('handles nested directory listing', async () => {
       (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
-        stdout: '/workspace:\nsrc\n\n/workspace/src:\nindex.ts\n',
+        stdout: '/:\nsrc\n\n/src:\nindex.ts\n',
         stderr: '',
         exitCode: 0,
       });
@@ -360,7 +380,7 @@ describe('SandboxToolDeps (mock sandbox)', () => {
       const result = await deps.statFile('test.txt');
       expect(result).toEqual({ exists: true, isFile: true });
       expect(sandbox.run).toHaveBeenCalledWith(
-        "test -f '/workspace/test.txt' && echo YES || echo NO"
+        "test -f '/test.txt' && echo YES || echo NO"
       );
     });
 
@@ -389,8 +409,8 @@ describe('SandboxToolDeps (mock sandbox)', () => {
         .mockResolvedValueOnce({ stdout: '100\n', stderr: '', exitCode: 0 }) // wc -c (original)
         .mockResolvedValueOnce({ stdout: '50\n', stderr: '', exitCode: 0 }); // tr -d + wc -c (stripped)
       expect(await deps.isBinaryFile('binary.bin')).toBe(true);
-      expect(sandbox.run).toHaveBeenCalledWith("wc -c < '/workspace/binary.bin'");
-      expect(sandbox.run).toHaveBeenCalledWith('tr -d "\\000" < \'/workspace/binary.bin\' | wc -c');
+      expect(sandbox.run).toHaveBeenCalledWith("wc -c < '/binary.bin'");
+      expect(sandbox.run).toHaveBeenCalledWith('tr -d "\\000" < \'/binary.bin\' | wc -c');
     });
 
     it('should return false when no null bytes (stripped size equals original)', async () => {

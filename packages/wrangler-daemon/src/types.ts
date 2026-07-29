@@ -163,6 +163,14 @@ export interface SessionInitParams {
     enableCommands?: boolean;
     sandbox?: boolean;
     a2ui?: { enabled: boolean };
+    /** Execution limits (maxInputLength, maxSteps, requestTimeout, maxToolOutput, toolTimeout) */
+    limits?: {
+      maxInputLength?: number;
+      maxSteps?: number;
+      requestTimeout?: number;
+      maxToolOutput?: number;
+      toolTimeout?: number;
+    };
   };
 }
 

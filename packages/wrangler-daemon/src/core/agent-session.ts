@@ -20,7 +20,7 @@ import {
   createLLMClient,
   resolveDefaultModel,
 } from '@agentskillmania/wrangler';
-import type { SubAgentConfig } from '@agentskillmania/wrangler';
+import type { SubAgentConfig, LimitsConfig } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
@@ -97,6 +97,8 @@ export interface AgentSessionOptions {
   subAgents?: SubAgentConfig[];
   /** Crew identifier — persisted into runnerConfig snapshot so resume can reload crew config */
   crewId?: string;
+  /** Execution limits (maxInputLength, maxSteps, requestTimeout, maxToolOutput, toolTimeout) */
+  limits?: LimitsConfig;
 }
 
 /** Default agent instructions when none provided */
@@ -132,6 +134,8 @@ export class AgentSession {
   private readonly sessionManager?: { getStatus(id: string): string };
   private readonly agentConfigPath?: string;
   private _busy = false;
+  /** Max input length in characters, enforced in handleMessage. */
+  private readonly maxInputLength?: number;
   /** Latest LLM request captured from llm:request stream events */
   private lastLLMRequest: { messages: unknown[]; tools?: unknown[]; skill?: string } | null = null;
   /** Full system prompt extracted from first message of llm-request */
@@ -160,6 +164,7 @@ export class AgentSession {
     this.workspacePath = options.workspacePath;
     this.agentName = options.agentName;
     this.model = runner.getConfig().model;
+    this.maxInputLength = options.limits?.maxInputLength;
   }
 
   /**
@@ -197,6 +202,7 @@ export class AgentSession {
       askHumanHandler,
       subAgents: options.subAgents,
       crewId: options.crewId,
+      limits: options.limits,
     });
 
     // Build tool definitions from runner for state synchronization
@@ -528,7 +534,23 @@ export class AgentSession {
     this.doneFlag = false;
 
     this.bridge.sseSender = (event: SSEEvent) => this.pushEvent(event);
-    this.state = addUserMessage(this.state, message);
+
+    // Enforce maxInputLength before appending — throws if message exceeds limit.
+    // The error propagates out of the async generator, surfaced to the client
+    // as an SSE error event by the caller (chat route streamAgentSession).
+    if (this.maxInputLength !== undefined) {
+      if (message.length > this.maxInputLength) {
+        yield {
+          event: 'error',
+          data: {
+            message: `Input exceeds maximum length of ${this.maxInputLength} characters (got ${message.length})`,
+          },
+        };
+        this._busy = false;
+        return;
+      }
+    }
+    this.state = addUserMessage(this.state, message, this.maxInputLength);
 
     const consumeStream = async () => {
       // Register EventEmitter listeners for all event types

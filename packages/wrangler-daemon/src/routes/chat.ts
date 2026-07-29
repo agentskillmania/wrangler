@@ -193,6 +193,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       enableCommands: body.config?.enableCommands,
       sandbox: body.config?.sandbox,
       a2ui: body.config?.a2ui,
+      limits: body.config?.limits,
     };
 
     const config = configManager().get();
@@ -356,6 +357,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       enableTodolist: body.config?.enableTodolist,
       enableCommands: body.config?.enableCommands,
       a2ui: body.config?.a2ui,
+      limits: body.config?.limits,
     };
 
     const config = configManager().get();

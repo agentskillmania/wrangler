@@ -124,8 +124,16 @@ export interface SearchConfig {
 }
 
 export interface LimitsConfig {
-  /** Maximum execution steps */
+  /** Max characters per user message. Default 100000. */
+  maxInputLength?: number;
+  /** Max agent execution steps. Default 500. */
   maxSteps?: number;
+  /** LLM request timeout in ms. Default 1800000 (30 min). */
+  requestTimeout?: number;
+  /** Tool output truncation in characters. Default 100000. */
+  maxToolOutput?: number;
+  /** Shell/python execution timeout in ms. Default 600000 (10 min). */
+  toolTimeout?: number;
 }
 
 // ── Main options interface ───────────────────────────────────────
@@ -155,8 +163,8 @@ export interface EnhancedRunnerOptions {
   /** A2UI support */
   a2ui?: { enabled?: boolean };
 
-  /** Context compression config */
-  compression?: CompressionConfig | IContextCompressor;
+  /** Context compression config. Omit = default enabled; false = disabled. */
+  compression?: CompressionConfig | IContextCompressor | false;
 
   /** Session metadata */
   source?: SessionSource;
@@ -258,6 +266,8 @@ export interface ResolvedRunnerConfig {
   compressorEnabled: boolean;
   /** Context window size for the model (from llm-client ModelMeta). Undefined if unknown. */
   contextWindow?: number;
+  /** Max user input length in characters. Undefined = no limit. */
+  maxInputLength?: number;
 }
 
 /**

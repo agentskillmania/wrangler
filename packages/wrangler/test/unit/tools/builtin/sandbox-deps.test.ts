@@ -30,20 +30,16 @@ describe.skipIf(!ENABLED)('SandboxToolDeps', () => {
   });
 
   describe('resolvePath', () => {
-    it('should resolve relative path within /workspace', () => {
-      expect(deps.resolvePath('src/index.ts')).toBe('/workspace/src/index.ts');
+    it('should resolve relative path within / (workspace-as-root mapping)', () => {
+      expect(deps.resolvePath('src/index.ts')).toBe('/src/index.ts');
     });
 
-    it('should resolve workspace root', () => {
-      expect(deps.resolvePath('.')).toBe('/workspace');
+    it('should resolve workspace root as /', () => {
+      expect(deps.resolvePath('.')).toBe('/');
     });
 
-    it('should reject path traversal', () => {
-      expect(() => deps.resolvePath('../etc/passwd')).toThrow('Path traversal');
-    });
-
-    it('should reject absolute escape', () => {
-      expect(() => deps.resolvePath('/etc/passwd')).toThrow('Path traversal');
+    it('should accept path under /', () => {
+      expect(deps.resolvePath('/src/index.ts')).toBe('/src/index.ts');
     });
   });
 

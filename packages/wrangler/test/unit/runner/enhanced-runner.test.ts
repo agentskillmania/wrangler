@@ -715,7 +715,6 @@ describe('EnhancedRunner', () => {
       const config = runner.getConfig();
       expect(config.builtinToolCount).toBeGreaterThanOrEqual(0);
       expect(config.mcpToolCount).toBe(0);
-      expect(config.sessionToolCount).toBeGreaterThanOrEqual(0);
       expect(config.todolistToolCount).toBeGreaterThanOrEqual(0);
       expect(config.specPlanToolCount).toBeGreaterThanOrEqual(0);
     });
@@ -759,8 +758,13 @@ describe('EnhancedRunner', () => {
       expect(runner.getConfig().thinkingEnabled).toBe(false);
     });
 
-    it('returns compressorEnabled=false when no compression configured', async () => {
+    it('returns compressorEnabled=true by default (compression auto-enabled)', async () => {
       const runner = await EnhancedRunner.create(makeOptions());
+      expect(runner.getConfig().compressorEnabled).toBe(true);
+    });
+
+    it('returns compressorEnabled=false when compression explicitly disabled', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ compression: false }));
       expect(runner.getConfig().compressorEnabled).toBe(false);
     });
 
@@ -859,14 +863,13 @@ describe('EnhancedRunner', () => {
       });
     });
 
-    it('returns session tools with type=session', async () => {
-      const { createSessionSupport } = await import('../../../src/session/support.js');
-      vi.mocked(createSessionSupport).mockReturnValueOnce({
-        tools: [{ name: 'ask_human', description: 'Ask human' }],
-        middlewares: [{ name: 'session' }],
-      });
+    it('returns builtin tools (incl. ask_human) with type=builtin', async () => {
+      // ask_human moved from session support to builtin tools. When provided
+      // via createBuiltinTools, it is reported with type='builtin'.
       const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
+      vi.mocked(createBuiltinTools).mockReturnValueOnce([
+        { name: 'ask_human', description: 'Ask human' },
+      ]);
       const runner = await EnhancedRunner.create(
         makeOptions({
           enableSession: true,
@@ -876,9 +879,9 @@ describe('EnhancedRunner', () => {
         })
       );
       const tools = runner.getToolInfo();
-      const sessionTool = tools.find((t) => t.name === 'ask_human');
-      expect(sessionTool?.type).toBe('session');
-      expect(sessionTool?.enabled).toBe(true);
+      const askHuman = tools.find((t) => t.name === 'ask_human');
+      expect(askHuman?.type).toBe('builtin');
+      expect(askHuman?.enabled).toBe(true);
     });
 
     it('returns todolist tools with type=todolist', async () => {
@@ -990,7 +993,7 @@ describe('EnhancedRunner', () => {
 
     it('create() without llmClient or llm throws', async () => {
       await expect(EnhancedRunner.create(makeOptions({ llmClient: undefined }))).rejects.toThrow(
-        'Must specify either llmClient or llm.'
+        'Must specify either llm.client or llm.quickInit.'
       );
     });
 
@@ -1003,7 +1006,7 @@ describe('EnhancedRunner', () => {
             },
           })
         )
-      ).rejects.toThrow('Cannot specify both llmClient and llm');
+      ).rejects.toThrow('Cannot specify both llm.client and llm.quickInit');
     });
 
     it('create() with empty skillDirs still succeeds', async () => {
@@ -1031,6 +1034,57 @@ describe('EnhancedRunner', () => {
       const names = tools.map((t: { name: string }) => t.name);
       expect(names).toContain('file_read');
       expect(names).not.toContain('shell');
+    });
+  });
+
+  // ── limits + compression migration tests ──────────────────────────────
+
+  describe('limits configuration', () => {
+    it('passes limits.maxSteps to AgentRunner', async () => {
+      await EnhancedRunner.create(makeOptions({ limits: { maxSteps: 42 } }));
+      const calls = await getAgentRunnerCalls();
+      expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ maxSteps: 42 }));
+    });
+
+    it('passes limits.maxToolOutput and toolTimeout to createBuiltinTools', async () => {
+      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      await EnhancedRunner.create(
+        makeOptions({ limits: { maxToolOutput: 50000, toolTimeout: 300000 } })
+      );
+      const opts = createBuiltinTools.mock.calls.at(-1)?.[0];
+      expect(opts.maxToolOutput).toBe(50000);
+      expect(opts.toolTimeout).toBe(300000);
+    });
+
+    it('migrates deprecated maxSteps flat field to limits', async () => {
+      await EnhancedRunner.create(makeOptions({ maxSteps: 99 }));
+      const calls = await getAgentRunnerCalls();
+      expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ maxSteps: 99 }));
+    });
+
+    it('structured limits.maxSteps takes precedence over deprecated maxSteps', async () => {
+      await EnhancedRunner.create(makeOptions({ maxSteps: 99, limits: { maxSteps: 7 } }));
+      const calls = await getAgentRunnerCalls();
+      expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ maxSteps: 7 }));
+    });
+  });
+
+  describe('compression migration', () => {
+    it('enables compression by default (undefined)', async () => {
+      const runner = await EnhancedRunner.create(makeOptions());
+      expect(runner.getConfig().compressorEnabled).toBe(true);
+    });
+
+    it('disables compression when explicitly false', async () => {
+      const runner = await EnhancedRunner.create(makeOptions({ compression: false }));
+      expect(runner.getConfig().compressorEnabled).toBe(false);
+    });
+
+    it('enables compression when a config object is provided', async () => {
+      const runner = await EnhancedRunner.create(
+        makeOptions({ compression: { threshold: 20 } })
+      );
+      expect(runner.getConfig().compressorEnabled).toBe(true);
     });
   });
 
@@ -1142,7 +1196,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       await expect(EnhancedRunner.resume(dir, {})).rejects.toThrow(
-        'Must specify either llmClient or llm'
+        'Must specify either llm.client or llm.quickInit'
       );
     });
 

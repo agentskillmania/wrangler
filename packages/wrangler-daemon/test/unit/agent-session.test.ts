@@ -140,7 +140,7 @@ vi.mock('@agentskillmania/colts', () => ({
     config: { name: 'test', instructions: '', tools: [] },
     context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
   }),
-  addUserMessage: vi.fn((state, _msg) => state),
+  addUserMessage: vi.fn((state, _msg, _maxLength?) => state),
 }));
 
 const testConfig = {
@@ -795,11 +795,127 @@ describe('AgentSession', () => {
       );
     });
 
+    it('passes limits to EnhancedRunner when provided', async () => {
+      const limits = { maxInputLength: 50000, maxSteps: 20, toolTimeout: 30000 };
+      await AgentSession.create({ ...baseOptions, limits }, testConfig);
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ limits })
+      );
+    });
+
+    it('omits limits when not provided', async () => {
+      await AgentSession.create(baseOptions, testConfig);
+      const call = mockEnhancedRunnerCreate.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(call.limits).toBeUndefined();
+    });
+
     it('omits subAgents and crewId for non-crew session (backward compat)', async () => {
       await AgentSession.create(baseOptions, testConfig);
       const call = mockEnhancedRunnerCreate.mock.calls.at(-1)?.[0] as Record<string, unknown>;
       expect(call.subAgents).toBeUndefined();
       expect(call.crewId).toBeUndefined();
+    });
+  });
+
+  describe('handleMessage() maxInputLength enforcement', () => {
+    it('yields error event and returns when message exceeds maxInputLength', async () => {
+      // Set up a runner mock — it should NOT be called because the message
+      // is rejected before runner.run().
+      const mock = createMockRunner({
+        run: vi.fn().mockResolvedValue({
+          state: {
+            id: 'test-state',
+            config: { name: 'test', instructions: '', tools: [] },
+            context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+          },
+          result: { type: 'success', answer: '', totalSteps: 0, tokens: { input: 0, output: 0 } },
+        }),
+      });
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+
+      const session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test', limits: { maxInputLength: 100 } },
+        testConfig
+      );
+
+      const longMessage = 'x'.repeat(101);
+      const events: SSEEvent[] = [];
+      for await (const event of session.handleMessage(longMessage)) {
+        events.push(event);
+      }
+
+      // Should yield exactly one error event
+      expect(events).toHaveLength(1);
+      expect(events[0].event).toBe('error');
+      expect((events[0].data as { message: string }).message).toContain('maximum length of 100');
+      expect((events[0].data as { message: string }).message).toContain('got 101');
+
+      // Runner must not have been invoked — message rejected before LLM call
+      expect(mock.runner.run).not.toHaveBeenCalled();
+
+      // busy flag must reset so subsequent messages can proceed
+      expect(session.busy).toBe(false);
+    });
+
+    it('passes message to runner when under maxInputLength', async () => {
+      const mock = createMockRunner({
+        run: vi.fn().mockImplementation(async () => {
+          mock.emit('complete');
+          return {
+            state: {
+              id: 'test-state',
+              config: { name: 'test', instructions: '', tools: [] },
+              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+            },
+            result: { type: 'success', answer: '', totalSteps: 1, tokens: { input: 0, output: 0 } },
+          };
+        }),
+      });
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+
+      const session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test', limits: { maxInputLength: 100 } },
+        testConfig
+      );
+
+      const events: SSEEvent[] = [];
+      for await (const event of session.handleMessage('short message')) {
+        events.push(event);
+      }
+
+      // Should reach the runner and emit done
+      expect(mock.runner.run).toHaveBeenCalledTimes(1);
+      expect(events.some((e) => e.event === 'done')).toBe(true);
+    });
+
+    it('does not enforce limit when maxInputLength is undefined', async () => {
+      const mock = createMockRunner({
+        run: vi.fn().mockImplementation(async () => {
+          mock.emit('complete');
+          return {
+            state: {
+              id: 'test-state',
+              config: { name: 'test', instructions: '', tools: [] },
+              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+            },
+            result: { type: 'success', answer: '', totalSteps: 1, tokens: { input: 0, output: 0 } },
+          };
+        }),
+      });
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+
+      const session = await AgentSession.create(
+        { workspacePath: '/tmp/test', agentName: 'test' },
+        testConfig
+      );
+
+      const events: SSEEvent[] = [];
+      for await (const event of session.handleMessage('x'.repeat(100000))) {
+        events.push(event);
+      }
+
+      expect(mock.runner.run).toHaveBeenCalledTimes(1);
+      expect(events.some((e) => e.event === 'done')).toBe(true);
     });
   });
 

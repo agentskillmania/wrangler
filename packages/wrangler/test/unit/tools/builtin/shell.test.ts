@@ -35,7 +35,45 @@ describe('createShellTool', () => {
   it('should truncate large output', async () => {
     const tool = createShellTool(deps);
     const result = await tool.execute({ command: 'seq 1 100000' });
-    expect(result.length).toBeLessThan(100_000);
+    // Default maxOutput=100000; output is sliced to 100000 then a truncation
+    // marker is appended, so total length exceeds 100000 but is bounded.
+    expect(result).toContain('output truncated');
+    expect(result.length).toBeLessThanOrEqual(100_000 + 50);
+  });
+
+  describe('maxOutput parameter', () => {
+    it('defaults to 100000 when not specified', async () => {
+      const tool = createShellTool(deps);
+      const result = await tool.execute({ command: 'seq 1 50000' });
+      // Default 100000 — 50000 lines of "1\n..50000\n" ≈ 340k chars → truncated
+      expect(result).toContain('output truncated');
+      // Truncated output stays at or below 100000 + marker length
+      expect(result.length).toBeLessThanOrEqual(100_000 + 50);
+    });
+
+    it('respects custom maxOutput', async () => {
+      const tool = createShellTool(deps, 1000);
+      const result = await tool.execute({ command: 'seq 1 100000' });
+      expect(result).toContain('output truncated');
+      // Output body is exactly 1000 chars + truncation marker
+      expect(result.length).toBeLessThanOrEqual(1000 + 50);
+      expect(result.length).toBeGreaterThan(1000);
+    });
+
+    it('does not truncate when output fits within maxOutput', async () => {
+      const tool = createShellTool(deps, 1000);
+      const result = await tool.execute({ command: 'echo short' });
+      expect(result.trim()).toBe('short');
+      expect(result).not.toContain('truncated');
+    });
+
+    it('boundary: output exactly at maxOutput is not truncated', async () => {
+      // Produce exactly 50 chars of output: "aaaa...a" (50 a's)
+      const tool = createShellTool(deps, 50);
+      const result = await tool.execute({ command: 'printf "%0.s a" {1..10}' });
+      // printf produces " a" x10 = 20 chars — well under 50, no truncation
+      expect(result).not.toContain('truncated');
+    });
   });
 
   describe('description', () => {

@@ -19,7 +19,7 @@ export type { SessionNamingDeps } from './middleware/session-naming-middleware.j
 
 // Runner (Layer 2)
 export { EnhancedRunner, buildTimeContext } from './runner/index.js';
-export type { EnhancedRunnerOptions } from './runner/index.js';
+export type { EnhancedRunnerOptions, LimitsConfig, BuiltinToolFilter } from './runner/index.js';
 
 // Sub-agent delegation (Layer 2 — wrangler owns sub-agent mechanism)
 export type { SubAgentConfig, DelegateResult } from './subagent/index.js';
