@@ -1,4 +1,5 @@
-import type { Tool } from '@agentskillmania/colts';
+import type { Tool, AskHumanHandler } from '@agentskillmania/colts';
+import { calculatorTool, createAskHumanTool } from '@agentskillmania/colts';
 import type { Sandbox } from '@agentskillmania/sandbox';
 import type { ZodTypeAny } from 'zod';
 
@@ -22,8 +23,10 @@ export interface BuiltinToolsOptions {
   timeout?: number;
   maxOutputSize?: number;
   searchProvider?: SearchProvider;
-  /** When provided, all tools operate through sandbox.run() with /workspace paths */
+  /** When provided, all tools operate through sandbox.run() with / paths */
   sandbox?: Sandbox;
+  /** When provided, registers the ask_human tool */
+  askHumanHandler?: AskHumanHandler;
 }
 
 export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAny>[] {
@@ -33,7 +36,13 @@ export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAn
 
   const searchProvider = options.searchProvider ?? new BingScrapeSearchProvider();
 
-  return [
+  // widenTool bridges specific Zod schemas to ZodTypeAny for uniform storage
+  const widen = <T extends ZodTypeAny>(tool: Tool<T>): Tool<ZodTypeAny> =>
+    tool as unknown as Tool<ZodTypeAny>;
+
+  const tools: Tool<ZodTypeAny>[] = [
+    widen(calculatorTool),
+    ...(options.askHumanHandler ? [widen(createAskHumanTool(options.askHumanHandler))] : []),
     createFileReadTool(deps),
     createFileWriteTool(deps),
     createFileEditTool(deps),
@@ -45,6 +54,7 @@ export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAn
     createWebFetchTool(deps),
     createWebSearchTool(searchProvider),
   ];
+  return tools;
 }
 
 // Re-export all tool factory functions for advanced usage

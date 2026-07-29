@@ -139,8 +139,6 @@ export interface ResolvedRunnerConfig {
   builtinToolCount: number;
   /** Number of MCP tools loaded */
   mcpToolCount: number;
-  /** Number of session tools */
-  sessionToolCount: number;
   /** Number of todolist tools */
   todolistToolCount: number;
   /** Number of spec-plan tools */

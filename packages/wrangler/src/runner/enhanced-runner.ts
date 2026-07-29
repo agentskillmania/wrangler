@@ -188,6 +188,7 @@ export class EnhancedRunner {
       workspacePath,
       searchProvider,
       sandbox: sandboxInstance,
+      askHumanHandler: options.askHumanHandler,
     });
 
     // Filter builtin tools based on toggle options.
@@ -199,6 +200,8 @@ export class EnhancedRunner {
     const toolToggles = options.builtinTools;
     const filteredBuiltinTools = toolToggles
       ? builtinTools.filter((tool) => {
+          // calculate and ask_human are always-on base tools, not toggleable
+          if (tool.name === 'calculate' || tool.name === 'ask_human') return true;
           const toggleMap: Record<
             string,
             keyof NonNullable<EnhancedRunnerOptions['builtinTools']>
@@ -232,7 +235,6 @@ export class EnhancedRunner {
       ? createSessionSupport({
           workspacePath,
           sessionBaseDir: options.sessionBaseDir,
-          askHumanHandler: options.askHumanHandler,
           llmClient,
           model: resolvedModel,
           runnerConfigSnapshot: {
@@ -250,7 +252,7 @@ export class EnhancedRunner {
           },
           source: options.source,
         })
-      : { tools: [] as Tool<ZodTypeAny>[], middlewares: [{ name: 'session' }] };
+      : { middlewares: [{ name: 'session' }] };
 
     const todolistEnabled = options.enableTodolist !== false;
     const todolistSupport = todolistEnabled
@@ -282,7 +284,6 @@ export class EnhancedRunner {
         : undefined;
 
     const allTools: Tool<ZodTypeAny>[] = [
-      ...sessionSupport.tools,
       ...filteredBuiltinTools,
       ...specPlanTools,
       ...mcpTools,
@@ -315,15 +316,7 @@ export class EnhancedRunner {
         enabled: true,
       });
     }
-    // Add session, MCP, todolist, a2ui, extra tools (always enabled if present)
-    for (const tool of sessionSupport.tools) {
-      toolMeta.set(tool.name, {
-        name: tool.name,
-        description: tool.description,
-        type: 'session',
-        enabled: true,
-      });
-    }
+    // Add MCP, todolist, a2ui, extra tools (always enabled if present)
     for (const tool of mcpTools) {
       toolMeta.set(tool.name, {
         name: tool.name,
@@ -501,7 +494,6 @@ export class EnhancedRunner {
       mcpConfigPaths: mcpConfigPaths,
       builtinToolCount: filteredBuiltinTools.length,
       mcpToolCount: mcpTools.length,
-      sessionToolCount: sessionSupport.tools.length,
       todolistToolCount: todolistSupport.tools.length,
       specPlanToolCount: specPlanTools.length,
       middlewareNames: [
