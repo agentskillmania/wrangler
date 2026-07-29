@@ -146,9 +146,6 @@ export interface ToolDeps {
   /** Root directory of the workspace */
   readonly workspaceRoot: string;
 
-  /** Whether tools run inside a WASM sandbox (vs host directly) */
-  readonly isSandboxed: boolean;
-
   /** Detected shell information (only available in host mode) */
   readonly shell?: ShellInfo;
 
@@ -208,7 +205,6 @@ export interface ToolDeps {
  */
 export class HostToolDeps implements ToolDeps {
   readonly workspaceRoot: string;
-  readonly isSandboxed = false;
   readonly maxOutputSize: number;
   readonly shell: ShellInfo;
 
@@ -395,7 +391,6 @@ export class HostToolDeps implements ToolDeps {
  */
 export class SandboxToolDeps implements ToolDeps {
   readonly workspaceRoot = '/workspace';
-  readonly isSandboxed = true;
   readonly maxOutputSize: number;
 
   private readonly sandbox: Sandbox;
