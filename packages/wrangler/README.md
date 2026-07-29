@@ -11,7 +11,7 @@ Core library for agent configuration and multi-agent crews — the abstraction l
 - **Crew as configuration** — load a crew directory (`CREW.md` + per-agent `AGENT.md`) and convert it into `EnhancedRunner.create({ subAgents })` options. The primary agent becomes the main runner; other agents become sub-agents reachable via colts' `delegate` tool. `CREW.md` body is injected into the primary agent's system prompt.
 - **Agent loading** — parse `AGENT.md` files to define agent identity, instructions, and skill directories
 - **Session management** — session store, transcript formatting, and conversation metadata
-- **Builtin tools** — file read/write/edit, grep, glob, shell, web-fetch, web-search with workspace sandboxing
+- **Builtin tools** — calculate, ask_human, file read/write/edit, grep, glob, shell, web-fetch, web-search with workspace sandboxing
 - **MCP integration** — load tools from MCP servers via `loadMCPTools`
 - **Spec/Plan system** — structured specification and plan documents for complex workflows
 - **Todolist support** — shared todo state for agents
@@ -35,7 +35,7 @@ pnpm add @agentskillmania/wrangler
 ## Quick Example
 
 ```typescript
-import { EnhancedRunner, AgentLoader, createBuiltinTools } from '@agentskillmania/wrangler';
+import { EnhancedRunner, AgentLoader } from '@agentskillmania/wrangler';
 import { LLMClient } from '@agentskillmania/llm-client';
 
 const llmClient = new LLMClient();
@@ -47,10 +47,10 @@ llmClient.registerApiKey({
 });
 
 const runner = await EnhancedRunner.create({
-  llmClient,
-  model: 'gpt-4o',
   workspacePath: '/path/to/project',
-  thinkingEnabled: true,
+  llm: { client: llmClient, model: 'gpt-4o' },
+  thinking: { enabled: true },
+  sandbox: { enabled: true },
 });
 
 const state = runner.createState();
@@ -75,12 +75,11 @@ const crew = await new CrewLoader('./my-crew').load();
 const opts = crewToRunnerOptions(crew);
 
 const runner = await EnhancedRunner.create({
-  llmClient,
-  model: opts.model ?? 'gpt-4o',
+  llm: { client: llmClient, model: opts.model ?? 'gpt-4o' },
   // crew's composed prompt (memory + primary instructions + sub-agent
   // catalog) rides through agentInstructions → AgentState.config.instructions
-  subAgents: opts.subAgents,
-  skillDirs: opts.skillDirs,
+  delegation: { subAgents: opts.subAgents },
+  skills: { dirs: opts.skillDirs },
   crewId: 'my-crew', // persisted into runnerConfig snapshot so resume can detect crew sessions
 });
 
@@ -103,6 +102,41 @@ const { runner, state } = await EnhancedRunner.resume(sessionDir, {
   subAgents: opts.subAgents, // rebuilt from CrewLoader + crewToRunnerOptions
 });
 ```
+
+## Configuration
+
+`EnhancedRunner.create()` accepts structured config groups:
+
+```typescript
+await EnhancedRunner.create({
+  workspacePath: '/project',
+
+  llm: {
+    client: llmClient,           // or quickInit for multi-provider
+    model: 'gpt-4o',
+    temperature: 0.7,
+    requestTimeout: 120_000,
+  },
+  skills: { dirs: ['/skills'] },
+  tools: {
+    builtinFilter: { shell: true, python: false }, // whitelist
+    mcpConfigPaths: ['./mcp.json'],
+    askHumanHandler: myHandler,
+  },
+  sandbox: { enabled: true },
+  thinking: { enabled: true, promptLevel: false },
+  session: { enabled: true, baseDir: '/sessions' },
+  todolist: { enabled: true },
+  specPlan: { enabled: true },
+  commands: { enabled: true },
+  a2ui: { enabled: false },
+  delegation: { subAgents: [...] },
+  limits: { maxSteps: 500 },
+  compression: { strategy: 'summarize', threshold: 50 },
+});
+```
+
+Legacy flat fields (`llmClient`, `enableSession`, `skillDirs`, `sandbox: true`, etc.) still work — they are migrated to the new structure internally.
 
 ## Dependencies
 
