@@ -43,6 +43,8 @@ export interface A2UIConfig {
 // ── Builtin tool filter ──────────────────────────────────────────
 
 export interface BuiltinToolFilter {
+  calculate?: boolean;
+  askHuman?: boolean;
   fileRead?: boolean;
   fileWrite?: boolean;
   fileEdit?: boolean;

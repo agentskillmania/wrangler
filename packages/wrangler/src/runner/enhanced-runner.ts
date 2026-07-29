@@ -34,6 +34,7 @@ import type {
   SkillMetadata,
   ResumeOptions,
   SandboxConfig,
+  BuiltinToolFilter,
 } from './types.js';
 import { createCommandMiddleware } from '../command/command-middleware.js';
 import { createClearHandler } from '../command/handlers/clear.js';
@@ -286,12 +287,12 @@ export class EnhancedRunner {
     const toolToggles = options.tools?.builtinFilter;
     const filteredBuiltinTools = toolToggles
       ? builtinTools.filter((tool) => {
-          // calculate and ask_human are always-on base tools, not toggleable
-          if (tool.name === 'calculate' || tool.name === 'ask_human') return true;
           const toggleMap: Record<
             string,
-            keyof NonNullable<EnhancedRunnerOptions['builtinTools']>
+            keyof NonNullable<BuiltinToolFilter>
           > = {
+            calculate: 'calculate',
+            ask_human: 'askHuman',
             file_read: 'fileRead',
             file_write: 'fileWrite',
             file_edit: 'fileEdit',
