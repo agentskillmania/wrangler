@@ -390,7 +390,7 @@ export class HostToolDeps implements ToolDeps {
  * editFile uses read-modify-write: read via cat, replace in JS, write back via stdin.
  */
 export class SandboxToolDeps implements ToolDeps {
-  readonly workspaceRoot = '/workspace';
+  readonly workspaceRoot = '/';
   readonly maxOutputSize: number;
 
   private readonly sandbox: Sandbox;
@@ -403,8 +403,8 @@ export class SandboxToolDeps implements ToolDeps {
   }
 
   resolvePath(filePath: string): string {
-    const absolute = resolve('/workspace', filePath);
-    if (absolute !== '/workspace' && !absolute.startsWith('/workspace/')) {
+    const absolute = resolve('/', filePath);
+    if (absolute !== '/' && !absolute.startsWith('/')) {
       throw new Error(`Path traversal detected: ${filePath}`);
     }
     return absolute;
