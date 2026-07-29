@@ -70,8 +70,6 @@ export class ResourceManager {
             name: parsed.name,
             description: parsed.description ?? '',
             path: agentDir,
-            toolCount: 0,
-            skillCount: 0,
           });
         } catch {
           /* skip directories without AGENT.md */

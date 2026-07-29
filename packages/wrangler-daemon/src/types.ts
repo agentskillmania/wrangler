@@ -43,8 +43,6 @@ export interface AgentInfo {
   name: string;
   description: string;
   path: string;
-  toolCount: number;
-  skillCount: number;
 }
 
 /** Detailed agent info returned by GET /api/agents/:id */
