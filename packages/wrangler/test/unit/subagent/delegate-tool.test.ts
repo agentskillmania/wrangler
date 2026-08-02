@@ -104,10 +104,7 @@ describe('createDelegateTool — tool inheritance paths', () => {
       emit: vi.fn(),
     });
 
-    await tool.execute!(
-      { agent: 'researcher', task: 'do research' } as never,
-      undefined as never
-    );
+    await tool.execute!({ agent: 'researcher', task: 'do research' } as never, undefined as never);
 
     const inherited = capturedFactoryOptions!.inheritedTools as Tool<ZodTypeAny>[];
     expect(inherited.map((t) => t.name)).toEqual(
@@ -121,11 +118,7 @@ describe('createDelegateTool — tool inheritance paths', () => {
   it('Path B: inheritParentTools false → only config.config.tools declared tools', async () => {
     const { createDelegateTool } = await import('../../../src/subagent/delegate-tool.js');
 
-    const parentTools = [
-      makeTool('file_read'),
-      makeTool('shell'),
-      makeTool('web_search'),
-    ];
+    const parentTools = [makeTool('file_read'), makeTool('shell'), makeTool('web_search')];
 
     const configs = new Map([
       [
@@ -152,10 +145,7 @@ describe('createDelegateTool — tool inheritance paths', () => {
       emit: vi.fn(),
     });
 
-    await tool.execute!(
-      { agent: 'researcher', task: 'do research' } as never,
-      undefined as never
-    );
+    await tool.execute!({ agent: 'researcher', task: 'do research' } as never, undefined as never);
 
     const inherited = capturedFactoryOptions!.inheritedTools as Tool<ZodTypeAny>[];
     // Only web_search — not file_read or shell
@@ -191,10 +181,7 @@ describe('createDelegateTool — tool inheritance paths', () => {
       emit: vi.fn(),
     });
 
-    await tool.execute!(
-      { agent: 'researcher', task: 'do research' } as never,
-      undefined as never
-    );
+    await tool.execute!({ agent: 'researcher', task: 'do research' } as never, undefined as never);
 
     const inherited = capturedFactoryOptions!.inheritedTools as Tool<ZodTypeAny>[];
     // delegate must never be inherited even if explicitly declared
@@ -309,10 +296,7 @@ describe('createDelegateTool — custom factory injection', () => {
       emit: vi.fn(),
     });
 
-    await tool.execute!(
-      { agent: 'researcher', task: 'do research' } as never,
-      undefined as never
-    );
+    await tool.execute!({ agent: 'researcher', task: 'do research' } as never, undefined as never);
 
     expect(mockCreateSubAgentRunner).toHaveBeenCalledTimes(1);
   });

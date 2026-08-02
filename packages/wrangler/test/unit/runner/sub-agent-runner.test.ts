@@ -103,7 +103,12 @@ describe('createSubAgentRunner', () => {
     // Parent registry includes todolist_read — must not be duplicated
     const inheritedTools: Tool<ZodTypeAny>[] = [
       { name: 'file_read', description: 'read', parameters: {} as never, execute: vi.fn() },
-      { name: 'todolist_read', description: 'parent todo', parameters: {} as never, execute: vi.fn() },
+      {
+        name: 'todolist_read',
+        description: 'parent todo',
+        parameters: {} as never,
+        execute: vi.fn(),
+      },
     ];
 
     createSubAgentRunner({

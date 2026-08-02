@@ -10,10 +10,10 @@ import type {
 import type { ZodTypeAny } from 'zod';
 
 import type { CommandHandler } from '../command/types.js';
+import type { SubAgentRunnerFactory } from '../subagent/delegate-tool.js';
+import type { SubAgentConfig } from '../subagent/types.js';
 import type { SearchProvider } from '../tools/builtin/index.js';
 import type { SessionSource } from '../types.js';
-import type { SubAgentConfig } from '../subagent/types.js';
-import type { SubAgentRunnerFactory } from '../subagent/delegate-tool.js';
 
 // ---- Tool & Skill metadata for diagnostics ----
 

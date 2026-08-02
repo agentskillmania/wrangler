@@ -10,18 +10,14 @@
  * todolist) instead of colts' bare AgentRunner.
  */
 
-import { z } from 'zod';
-
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import type { ILLMProvider, IToolRegistry, ISkillProvider, Tool } from '@agentskillmania/colts';
+import { z } from 'zod';
 import type { ZodTypeAny } from 'zod';
 
-import { createSubAgentRunner, type SubAgentRunnerOptions } from '../runner/sub-agent-runner.js';
-import type {
-  SubAgentConfig,
-  DelegateResult,
-} from './types.js';
+import type { SubAgentConfig, DelegateResult } from './types.js';
 import { DEFAULT_SUBAGENT_MAX_STEPS } from './types.js';
+import { createSubAgentRunner, type SubAgentRunnerOptions } from '../runner/sub-agent-runner.js';
 
 /**
  * Factory signature for creating a sub-agent runner.
@@ -138,9 +134,7 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool<ZodTypeAny> {
         // - `delegate`: would be recursive (and sub-agents can't delegate)
         // - `load_skill`: auto-registered by AgentRunner when skillProvider is present
         const all = parentToolRegistry.getAll?.() ?? [];
-        inheritedTools = all.filter(
-          (t) => t.name !== 'delegate' && t.name !== 'load_skill'
-        );
+        inheritedTools = all.filter((t) => t.name !== 'delegate' && t.name !== 'load_skill');
       } else {
         // Path B (opt-in minimal): only register tools explicitly declared in
         // config.config.tools. This gives "least-privilege" sub-agents — e.g.
@@ -169,7 +163,14 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool<ZodTypeAny> {
       // Wire sub-agent event forwarding: each event is re-emitted to the parent
       // runner's EventEmitter with a 'subagent:' prefix and subtaskId for routing.
       const subtaskId = `${agent}-${Date.now()}`;
-      const forwardEvents = ['token', 'thinking', 'tool:start', 'tool:end', 'tools:start', 'tools:end'];
+      const forwardEvents = [
+        'token',
+        'thinking',
+        'tool:start',
+        'tool:end',
+        'tools:start',
+        'tools:end',
+      ];
       for (const evtType of forwardEvents) {
         subRunner.on(evtType as 'token', (...args: unknown[]) => {
           const data = (args[0] ?? {}) as Record<string, unknown>;
@@ -267,7 +268,12 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool<ZodTypeAny> {
       }
 
       // Emit subagent:end with the result
-      deps.emit('subagent:end', { name: agent, result: delegateResult, subtaskId, timestamp: Date.now() });
+      deps.emit('subagent:end', {
+        name: agent,
+        result: delegateResult,
+        subtaskId,
+        timestamp: Date.now(),
+      });
 
       return delegateResult;
     },

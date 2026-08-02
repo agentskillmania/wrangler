@@ -1,12 +1,12 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-import type { SubAgentConfig } from '../subagent/types.js';
 import yaml from 'js-yaml';
 
 import type { CrewConfig } from './types.js';
 import { parseAgentMd } from '../agent/agent-parser.js';
 import type { ParsedAgent } from '../agent/agent-parser.js';
+import type { SubAgentConfig } from '../subagent/types.js';
 
 interface CrewMeta {
   name: string;

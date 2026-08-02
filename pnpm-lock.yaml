@@ -68,6 +68,9 @@ importers:
       '@agentskillmania/colts':
         specifier: link:../../../colts/packages/colts
         version: link:../../../colts/packages/colts
+      '@agentskillmania/genui':
+        specifier: link:../../../genui
+        version: link:../../../genui
       '@agentskillmania/llm-client':
         specifier: link:../../../colts/packages/llm-client
         version: link:../../../colts/packages/llm-client

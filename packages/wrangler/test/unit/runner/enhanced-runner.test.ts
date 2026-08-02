@@ -1081,9 +1081,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('enables compression when a config object is provided', async () => {
-      const runner = await EnhancedRunner.create(
-        makeOptions({ compression: { threshold: 20 } })
-      );
+      const runner = await EnhancedRunner.create(makeOptions({ compression: { threshold: 20 } }));
       expect(runner.getConfig().compressorEnabled).toBe(true);
     });
   });

@@ -798,9 +798,7 @@ describe('AgentSession', () => {
     it('passes limits to EnhancedRunner when provided', async () => {
       const limits = { maxInputLength: 50000, maxSteps: 20, toolTimeout: 30000 };
       await AgentSession.create({ ...baseOptions, limits }, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ limits })
-      );
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(expect.objectContaining({ limits }));
     });
 
     it('omits limits when not provided', async () => {

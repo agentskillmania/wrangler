@@ -45,10 +45,22 @@ export interface SubAgentConfig {
  */
 export type DelegateResult =
   | { status: 'success'; answer: string; totalSteps: number; tokens: TokenStats; duration: number }
-  | { status: 'max_steps'; lastAnswer: string; totalSteps: number; tokens: TokenStats; duration: number }
+  | {
+      status: 'max_steps';
+      lastAnswer: string;
+      totalSteps: number;
+      tokens: TokenStats;
+      duration: number;
+    }
   | { status: 'error'; error: string; totalSteps: number; tokens: TokenStats; duration: number }
   | { status: 'abort'; totalSteps: number; tokens: TokenStats; duration: number }
-  | { status: 'timeout'; partialResult: string; totalSteps: number; tokens: TokenStats; duration: number };
+  | {
+      status: 'timeout';
+      partialResult: string;
+      totalSteps: number;
+      tokens: TokenStats;
+      duration: number;
+    };
 
 /** Default max steps for a sub-agent when not specified in SubAgentConfig */
 export const DEFAULT_SUBAGENT_MAX_STEPS = 500;

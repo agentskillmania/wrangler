@@ -26,7 +26,6 @@ import type { ZodTypeAny } from 'zod';
 
 import { MarkdownMessageAssembler } from './markdown-assembler.js';
 import { buildTimeContext } from './system-prompt.js';
-import { createDelegateTool } from '../subagent/delegate-tool.js';
 import type {
   EnhancedRunnerOptions,
   ResolvedRunnerConfig,
@@ -48,6 +47,7 @@ import { SessionStore } from '../session/session-store.js';
 import { createSessionSupport } from '../session/support.js';
 import { PlanStore } from '../spec-plan/plan-store.js';
 import { SpecStore } from '../spec-plan/spec-store.js';
+import { createDelegateTool } from '../subagent/delegate-tool.js';
 import { createTodolistSupport } from '../todolist/support.js';
 import { createA2UITools, A2UIMiddleware } from '../tools/a2ui/index.js';
 import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js';
@@ -83,9 +83,11 @@ function migrateOptions(raw: EnhancedRunnerOptions): EnhancedRunnerOptions {
   if (raw.confirmTools !== undefined) tools.confirmTools ??= raw.confirmTools;
   if (raw.builtinTools !== undefined) tools.builtinFilter ??= raw.builtinTools;
 
-  const sandbox: SandboxConfig = typeof raw.sandbox === 'boolean'
-    ? { enabled: raw.sandbox }
-    : (raw.sandbox as SandboxConfig) ?? (raw.sandboxEnabled !== undefined ? { enabled: raw.sandboxEnabled } : {});
+  const sandbox: SandboxConfig =
+    typeof raw.sandbox === 'boolean'
+      ? { enabled: raw.sandbox }
+      : ((raw.sandbox as SandboxConfig) ??
+        (raw.sandboxEnabled !== undefined ? { enabled: raw.sandboxEnabled } : {}));
 
   const thinking = raw.thinking ?? {};
   if (raw.thinkingEnabled !== undefined) thinking.enabled ??= raw.thinkingEnabled;
@@ -111,14 +113,18 @@ function migrateOptions(raw: EnhancedRunnerOptions): EnhancedRunnerOptions {
 
   const delegation = raw.delegation ?? {};
   if (raw.subAgents !== undefined) delegation.subAgents ??= raw.subAgents;
-  if (raw.subAgentRunnerFactory !== undefined) delegation.runnerFactory ??= raw.subAgentRunnerFactory;
+  if (raw.subAgentRunnerFactory !== undefined)
+    delegation.runnerFactory ??= raw.subAgentRunnerFactory;
 
   const search = raw.search ?? {};
   if (raw.searchProvider !== undefined) search.provider ??= raw.searchProvider;
 
   const limits = raw.limits ?? {};
   if (raw.maxSteps !== undefined) limits.maxSteps ??= raw.maxSteps;
-  if (raw.requestTimeout !== undefined) { limits.requestTimeout ??= raw.requestTimeout; llm.requestTimeout ??= raw.requestTimeout; }
+  if (raw.requestTimeout !== undefined) {
+    limits.requestTimeout ??= raw.requestTimeout;
+    llm.requestTimeout ??= raw.requestTimeout;
+  }
 
   return {
     ...raw,
@@ -164,9 +170,13 @@ function resolveLLMClient(options: {
   llmClient?: ILLMProvider;
 }): ILLMProvider {
   // Handle both structured (llm.client/llm.quickInit) and legacy (llmClient/llm as LLMQuickInit)
-  const llmGroup = options.llm as { client?: ILLMProvider; quickInit?: LLMQuickInit; providers?: unknown[] } | undefined;
+  const llmGroup = options.llm as
+    | { client?: ILLMProvider; quickInit?: LLMQuickInit; providers?: unknown[] }
+    | undefined;
   const client = llmGroup?.client ?? options.llmClient;
-  const quickInit = llmGroup?.quickInit ?? (options.llm && 'providers' in options.llm ? options.llm as LLMQuickInit : undefined);
+  const quickInit =
+    llmGroup?.quickInit ??
+    (options.llm && 'providers' in options.llm ? (options.llm as LLMQuickInit) : undefined);
   if (client && quickInit) {
     throw new Error(
       'Cannot specify both llm.client and llm.quickInit. Choose one: injection or quick initialization.'
@@ -263,9 +273,8 @@ export class EnhancedRunner {
 
     const searchProvider = resolveSearchProvider(options.search?.provider);
 
-    const sandboxEnabled = typeof options.sandbox === 'object'
-      ? options.sandbox?.enabled
-      : options.sandbox;
+    const sandboxEnabled =
+      typeof options.sandbox === 'object' ? options.sandbox?.enabled : options.sandbox;
 
     let sandboxInstance: Sandbox | undefined;
     if (sandboxEnabled) {
@@ -290,10 +299,7 @@ export class EnhancedRunner {
     const toolToggles = options.tools?.builtinFilter;
     const filteredBuiltinTools = toolToggles
       ? builtinTools.filter((tool) => {
-          const toggleMap: Record<
-            string,
-            keyof NonNullable<BuiltinToolFilter>
-          > = {
+          const toggleMap: Record<string, keyof NonNullable<BuiltinToolFilter>> = {
             calculate: 'calculate',
             ask_human: 'askHuman',
             file_read: 'fileRead',
@@ -316,7 +322,11 @@ export class EnhancedRunner {
     const mcpConfigPaths = options.tools?.mcpConfigPaths ?? [];
     const mcpTools = await loadMCPTools({ configPaths: mcpConfigPaths });
 
-    const llmQuickInit = options.llm?.quickInit ?? (options.llm && 'providers' in (options.llm as object) ? options.llm as LLMQuickInit : undefined);
+    const llmQuickInit =
+      options.llm?.quickInit ??
+      (options.llm && 'providers' in (options.llm as object)
+        ? (options.llm as LLMQuickInit)
+        : undefined);
     const resolvedModel =
       options.llm?.model ??
       (llmQuickInit?.providers ? resolveDefaultModel(llmQuickInit.providers) : 'glm-5.1');
@@ -337,7 +347,8 @@ export class EnhancedRunner {
             enableSession: options.session?.enabled,
             enableTodolist: options.todolist?.enabled,
             enableSpecPlan: options.specPlan?.enabled,
-            enableCommands: typeof options.commands === 'object' ? options.commands?.enabled : undefined,
+            enableCommands:
+              typeof options.commands === 'object' ? options.commands?.enabled : undefined,
             a2ui: options.a2ui as { enabled: boolean } | undefined,
             crewId: options.crewId,
           },
@@ -450,7 +461,9 @@ export class EnhancedRunner {
     }
 
     // Build command registry with built-in + custom handlers (conditional)
-    const commandsEnabled = (typeof options.commands === 'object' ? options.commands?.enabled : options.commands) !== false;
+    const commandsEnabled =
+      (typeof options.commands === 'object' ? options.commands?.enabled : options.commands) !==
+      false;
     let commandMiddleware: { name: string } | undefined;
     let compressorInstance: IContextCompressor | undefined;
     if (commandsEnabled) {
@@ -458,15 +471,15 @@ export class EnhancedRunner {
       commandRegistry.register(createClearHandler());
       commandRegistry.register(createCompactHandler());
       {
-        // When a2ui is enabled, automatically include the a2ui-generation skill from @agentskillmania/agenui
+        // When a2ui is enabled, automatically include the a2ui-generation skill from @agentskillmania/genui
         const skillDirs = collectSkillDirs(options);
         if (a2uiEnabled) {
           try {
-            const agenuiRoot = nodeRequire.resolve('@agentskillmania/agenui/package.json');
-            const agenuiSkillsDir = path.join(path.dirname(agenuiRoot), 'dist', 'skills');
-            skillDirs.push(agenuiSkillsDir);
+            const genuiRoot = nodeRequire.resolve('@agentskillmania/genui/package.json');
+            const genuiSkillsDir = path.join(path.dirname(genuiRoot), 'skills');
+            skillDirs.push(genuiSkillsDir);
           } catch {
-            /* agenui not installed — skip */
+            /* genui not installed — skip */
           }
         }
         if (skillDirs.length > 0) {
@@ -475,14 +488,20 @@ export class EnhancedRunner {
           commandRegistry.register(createSkillHandler(skillProvider));
         }
       }
-      for (const cmd of (typeof options.commands === 'object' ? options.commands?.extra : undefined) ?? []) {
+      for (const cmd of (typeof options.commands === 'object'
+        ? options.commands?.extra
+        : undefined) ?? []) {
         commandRegistry.register(cmd);
       }
       // Create compressor instance for both AgentRunner auto-compression and /compact command.
       // Default: enabled (compression !== false). If no config provided, auto-detect
       // contextWindowSize from model metadata; fall back to message-count threshold.
       if (options.compression !== false) {
-        if (options.compression && typeof options.compression === 'object' && 'shouldCompress' in options.compression) {
+        if (
+          options.compression &&
+          typeof options.compression === 'object' &&
+          'shouldCompress' in options.compression
+        ) {
           compressorInstance = options.compression as IContextCompressor;
         } else {
           const compressionConfig = { ...((options.compression as CompressionConfig) ?? {}) };

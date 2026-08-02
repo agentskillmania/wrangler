@@ -379,9 +379,7 @@ describe('SandboxToolDeps (mock sandbox)', () => {
       });
       const result = await deps.statFile('test.txt');
       expect(result).toEqual({ exists: true, isFile: true });
-      expect(sandbox.run).toHaveBeenCalledWith(
-        "test -f '/test.txt' && echo YES || echo NO"
-      );
+      expect(sandbox.run).toHaveBeenCalledWith("test -f '/test.txt' && echo YES || echo NO");
     });
 
     it('should return exists=true isFile=false for directory', async () => {
