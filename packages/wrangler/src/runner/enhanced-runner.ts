@@ -54,7 +54,11 @@ import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js
 import { createBuiltinTools } from '../tools/builtin/index.js';
 import type { SearchProvider } from '../tools/builtin/index.js';
 import { SogouScrapeSearchProvider } from '../tools/builtin/sogou-scrape-search.js';
+import { HostToolDeps, SandboxToolDeps } from '../tools/builtin/workspace-deps.js';
+import type { ToolDeps } from '../tools/builtin/workspace-deps.js';
 import { loadMCPTools } from '../tools/mcp/index.js';
+import { createReadResourceTool } from '../tools/skill/read-resource.js';
+import { createRunScriptTool } from '../tools/skill/run-script.js';
 import { createSpecPlanTools } from '../tools/spec-plan/index.js';
 
 const nodeRequire = typeof require === 'function' ? require : createRequire(import.meta.url);
@@ -385,12 +389,29 @@ export class EnhancedRunner {
         ? new Map(options.delegation.subAgents.map((sa) => [sa.name, sa]))
         : undefined;
 
+    // Build skill-resource tools (read_skill_resource + run_skill_script) when
+    // skill directories are configured. These complement load_skill by giving
+    // the agent access to reference docs and bundled scripts.
+    const resolvedSkillDirsForTools = collectSkillDirs(options);
+    const skillTools: Tool<ZodTypeAny>[] = [];
+    if (resolvedSkillDirsForTools.length > 0) {
+      const skillProviderForTools = new FilesystemSkillProvider(resolvedSkillDirsForTools);
+      const maxOutputSize = options.limits?.maxToolOutput ?? 1024 * 1024;
+      const toolTimeout = options.limits?.toolTimeout ?? 600_000;
+      const depsForSkills: ToolDeps = sandboxInstance
+        ? new SandboxToolDeps(sandboxInstance, maxOutputSize, toolTimeout)
+        : new HostToolDeps(workspacePath, maxOutputSize, undefined, toolTimeout);
+      skillTools.push(createReadResourceTool(skillProviderForTools));
+      skillTools.push(createRunScriptTool(depsForSkills, skillProviderForTools));
+    }
+
     const allTools: Tool<ZodTypeAny>[] = [
       ...filteredBuiltinTools,
       ...specPlanTools,
       ...mcpTools,
       ...todolistSupport.tools,
       ...a2uiTools,
+      ...skillTools,
       ...(options.tools?.extra ?? []),
     ];
 
@@ -440,6 +461,14 @@ export class EnhancedRunner {
         name: tool.name,
         description: tool.description,
         type: 'a2ui',
+        enabled: true,
+      });
+    }
+    for (const tool of skillTools) {
+      toolMeta.set(tool.name, {
+        name: tool.name,
+        description: tool.description,
+        type: 'skill',
         enabled: true,
       });
     }

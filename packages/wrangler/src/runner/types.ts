@@ -18,7 +18,7 @@ import type { SessionSource } from '../types.js';
 // ---- Tool & Skill metadata for diagnostics ----
 
 /** Tool type classification — where the tool came from. */
-export type ToolType = 'builtin' | 'mcp' | 'session' | 'todolist' | 'a2ui' | 'extra';
+export type ToolType = 'builtin' | 'mcp' | 'session' | 'todolist' | 'a2ui' | 'skill' | 'extra';
 
 /** Extended tool info for diagnostics, including type and enabled state. */
 export interface ToolMetadata {
