@@ -36,6 +36,11 @@ export class SessionStore {
   private readonly writeQueues = new Map<string, Promise<unknown>>();
   private _sessionDir?: string;
 
+  /** Whether this store is bound directly to a session directory. */
+  get isDirBound(): boolean {
+    return this._sessionDir !== undefined;
+  }
+
   constructor(
     private readonly baseDir: string,
     private readonly workspacePath: string

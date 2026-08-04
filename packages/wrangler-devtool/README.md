@@ -198,7 +198,7 @@ Eval uses the same LLM config as wrangler. Search order (first with `llm.provide
 
 1. `projectDir/eval-config.yaml` — eval-specific override (supports `judge.model`)
 2. `projectDir/wrangler.yaml` — project config
-3. `~/.agentskillmania/wrangler/config.yaml` — global config
+3. `{appDir}/config.yaml` — global config (`AGENTSKILLMANIA_APP_DIR` ?? `~/.agentskillmania/skill-studio`)
 4. `OPENAI_API_KEY` env var — CI fallback
 
 Example `eval-config.yaml` with separate judge model:

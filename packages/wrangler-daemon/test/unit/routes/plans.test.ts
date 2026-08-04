@@ -6,11 +6,11 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { PlanStore } from '@agentskillmania/wrangler';
 import { planRoutes } from '../../../src/routes/plans.js';
 
-let sessionsDir: string;
+let specPlanDir: string;
 
 vi.mock('../../../src/constants.js', () => ({
-  get SESSIONS_DIR() {
-    return sessionsDir;
+  get SPEC_PLAN_DIR() {
+    return specPlanDir;
   },
 }));
 
@@ -22,10 +22,10 @@ describe('Plan API Routes', () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'daemon-plan-test-'));
-    sessionsDir = join(tempDir, 'sessions');
-    await mkdir(sessionsDir, { recursive: true });
+    specPlanDir = join(tempDir, 'spec-plan');
+    await mkdir(specPlanDir, { recursive: true });
     workspacePath = join(tempDir, 'workspace');
-    planStore = new PlanStore(sessionsDir);
+    planStore = new PlanStore(join(specPlanDir, 'plans'));
 
     fastify = Fastify();
     await fastify.register(planRoutes);

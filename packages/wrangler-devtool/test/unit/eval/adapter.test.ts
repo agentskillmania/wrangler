@@ -17,6 +17,7 @@ vi.mock('@agentskillmania/wrangler', () => ({
       on: mockOn,
     }),
   },
+  appDir: () => '/tmp/agentskillmania-test-app',
 }));
 
 import { AgentAdapter } from '../../../src/eval/adapters/agent-adapter.js';

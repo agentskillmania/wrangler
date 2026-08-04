@@ -40,3 +40,11 @@ describe('constants', () => {
     expect(PID_PATH).toBe(join(APP_DIR, 'daemon.pid'));
   });
 });
+
+it('honors AGENTSKILLMANIA_APP_DIR env override', async () => {
+  vi.stubEnv('AGENTSKILLMANIA_APP_DIR', '/tmp/agentskillmania-test-root');
+  vi.resetModules();
+  const mod = await import('../../src/constants.js');
+  expect(mod.APP_DIR).toBe('/tmp/agentskillmania-test-root');
+  vi.unstubAllEnvs();
+});

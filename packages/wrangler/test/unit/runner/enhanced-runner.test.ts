@@ -65,6 +65,9 @@ vi.mock('../../../src/session/support.js', () => ({
     tools: [],
     middlewares: [{ name: 'session' }],
   }),
+  appDir: () =>
+    process.env.AGENTSKILLMANIA_APP_DIR ||
+    join(require('node:os').homedir(), '.agentskillmania', 'skill-studio'),
 }));
 
 vi.mock('../../../src/todolist/support.js', () => ({
@@ -492,6 +495,29 @@ describe('EnhancedRunner', () => {
     await EnhancedRunner.create(makeOptions());
 
     expect(createSpecPlanTools).toHaveBeenCalled();
+  });
+
+  it('roots spec-plan stores at {appDir}/spec-plan independent of session config', async () => {
+    const { SpecStore } = await import('../../../src/spec-plan/spec-store.js');
+    const { PlanStore } = await import('../../../src/spec-plan/plan-store.js');
+    const appRoot = join(tmpdir(), `agentskillmania-specplan-${Date.now()}`);
+    vi.stubEnv('AGENTSKILLMANIA_APP_DIR', appRoot);
+    try {
+      vi.mocked(SpecStore).mockClear();
+      vi.mocked(PlanStore).mockClear();
+
+      // Even with an explicit session base dir the spec-plan stores stay at
+      // {appDir}/spec-plan — the two concerns are fully decoupled.
+      await EnhancedRunner.create(
+        makeOptions({ sessionBaseDir: join(appRoot, 'sessions') })
+      );
+
+      expect(SpecStore).toHaveBeenCalledWith(join(appRoot, 'spec-plan', 'specs'));
+      expect(PlanStore).toHaveBeenCalledWith(join(appRoot, 'spec-plan', 'plans'));
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(appRoot, { recursive: true, force: true });
+    }
   });
 
   it('should skip command middleware when enableCommands is false', async () => {

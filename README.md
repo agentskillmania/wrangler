@@ -29,7 +29,7 @@ pnpm build
 npx wrangler-daemon
 ```
 
-Place a `wrangler.yaml` in your project directory (or `~/.agentskillmania/wrangler/config.yaml`):
+Place a `wrangler.yaml` in your project directory (or `~/.agentskillmania/skill-studio/config.yaml`):
 
 ```yaml
 llm:

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { writeFileSync, rmSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, rmSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -104,6 +104,25 @@ describe('loadEvalLlmConfig', () => {
     delete process.env.MODEL;
     delete process.env.OPENAI_BASE_URL;
     delete process.env.PROVIDER;
+  });
+
+  // ── Global dir default ─────────────────────────────────
+
+  it('defaults globalDir to {appDir} (AGENTSKILLMANIA_APP_DIR)', async () => {
+    const appDir = join(tempDir, 'agentskillmania-app');
+    mkdirSync(appDir, { recursive: true });
+    writeFileSync(
+      join(appDir, 'config.yaml'),
+      `llm:\n  providers:\n    - name: openai\n      apiKey: sk-global\n      models: [{ modelId: gpt-4o }]\n`,
+      'utf-8'
+    );
+    process.env.AGENTSKILLMANIA_APP_DIR = appDir;
+    try {
+      const config = await loadEvalLlmConfig({});
+      expect(config.llm.providers[0].apiKey).toBe('sk-global');
+    } finally {
+      delete process.env.AGENTSKILLMANIA_APP_DIR;
+    }
   });
 
   // ── No config ─────────────────────────────────────────

@@ -5,15 +5,15 @@
  * Search order (first with llm.providers wins):
  *   1. projectDir/eval-config.yaml   — eval-specific override (can set judge model)
  *   2. projectDir/wrangler.yaml      — project config
- *   3. ~/.agentskillmania/wrangler/config.yaml — global config
+ *   3. {appDir}/config.yaml          — global config (AGENTSKILLMANIA_APP_DIR ?? ~/.agentskillmania/skill-studio)
  *   4. Environment variables         — CI fallback (OPENAI_API_KEY etc.)
  */
 
 import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { LLMQuickInit } from '@agentskillmania/colts';
+import { appDir } from '@agentskillmania/wrangler';
 
 /** Result of loading LLM config. */
 export interface EvalLlmConfig {
@@ -50,7 +50,7 @@ export async function loadEvalLlmConfig(
     searchPaths.push(join(opts.projectDir, 'eval-config.yaml'));
     searchPaths.push(join(opts.projectDir, 'wrangler.yaml'));
   }
-  const globalDir = opts.globalDir ?? join(homedir(), '.agentskillmania', 'wrangler');
+  const globalDir = opts.globalDir ?? appDir();
   searchPaths.push(join(globalDir, 'config.yaml'));
 
   const yaml = await import('js-yaml');

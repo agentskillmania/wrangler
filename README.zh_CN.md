@@ -28,7 +28,7 @@ pnpm build
 npx wrangler-daemon
 ```
 
-在你的项目目录放置 `wrangler.yaml`（或 `~/.agentskillmania/wrangler/config.yaml`）：
+在你的项目目录放置 `wrangler.yaml`（或 `~/.agentskillmania/skill-studio/config.yaml`）：
 
 ```yaml
 llm:

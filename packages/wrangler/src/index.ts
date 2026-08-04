@@ -8,7 +8,7 @@ import './types/colts-augmentation.js';
 export type { SessionMeta, SessionSource, RunnerConfigSnapshot } from './types.js';
 
 // Session support
-export { createSessionSupport } from './session/support.js';
+export { appDir, createSessionSupport } from './session/support.js';
 export { SessionStore } from './session/session-store.js';
 export { writeMeta, readMeta } from './session/meta.js';
 export { SessionNotFoundError } from './session/errors.js';

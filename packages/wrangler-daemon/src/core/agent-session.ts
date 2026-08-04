@@ -18,9 +18,11 @@ import {
   EnhancedRunner,
   SessionStore,
   createLLMClient,
+  readMeta,
   resolveDefaultModel,
+  writeMeta,
 } from '@agentskillmania/wrangler';
-import type { SubAgentConfig, LimitsConfig } from '@agentskillmania/wrangler';
+import type { SessionMeta, SubAgentConfig, LimitsConfig } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
@@ -325,7 +327,30 @@ export class AgentSession {
    */
   async saveState(): Promise<void> {
     if (this.sessionStore) {
-      await this.sessionStore.saveState(this.sessionId, this.state);
+      if (this.sessionStore.isDirBound) {
+        // Directory-bound store (explicit sessionDir): sessionId is not
+        // accepted — write state + meta directly into the bound directory
+        // (mirrors the daemon's persist_session for explicit dirs).
+        const dir = this.sessionStore.getSessionDir(undefined);
+        await this.sessionStore.saveState(undefined, this.state);
+        const now = new Date().toISOString();
+        const existing = await readMeta(dir);
+        const meta: SessionMeta = {
+          id: existing?.id ?? this.sessionId,
+          title: existing?.title,
+          titleSource: existing?.titleSource,
+          workspacePath: this.workspacePath,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          agentName: this.agentName,
+          runnerConfig: { model: this.model },
+          source: existing?.source,
+          metadata: existing?.metadata,
+        };
+        await writeMeta(dir, meta);
+      } else {
+        await this.sessionStore.saveState(this.sessionId, this.state);
+      }
     }
   }
 
@@ -372,7 +397,11 @@ export class AgentSession {
    * Reads persisted metadata (title, timestamps) from disk.
    */
   private async buildSessionOverview(): Promise<SessionOverview> {
-    const meta = this.sessionStore ? await this.sessionStore.getMeta(this.sessionId) : null;
+    const meta = this.sessionStore
+      ? await this.sessionStore.getMeta(
+          this.sessionStore.isDirBound ? undefined : this.sessionId
+        )
+      : null;
     const runnerConfig = this.runner.getConfig();
     const ctx = this.state?.context;
 
@@ -416,7 +445,11 @@ export class AgentSession {
           ? ctx.totalTokens.input + ctx.totalTokens.output
           : undefined,
       workspacePath: this.workspacePath ?? '',
-      sessionPath: this.sessionStore?.getSessionDir?.(this.sessionId),
+      sessionPath: this.sessionStore
+        ? this.sessionStore.isDirBound
+          ? this.sessionStore.getSessionDir(undefined)
+          : this.sessionStore.getSessionDir(this.sessionId)
+        : undefined,
       skillDirs: runnerConfig.skillDirs ?? [],
       mcpConfigPaths: runnerConfig.mcpConfigPaths ?? [],
     };

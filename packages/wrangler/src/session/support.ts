@@ -10,7 +10,15 @@ import { createSessionMiddleware } from '../middleware/session-middleware.js';
 import { createSessionNamingMiddleware } from '../middleware/session-naming-middleware.js';
 import type { RunnerConfigSnapshot, SessionSource } from '../types.js';
 
-const DEFAULT_SESSION_BASE_DIR = join(homedir(), '.agentskillmania', 'wrangler', 'sessions');
+/**
+ * Resolve the application root: `AGENTSKILLMANIA_APP_DIR` env override, else
+ * `~/.agentskillmania/skill-studio`. Mirrors the daemon's `APP_DIR`.
+ */
+export function appDir(): string {
+  const env = process.env.AGENTSKILLMANIA_APP_DIR;
+  if (env && env.trim()) return env;
+  return join(homedir(), '.agentskillmania', 'skill-studio');
+}
 
 /**
  * Session 持久化支持 — 返回 middleware 和 SessionStore。
@@ -21,7 +29,7 @@ const DEFAULT_SESSION_BASE_DIR = join(homedir(), '.agentskillmania', 'wrangler',
 export function createSessionSupport(options: {
   /** workspace 目录路径（session 按此分组） */
   workspacePath: string;
-  /** session 存储根目录（默认 ~/.agentskillmania/wrangler/sessions） */
+  /** session 存储根目录（默认 {appDir}/sessions） */
   sessionBaseDir?: string;
   /** 可选 LLM provider for Phase 2 title upgrade */
   llmClient?: ILLMProvider;
@@ -35,7 +43,7 @@ export function createSessionSupport(options: {
   middlewares: AgentMiddleware[];
   store: SessionStore;
 } {
-  const sessionBaseDir = options.sessionBaseDir ?? DEFAULT_SESSION_BASE_DIR;
+  const sessionBaseDir = options.sessionBaseDir ?? join(appDir(), 'sessions');
   const store = new SessionStore(sessionBaseDir, options.workspacePath);
 
   const sessionMiddleware = createSessionMiddleware(store, {

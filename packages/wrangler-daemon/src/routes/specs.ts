@@ -1,11 +1,13 @@
+import { join } from 'node:path';
+
 import { SpecStore } from '@agentskillmania/wrangler';
 import type { SpecStatus } from '@agentskillmania/wrangler';
 import type { FastifyInstance } from 'fastify';
 
-import { SESSIONS_DIR } from '../constants.js';
+import { SPEC_PLAN_DIR } from '../constants.js';
 
 function getSpecStore(_workspacePath: string): SpecStore {
-  return new SpecStore(SESSIONS_DIR);
+  return new SpecStore(join(SPEC_PLAN_DIR, 'specs'));
 }
 
 export async function specRoutes(fastify: FastifyInstance): Promise<void> {

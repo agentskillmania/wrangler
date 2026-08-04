@@ -198,7 +198,7 @@ const runner = await EnhancedRunner.create({
 
 1. `projectDir/eval-config.yaml` — 评估专用覆盖（支持 `judge.model`）
 2. `projectDir/wrangler.yaml` — 项目配置
-3. `~/.agentskillmania/wrangler/config.yaml` — 全局配置
+3. `{appDir}/config.yaml` — 全局配置（`AGENTSKILLMANIA_APP_DIR` ?? `~/.agentskillmania/skill-studio`）
 4. `OPENAI_API_KEY` 环境变量 — CI 兜底
 
 `eval-config.yaml` 示例（指定 judge 用不同模型）：

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ConfigManager } from '../../../src/core/config-manager.js';
 import { ResourceManager } from '../../../src/core/resource-manager.js';
-import { SessionNotFoundError } from '@agentskillmania/wrangler';
+import { SessionNotFoundError, writeMeta } from '@agentskillmania/wrangler';
 import { SessionManager } from '../../../src/core/session-manager.js';
 import { chatRoutes } from '../../../src/routes/chat.js';
 
@@ -642,6 +642,60 @@ describe('Chat API', () => {
       // Session resume receives sessionDir as first arg
       const callArg = mockAgentSessionResume.mock.calls[0][0] as string;
       expect(callArg).toContain('existing-session');
+    });
+
+    it('resumes from explicit sessionDir even when session is not in the standard tree', async () => {
+      mockAgentSessionResume.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      // Session lives in an explicit "notebook" dir — invisible to the
+      // standard {root}/sessions tree; identity comes from its meta.yaml.
+      const explicitDir = join(tempDir, 'notebook-sessions', 'my-session');
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(explicitDir, { recursive: true });
+      await writeMeta(explicitDir, {
+        id: 'my-session',
+        workspacePath: join(tempDir, 'workspace'),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        agentName: 'test-agent',
+        runnerConfig: { model: 'test-model' },
+      });
+
+      const res = await fetch(`${getUrl()}/api/chat/some-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello', sessionDir: explicitDir }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockAgentSessionResume).toHaveBeenCalledTimes(1);
+      expect(mockAgentSessionResume.mock.calls[0][0]).toBe(explicitDir);
+
+      // Identity resolved from the explicit dir's meta.yaml
+      const opts = mockAgentSessionResume.mock.calls[0][1] as {
+        workspacePath: string;
+        agentName: string;
+      };
+      expect(opts.workspacePath).toBe(join(tempDir, 'workspace'));
+      expect(opts.agentName).toBe('test-agent');
+    });
+
+    it('returns 404 when explicit sessionDir has no meta.yaml', async () => {
+      const res = await fetch(`${getUrl()}/api/chat/some-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          sessionDir: join(tempDir, 'missing-session-dir'),
+        }),
+      });
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('Session not found');
     });
 
     it('reloads crew subAgents on resume when meta.runnerConfig.crewId is set', async () => {

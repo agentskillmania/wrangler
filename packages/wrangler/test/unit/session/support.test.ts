@@ -55,6 +55,24 @@ describe('createSessionSupport', () => {
     expect(sessionEntries).toHaveLength(1);
   });
 
+  it('defaults to {appDir}/sessions when no sessionBaseDir is given', async () => {
+    // The default session base dir is the unified application root's
+    // `sessions` folder, and the root itself honors AGENTSKILLMANIA_APP_DIR.
+    const appDir = join(tmpdir(), `agentskillmania-app-${Date.now()}`);
+    vi.stubEnv('AGENTSKILLMANIA_APP_DIR', appDir);
+    try {
+      const session = createSessionSupport({ workspacePath: '/test/workspace' });
+
+      await session.store.createWithId('default-location-session', 'test-model', 'test-agent');
+
+      const entries = await readdir(join(appDir, 'sessions'), { recursive: true });
+      expect(entries.join(',')).toContain('meta.yaml');
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(appDir, { recursive: true, force: true });
+    }
+  });
+
   // ── Middleware behavioral contract tests ────────────────────────────────
 
   describe('middlewares', () => {

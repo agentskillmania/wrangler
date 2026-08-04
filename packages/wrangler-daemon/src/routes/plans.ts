@@ -1,11 +1,13 @@
+import { join } from 'node:path';
+
 import { PlanStore } from '@agentskillmania/wrangler';
 import type { PlanStatus } from '@agentskillmania/wrangler';
 import type { FastifyInstance } from 'fastify';
 
-import { SESSIONS_DIR } from '../constants.js';
+import { SPEC_PLAN_DIR } from '../constants.js';
 
 function getPlanStore(_workspacePath: string): PlanStore {
-  return new PlanStore(SESSIONS_DIR);
+  return new PlanStore(join(SPEC_PLAN_DIR, 'plans'));
 }
 
 export async function planRoutes(fastify: FastifyInstance): Promise<void> {

@@ -44,6 +44,7 @@ import { CommandRegistry } from '../command/registry.js';
 import { createLLMClient, resolveDefaultModel } from '../llm/client.js';
 import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
+import { appDir } from '../session/support.js';
 import { createSessionSupport } from '../session/support.js';
 import { PlanStore } from '../spec-plan/plan-store.js';
 import { SpecStore } from '../spec-plan/spec-store.js';
@@ -367,10 +368,10 @@ export class EnhancedRunner {
 
     // Spec-plan support (conditional)
     const specPlanEnabled = options.specPlan?.enabled !== false;
-    const specPlanBaseDir = path.join(
-      options.sessionBaseDir ?? path.join(workspacePath, '.agentskillmania'),
-      'spec-plan'
-    );
+    // Fixed unified root: {appDir}/spec-plan. Decoupled from the session
+    // base dir (the two concerns used to share a setting, which broke the
+    // daemon: sessions at {root}/sessions but specs under {root}/sessions).
+    const specPlanBaseDir = path.join(appDir(), 'spec-plan');
     const specStore = new SpecStore(path.join(specPlanBaseDir, 'specs'));
     const planStore = new PlanStore(path.join(specPlanBaseDir, 'plans'));
     const specPlanTools = specPlanEnabled ? createSpecPlanTools(specStore, planStore) : [];
@@ -691,7 +692,10 @@ export class EnhancedRunner {
       enableSpecPlan: rc.enableSpecPlan,
       enableCommands: rc.enableCommands,
       a2ui: rc.a2ui,
-      sessionBaseDir: path.dirname(path.dirname(sessionDir)),
+      // Session base dir is NOT reverse-derived from the session dir: the
+      // library default ({appDir}/sessions) matches the standard
+      // {base}/{hash}/{id} shape, so resume lands back in the same place.
+      // Explicit sessionDir resume persists via a directory-bound store.
       source: meta.source,
       subAgents: options.subAgents,
     });

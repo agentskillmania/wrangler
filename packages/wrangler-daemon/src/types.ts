@@ -154,6 +154,12 @@ export interface PerRequestParams {
 /** Session-init parameters — only create endpoint accepts these */
 export interface SessionInitParams {
   workspacePath: string;
+  /**
+   * Explicit session directory ("notebook dir is the session"). When set,
+   * the session persists to this directory instead of the standard
+   * `{root}/sessions/{hash}/{id}` tree.
+   */
+  sessionDir?: string;
   config?: {
     skillDirs?: string[];
     mcpConfigPaths?: string[];
@@ -178,4 +184,11 @@ export interface SessionInitParams {
 export type CreateAndChatRequest = PerRequestParams & SessionInitParams;
 
 /** POST /api/chat/:sessionId — send message to existing session */
-export type ResumeChatRequest = PerRequestParams;
+export type ResumeChatRequest = PerRequestParams & {
+  /**
+   * Explicit session directory ("notebook dir is the session"). When set,
+   * resume reads identity from this directory's meta.yaml instead of
+   * looking the session up in the standard `{root}/sessions` tree.
+   */
+  sessionDir?: string;
+};

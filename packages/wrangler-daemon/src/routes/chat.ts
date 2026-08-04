@@ -1,4 +1,5 @@
-import { SessionNotFoundError, crewToRunnerOptions } from '@agentskillmania/wrangler';
+import { SessionNotFoundError, SessionStore, crewToRunnerOptions, readMeta } from '@agentskillmania/wrangler';
+import type { SessionMeta } from '@agentskillmania/wrangler';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
@@ -183,7 +184,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         BUILTIN_SKILLS_DIR, // always include devtool's built-in skills (architect/reviewer/curator)
       ],
       mcpConfigPaths: body.config?.mcpConfigPaths ?? agentDetail.mcpPaths,
-      sessionBaseDir: sessionManager().baseDir,
+      // Explicit sessionDir ("notebook dir is the session"): bind the store
+      // directly to that directory so persistence lands there.
+      sessionStore: body.sessionDir ? SessionStore.fromDir(body.sessionDir) : undefined,
       sessionManager: sessionManager(),
       agentConfigPath: agentDetail.path,
       // New config fields from request body
@@ -229,18 +232,36 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       return;
     }
 
-    const info = await sessionManager().getInfo(sessionId);
-    if (!info) {
-      reply.code(404).send({ error: 'Session not found' });
-      return;
+    // Explicit sessionDir ("notebook dir is the session") bypasses the
+    // standard {root}/sessions tree: identity comes from the persisted
+    // meta.yaml in that directory.
+    let info: SessionMeta;
+    let store: SessionStore;
+    let sessionDir: string;
+    if (body.sessionDir) {
+      const meta = await readMeta(body.sessionDir);
+      if (!meta) {
+        reply.code(404).send({ error: 'Session not found' });
+        return;
+      }
+      info = meta;
+      store = SessionStore.fromDir(body.sessionDir);
+      sessionDir = body.sessionDir;
+    } else {
+      const meta = await sessionManager().getInfo(sessionId);
+      if (!meta) {
+        reply.code(404).send({ error: 'Session not found' });
+        return;
+      }
+      info = meta;
+      store = sessionManager().getSessionStore(meta.workspacePath);
+      sessionDir = store.getSessionDir(sessionId);
     }
 
     // Lazily resume AgentSession on first resume chat
     let agentSession = sessionManager().getAgentSession(sessionId);
     if (!agentSession) {
-      const store = sessionManager().getSessionStore(info.workspacePath);
       const agentDetail = await resourceManager().getAgent(info.agentName);
-      const sessionDir = store.getSessionDir(sessionId);
       const config = configManager().get();
 
       // Crew session: if the persisted runnerConfig carried a crewId, reload
@@ -350,7 +371,6 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       sandbox: runnerOpts.sandbox ?? body.config?.sandbox ?? true,
       skillDirs: [...(runnerOpts.skillDirs ?? []), BUILTIN_SKILLS_DIR],
       mcpConfigPaths: body.config?.mcpConfigPaths ?? [],
-      sessionBaseDir: sessionManager().baseDir,
       sessionManager: sessionManager(),
       builtinTools: body.config?.builtinTools as AgentSessionOptions['builtinTools'],
       enableSession: body.config?.enableSession,
