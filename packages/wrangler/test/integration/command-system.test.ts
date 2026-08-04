@@ -268,7 +268,7 @@ describe('Command System Integration Tests', () => {
         llmClient: makeLLMClient() as any,
         model: testConfig.testModel,
         workspacePath: '/tmp/test-workspace',
-        commands: [customClearHandler],
+        commands: { enabled: true, extra: [customClearHandler] },
         mcpConfigPaths: [],
       });
 

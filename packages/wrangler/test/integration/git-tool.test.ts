@@ -23,14 +23,10 @@ describe('Integration: git tool (real git)', () => {
   beforeEach(async () => {
     workspace = mkdtempSync(join(tmpdir(), 'wrangler-int-git-'));
     deps = new HostToolDeps(workspace);
-    // Initialize a real git repo for the tests.
-    // Use --template='' to avoid inheriting hooks (e.g. husky) from the
-    // parent repo or global core.hooksPath, which would make git commit
-    // trigger pre-commit checks and hang/fail the test.
-    await deps.exec('git init --template={}');
+    // Initialize a real git repo for the tests
+    await deps.exec('git init');
     await deps.exec('git config user.email test@test.com');
     await deps.exec('git config user.name Test');
-    await deps.exec('git config core.hooksPath /dev/null');
   });
 
   afterEach(() => {

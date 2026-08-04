@@ -790,7 +790,12 @@ describe('EnhancedRunner', () => {
           extraTools: [],
         })
       );
-      expect(runner.getToolInfo()).toEqual([]);
+      // Skill tools (read_skill_resource, run_skill_script) are always
+      // registered when skill directories are available (collectSkillDirs
+      // auto-appends builtin spec-plan skills). Filter them out to verify
+      // no other tools are loaded.
+      const nonSkillTools = runner.getToolInfo().filter((t) => t.type !== 'skill');
+      expect(nonSkillTools).toEqual([]);
     });
 
     it('returns builtin tools with type=builtin and enabled=true by default', async () => {

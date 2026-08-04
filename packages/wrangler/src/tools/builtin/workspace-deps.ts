@@ -237,6 +237,7 @@ export class HostToolDeps implements ToolDeps {
         timeout,
         maxBuffer: this.maxOutputSize,
         shell: this.shell.path,
+        cwd: this.workspaceRoot,
       });
       return { stdout, stderr, exitCode: 0 };
     } catch (error) {
@@ -268,6 +269,7 @@ export class HostToolDeps implements ToolDeps {
       const { stdout, stderr } = await execFileAsync(exe, args, {
         timeout,
         maxBuffer: this.maxOutputSize,
+        cwd: this.workspaceRoot,
       });
       return { stdout, stderr, exitCode: 0 };
     } catch (error) {

@@ -1,9 +1,23 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createBuiltinTools } from '../../../../src/tools/builtin/index.js';
+
+// HostToolDeps.exec/execArray now set cwd to workspaceRoot, so tests need
+// a real directory (not a fake path like /tmp/test-workspace).
+let testWorkspace: string;
+
+beforeAll(() => {
+  testWorkspace = mkdtempSync(join(tmpdir(), 'wrangler-unit-builtin-'));
+});
+afterAll(() => {
+  rmSync(testWorkspace, { recursive: true, force: true });
+});
 
 describe('createBuiltinTools', () => {
   it('returns 11 colts Tool instances (calculator + 10 builtin)', () => {
-    const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
+    const tools = createBuiltinTools({ workspacePath: testWorkspace });
     expect(tools).toHaveLength(11);
     for (const tool of tools) {
       expect(tool).toHaveProperty('name');
@@ -15,7 +29,7 @@ describe('createBuiltinTools', () => {
   });
 
   it('includes all expected tool names', () => {
-    const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
+    const tools = createBuiltinTools({ workspacePath: testWorkspace });
     const names = tools.map((t) => t.name);
     expect(names).toContain('calculate');
     expect(names).toContain('file_read');
@@ -31,7 +45,7 @@ describe('createBuiltinTools', () => {
   });
 
   it('passes workspace config to file tools', async () => {
-    const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
+    const tools = createBuiltinTools({ workspacePath: testWorkspace });
     const fileRead = tools.find((t) => t.name === 'file_read')!;
     // Should attempt to read from workspace path and throw when file missing
     await expect(fileRead.execute({ filePath: 'nonexistent.txt' })).rejects.toThrow(
@@ -40,7 +54,7 @@ describe('createBuiltinTools', () => {
   });
 
   it('web_search uses default BingScrapeSearchProvider when no provider configured', async () => {
-    const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
+    const tools = createBuiltinTools({ workspacePath: testWorkspace });
     const webSearch = tools.find((t) => t.name === 'web_search')!;
     expect(webSearch).toHaveProperty('name', 'web_search');
     expect(webSearch).toHaveProperty('parameters');
@@ -48,21 +62,21 @@ describe('createBuiltinTools', () => {
   });
 
   it('shell tool executes commands in host mode', async () => {
-    const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
+    const tools = createBuiltinTools({ workspacePath: testWorkspace });
     const shell = tools.find((t) => t.name === 'shell')!;
     const result = await shell.execute({ command: 'echo test' });
     expect(result).toContain('test');
   });
 
   it('python tool executes python code in host mode', async () => {
-    const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
+    const tools = createBuiltinTools({ workspacePath: testWorkspace });
     const python = tools.find((t) => t.name === 'python')!;
     const result = await python.execute({ code: 'print("hello from python")' });
     expect(result).toContain('hello from python');
   });
 
   it('git tool executes git commands in host mode', async () => {
-    const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
+    const tools = createBuiltinTools({ workspacePath: testWorkspace });
     const git = tools.find((t) => t.name === 'git')!;
     const result = await git.execute({ command: '--version' });
     expect(result).toContain('git version');
@@ -73,7 +87,7 @@ describe('createBuiltinTools', () => {
       run: vi.fn().mockResolvedValue({ stdout: 'sandbox output', stderr: '', exitCode: 0 }),
     } as unknown as import('@agentskillmania/sandbox').Sandbox;
     const tools = createBuiltinTools({
-      workspacePath: '/tmp/test-workspace',
+      workspacePath: testWorkspace,
       sandbox: mockSandbox,
     });
     expect(tools).toHaveLength(11);
@@ -85,7 +99,7 @@ describe('createBuiltinTools', () => {
 
   it('passes maxToolOutput to shell tool for truncation', async () => {
     const tools = createBuiltinTools({
-      workspacePath: '/tmp/test-workspace',
+      workspacePath: testWorkspace,
       maxToolOutput: 500,
     });
     const shell = tools.find((t) => t.name === 'shell')!;
@@ -97,7 +111,7 @@ describe('createBuiltinTools', () => {
 
   it('passes toolTimeout to deps (construction succeeds)', () => {
     const tools = createBuiltinTools({
-      workspacePath: '/tmp/test-workspace',
+      workspacePath: testWorkspace,
       toolTimeout: 30_000,
     });
     expect(tools).toHaveLength(11);
@@ -110,7 +124,7 @@ describe('createBuiltinTools', () => {
   it('includes ask_human tool when askHumanHandler is provided', () => {
     const handler = vi.fn();
     const tools = createBuiltinTools({
-      workspacePath: '/tmp/test-workspace',
+      workspacePath: testWorkspace,
       askHumanHandler: handler as never,
     });
     expect(tools).toHaveLength(12);
@@ -118,7 +132,7 @@ describe('createBuiltinTools', () => {
   });
 
   it('omits ask_human tool when no askHumanHandler', () => {
-    const tools = createBuiltinTools({ workspacePath: '/tmp/test-workspace' });
+    const tools = createBuiltinTools({ workspacePath: testWorkspace });
     expect(tools.map((t) => t.name)).not.toContain('ask_human');
   });
 });

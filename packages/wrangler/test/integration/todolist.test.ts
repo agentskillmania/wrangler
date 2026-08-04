@@ -160,9 +160,11 @@ describe('US3: Todo state persists across sessions', () => {
       const todolistSupport = createTodolistSupport();
 
       // Round 1: Create todos
+      // Note: createSessionSupport no longer returns tools (calculate/ask_human
+      // moved to createBuiltinTools). Only todolist provides tools here.
       const runner1 = makeRunner(
-        [...session.tools, ...todolistSupport.tools],
-        [session.middlewares[0], todolistSupport.middleware]
+        [...todolistSupport.tools],
+        [...session.middlewares, todolistSupport.middleware]
       );
 
       let state1 = createAgentState({
@@ -188,8 +190,8 @@ describe('US3: Todo state persists across sessions', () => {
       expect(loaded).toHaveProperty('id');
 
       const runner2 = makeRunner(
-        [...session.tools, ...todolistSupport.tools],
-        [session.middlewares[0], todolistSupport.middleware]
+        [...todolistSupport.tools],
+        [...session.middlewares, todolistSupport.middleware]
       );
 
       const state2 = addUserMessage(loaded!, 'What tasks are in my todo list?');
