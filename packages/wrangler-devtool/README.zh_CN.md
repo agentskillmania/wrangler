@@ -181,13 +181,13 @@ devtool 内置五个 skill，上层智能体可通过 `load_skill` 加载：
 | `definition-reviewer` | 评审 agent/skill/crew 定义质量 |
 | `session-curator` | 管理和整理对话会话 |
 
-上层应用导入 `BUILTIN_SKILLS_DIR` 并添加到 `skillDirs`：
+上层应用导入 `BUILTIN_SKILLS_DIR` 并添加到 `skills.dirs`：
 
 ```typescript
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 
 const runner = await EnhancedRunner.create({
-  skillDirs: [BUILTIN_SKILLS_DIR],
+  skills: { dirs: [BUILTIN_SKILLS_DIR] },
   // ...
 });
 ```

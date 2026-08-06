@@ -33,10 +33,12 @@ Place a `wrangler.yaml` in your project directory (or `~/.agentskillmania/skill-
 
 ```yaml
 llm:
-  provider: openai
-  apiKey: sk-your-key
-  model: gpt-4o
-  baseUrl: https://api.openai.com/v1  # optional
+  providers:
+    - name: openai
+      apiKey: sk-your-key
+      baseUrl: https://api.openai.com/v1  # optional
+      models:
+        - modelId: gpt-4o
 ```
 
 ## Development with Devtool

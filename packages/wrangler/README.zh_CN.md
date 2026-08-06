@@ -48,10 +48,10 @@ llmClient.registerApiKey({
 });
 
 const runner = await EnhancedRunner.create({
-  llmClient,
-  model: 'gpt-4o',
   workspacePath: '/path/to/project',
-  thinkingEnabled: true,
+  llm: { client: llmClient, model: 'gpt-4o' },
+  thinking: { enabled: true },
+  sandbox: { enabled: true },
 });
 
 const state = runner.createState();
@@ -76,12 +76,11 @@ const crew = await new CrewLoader('./my-crew').load();
 const opts = crewToRunnerOptions(crew);
 
 const runner = await EnhancedRunner.create({
-  llmClient,
-  model: opts.model ?? 'gpt-4o',
+  llm: { client: llmClient, model: opts.model ?? 'gpt-4o' },
   // 团队的合成 prompt（memory + 主 Agent 指令 + 子代理目录）通过
   // agentInstructions → AgentState.config.instructions 传递
-  subAgents: opts.subAgents,
-  skillDirs: opts.skillDirs,
+  delegation: { subAgents: opts.subAgents },
+  skills: { dirs: opts.skillDirs },
   crewId: 'my-crew', // 写入 runnerConfig 快照，resume 时据此识别团队会话
 });
 
@@ -99,10 +98,45 @@ const state = createAgentState({
 
 ```typescript
 const { runner, state } = await EnhancedRunner.resume(sessionDir, {
-  llmClient,
+  llm: { client: llmClient },
   subAgents: opts.subAgents, // 由 CrewLoader + crewToRunnerOptions 重建
 });
 ```
+
+## 配置
+
+`EnhancedRunner.create()` 接受结构化的配置组：
+
+```typescript
+await EnhancedRunner.create({
+  workspacePath: '/project',
+
+  llm: {
+    client: llmClient,           // 或 quickInit 支持多 provider
+    model: 'gpt-4o',
+    temperature: 0.7,
+    requestTimeout: 120_000,
+  },
+  skills: { dirs: ['/skills'] },
+  tools: {
+    builtinFilter: { shell: true, python: false }, // 白名单
+    mcpConfigPaths: ['./mcp.json'],
+    askHumanHandler: myHandler,
+  },
+  sandbox: { enabled: true },
+  thinking: { enabled: true, promptLevel: false },
+  session: { enabled: true, baseDir: '/sessions' },
+  todolist: { enabled: true },
+  specPlan: { enabled: true },
+  commands: { enabled: true },
+  a2ui: { enabled: false },
+  delegation: { subAgents: [...] },
+  limits: { maxSteps: 500 },
+  compression: { strategy: 'summarize', threshold: 50 },
+});
+```
+
+旧版扁平字段（`llmClient`、`enableSession`、`skillDirs`、`sandbox: true` 等）已移除——所有选项都通过上面的结构化组传入。按请求覆盖（model、thinking）见 `ResumeOptions`；daemon 的聊天请求 `config` 暴露同样的配置组。
 
 ## 依赖
 

@@ -181,13 +181,13 @@ Devtool ships five skills that upper-layer agents can load via `load_skill`:
 | `definition-reviewer` | Review agent/skill/crew definitions for quality |
 | `session-curator` | Manage and organize conversation sessions |
 
-Upper-layer applications import `BUILTIN_SKILLS_DIR` and add it to `skillDirs`:
+Upper-layer applications import `BUILTIN_SKILLS_DIR` and add it to `skills.dirs`:
 
 ```typescript
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 
 const runner = await EnhancedRunner.create({
-  skillDirs: [BUILTIN_SKILLS_DIR],
+  skills: { dirs: [BUILTIN_SKILLS_DIR] },
   // ...
 });
 ```

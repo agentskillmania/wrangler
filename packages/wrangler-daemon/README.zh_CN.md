@@ -79,16 +79,25 @@ server:
 {
   "message": "工作区里有哪些文件？",
   "workspacePath": "/abs/path/to/project",
+  "sessionId": "可选，客户端指定 ID",
   "thinkingEnabled": false,
   "model": "glm-5.1",          // 可选，按请求覆盖
-  "config": {                  // 可选的 Runner 配置
-    "sandbox": true,
-    "enableSession": true,
-    "enableTodolist": true,
-    "enableCommands": true,
-    "builtinTools": { "shell": true, "fileRead": true },
-    "skillDirs": ["./skills"],
-    "mcpConfigPaths": ["./mcp.json"]
+  "config": {                  // 可选的 Runner 配置（结构化配置组）
+    "skills": { "dirs": ["./skills"] },
+    "tools": {
+      "mcpConfigPaths": ["./mcp.json"],
+      "builtinFilter": { "shell": true, "fileRead": true }
+    },
+    "sandbox": true,           // 或 { "enabled": true, "timeout": 600000, ... }
+    "thinking": { "enabled": false },
+    "session": { "enabled": true },
+    "todolist": { "enabled": true },
+    "specPlan": { "enabled": true },
+    "commands": { "enabled": true },
+    "a2ui": { "enabled": false },
+    "limits": { "maxSteps": 500, "requestTimeout": 1800000 },
+    "search": { "provider": "sogou" },
+    "compression": true
   }
 }
 ```
@@ -197,7 +206,7 @@ HTTP 请求
   → Fastify 路由（routes/*.ts）
     → ResourceManager（从磁盘加载 AGENT.md / CREW.md）
     → AgentSession.create / .resume（包装 EnhancedRunner）
-      → EnhancedRunner.create({ subAgents, crewId, skillDirs, ... })
+      → EnhancedRunner.create({ llm, skills, delegation, crewId, ... })
         → colts AgentRunner（ReAct 循环，EventEmitter）
     → SSE 流（AgentSession.handleMessage → reply.raw）
 ```

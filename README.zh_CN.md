@@ -32,10 +32,12 @@ npx wrangler-daemon
 
 ```yaml
 llm:
-  provider: openai
-  apiKey: sk-your-key
-  model: gpt-4o
-  baseUrl: https://api.openai.com/v1  # 可选
+  providers:
+    - name: openai
+      apiKey: sk-your-key
+      baseUrl: https://api.openai.com/v1  # 可选
+      models:
+        - modelId: gpt-4o
 ```
 
 ## 使用 Devtool 开发

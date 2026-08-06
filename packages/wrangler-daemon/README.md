@@ -79,16 +79,25 @@ New conversation body (`/api/agents/:name/chat` and `/api/crews/:id/chat`):
 {
   "message": "What files are in this workspace?",
   "workspacePath": "/abs/path/to/project",
+  "sessionId": "optional-client-id",
   "thinkingEnabled": false,
   "model": "glm-5.1",          // optional per-request override
-  "config": {                  // optional runner config
-    "sandbox": true,
-    "enableSession": true,
-    "enableTodolist": true,
-    "enableCommands": true,
-    "builtinTools": { "shell": true, "fileRead": true },
-    "skillDirs": ["./skills"],
-    "mcpConfigPaths": ["./mcp.json"]
+  "config": {                  // optional runner config (structured groups)
+    "skills": { "dirs": ["./skills"] },
+    "tools": {
+      "mcpConfigPaths": ["./mcp.json"],
+      "builtinFilter": { "shell": true, "fileRead": true }
+    },
+    "sandbox": true,           // or { "enabled": true, "timeout": 600000, ... }
+    "thinking": { "enabled": false },
+    "session": { "enabled": true },
+    "todolist": { "enabled": true },
+    "specPlan": { "enabled": true },
+    "commands": { "enabled": true },
+    "a2ui": { "enabled": false },
+    "limits": { "maxSteps": 500, "requestTimeout": 1800000 },
+    "search": { "provider": "sogou" },
+    "compression": true
   }
 }
 ```
@@ -197,7 +206,7 @@ HTTP request
   → Fastify route (routes/*.ts)
     → ResourceManager (loads AGENT.md / CREW.md from disk)
     → AgentSession.create / .resume (wraps EnhancedRunner)
-      → EnhancedRunner.create({ subAgents, crewId, skillDirs, ... })
+      → EnhancedRunner.create({ llm, skills, delegation, crewId, ... })
         → colts AgentRunner (ReAct loop, EventEmitter)
     → SSE stream (AgentSession.handleMessage → reply.raw)
 ```

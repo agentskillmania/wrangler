@@ -98,7 +98,7 @@ const state = createAgentState({
 
 ```typescript
 const { runner, state } = await EnhancedRunner.resume(sessionDir, {
-  llmClient,
+  llm: { client: llmClient },
   subAgents: opts.subAgents, // rebuilt from CrewLoader + crewToRunnerOptions
 });
 ```
@@ -136,7 +136,7 @@ await EnhancedRunner.create({
 });
 ```
 
-Legacy flat fields (`llmClient`, `enableSession`, `skillDirs`, `sandbox: true`, etc.) still work — they are migrated to the new structure internally.
+Legacy flat fields (`llmClient`, `enableSession`, `skillDirs`, `sandbox: true`, etc.) were removed — all options live in the structured groups above. For per-request overrides (model, thinking) see `ResumeOptions`; the daemon exposes the same groups in its chat request `config`.
 
 ## Dependencies
 
