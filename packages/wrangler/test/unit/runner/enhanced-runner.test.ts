@@ -214,6 +214,20 @@ describe('EnhancedRunner', () => {
     expect(runnerArgs.tools).toContain(...mockExtraTools);
   });
 
+  it('should create() pass an injected SearchProvider instance through (upper-layer extension)', async () => {
+    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+
+    // Upper layer injects its own provider — the library must not wrap or
+    // replace it (mirrors the Rust SearchGroup.provider_instance path).
+    const customProvider = { search: async () => [] };
+    await EnhancedRunner.create(
+      makeOptions({ search: { provider: customProvider as never } })
+    );
+
+    const calls = createBuiltinTools.mock.calls;
+    expect(calls[calls.length - 1][0].searchProvider).toBe(customProvider);
+  });
+
   it('should create() sets systemPrompt to YAML frontmatter with Time: and Timezone:', async () => {
     await EnhancedRunner.create(makeOptions());
 
