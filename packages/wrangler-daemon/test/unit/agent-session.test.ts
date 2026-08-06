@@ -696,57 +696,63 @@ describe('AgentSession', () => {
       mockEnhancedRunnerCreate.mockClear();
     });
 
-    it('passes default sandbox=true to EnhancedRunner', async () => {
+    it('passes default sandbox={enabled:true} to EnhancedRunner', async () => {
       await AgentSession.create(baseOptions, testConfig);
       expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ sandbox: true })
+        expect.objectContaining({ sandbox: { enabled: true } })
       );
     });
 
-    it('passes sandbox=false when explicitly set', async () => {
+    it('passes sandbox={enabled:false} when explicitly set', async () => {
       await AgentSession.create({ ...baseOptions, sandbox: false }, testConfig);
       expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ sandbox: false })
+        expect.objectContaining({ sandbox: { enabled: false } })
       );
     });
 
-    it('passes builtinTools whitelist to EnhancedRunner', async () => {
-      const builtinTools = { shell: false, fileRead: true };
-      await AgentSession.create({ ...baseOptions, builtinTools }, testConfig);
+    it('passes builtinTools whitelist to EnhancedRunner via tools.builtinFilter', async () => {
+      const builtinFilter = { shell: false, fileRead: true };
+      await AgentSession.create({ ...baseOptions, tools: { builtinFilter } }, testConfig);
       expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ builtinTools })
+        expect.objectContaining({ tools: expect.objectContaining({ builtinFilter }) })
       );
     });
 
-    it('passes enableSession/enableTodolist/enableCommands to EnhancedRunner', async () => {
+    it('passes session/todolist/commands enabled=false to EnhancedRunner', async () => {
       await AgentSession.create(
-        { ...baseOptions, enableSession: false, enableTodolist: false, enableCommands: false },
+        {
+          ...baseOptions,
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
+        },
         testConfig
       );
       expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
+          session: expect.objectContaining({ enabled: false }),
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
     });
 
-    it('defaults enableSession/enableTodolist/enableCommands to true', async () => {
+    it('defaults session/todolist/commands enabled to true', async () => {
       await AgentSession.create(baseOptions, testConfig);
       expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          enableSession: true,
-          enableTodolist: true,
-          enableCommands: true,
+          session: expect.objectContaining({ enabled: true }),
+          todolist: { enabled: true },
+          commands: { enabled: true },
+          specPlan: { enabled: true },
         })
       );
     });
 
-    it('passes thinkingEnabled=false when explicitly set', async () => {
-      await AgentSession.create({ ...baseOptions, thinkingEnabled: false }, testConfig);
+    it('passes thinking.enabled=false when explicitly set', async () => {
+      await AgentSession.create({ ...baseOptions, thinking: { enabled: false } }, testConfig);
       expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ thinkingEnabled: false })
+        expect.objectContaining({ thinking: { enabled: false } })
       );
     });
 
@@ -756,23 +762,26 @@ describe('AgentSession', () => {
       expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(expect.objectContaining({ a2ui }));
     });
 
-    it('passes workspacePath and skillDirs to EnhancedRunner', async () => {
+    it('passes workspacePath and skills/tools groups to EnhancedRunner', async () => {
       const skillDirs = ['/tmp/skills'];
       const mcpConfigPaths = ['/tmp/mcp.json'];
-      await AgentSession.create({ ...baseOptions, skillDirs, mcpConfigPaths }, testConfig);
+      await AgentSession.create(
+        { ...baseOptions, skills: { dirs: skillDirs }, tools: { mcpConfigPaths } },
+        testConfig
+      );
       expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           workspacePath: '/tmp/test-workspace',
-          skillDirs,
-          mcpConfigPaths,
+          skills: { dirs: skillDirs },
+          tools: expect.objectContaining({ mcpConfigPaths }),
         })
       );
     });
 
-    it('defaults mcpConfigPaths to empty array', async () => {
+    it('passes empty tools.mcpConfigPaths when unset', async () => {
       await AgentSession.create(baseOptions, testConfig);
       expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ mcpConfigPaths: [] })
+        expect.objectContaining({ tools: expect.objectContaining({ mcpConfigPaths: [] }) })
       );
     });
 
@@ -785,7 +794,9 @@ describe('AgentSession', () => {
         },
       ];
       await AgentSession.create({ ...baseOptions, subAgents }, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(expect.objectContaining({ subAgents }));
+      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ delegation: { subAgents } })
+      );
     });
 
     it('passes crewId to EnhancedRunner when provided (crew session)', async () => {
@@ -1365,7 +1376,7 @@ describe('AgentSession', () => {
       expect(mockEnhancedRunnerResume).toHaveBeenCalledWith(
         '/tmp/session-123',
         expect.objectContaining({
-          llmClient: expect.any(Object),
+          llm: expect.objectContaining({ client: expect.any(Object) }),
           askHumanHandler: expect.any(Function),
         })
       );

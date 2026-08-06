@@ -339,12 +339,11 @@ describe('Chat API', () => {
           model: 'gpt-4o',
           thinkingEnabled: true,
           config: {
-            skillDirs: ['./skills'],
-            mcpConfigPaths: ['./mcp.json'],
-            builtinTools: { shell: false, fileRead: true },
-            enableSession: false,
-            enableTodolist: false,
-            enableCommands: false,
+            skills: { dirs: ['./skills'] },
+            tools: { mcpConfigPaths: ['./mcp.json'], builtinFilter: { shell: false, fileRead: true } },
+            session: { enabled: false },
+            todolist: { enabled: false },
+            commands: { enabled: false },
             sandbox: false,
             a2ui: { enabled: true },
           },
@@ -356,12 +355,11 @@ describe('Chat API', () => {
 
       const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
       // Session-init: model comes from agent default, not per-request model
-      expect(callArg.skillDirs).toEqual(['./skills', expect.any(String)]);
-      expect(callArg.mcpConfigPaths).toEqual(['./mcp.json']);
-      expect(callArg.builtinTools).toEqual({ shell: false, fileRead: true });
-      expect(callArg.enableSession).toBe(false);
-      expect(callArg.enableTodolist).toBe(false);
-      expect(callArg.enableCommands).toBe(false);
+      expect(callArg.skills).toEqual({ dirs: ['./skills', expect.any(String)] });
+      expect(callArg.tools).toEqual({ mcpConfigPaths: ['./mcp.json'], builtinFilter: { shell: false, fileRead: true } });
+      expect(callArg.session).toEqual({ enabled: false });
+      expect(callArg.todolist).toEqual({ enabled: false });
+      expect(callArg.commands).toEqual({ enabled: false });
       expect(callArg.sandbox).toBe(false);
       expect(callArg.a2ui).toEqual({ enabled: true });
 
@@ -394,10 +392,10 @@ describe('Chat API', () => {
       expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
 
       const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
-      // test agent has no explicit model/skillDirs/mcpPaths, so defaults apply
+      // test agent has no explicit model/skills/mcpPaths, so defaults apply
       expect(callArg.model).toBeUndefined();
-      expect(callArg.skillDirs).toEqual([expect.any(String)]);
-      expect(callArg.mcpConfigPaths).toEqual([]);
+      expect(callArg.skills).toEqual({ dirs: [expect.any(String)] });
+      expect(callArg.tools).toEqual({ mcpConfigPaths: [] });
       expect(callArg.sandbox).toBe(false);
 
       // Per-request params not provided, so handleMessage gets undefined
@@ -867,7 +865,7 @@ describe('Chat API', () => {
       expect(instructions).toContain('Shared crew memory');
       expect(instructions).toContain('Orchestrate');
       // BUILTIN_SKILLS_DIR is appended
-      expect(callArg.skillDirs).toEqual([expect.any(String)]);
+      expect(callArg.skills).toEqual({ dirs: [expect.any(String)] });
     });
 
     it('emits session-start, forwards client disconnect to agentSession.stop()', async () => {

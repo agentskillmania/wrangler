@@ -34,6 +34,7 @@ import type {
   ResumeOptions,
   SandboxConfig,
   BuiltinToolFilter,
+  LLMConfig,
 } from './types.js';
 import { createCommandMiddleware } from '../command/command-middleware.js';
 import { createClearHandler } from '../command/handlers/clear.js';
@@ -64,90 +65,6 @@ import { createSpecPlanTools } from '../tools/spec-plan/index.js';
 
 const nodeRequire = typeof require === 'function' ? require : createRequire(import.meta.url);
 
-/**
- * Migrate deprecated flat fields to structured groups.
- * New-style structured fields take precedence; flat fields are fallback.
- * Returns a normalized options object where all groups are populated.
- */
-function migrateOptions(raw: EnhancedRunnerOptions): EnhancedRunnerOptions {
-  const llm = raw.llm ?? {};
-  if (raw.llmClient !== undefined) llm.client ??= raw.llmClient;
-  if (raw.llm2 !== undefined) llm.quickInit ??= raw.llm2;
-  if (raw.model !== undefined) llm.model ??= raw.model;
-  if (raw.temperature !== undefined) llm.temperature ??= raw.temperature;
-  if (raw.requestTimeout !== undefined) llm.requestTimeout ??= raw.requestTimeout;
-
-  const skills = raw.skills ?? {};
-  if (raw.skillDirs !== undefined) skills.dirs ??= raw.skillDirs;
-
-  const tools = raw.tools ?? {};
-  if (raw.extraTools !== undefined) tools.extra ??= raw.extraTools;
-  if (raw.mcpConfigPaths !== undefined) tools.mcpConfigPaths ??= raw.mcpConfigPaths;
-  if (raw.askHumanHandler !== undefined) tools.askHumanHandler ??= raw.askHumanHandler;
-  if (raw.confirmHandler !== undefined) tools.confirmHandler ??= raw.confirmHandler;
-  if (raw.confirmTools !== undefined) tools.confirmTools ??= raw.confirmTools;
-  if (raw.builtinTools !== undefined) tools.builtinFilter ??= raw.builtinTools;
-
-  const sandbox: SandboxConfig =
-    typeof raw.sandbox === 'boolean'
-      ? { enabled: raw.sandbox }
-      : ((raw.sandbox as SandboxConfig) ??
-        (raw.sandboxEnabled !== undefined ? { enabled: raw.sandboxEnabled } : {}));
-
-  const thinking = raw.thinking ?? {};
-  if (raw.thinkingEnabled !== undefined) thinking.enabled ??= raw.thinkingEnabled;
-  if (raw.enablePromptThinking !== undefined) thinking.promptLevel ??= raw.enablePromptThinking;
-
-  const session = raw.session ?? {};
-  if (raw.enableSession !== undefined) session.enabled ??= raw.enableSession;
-  if (raw.sessionBaseDir !== undefined) session.baseDir ??= raw.sessionBaseDir;
-
-  const todolist = raw.todolist ?? {};
-  if (raw.enableTodolist !== undefined) todolist.enabled ??= raw.enableTodolist;
-
-  const specPlan = raw.specPlan ?? {};
-  if (raw.enableSpecPlan !== undefined) specPlan.enabled ??= raw.enableSpecPlan;
-
-  const commands = raw.commands ?? {};
-  if (raw.enableCommands !== undefined && typeof commands === 'object') {
-    (commands as { enabled?: boolean }).enabled ??= raw.enableCommands;
-  }
-  if (raw.commandsExtra !== undefined && typeof commands === 'object') {
-    (commands as { extra?: unknown[] }).extra ??= raw.commandsExtra as never;
-  }
-
-  const delegation = raw.delegation ?? {};
-  if (raw.subAgents !== undefined) delegation.subAgents ??= raw.subAgents;
-  if (raw.subAgentRunnerFactory !== undefined)
-    delegation.runnerFactory ??= raw.subAgentRunnerFactory;
-
-  const search = raw.search ?? {};
-  if (raw.searchProvider !== undefined) search.provider ??= raw.searchProvider;
-
-  const limits = raw.limits ?? {};
-  if (raw.maxSteps !== undefined) limits.maxSteps ??= raw.maxSteps;
-  if (raw.requestTimeout !== undefined) {
-    limits.requestTimeout ??= raw.requestTimeout;
-    llm.requestTimeout ??= raw.requestTimeout;
-  }
-
-  return {
-    ...raw,
-    llm: Object.keys(llm).length > 0 ? llm : undefined,
-    skills: Object.keys(skills).length > 0 ? skills : undefined,
-    tools: Object.keys(tools).length > 0 ? tools : undefined,
-    sandbox,
-    thinking: Object.keys(thinking).length > 0 ? thinking : undefined,
-    session: Object.keys(session).length > 0 ? session : undefined,
-    todolist: Object.keys(todolist).length > 0 ? todolist : undefined,
-    specPlan: Object.keys(specPlan).length > 0 ? specPlan : undefined,
-    commands,
-    delegation: Object.keys(delegation).length > 0 ? delegation : undefined,
-    search: Object.keys(search).length > 0 ? search : undefined,
-    limits: Object.keys(limits).length > 0 ? limits : undefined,
-  };
-}
-
 function resolveSearchProvider(provider?: SearchProvider | 'bing' | 'sogou'): SearchProvider {
   if (!provider || provider === 'sogou') return new SogouScrapeSearchProvider();
   if (provider === 'bing') return new BingScrapeSearchProvider();
@@ -155,12 +72,12 @@ function resolveSearchProvider(provider?: SearchProvider | 'bing' | 'sogou'): Se
 }
 
 /**
- * Build the base skill directory list: user-provided skillDirs plus the
+ * Build the base skill directory list: user-provided skill dirs plus the
  * built-in wrangler spec-plan skills (resolved from the installed package).
  * Returns a fresh array the caller may extend.
  */
 function collectSkillDirs(options: EnhancedRunnerOptions): string[] {
-  const dirs = [...(options.skills?.dirs ?? options.skillDirs ?? [])];
+  const dirs = [...(options.skills?.dirs ?? [])];
   try {
     const wranglerRoot = nodeRequire.resolve('@agentskillmania/wrangler/package.json');
     dirs.push(path.join(path.dirname(wranglerRoot), 'dist', 'spec-plan', 'skills'));
@@ -170,18 +87,10 @@ function collectSkillDirs(options: EnhancedRunnerOptions): string[] {
   return dirs;
 }
 
-function resolveLLMClient(options: {
-  llm?: { client?: ILLMProvider; quickInit?: LLMQuickInit } | LLMQuickInit;
-  llmClient?: ILLMProvider;
-}): ILLMProvider {
-  // Handle both structured (llm.client/llm.quickInit) and legacy (llmClient/llm as LLMQuickInit)
-  const llmGroup = options.llm as
-    | { client?: ILLMProvider; quickInit?: LLMQuickInit; providers?: unknown[] }
-    | undefined;
-  const client = llmGroup?.client ?? options.llmClient;
-  const quickInit =
-    llmGroup?.quickInit ??
-    (options.llm && 'providers' in options.llm ? (options.llm as LLMQuickInit) : undefined);
+function resolveLLMClient(options: { llm?: LLMConfig }): ILLMProvider {
+  const llmGroup = options.llm;
+  const client = llmGroup?.client;
+  const quickInit = llmGroup?.quickInit;
   if (client && quickInit) {
     throw new Error(
       'Cannot specify both llm.client and llm.quickInit. Choose one: injection or quick initialization.'
@@ -271,19 +180,22 @@ export class EnhancedRunner {
    * @param options - Configuration options
    * @returns Configured EnhancedRunner instance
    */
-  static async create(optionsRaw: EnhancedRunnerOptions): Promise<EnhancedRunner> {
-    const options = migrateOptions(optionsRaw);
+  static async create(options: EnhancedRunnerOptions): Promise<EnhancedRunner> {
     const workspacePath = options.workspacePath ?? process.cwd();
     const llmClient = resolveLLMClient(options);
 
     const searchProvider = resolveSearchProvider(options.search?.provider);
 
-    const sandboxEnabled =
-      typeof options.sandbox === 'object' ? options.sandbox?.enabled : options.sandbox;
+    const sandboxEnabled = options.sandbox?.enabled;
 
     let sandboxInstance: Sandbox | undefined;
     if (sandboxEnabled) {
-      sandboxInstance = new Sandbox({ sandboxDir: workspacePath });
+      // Pass the full sandbox config through: execution parameters (timeout/
+      // allowNetwork/policies) come from the wrangler-level configuration,
+      // NOT from the sandbox package's own config.yaml/env (that file serves
+      // the standalone CLI/MCP only).
+      const { enabled: _enabled, ...sandboxParams } = options.sandbox ?? {};
+      sandboxInstance = new Sandbox({ sandboxDir: workspacePath, ...sandboxParams });
     }
 
     const builtinTools = createBuiltinTools({
@@ -327,11 +239,7 @@ export class EnhancedRunner {
     const mcpConfigPaths = options.tools?.mcpConfigPaths ?? [];
     const mcpTools = await loadMCPTools({ configPaths: mcpConfigPaths });
 
-    const llmQuickInit =
-      options.llm?.quickInit ??
-      (options.llm && 'providers' in (options.llm as object)
-        ? (options.llm as LLMQuickInit)
-        : undefined);
+    const llmQuickInit = options.llm?.quickInit;
     const resolvedModel =
       options.llm?.model ??
       (llmQuickInit?.providers ? resolveDefaultModel(llmQuickInit.providers) : 'glm-5.1');
@@ -352,8 +260,7 @@ export class EnhancedRunner {
             enableSession: options.session?.enabled,
             enableTodolist: options.todolist?.enabled,
             enableSpecPlan: options.specPlan?.enabled,
-            enableCommands:
-              typeof options.commands === 'object' ? options.commands?.enabled : undefined,
+            enableCommands: options.commands?.enabled,
             a2ui: options.a2ui as { enabled: boolean } | undefined,
             crewId: options.crewId,
           },
@@ -473,7 +380,7 @@ export class EnhancedRunner {
         enabled: true,
       });
     }
-    for (const tool of options.extraTools ?? []) {
+    for (const tool of options.tools?.extra ?? []) {
       toolMeta.set(tool.name, {
         name: tool.name,
         description: tool.description,
@@ -491,9 +398,7 @@ export class EnhancedRunner {
     }
 
     // Build command registry with built-in + custom handlers (conditional)
-    const commandsEnabled =
-      (typeof options.commands === 'object' ? options.commands?.enabled : options.commands) !==
-      false;
+    const commandsEnabled = options.commands?.enabled !== false;
     let commandMiddleware: { name: string } | undefined;
     let compressorInstance: IContextCompressor | undefined;
     if (commandsEnabled) {
@@ -518,9 +423,7 @@ export class EnhancedRunner {
           commandRegistry.register(createSkillHandler(skillProvider));
         }
       }
-      for (const cmd of (typeof options.commands === 'object'
-        ? options.commands?.extra
-        : undefined) ?? []) {
+      for (const cmd of options.commands?.extra ?? []) {
         commandRegistry.register(cmd);
       }
       // Create compressor instance for both AgentRunner auto-compression and /compact command.
@@ -679,25 +582,29 @@ export class EnhancedRunner {
 
     const rc = meta.runnerConfig;
     const runner = await EnhancedRunner.create({
-      llmClient: resolveLLMClient(options),
-      model: options.model ?? rc.model,
-      thinkingEnabled: options.thinkingEnabled,
+      llm: {
+        client: resolveLLMClient(options),
+        model: options.model ?? rc.model,
+      },
+      thinking: { enabled: options.thinkingEnabled },
       workspacePath: meta.workspacePath,
-      skillDirs: rc.skillDirs,
-      mcpConfigPaths: rc.mcpConfigPaths,
-      builtinTools: rc.builtinTools,
-      sandbox: rc.sandbox,
-      enableSession: rc.enableSession,
-      enableTodolist: rc.enableTodolist,
-      enableSpecPlan: rc.enableSpecPlan,
-      enableCommands: rc.enableCommands,
-      a2ui: rc.a2ui,
+      skills: { dirs: rc.skillDirs },
+      tools: {
+        mcpConfigPaths: rc.mcpConfigPaths,
+        builtinFilter: rc.builtinTools as Record<string, boolean> | undefined,
+      },
+      sandbox: rc.sandbox !== undefined ? { enabled: rc.sandbox } : undefined,
+      session: { enabled: rc.enableSession },
+      todolist: { enabled: rc.enableTodolist },
+      specPlan: { enabled: rc.enableSpecPlan },
+      commands: { enabled: rc.enableCommands },
+      a2ui: rc.a2ui as { enabled: boolean } | undefined,
       // Session base dir is NOT reverse-derived from the session dir: the
       // library default ({appDir}/sessions) matches the standard
       // {base}/{hash}/{id} shape, so resume lands back in the same place.
       // Explicit sessionDir resume persists via a directory-bound store.
       source: meta.source,
-      subAgents: options.subAgents,
+      delegation: { subAgents: options.subAgents },
     });
 
     const newState = produce(state, (draft) => {

@@ -22,7 +22,7 @@ import {
   resolveDefaultModel,
   writeMeta,
 } from '@agentskillmania/wrangler';
-import type { SessionMeta, SubAgentConfig, LimitsConfig } from '@agentskillmania/wrangler';
+import type { SessionMeta, SubAgentConfig, LimitsConfig, SandboxConfig } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
@@ -61,6 +61,33 @@ export interface AgentSessionResumeOptions {
   subAgents?: SubAgentConfig[];
 }
 
+
+/**
+ * Merge sandbox config sources field-by-field (lower → higher precedence):
+ * daemon config.yaml `sandbox` defaults ← request-body `sandbox` (boolean
+ * legacy form only overrides `enabled`). The sandbox package's own
+ * config.yaml/env are NOT part of this chain — the wrangler layer drives the
+ * sandbox purely via constructor params.
+ */
+export function mergeSandboxConfig(
+  base: SandboxConfig | undefined,
+  override: SandboxConfig | boolean | undefined
+): SandboxConfig {
+  const fromOverride =
+    typeof override === 'object' && override !== null ? override : {};
+  const enabled =
+    typeof override === 'boolean'
+      ? override
+      : (fromOverride.enabled ?? base?.enabled ?? true);
+  return {
+    enabled,
+    timeout: fromOverride.timeout ?? base?.timeout,
+    allowNetwork: fromOverride.allowNetwork ?? base?.allowNetwork,
+    commandPolicy: fromOverride.commandPolicy ?? base?.commandPolicy,
+    networkPolicy: fromOverride.networkPolicy ?? base?.networkPolicy,
+  };
+}
+
 /** Options for creating an AgentSession */
 export interface AgentSessionOptions {
   sessionId?: string;
@@ -68,33 +95,28 @@ export interface AgentSessionOptions {
   agentName: string;
   agentInstructions?: string;
   model?: string;
-  skillDirs?: string[];
-  mcpConfigPaths?: string[];
   sessionBaseDir?: string;
   sessionStore?: SessionStore;
   /** SessionManager instance for reading runtime status. */
   sessionManager?: { getStatus(id: string): string };
   /** Agent definition file path. */
   agentConfigPath?: string;
-  // EnhancedRunner options — all optional with defaults matching current behavior
-  builtinTools?: {
-    fileRead?: boolean;
-    fileWrite?: boolean;
-    fileEdit?: boolean;
-    glob?: boolean;
-    grep?: boolean;
-    shell?: boolean;
-    webSearch?: boolean;
-    webFetch?: boolean;
-    python?: boolean;
-    git?: boolean;
+  // Structured EnhancedRunner option groups (see EnhancedRunnerOptions)
+  skills?: { dirs?: string[] };
+  tools?: {
+    mcpConfigPaths?: string[];
+    builtinFilter?: Record<string, boolean>;
   };
-  enableSession?: boolean;
-  enableTodolist?: boolean;
-  enableCommands?: boolean;
-  sandbox?: boolean;
-  thinkingEnabled?: boolean;
-  a2ui?: { enabled: boolean };
+  session?: { enabled?: boolean };
+  todolist?: { enabled?: boolean };
+  specPlan?: { enabled?: boolean };
+  commands?: { enabled?: boolean };
+  /** Sandbox config: boolean (legacy) or full execution-parameter object. */
+  sandbox?: boolean | SandboxConfig;
+  thinking?: { enabled?: boolean; promptLevel?: boolean };
+  a2ui?: { enabled?: boolean };
+  search?: { provider?: 'sogou' | 'bing' };
+  compression?: boolean;
   /** Sub-agent configs — enables the 'delegate' tool for crew delegation */
   subAgents?: SubAgentConfig[];
   /** Crew identifier — persisted into runnerConfig snapshot so resume can reload crew config */
@@ -187,22 +209,31 @@ export class AgentSession {
 
     const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
 
+    // Structured runner config: daemon config.yaml defaults merged with the
+    // request-body config groups, field-level. The full sandbox object
+    // (timeout/allowNetwork/policies) is passed through — not just `enabled`.
+    const mergedSandbox = mergeSandboxConfig(config.sandbox, options.sandbox);
+
     const runner = await EnhancedRunner.create({
-      llmClient,
-      model: llmModel,
+      llm: { client: llmClient, model: llmModel },
       workspacePath: options.workspacePath,
-      sandbox: options.sandbox ?? true,
-      thinkingEnabled: options.thinkingEnabled ?? false,
-      builtinTools: options.builtinTools,
-      enableSession: options.enableSession ?? true,
-      enableTodolist: options.enableTodolist ?? true,
-      enableCommands: options.enableCommands ?? true,
+      sandbox: mergedSandbox,
+      thinking: options.thinking,
+      tools: {
+        ...options.tools,
+        mcpConfigPaths: options.tools?.mcpConfigPaths ?? [],
+        askHumanHandler,
+      },
+      session: { enabled: options.session?.enabled ?? true, baseDir: options.sessionBaseDir },
+      todolist: { enabled: options.todolist?.enabled ?? true },
+      specPlan: { enabled: options.specPlan?.enabled ?? true },
+      commands: { enabled: options.commands?.enabled ?? true },
       a2ui: options.a2ui,
-      skillDirs: options.skillDirs,
-      mcpConfigPaths: options.mcpConfigPaths ?? [],
-      sessionBaseDir: options.sessionBaseDir,
-      askHumanHandler,
-      subAgents: options.subAgents,
+      skills: options.skills,
+      search: options.search,
+      // API boolean: undefined = default enabled; false = disabled.
+      compression: options.compression === false ? false : undefined,
+      delegation: { subAgents: options.subAgents },
       crewId: options.crewId,
       limits: options.limits,
     });
@@ -261,8 +292,7 @@ export class AgentSession {
     const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
 
     const { runner, state } = await EnhancedRunner.resume(sessionDir, {
-      llmClient,
-      model: llmModel,
+      llm: { client: llmClient, model: llmModel },
       askHumanHandler,
       subAgents: options.subAgents,
     });

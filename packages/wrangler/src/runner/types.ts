@@ -92,9 +92,25 @@ export interface ToolsConfig {
   confirmTools?: string[];
 }
 
+/** Command/network security policy (mirrors `@agentskillmania/sandbox`) */
+export interface PolicyConfig {
+  /** whitelist = only allow these, blacklist = block these */
+  mode: 'whitelist' | 'blacklist';
+  /** Items to apply the mode to (commands or domains) */
+  list: string[];
+}
+
 export interface SandboxConfig {
   /** Enable WASM sandbox (default: true) */
   enabled?: boolean;
+  /** Execution timeout in ms (sandbox default: 600_000) */
+  timeout?: number;
+  /** Allow network access (default: false) */
+  allowNetwork?: boolean;
+  /** Command security policy */
+  commandPolicy?: PolicyConfig;
+  /** Network security policy */
+  networkPolicy?: PolicyConfig;
 }
 
 export interface ThinkingConfig {
@@ -142,12 +158,12 @@ export interface EnhancedRunnerOptions {
   // ── Core ──
   workspacePath?: string;
 
-  // ── Structured groups (preferred) ──
+  // ── Structured groups ──
   llm?: LLMConfig;
   skills?: SkillsConfig;
   tools?: ToolsConfig;
-  /** Sandbox config. Accepts boolean (legacy) or { enabled } object. */
-  sandbox?: SandboxConfig | boolean;
+  /** Sandbox execution config. */
+  sandbox?: SandboxConfig;
   thinking?: ThinkingConfig;
   session?: SessionConfig;
   delegation?: DelegationConfig;
@@ -169,58 +185,6 @@ export interface EnhancedRunnerOptions {
   /** Session metadata */
   source?: SessionSource;
   crewId?: string;
-
-  // ── Deprecated flat fields (backward compat — migrated internally) ──
-  /** @deprecated use llm.client */
-  llmClient?: ILLMProvider;
-  /** @deprecated use llm.quickInit */
-  llm2?: LLMQuickInit;
-  /** @deprecated use llm.model */
-  model?: string;
-  /** @deprecated use llm.temperature */
-  temperature?: number;
-  /** @deprecated use llm.requestTimeout */
-  requestTimeout?: number;
-  /** @deprecated use tools.extra */
-  extraTools?: Tool<ZodTypeAny>[];
-  /** @deprecated use search.provider */
-  searchProvider?: SearchProvider | 'bing' | 'sogou';
-  /** @deprecated use sandbox.enabled */
-  sandboxEnabled?: boolean;
-  /** @deprecated use tools.mcpConfigPaths */
-  mcpConfigPaths?: string[];
-  /** @deprecated use session.baseDir */
-  sessionBaseDir?: string;
-  /** @deprecated use skills.dirs */
-  skillDirs?: string[];
-  /** @deprecated use tools.askHumanHandler */
-  askHumanHandler?: AskHumanHandler;
-  /** @deprecated use tools.confirmHandler */
-  confirmHandler?: ConfirmHandler;
-  /** @deprecated use tools.confirmTools */
-  confirmTools?: string[];
-  /** @deprecated use thinking.enabled */
-  thinkingEnabled?: boolean;
-  /** @deprecated use thinking.promptLevel */
-  enablePromptThinking?: boolean;
-  /** @deprecated use delegation.subAgents */
-  subAgents?: SubAgentConfig[];
-  /** @deprecated use delegation.runnerFactory */
-  subAgentRunnerFactory?: SubAgentRunnerFactory;
-  /** @deprecated use limits.maxSteps */
-  maxSteps?: number;
-  /** @deprecated use commands.extra */
-  commandsExtra?: CommandHandler[];
-  /** @deprecated use tools.builtinFilter */
-  builtinTools?: BuiltinToolFilter;
-  /** @deprecated use session.enabled */
-  enableSession?: boolean;
-  /** @deprecated use todolist.enabled */
-  enableTodolist?: boolean;
-  /** @deprecated use specPlan.enabled */
-  enableSpecPlan?: boolean;
-  /** @deprecated use commands.enabled */
-  enableCommands?: boolean;
 }
 
 /**
@@ -274,10 +238,8 @@ export interface ResolvedRunnerConfig {
  * Options for EnhancedRunner.resume() — from session directory.
  */
 export interface ResumeOptions {
-  /** LLM provider instance (injection mode) */
-  llmClient?: ILLMProvider;
-  /** LLM quick initialization config (multi-provider, one apiKey per provider) */
-  llm?: LLMQuickInit;
+  /** LLM config: provider injection (client) or quick-init (quickInit). */
+  llm?: LLMConfig;
   /** Optional model override */
   model?: string;
   /** Optional thinking mode override */

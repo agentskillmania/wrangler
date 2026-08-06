@@ -5,12 +5,16 @@ import type { ResourceManager } from './core/resource-manager.js';
 import type { SessionManager } from './core/session-manager.js';
 
 /** Daemon configuration stored in config.yaml */
+import type { SandboxConfig } from '@agentskillmania/wrangler';
+
 export interface DaemonConfig {
   llm: LLMQuickInit;
   server: {
     port: number;
     host: string;
   };
+  /** Sandbox execution defaults for all sessions (overridable per request). */
+  sandbox?: SandboxConfig;
   [key: string]: unknown; // Index signature for settings-yaml compatibility
 }
 
@@ -53,7 +57,6 @@ export interface AgentDetail {
   instructions: string;
   model?: string;
   thinking?: { enabled?: boolean };
-  sandbox?: boolean;
   path: string;
   skillDirs: string[];
   mcpPaths: string[];
@@ -160,16 +163,29 @@ export interface SessionInitParams {
    * `{root}/sessions/{hash}/{id}` tree.
    */
   sessionDir?: string;
+  /** Structured runner config — mirrors `EnhancedRunnerOptions` groups
+   * (field-level merged over the daemon config.yaml defaults; absent groups
+   * fall back to runner defaults). */
   config?: {
-    skillDirs?: string[];
-    mcpConfigPaths?: string[];
-    builtinTools?: Record<string, boolean>;
-    enableSession?: boolean;
-    enableTodolist?: boolean;
-    enableCommands?: boolean;
-    sandbox?: boolean;
-    a2ui?: { enabled: boolean };
-    /** Execution limits (maxInputLength, maxSteps, requestTimeout, maxToolOutput, toolTimeout) */
+    /** Skill directories to scan for SKILL.md files. */
+    skills?: { dirs?: string[] };
+    /** MCP config paths + builtin tool whitelist. */
+    tools?: { mcpConfigPaths?: string[]; builtinFilter?: Record<string, boolean> };
+    /** Sandbox config: boolean (legacy) or full execution-parameter object. */
+    sandbox?: boolean | SandboxConfig;
+    /** Thinking/reasoning mode + prompt-level guidance. */
+    thinking?: { enabled?: boolean; promptLevel?: boolean };
+    /** Session persistence (baseDir is daemon-managed, not exposed). */
+    session?: { enabled?: boolean };
+    /** Todolist support (default: enabled). */
+    todolist?: { enabled?: boolean };
+    /** Spec-plan tools (default: enabled). */
+    specPlan?: { enabled?: boolean };
+    /** Command middleware (default: enabled). */
+    commands?: { enabled?: boolean };
+    /** A2UI support (default: disabled). */
+    a2ui?: { enabled?: boolean };
+    /** Execution limits (maxInputLength, maxSteps, requestTimeout, maxToolOutput, toolTimeout). */
     limits?: {
       maxInputLength?: number;
       maxSteps?: number;
@@ -177,6 +193,10 @@ export interface SessionInitParams {
       maxToolOutput?: number;
       toolTimeout?: number;
     };
+    /** Web search provider. Defaults to 'sogou'. */
+    search?: { provider?: 'sogou' | 'bing' };
+    /** Context compression. Omit = enabled; false = disabled. */
+    compression?: boolean;
   };
 }
 

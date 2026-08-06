@@ -52,20 +52,19 @@ export class CrewAdapter extends BaseAdapter {
       llm: llmConfig.llm,
       // Crew's skill dirs + the conventional <crewDir>/skills (already in
       // crewRunnerOpts) — pass directly.
-      skillDirs: opts.skillDirs,
-      enableSession: false,
-      enableTodolist: false,
-      enableCommands: false,
+      skills: { dirs: opts.skillDirs },
+      session: { enabled: false },
+      todolist: { enabled: false },
+      commands: { enabled: false },
       // The crew wiring: sub-agents turn on the delegate tool, and the
-      // model/sandbox from the crew definition win over suite defaults
+      // model from the crew definition wins over suite defaults
       // (suite.sampling.model can still override below if set).
-      subAgents: opts.subAgents,
-      sandbox: opts.sandbox,
+      delegation: { subAgents: opts.subAgents },
     };
     if (suite.sampling.model) {
-      runnerOpts.model = suite.sampling.model;
+      runnerOpts.llm = { ...(runnerOpts.llm as object), model: suite.sampling.model };
     } else if (opts.model) {
-      runnerOpts.model = opts.model;
+      runnerOpts.llm = { ...(runnerOpts.llm as object), model: opts.model };
     }
 
     return EnhancedRunner.create(runnerOpts as Parameters<typeof EnhancedRunner.create>[0]);

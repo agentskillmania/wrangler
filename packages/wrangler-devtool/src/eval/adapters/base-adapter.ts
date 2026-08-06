@@ -108,13 +108,13 @@ export abstract class BaseAdapter implements ExecutionAdapter {
     const opts: Record<string, unknown> = {
       workspacePath,
       llm: llmConfig.llm,
-      skillDirs: this.getSkillDirs(suite),
-      enableSession: false,
-      enableTodolist: false,
-      enableCommands: false,
+      skills: { dirs: this.getSkillDirs(suite) },
+      session: { enabled: false },
+      todolist: { enabled: false },
+      commands: { enabled: false },
     };
     if (suite.sampling.model) {
-      opts.model = suite.sampling.model;
+      opts.llm = { ...(opts.llm as object), model: suite.sampling.model };
     }
     return EnhancedRunner.create(opts as Parameters<typeof EnhancedRunner.create>[0]);
   }

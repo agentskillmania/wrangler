@@ -9,4 +9,6 @@ export type {
   ResumeOptions,
   LimitsConfig,
   BuiltinToolFilter,
+  SandboxConfig,
+  PolicyConfig,
 } from './types.js';

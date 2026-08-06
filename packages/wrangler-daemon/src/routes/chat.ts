@@ -179,23 +179,37 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       agentName: agentDetail.name,
       agentInstructions: agentDetail.instructions,
       model: agentDetail.model,
-      skillDirs: [
-        ...(body.config?.skillDirs ?? agentDetail.skillDirs ?? []),
-        BUILTIN_SKILLS_DIR, // always include devtool's built-in skills (architect/reviewer/curator)
-      ],
-      mcpConfigPaths: body.config?.mcpConfigPaths ?? agentDetail.mcpPaths,
+      // Structured config groups from request body, falling back to the
+      // agent definition. Builtin skills dir always appended.
+      skills: {
+        dirs: [
+          ...(body.config?.skills?.dirs ?? agentDetail.skillDirs ?? []),
+          BUILTIN_SKILLS_DIR, // always include devtool's built-in skills (architect/reviewer/curator)
+        ],
+      },
+      tools: {
+        mcpConfigPaths: body.config?.tools?.mcpConfigPaths ?? agentDetail.mcpPaths,
+        builtinFilter: body.config?.tools?.builtinFilter,
+      },
       // Explicit sessionDir ("notebook dir is the session"): bind the store
       // directly to that directory so persistence lands there.
       sessionStore: body.sessionDir ? SessionStore.fromDir(body.sessionDir) : undefined,
       sessionManager: sessionManager(),
+      // The daemon decides where sessions live (configurable via APP_DIR /
+      // SessionManager baseDir); the runner's session middleware must write
+      // to the SAME base dir or resume can't find sessions on disk.
+      sessionBaseDir: sessionManager().baseDir,
       agentConfigPath: agentDetail.path,
-      // New config fields from request body
-      builtinTools: body.config?.builtinTools as AgentSessionOptions['builtinTools'],
-      enableSession: body.config?.enableSession,
-      enableTodolist: body.config?.enableTodolist,
-      enableCommands: body.config?.enableCommands,
+      // Structured config groups from request body
+      thinking: body.config?.thinking,
+      session: body.config?.session,
+      todolist: body.config?.todolist,
+      specPlan: body.config?.specPlan,
+      commands: body.config?.commands,
       sandbox: body.config?.sandbox,
       a2ui: body.config?.a2ui,
+      search: body.config?.search,
+      compression: body.config?.compression,
       limits: body.config?.limits,
     };
 
@@ -368,15 +382,30 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       subAgents: runnerOpts.subAgents,
       crewId: id,
       model: body.model ?? runnerOpts.model,
-      sandbox: runnerOpts.sandbox ?? body.config?.sandbox ?? true,
-      skillDirs: [...(runnerOpts.skillDirs ?? []), BUILTIN_SKILLS_DIR],
-      mcpConfigPaths: body.config?.mcpConfigPaths ?? [],
+      sandbox: body.config?.sandbox ?? true,
+      // Structured config groups from request body — same field set as the
+      // agent route. Crew skill dirs (from CREW.md + builtin) are the base;
+      // request body overrides the search paths.
+      skills: {
+        dirs: [...(body.config?.skills?.dirs ?? runnerOpts.skillDirs ?? []), BUILTIN_SKILLS_DIR],
+      },
+      tools: {
+        mcpConfigPaths: body.config?.tools?.mcpConfigPaths ?? [],
+        builtinFilter: body.config?.tools?.builtinFilter,
+      },
+      sessionStore: body.sessionDir ? SessionStore.fromDir(body.sessionDir) : undefined,
       sessionManager: sessionManager(),
-      builtinTools: body.config?.builtinTools as AgentSessionOptions['builtinTools'],
-      enableSession: body.config?.enableSession,
-      enableTodolist: body.config?.enableTodolist,
-      enableCommands: body.config?.enableCommands,
+      // Same base-dir contract as the agent route: the daemon decides where
+      // sessions live, and the runner's session middleware must write there.
+      sessionBaseDir: sessionManager().baseDir,
+      thinking: body.config?.thinking,
+      session: body.config?.session,
+      todolist: body.config?.todolist,
+      specPlan: body.config?.specPlan,
+      commands: body.config?.commands,
       a2ui: body.config?.a2ui,
+      search: body.config?.search,
+      compression: body.config?.compression,
       limits: body.config?.limits,
     };
 

@@ -120,18 +120,30 @@ describe('EnhancedRunner', () => {
   });
 
   function makeOptions(overrides?: Partial<EnhancedRunnerOptions>): EnhancedRunnerOptions {
-    return {
-      llmClient: mockLLMClient,
-      model: 'gpt-4',
+    const base: EnhancedRunnerOptions = {
       workspacePath: '/test/workspace',
-      extraTools: mockExtraTools,
-      searchProvider: 'bing' as never,
-      sandbox: false,
-      sessionBaseDir: testBaseDir,
-      skillDirs: ['/skills/dir1', '/skills/dir2'],
-      askHumanHandler: vi.fn(),
-      thinkingEnabled: true,
+      llm: { client: mockLLMClient, model: 'gpt-4' },
+      tools: { extra: mockExtraTools, askHumanHandler: vi.fn() },
+      search: { provider: 'bing' as never },
+      sandbox: { enabled: false },
+      session: { baseDir: testBaseDir },
+      skills: { dirs: ['/skills/dir1', '/skills/dir2'] },
+      thinking: { enabled: true },
+    };
+    // Deep-merge structured groups so overrides like { llm: { model: 'x' } }
+    // keep the base group's other fields (e.g. client).
+    const mergeGroup = <T extends object>(key: keyof EnhancedRunnerOptions) =>
+      ({ ...(base[key] as T), ...(overrides?.[key] as T | undefined) }) as T;
+    return {
+      ...base,
       ...overrides,
+      llm: mergeGroup<NonNullable<EnhancedRunnerOptions['llm']>>('llm'),
+      tools: mergeGroup<NonNullable<EnhancedRunnerOptions['tools']>>('tools'),
+      search: mergeGroup<NonNullable<EnhancedRunnerOptions['search']>>('search'),
+      sandbox: mergeGroup<NonNullable<EnhancedRunnerOptions['sandbox']>>('sandbox'),
+      session: mergeGroup<NonNullable<EnhancedRunnerOptions['session']>>('session'),
+      skills: mergeGroup<NonNullable<EnhancedRunnerOptions['skills']>>('skills'),
+      thinking: mergeGroup<NonNullable<EnhancedRunnerOptions['thinking']>>('thinking'),
     };
   }
 
@@ -146,14 +158,14 @@ describe('EnhancedRunner', () => {
   });
 
   it('should create() pass correct model to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ model: 'claude-3' }));
+    await EnhancedRunner.create(makeOptions({ llm: { model: 'claude-3' } }));
 
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ model: 'claude-3' }));
   });
 
   it('should create() defaults model to glm-5.1', async () => {
-    await EnhancedRunner.create(makeOptions({ model: undefined }));
+    await EnhancedRunner.create(makeOptions({ llm: { model: undefined } }));
 
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ model: 'glm-5.1' }));
@@ -162,7 +174,7 @@ describe('EnhancedRunner', () => {
   it('should create() pass mcpConfigPaths to loadMCPTools', async () => {
     const { loadMCPTools } = await import('../../../src/tools/mcp/index.js');
 
-    await EnhancedRunner.create(makeOptions({ mcpConfigPaths: ['/custom/mcp.json'] }));
+    await EnhancedRunner.create(makeOptions({ tools: { mcpConfigPaths: ['/custom/mcp.json'] } }));
 
     expect(loadMCPTools).toHaveBeenCalledWith({
       configPaths: ['/custom/mcp.json'],
@@ -215,7 +227,7 @@ describe('EnhancedRunner', () => {
   });
 
   it('should create() passes skillDirs to AgentRunner (with built-in skills appended)', async () => {
-    await EnhancedRunner.create(makeOptions({ skillDirs: ['/skills/dir1', '/skills/dir2'] }));
+    await EnhancedRunner.create(makeOptions({ skills: { dirs: ['/skills/dir1', '/skills/dir2'] } }));
 
     const calls = await getAgentRunnerCalls();
     const skillDirs = calls[calls.length - 1][0].skillDirs;
@@ -226,26 +238,26 @@ describe('EnhancedRunner', () => {
   });
 
   it('should create() passes thinkingEnabled to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ thinkingEnabled: true }));
+    await EnhancedRunner.create(makeOptions({ thinking: { enabled: true } }));
 
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ thinkingEnabled: true }));
   });
 
   it('should pass requestTimeout to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ requestTimeout: 60000 }));
+    await EnhancedRunner.create(makeOptions({ llm: { requestTimeout: 60000 } }));
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ requestTimeout: 60000 }));
   });
 
   it('should pass maxSteps to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ maxSteps: 30 }));
+    await EnhancedRunner.create(makeOptions({ limits: { maxSteps: 30 } }));
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ maxSteps: 30 }));
   });
 
   it('should pass enablePromptThinking to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ enablePromptThinking: true }));
+    await EnhancedRunner.create(makeOptions({ thinking: { promptLevel: true } }));
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(
       expect.objectContaining({ enablePromptThinking: true })
@@ -253,25 +265,23 @@ describe('EnhancedRunner', () => {
   });
 
   it('should pass temperature to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ temperature: 0.7 }));
+    await EnhancedRunner.create(makeOptions({ llm: { temperature: 0.7 } }));
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ temperature: 0.7 }));
   });
 
   it('should not hardcode thinkingEnabled to true', async () => {
-    await EnhancedRunner.create(makeOptions({ thinkingEnabled: false }));
+    await EnhancedRunner.create(makeOptions({ thinking: { enabled: false } }));
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ thinkingEnabled: false }));
   });
 
   it('should pass undefined thinkingEnabled when not set', async () => {
     const opts = makeOptions();
-    delete opts.thinkingEnabled;
+    delete opts.thinking;
     await EnhancedRunner.create(opts);
     const calls = await getAgentRunnerCalls();
-    expect(calls[calls.length - 1][0]).toEqual(
-      expect.objectContaining({ thinkingEnabled: undefined })
-    );
+    expect(calls[calls.length - 1][0].thinkingEnabled).toBeUndefined();
   });
 
   it('should create() passes middleware array (length 2: session + todolist) to AgentRunner', async () => {
@@ -362,7 +372,7 @@ describe('EnhancedRunner', () => {
       { name: 'web_search' },
     ]);
 
-    await EnhancedRunner.create(makeOptions({ builtinTools: {} }));
+    await EnhancedRunner.create(makeOptions({ tools: { builtinFilter: {} } }));
 
     const calls = await getAgentRunnerCalls();
     const tools = calls[calls.length - 1][0].tools;
@@ -383,7 +393,7 @@ describe('EnhancedRunner', () => {
 
     await EnhancedRunner.create(
       makeOptions({
-        builtinTools: { fileRead: true, fileWrite: true },
+        tools: { builtinFilter: { fileRead: true, fileWrite: true } },
       })
     );
 
@@ -401,7 +411,7 @@ describe('EnhancedRunner', () => {
     vi.mocked(createBuiltinTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
 
     // shell: false → excluded; file_read not listed → also excluded
-    await EnhancedRunner.create(makeOptions({ builtinTools: { shell: false } }));
+    await EnhancedRunner.create(makeOptions({ tools: { builtinFilter: { shell: false } } }));
 
     const calls = await getAgentRunnerCalls();
     const tools = calls[calls.length - 1][0].tools;
@@ -414,7 +424,7 @@ describe('EnhancedRunner', () => {
     const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
     vi.mocked(createBuiltinTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
 
-    await EnhancedRunner.create(makeOptions({ builtinTools: { fileRead: true } }));
+    await EnhancedRunner.create(makeOptions({ tools: { builtinFilter: { fileRead: true } } }));
 
     const calls = await getAgentRunnerCalls();
     const tools = calls[calls.length - 1][0].tools;
@@ -429,13 +439,13 @@ describe('EnhancedRunner', () => {
     const { createSessionSupport } = await import('../../../src/session/support.js');
     vi.mocked(createSessionSupport).mockClear();
 
-    await EnhancedRunner.create(makeOptions({ enableSession: false }));
+    await EnhancedRunner.create(makeOptions({ session: { enabled: false } }));
 
     expect(createSessionSupport).not.toHaveBeenCalled();
   });
 
   it('should skip session tools and middleware when enableSession is false', async () => {
-    await EnhancedRunner.create(makeOptions({ enableSession: false }));
+    await EnhancedRunner.create(makeOptions({ session: { enabled: false } }));
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
@@ -456,13 +466,13 @@ describe('EnhancedRunner', () => {
     const { createTodolistSupport } = await import('../../../src/todolist/support.js');
     vi.mocked(createTodolistSupport).mockClear();
 
-    await EnhancedRunner.create(makeOptions({ enableTodolist: false }));
+    await EnhancedRunner.create(makeOptions({ todolist: { enabled: false } }));
 
     expect(createTodolistSupport).not.toHaveBeenCalled();
   });
 
   it('should skip todolist middleware when enableTodolist is false', async () => {
-    await EnhancedRunner.create(makeOptions({ enableTodolist: false }));
+    await EnhancedRunner.create(makeOptions({ todolist: { enabled: false } }));
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
@@ -474,7 +484,7 @@ describe('EnhancedRunner', () => {
     const { createSpecPlanTools } = await import('../../../src/tools/spec-plan/index.js');
     vi.mocked(createSpecPlanTools).mockClear();
 
-    await EnhancedRunner.create(makeOptions({ enableSpecPlan: false }));
+    await EnhancedRunner.create(makeOptions({ specPlan: { enabled: false } }));
 
     expect(createSpecPlanTools).not.toHaveBeenCalled();
   });
@@ -483,7 +493,7 @@ describe('EnhancedRunner', () => {
     const { createSpecPlanTools } = await import('../../../src/tools/spec-plan/index.js');
     vi.mocked(createSpecPlanTools).mockClear();
 
-    await EnhancedRunner.create(makeOptions({ enableSpecPlan: true }));
+    await EnhancedRunner.create(makeOptions({ specPlan: { enabled: true } }));
 
     expect(createSpecPlanTools).toHaveBeenCalled();
   });
@@ -509,7 +519,7 @@ describe('EnhancedRunner', () => {
       // Even with an explicit session base dir the spec-plan stores stay at
       // {appDir}/spec-plan — the two concerns are fully decoupled.
       await EnhancedRunner.create(
-        makeOptions({ sessionBaseDir: join(appRoot, 'sessions') })
+        makeOptions({ session: { baseDir: join(appRoot, 'sessions') } })
       );
 
       expect(SpecStore).toHaveBeenCalledWith(join(appRoot, 'spec-plan', 'specs'));
@@ -521,7 +531,7 @@ describe('EnhancedRunner', () => {
   });
 
   it('should skip command middleware when enableCommands is false', async () => {
-    await EnhancedRunner.create(makeOptions({ enableCommands: false }));
+    await EnhancedRunner.create(makeOptions({ commands: { enabled: false } }));
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
@@ -530,7 +540,7 @@ describe('EnhancedRunner', () => {
   });
 
   it('should have only todolist middleware when session and commands are disabled', async () => {
-    await EnhancedRunner.create(makeOptions({ enableSession: false, enableCommands: false }));
+    await EnhancedRunner.create(makeOptions({ session: { enabled: false }, commands: { enabled: false } }));
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
@@ -560,7 +570,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('should handle create with no extraTools', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ extraTools: undefined }));
+      const runner = await EnhancedRunner.create(makeOptions({ tools: { extra: undefined } }));
       expect(runner).toBeInstanceOf(EnhancedRunner);
 
       const calls = await getAgentRunnerCalls();
@@ -607,7 +617,7 @@ describe('EnhancedRunner', () => {
 
     it('should not include session/todolist middleware when both disabled', async () => {
       const runner = await EnhancedRunner.create(
-        makeOptions({ enableSession: false, enableTodolist: false, enableCommands: false })
+        makeOptions({ session: { enabled: false }, todolist: { enabled: false }, commands: { enabled: false } })
       );
       const config = runner.getConfig();
       expect(config.middlewareNames).toEqual([]);
@@ -623,12 +633,10 @@ describe('EnhancedRunner', () => {
       const confirmHandler = vi.fn().mockResolvedValue({ allowed: true });
       await EnhancedRunner.create(
         makeOptions({
-          confirmHandler,
-          confirmTools: ['shell'],
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          extraTools: [],
+          tools: { confirmHandler, confirmTools: ['shell'], extra: [] },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
 
@@ -642,10 +650,10 @@ describe('EnhancedRunner', () => {
       const runner = await EnhancedRunner.create(
         makeOptions({
           a2ui: { enabled: true },
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          extraTools: [],
+          tools: { extra: [] },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
 
@@ -661,10 +669,10 @@ describe('EnhancedRunner', () => {
       const runner = await EnhancedRunner.create(
         makeOptions({
           a2ui: { enabled: false },
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          extraTools: [],
+          tools: { extra: [] },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
 
@@ -677,10 +685,10 @@ describe('EnhancedRunner', () => {
     it('should not include a2ui tools or middleware when a2ui is omitted', async () => {
       const runner = await EnhancedRunner.create(
         makeOptions({
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          extraTools: [],
+          tools: { extra: [] },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
 
@@ -696,11 +704,10 @@ describe('EnhancedRunner', () => {
 
       await EnhancedRunner.create(
         makeOptions({
-          builtinTools: { fileRead: true, shell: false },
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          extraTools: [],
+          tools: { builtinFilter: { fileRead: true, shell: false }, extra: [] },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
 
@@ -712,7 +719,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('should keep command middleware when enableCommands is true', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ enableCommands: true }));
+      const runner = await EnhancedRunner.create(makeOptions({ commands: { enabled: true } }));
       expect(runner.getConfig().middlewareNames).toContain('command');
       expect(runner.getConfig().enableCommands).toBe(true);
     });
@@ -722,17 +729,17 @@ describe('EnhancedRunner', () => {
 
   describe('getConfig()', () => {
     it('returns model from options', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ model: 'test-model-42' }));
+      const runner = await EnhancedRunner.create(makeOptions({ llm: { model: 'test-model-42' } }));
       expect(runner.getConfig().model).toBe('test-model-42');
     });
 
     it('returns sandbox=false when not configured', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ sandbox: false }));
+      const runner = await EnhancedRunner.create(makeOptions({ sandbox: { enabled: false } }));
       expect(runner.getConfig().sandbox).toBe(false);
     });
 
     it('returns sandbox=true when configured', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ sandbox: true }));
+      const runner = await EnhancedRunner.create(makeOptions({ sandbox: { enabled: true } }));
       expect(runner.getConfig().sandbox).toBe(true);
     });
 
@@ -753,34 +760,34 @@ describe('EnhancedRunner', () => {
     });
 
     it('returns enableSession=false and excludes session from middlewareNames', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ enableSession: false }));
+      const runner = await EnhancedRunner.create(makeOptions({ session: { enabled: false } }));
       const config = runner.getConfig();
       expect(config.enableSession).toBe(false);
       expect(config.middlewareNames).not.toContain('session');
     });
 
     it('returns enableTodolist=false and excludes todolist from middlewareNames', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ enableTodolist: false }));
+      const runner = await EnhancedRunner.create(makeOptions({ todolist: { enabled: false } }));
       const config = runner.getConfig();
       expect(config.enableTodolist).toBe(false);
       expect(config.middlewareNames).not.toContain('todolist');
     });
 
     it('returns enableSpecPlan reflecting the option', async () => {
-      const runner1 = await EnhancedRunner.create(makeOptions({ enableSpecPlan: true }));
+      const runner1 = await EnhancedRunner.create(makeOptions({ specPlan: { enabled: true } }));
       expect(runner1.getConfig().enableSpecPlan).toBe(true);
 
-      const runner2 = await EnhancedRunner.create(makeOptions({ enableSpecPlan: false }));
+      const runner2 = await EnhancedRunner.create(makeOptions({ specPlan: { enabled: false } }));
       expect(runner2.getConfig().enableSpecPlan).toBe(false);
     });
 
     it('returns thinkingEnabled reflecting the option (true)', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ thinkingEnabled: true }));
+      const runner = await EnhancedRunner.create(makeOptions({ thinking: { enabled: true } }));
       expect(runner.getConfig().thinkingEnabled).toBe(true);
     });
 
     it('returns thinkingEnabled reflecting the option (false)', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ thinkingEnabled: false }));
+      const runner = await EnhancedRunner.create(makeOptions({ thinking: { enabled: false } }));
       expect(runner.getConfig().thinkingEnabled).toBe(false);
     });
 
@@ -810,10 +817,10 @@ describe('EnhancedRunner', () => {
       vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
       const runner = await EnhancedRunner.create(
         makeOptions({
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          extraTools: [],
+          tools: { extra: [] },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
       // Skill tools (read_skill_resource, run_skill_script) are always
@@ -832,10 +839,10 @@ describe('EnhancedRunner', () => {
       ]);
       const runner = await EnhancedRunner.create(
         makeOptions({
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          extraTools: [],
+          tools: { extra: [] },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
       const tools = runner.getToolInfo();
@@ -854,11 +861,10 @@ describe('EnhancedRunner', () => {
       ]);
       const runner = await EnhancedRunner.create(
         makeOptions({
-          builtinTools: { fileRead: true },
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          extraTools: [],
+          tools: { builtinFilter: { fileRead: true }, extra: [] },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
       const tools = runner.getToolInfo();
@@ -878,10 +884,10 @@ describe('EnhancedRunner', () => {
       ];
       const runner = await EnhancedRunner.create(
         makeOptions({
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          extraTools,
+          tools: { extra: extraTools },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
       const tools = runner.getToolInfo();
@@ -903,10 +909,10 @@ describe('EnhancedRunner', () => {
       ]);
       const runner = await EnhancedRunner.create(
         makeOptions({
-          enableSession: true,
-          enableTodolist: false,
-          enableCommands: false,
-          extraTools: [],
+          session: { enabled: true },
+          tools: { extra: [] },
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
       const tools = runner.getToolInfo();
@@ -925,10 +931,10 @@ describe('EnhancedRunner', () => {
       vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
       const runner = await EnhancedRunner.create(
         makeOptions({
-          enableSession: false,
-          enableTodolist: true,
-          enableCommands: false,
-          extraTools: [],
+          session: { enabled: false },
+          todolist: { enabled: true },
+          tools: { extra: [] },
+          commands: { enabled: false },
         })
       );
       const tools = runner.getToolInfo();
@@ -947,11 +953,11 @@ describe('EnhancedRunner', () => {
       vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
       const runner = await EnhancedRunner.create(
         makeOptions({
-          enableSession: false,
-          enableTodolist: false,
-          enableSpecPlan: true,
-          enableCommands: false,
-          extraTools: [],
+          tools: { extra: [] },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          specPlan: { enabled: true },
+          commands: { enabled: false },
         })
       );
       const tools = runner.getToolInfo();
@@ -972,7 +978,7 @@ describe('EnhancedRunner', () => {
 
   describe('getSkillInfo()', () => {
     it('returns empty array when no skill dirs configured', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ skillDirs: undefined }));
+      const runner = await EnhancedRunner.create(makeOptions({ skills: { dirs: undefined } }));
       const skills = runner.getSkillInfo();
       // May have built-in spec-plan skills if resolved, but should not error
       expect(Array.isArray(skills)).toBe(true);
@@ -985,7 +991,7 @@ describe('EnhancedRunner', () => {
         { name: 'spec-plan', description: 'Plan specifications', source: '/skills/spec-plan' },
         { name: 'a2ui-gen', description: 'A2UI generation', source: '/skills/a2ui-gen' },
       ] as any);
-      const runner = await EnhancedRunner.create(makeOptions({ skillDirs: ['/test/skills'] }));
+      const runner = await EnhancedRunner.create(makeOptions({ skills: { dirs: ['/test/skills'] } }));
       const skills = runner.getSkillInfo();
       expect(skills.length).toBeGreaterThanOrEqual(2);
       const specPlan = skills.find((s) => s.name === 'spec-plan');
@@ -1023,17 +1029,19 @@ describe('EnhancedRunner', () => {
     });
 
     it('create() without llmClient or llm throws', async () => {
-      await expect(EnhancedRunner.create(makeOptions({ llmClient: undefined }))).rejects.toThrow(
+      await expect(EnhancedRunner.create(makeOptions({ llm: { client: undefined } }))).rejects.toThrow(
         'Must specify either llm.client or llm.quickInit.'
       );
     });
 
-    it('create() with both llmClient and llm throws', async () => {
+    it('create() with both llm.client and llm.quickInit throws', async () => {
       await expect(
         EnhancedRunner.create(
           makeOptions({
             llm: {
-              providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+              quickInit: {
+                providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+              },
             },
           })
         )
@@ -1041,7 +1049,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('create() with empty skillDirs still succeeds', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ skillDirs: [] }));
+      const runner = await EnhancedRunner.create(makeOptions({ skills: { dirs: [] } }));
       expect(runner).toBeInstanceOf(EnhancedRunner);
       expect(runner.getConfig().skillDirs).toEqual([]);
     });
@@ -1052,11 +1060,10 @@ describe('EnhancedRunner', () => {
 
       await EnhancedRunner.create(
         makeOptions({
-          builtinTools: { fileRead: true, unknownToggle: true } as any,
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          extraTools: [],
+          tools: { builtinFilter: { fileRead: true, unknownToggle: true } as any, extra: [] },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
         })
       );
 
@@ -1088,7 +1095,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('migrates deprecated maxSteps flat field to limits', async () => {
-      await EnhancedRunner.create(makeOptions({ maxSteps: 99 }));
+      await EnhancedRunner.create(makeOptions({ limits: { maxSteps: 99 } }));
       const calls = await getAgentRunnerCalls();
       expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ maxSteps: 99 }));
     });
@@ -1153,7 +1160,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { runner, state } = await EnhancedRunner.resume(dir, {
-        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
       });
 
       expect(runner).toBeInstanceOf(EnhancedRunner);
@@ -1171,7 +1178,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { runner, state } = await EnhancedRunner.resume(dir, {
-        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
       });
 
       const result = await runner.run(state);
@@ -1191,7 +1198,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { state } = await EnhancedRunner.resume(dir, {
-        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
       });
 
       // runner.getToolInfo() returns mock tools (empty in this test env)
@@ -1208,7 +1215,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { runner } = await EnhancedRunner.resume(dir, {
-        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
         model: 'claude-3',
       });
 
@@ -1300,7 +1307,7 @@ describe('EnhancedRunner', () => {
       ];
 
       const { runner } = await EnhancedRunner.resume(dir, {
-        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
         subAgents,
       });
 
@@ -1323,7 +1330,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       await EnhancedRunner.resume(dir, {
-        llm: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
       });
 
       const calls = await getAgentRunnerCalls();
