@@ -13,10 +13,13 @@ import type { SearchProvider, SearchResult } from './web-search.js';
  * Following each redirect reveals the real URL via window.location.replace().
  * We resolve up to 5 URLs concurrently to avoid serial latency.
  *
- * CSS selectors:
- * - Result container: div.vrwrap (organic results with id containing 30000000)
- * - Title + URL: h3 a[name="dttl"] (textContent=title, href=sogou redirect url)
- * - Snippet: div.fz-mid or div.str_info
+ * CSS selectors (sogou 2025 page revision — vrwrap containers no longer
+ * carry the old `30000000` ids, titles moved from `h3 a[name="dttl"]` to
+ * `h3.vr-title > a[target="_blank"]`, snippets live in `p.star-wiki`):
+ * - Result container: div.vrwrap (organic results)
+ * - Title + URL: h3.vr-title a[target="_blank"] (textContent=title, href
+ *   is either an absolute URL or a sogou /link?url=... redirect)
+ * - Snippet: p.star-wiki
  */
 export class SogouScrapeSearchProvider implements SearchProvider {
   async search(query: string): Promise<SearchResult[]> {
@@ -46,8 +49,8 @@ export class SogouScrapeSearchProvider implements SearchProvider {
   /**
    * Parse Sogou HTML into raw results with Sogou redirect URLs.
    *
-   * Only extracts organic web results (id contains 30000000),
-   * skipping image cards, knowledge panels, and ads.
+   * Only extracts organic web results (div.vrwrap), skipping image cards,
+   * knowledge panels, and ads.
    */
   private parseResults(html: string): Array<{ title: string; url: string; snippet: string }> {
     const results: Array<{ title: string; url: string; snippet: string }> = [];
@@ -57,16 +60,17 @@ export class SogouScrapeSearchProvider implements SearchProvider {
 
     const items = doc.querySelectorAll('div.vrwrap');
     for (const item of items) {
-      // Only organic web results (id like sogou_vr_30000000_wrap_N)
-      const id = item.getAttribute('id') ?? '';
-      if (!id.includes('30000000')) continue;
-
-      const link = item.querySelector('h3 a[name="dttl"]');
+      // Title link: h3.vr-title > a[target="_blank"] (absolute URL or
+      // /link?url=... redirect).
+      const link = item.querySelector('h3 a[target="_blank"]');
       if (!link) continue;
 
       const title = link.textContent?.trim() ?? '';
       const href = link.getAttribute('href') ?? '';
-      const snippetEl = item.querySelector('.str_info') ?? item.querySelector('.fz-mid');
+      // Snippet lives in p.star-wiki on most results; some blocks (e.g.
+      // zhihu cards) use .fz-mid instead — keep the fallback.
+      const snippetEl =
+        item.querySelector('p.star-wiki') ?? item.querySelector('.fz-mid');
       const snippet = snippetEl?.textContent?.trim() ?? '';
 
       if (title && href) {

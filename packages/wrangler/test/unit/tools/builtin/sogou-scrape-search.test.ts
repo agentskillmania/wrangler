@@ -10,29 +10,31 @@ describe('SogouScrapeSearchProvider', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
-  /** Build realistic Sogou HTML with organic results and non-organic items. */
+  /**
+   * Build realistic Sogou HTML (2025 page revision): vrwrap containers carry
+   * no ids, titles are h3.vr-title > a[target="_blank"], snippets live in
+   * p.star-wiki. Image cards appear as vrwrap divs WITHOUT a title link and
+   * are skipped by the parser.
+   */
   function buildSogouHtml(results: Array<{ title: string; snippet: string; url: string }>): string {
     const items = results
       .map(
         (r, i) => `
-      <div class="vrwrap" id="sogou_vr_30000000_wrap_${i + 1}">
+      <div class="vrwrap">
         <h3 class="vr-title">
-          <a name="dttl" target="_blank" href="${r.url}">${r.title}</a>
+          <a target="_blank" href="${r.url}">${r.title}</a>
         </h3>
-        <div class="fz-mid space-txt base-ellipsis clamp2">${r.snippet}</div>
+        <p class="star-wiki base-ellipsis clamp3 space-txt">${r.snippet}</p>
       </div>`
       )
       .join('\n');
 
-    // Include a non-organic result (image card) that should be filtered out
+    // Include a non-organic item (image card: vrwrap without a title link)
+    // that should be filtered out.
     return `
       <html><body>
-        <div class="vrwrap" data-reactroot="">
+        <div class="vrwrap">
           <a href="https://pic.sogou.com/pics?...">Image Result</a>
-        </div>
-        <div class="vrwrap" id="sogou_vr_30010467_2">
-          <h3 class="vr-title"><a name="dttl" href="/link?url=ad1">Ad Result</a></h3>
-          <div class="fz-mid">This is an ad</div>
         </div>
         ${items}
       </body></html>`;
@@ -78,13 +80,14 @@ describe('SogouScrapeSearchProvider', () => {
     });
   });
 
-  it('filters out non-organic results (image cards, ads)', async () => {
+  it('skips vrwrap items without a title link (image cards)', async () => {
     const searchHtml = buildSogouHtml([]);
     fetchSpy.mockResolvedValue(new Response(searchHtml, { status: 200 }));
 
     const results = await provider.search('test');
 
-    // buildSogouHtml with 0 organic results still has image card + ad
+    // buildSogouHtml with 0 organic results still has an image card vrwrap
+    // (no h3 title link) — the parser must skip it.
     expect(results).toHaveLength(0);
   });
 
@@ -172,9 +175,9 @@ describe('SogouScrapeSearchProvider', () => {
   it('handles result with missing snippet gracefully', async () => {
     const html = `
       <html><body>
-        <div class="vrwrap" id="sogou_vr_30000000_wrap_1">
+        <div class="vrwrap">
           <h3 class="vr-title">
-            <a name="dttl" target="_blank" href="/link?url=snippet-test">Title Only</a>
+            <a target="_blank" href="/link?url=snippet-test">Title Only</a>
           </h3>
         </div>
       </body></html>`;
@@ -192,14 +195,37 @@ describe('SogouScrapeSearchProvider', () => {
     expect(results[0].title).toBe('Title Only');
   });
 
+  it('falls back to .fz-mid snippet when p.star-wiki is absent', async () => {
+    const html = `
+      <html><body>
+        <div class="vrwrap">
+          <h3 class="vr-title">
+            <a target="_blank" href="/link?url=fzmid-test">Zhihu Card</a>
+          </h3>
+          <div class="fz-mid space-txt">Snippet in fz-mid</div>
+        </div>
+      </body></html>`;
+
+    fetchSpy.mockImplementation(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/web?query=')) return new Response(html, { status: 200 });
+      return new Response(buildRedirectHtml('https://example.com/zhihu'), { status: 200 });
+    });
+
+    const results = await provider.search('test');
+
+    expect(results).toHaveLength(1);
+    expect(results[0].snippet).toBe('Snippet in fz-mid');
+  });
+
   it('skips results with missing title', async () => {
     const html = `
       <html><body>
-        <div class="vrwrap" id="sogou_vr_30000000_wrap_1">
+        <div class="vrwrap">
           <h3 class="vr-title">
-            <a name="dttl" target="_blank" href="/link?url=no-title"></a>
+            <a target="_blank" href="/link?url=no-title"></a>
           </h3>
-          <div class="fz-mid">Has snippet but no title</div>
+          <p class="star-wiki">Has snippet but no title</p>
         </div>
       </body></html>`;
 
