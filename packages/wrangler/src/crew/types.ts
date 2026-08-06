@@ -7,7 +7,6 @@ export interface CrewConfig {
     readonly name: string;
     readonly description: string;
     readonly primaryAgent: string;
-    readonly sandbox?: boolean;
   };
   readonly memory: string;
   readonly agentDefs: Readonly<Record<string, ParsedAgent>>;

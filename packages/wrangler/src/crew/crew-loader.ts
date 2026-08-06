@@ -12,7 +12,6 @@ interface CrewMeta {
   name: string;
   description?: string;
   'primary-agent': string;
-  sandbox?: boolean;
 }
 
 /**
@@ -58,7 +57,6 @@ export class CrewLoader {
         name: meta.name,
         description: meta.description ?? '',
         primaryAgent: meta['primary-agent'],
-        sandbox: meta.sandbox,
       },
       memory,
       agentDefs,
@@ -141,8 +139,6 @@ export interface CrewRunnerOptions {
   primaryAgent: string;
   /** Model override from primary agent definition */
   model?: string;
-  /** Sandbox setting */
-  sandbox?: boolean;
   /** Skill directories */
   skillDirs: string[];
 }
@@ -191,7 +187,6 @@ export function crewToRunnerOptions(crew: CrewConfig): CrewRunnerOptions {
     subAgents,
     primaryAgent: primaryName,
     model: primaryDef?.model,
-    sandbox: crew.meta.sandbox,
     skillDirs: [...crew.skillDirs],
   };
 }

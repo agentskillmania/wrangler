@@ -146,28 +146,6 @@ describe('CrewLoader', () => {
     }
   });
 
-  it('parses sandbox field from CREW.md frontmatter', async () => {
-    const tmpDir = join(__dirname, '../../fixtures/crew-sandbox');
-    try {
-      await mkdir(tmpDir, { recursive: true });
-      await writeFile(
-        join(tmpDir, 'CREW.md'),
-        '---\nname: sandbox-crew\nprimary-agent: primary\nsandbox: true\n---\nMemory'
-      );
-      const loader = new CrewLoader(tmpDir);
-      const config = await loader.load();
-      expect(config.meta.sandbox).toBe(true);
-    } finally {
-      await rm(tmpDir, { recursive: true });
-    }
-  });
-
-  it('defaults sandbox to undefined when not in CREW.md', async () => {
-    const loader = new CrewLoader(FIXTURE_DIR);
-    const config = await loader.load();
-    expect(config.meta.sandbox).toBeUndefined();
-  });
-
   // --- Negative paths (W3-1) ---
 
   it('rejects malformed YAML in CREW.md frontmatter', async () => {
