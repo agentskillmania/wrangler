@@ -6,7 +6,6 @@ export interface ParsedAgent {
   instructions: string;
   model?: string;
   thinking?: { enabled?: boolean };
-  sandbox?: boolean;
 }
 
 export function parseAgentMd(content: string, fallbackName?: string): ParsedAgent {
@@ -45,7 +44,6 @@ export function parseAgentMd(content: string, fallbackName?: string): ParsedAgen
       instructions: body,
       model: raw.model as string | undefined,
       thinking: raw.thinking as { enabled?: boolean } | undefined,
-      sandbox: raw.sandbox as boolean | undefined,
     };
   } catch {
     return {

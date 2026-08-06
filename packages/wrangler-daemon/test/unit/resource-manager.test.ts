@@ -261,13 +261,13 @@ describe('ResourceManager', () => {
       expect(detail!.skillCount).toBe(0);
     });
 
-    it('parses AGENT.md frontmatter for model, description, thinking, sandbox', async () => {
+    it('parses AGENT.md frontmatter for model, description, thinking', async () => {
       await mkdir(agentsDir, { recursive: true });
       const agentDir = join(agentsDir, 'structured-agent');
       await mkdir(agentDir, { recursive: true });
       await writeFile(
         join(agentDir, 'AGENT.md'),
-        '---\nname: Structured\ndescription: A test agent\nmodel: gpt-4\nthinking:\n  enabled: true\nsandbox: true\n---\n\nYou are structured.',
+        '---\nname: Structured\ndescription: A test agent\nmodel: gpt-4\nthinking:\n  enabled: true\n---\n\nYou are structured.',
         'utf-8'
       );
 
@@ -280,7 +280,6 @@ describe('ResourceManager', () => {
       expect(detail!.description).toBe('A test agent');
       expect(detail!.model).toBe('gpt-4');
       expect(detail!.thinking).toEqual({ enabled: true });
-      expect(detail!.sandbox).toBe(true);
     });
 
     it('discovers agent-private skill directories', async () => {

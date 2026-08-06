@@ -68,40 +68,6 @@ Body`;
     expect(result.name).toBe('unknown');
   });
 
-  it('parses sandbox: true from frontmatter', () => {
-    const content = `---
-name: sandboxed-agent
-sandbox: true
----
-
-I run in a sandbox.`;
-    const result = parseAgentMd(content);
-    expect(result.name).toBe('sandboxed-agent');
-    expect(result.sandbox).toBe(true);
-  });
-
-  it('parses sandbox: false from frontmatter', () => {
-    const content = `---
-name: host-agent
-sandbox: false
----
-
-I run on host.`;
-    const result = parseAgentMd(content);
-    expect(result.name).toBe('host-agent');
-    expect(result.sandbox).toBe(false);
-  });
-
-  it('defaults sandbox to undefined when not specified', () => {
-    const content = `---
-name: default-agent
----
-
-No sandbox field.`;
-    const result = parseAgentMd(content);
-    expect(result.sandbox).toBeUndefined();
-  });
-
   // BUG7: frontmatter closing '---' must be on its own line.
   // Body text containing '---' (markdown horizontal rule) must NOT be
   // mistaken for the frontmatter delimiter.

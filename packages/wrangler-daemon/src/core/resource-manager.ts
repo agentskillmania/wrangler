@@ -94,7 +94,6 @@ export class ResourceManager {
         instructions: result.instructions,
         model: result.model,
         thinking: result.thinking,
-        sandbox: result.sandbox,
         path: agentDir,
         skillDirs: result.skillDirs,
         mcpPaths: result.mcpPaths,
