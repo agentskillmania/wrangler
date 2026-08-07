@@ -379,12 +379,21 @@ export class HostToolDeps implements ToolDeps {
   }
 
   async isBinaryFile(filePath: string): Promise<boolean> {
+    // Sandbox-internal paths (/...) are unreachable from the host filesystem,
+    // so inspect the content inside the sandbox: compare the raw byte count
+    // with the null-byte-stripped count (mirrors the Rust SandboxToolDeps).
     const absolute = this.resolvePath(filePath);
-    try {
-      return await detectBinary(absolute);
-    } catch {
+    const q = shellSingleQuote(absolute);
+    const [raw, stripped] = await Promise.all([
+      this.exec(`wc -c < ${q}`),
+      this.exec(`tr -d '\\000' < ${q} | wc -c`),
+    ]);
+    if (raw.exitCode !== 0 || stripped.exitCode !== 0) {
       return false;
     }
+    const rawN = Number.parseInt(raw.stdout.trim(), 10);
+    const strippedN = Number.parseInt(stripped.stdout.trim(), 10);
+    return Number.isFinite(rawN) && Number.isFinite(strippedN) && rawN !== strippedN;
   }
 }
 

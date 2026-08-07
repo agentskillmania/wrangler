@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SandboxToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { createFileReadTool } from '../../../../src/tools/builtin/file-read.js';
 import { Sandbox } from '@agentskillmania/sandbox';
 import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -205,6 +206,15 @@ describe.skipIf(!ENABLED)('SandboxToolDeps', () => {
 
     it('should return false for non-existent file', async () => {
       expect(await deps.isBinaryFile('no-such-file.txt')).toBe(false);
+    });
+  });
+
+  describe('file_read binary rejection', () => {
+    it('should reject reading a binary file inside the sandbox', async () => {
+      await deps.exec(`printf "\\x00\\x00hello" > binary-read.bin`);
+      const tool = createFileReadTool(deps);
+      const result = await tool.execute({ filePath: 'binary-read.bin' });
+      expect(result).toContain('Cannot read binary file');
     });
   });
 });
