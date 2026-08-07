@@ -332,6 +332,33 @@ describe('AgentSession', () => {
       expect(data.tokens.input).toBe(20);
     });
 
+    it('maps todo:list event to todo-list SSE with Rust wire shape', () => {
+      const result = AgentSession.mapEvent({
+        type: 'todo:list',
+        items: [
+          { id: 1, subject: 'a', status: 'in_progress' },
+          {
+            id: 2,
+            subject: 'b',
+            status: 'pending',
+            description: 'd',
+            blocks: [],
+            blockedBy: [1],
+          },
+          { id: 3, subject: 'c', status: 'completed', blocks: [1, 2], blockedBy: [] },
+        ],
+        timestamp: 0,
+      } as any);
+      expect(result!.event).toBe('todo-list');
+      expect(result!.data).toEqual({
+        items: [
+          { id: 1, subject: 'a', status: 'in_progress' },
+          { id: 2, subject: 'b', status: 'pending', description: 'd', blocked_by: [1] },
+          { id: 3, subject: 'c', status: 'completed', blocks: [1, 2] },
+        ],
+      });
+    });
+
     it('maps waiting-human event', () => {
       const result = AgentSession.mapEvent({
         type: 'waiting-human',

@@ -22,7 +22,12 @@ import {
   resolveDefaultModel,
   writeMeta,
 } from '@agentskillmania/wrangler';
-import type { SessionMeta, SubAgentConfig, LimitsConfig, SandboxConfig } from '@agentskillmania/wrangler';
+import type {
+  SessionMeta,
+  SubAgentConfig,
+  LimitsConfig,
+  SandboxConfig,
+} from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
@@ -61,7 +66,6 @@ export interface AgentSessionResumeOptions {
   subAgents?: SubAgentConfig[];
 }
 
-
 /**
  * Merge sandbox config sources field-by-field (lower → higher precedence):
  * daemon config.yaml `sandbox` defaults ← request-body `sandbox` (boolean
@@ -73,12 +77,9 @@ export function mergeSandboxConfig(
   base: SandboxConfig | undefined,
   override: SandboxConfig | boolean | undefined
 ): SandboxConfig {
-  const fromOverride =
-    typeof override === 'object' && override !== null ? override : {};
+  const fromOverride = typeof override === 'object' && override !== null ? override : {};
   const enabled =
-    typeof override === 'boolean'
-      ? override
-      : (fromOverride.enabled ?? base?.enabled ?? true);
+    typeof override === 'boolean' ? override : (fromOverride.enabled ?? base?.enabled ?? true);
   return {
     enabled,
     timeout: fromOverride.timeout ?? base?.timeout,
@@ -428,9 +429,7 @@ export class AgentSession {
    */
   private async buildSessionOverview(): Promise<SessionOverview> {
     const meta = this.sessionStore
-      ? await this.sessionStore.getMeta(
-          this.sessionStore.isDirBound ? undefined : this.sessionId
-        )
+      ? await this.sessionStore.getMeta(this.sessionStore.isDirBound ? undefined : this.sessionId)
       : null;
     const runnerConfig = this.runner.getConfig();
     const ctx = this.state?.context;
@@ -639,6 +638,7 @@ export class AgentSession {
         'subagent:tool:end',
         'llm:request',
         'llm:response',
+        'todo:list',
         'compressing',
         'compressed',
         'waiting-human',
@@ -959,6 +959,24 @@ export class AgentSession {
             tokens: (event as unknown as { tokens?: unknown }).tokens,
           },
         };
+
+      case 'todo:list': {
+        // Normalize to the Rust daemon's wire shape (serde output): omit
+        // undefined/null and empty arrays, and rename camelCase `blockedBy`
+        // to snake_case `blocked_by` — both daemons must emit identical JSON.
+        const items = ((event as unknown as { items?: unknown[] }).items ?? []).map(
+          (item: unknown) => {
+            const out: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(item as Record<string, unknown>)) {
+              if (v === undefined || v === null) continue;
+              if (Array.isArray(v) && v.length === 0) continue;
+              out[k === 'blockedBy' ? 'blocked_by' : k] = v;
+            }
+            return out;
+          }
+        );
+        return { event: 'todo-list', data: { items } };
+      }
 
       case 'compressing':
         return { event: 'compressing', data: {} };
