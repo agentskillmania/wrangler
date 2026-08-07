@@ -416,11 +416,10 @@ export class SandboxToolDeps implements ToolDeps {
   }
 
   resolvePath(filePath: string): string {
-    const absolute = resolve('/', filePath);
-    if (absolute !== '/' && !absolute.startsWith('/')) {
-      throw new Error(`Path traversal detected: ${filePath}`);
-    }
-    return absolute;
+    // Sandbox-internal paths are relative to `/`; node's resolve() already
+    // joins + lexically normalizes (`/a/../b` → `/b`). No traversal check
+    // here — the wasmtime capability layer is the real boundary.
+    return resolve('/', filePath);
   }
 
   async exec(command: string, _options?: { timeout?: number }): Promise<ExecResult> {
