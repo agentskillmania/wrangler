@@ -382,6 +382,13 @@ export class HostToolDeps implements ToolDeps {
     // Sandbox-internal paths (/...) are unreachable from the host filesystem,
     // so inspect the content inside the sandbox: compare the raw byte count
     // with the null-byte-stripped count (mirrors the Rust SandboxToolDeps).
+    //
+    // TODO(binary-detection): NUL-presence is a deliberate, documented
+    // divergence from the Rust side, which uses binaryornot-rs's trained
+    // decision-tree classifier (signatures + byte statistics). The plan is to
+    // lift THIS side up to the classifier (WASM wrapper of binaryornot-rs),
+    // not to drag Rust down to the NUL check — see the Rust workspace_deps.rs
+    // doc comment for the full rationale.
     const absolute = this.resolvePath(filePath);
     const q = shellSingleQuote(absolute);
     const [raw, stripped] = await Promise.all([
@@ -679,6 +686,11 @@ export function truncateOutput(
 
 /** Detect binary files using magic bytes and extension analysis */
 export async function isBinaryFile(filePath: string): Promise<boolean> {
+  // TODO(binary-detection): `isbinaryfile`'s NUL-presence rule is a
+  // deliberate, documented divergence from the Rust side (binaryornot-rs
+  // decision-tree classifier). Plan: lift this side UP to the classifier
+  // (WASM wrapper), not drag Rust down — see the Rust workspace_deps.rs
+  // doc comment for the full rationale.
   try {
     return await detectBinary(filePath);
   } catch {
