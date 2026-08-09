@@ -443,6 +443,103 @@ describe('AgentSession', () => {
       expect(result).toEqual({ event: 'subagent-start', data: { name: 'helper', task: 'assist' } });
     });
 
+    it('maps subagent:tool:start event with action', () => {
+      const result = AgentSession.mapEvent({
+        type: 'subagent:tool:start',
+        subtaskId: 'helper-1',
+        subagentName: 'helper',
+        action: { id: 'call-x', tool: 'read_file', arguments: { path: '/tmp/x' } },
+      } as any);
+      expect(result).toEqual({
+        event: 'subagent-tool-start',
+        data: {
+          subtaskId: 'helper-1',
+          name: 'helper',
+          action: { id: 'call-x', tool: 'read_file', arguments: { path: '/tmp/x' } },
+        },
+      });
+    });
+
+    it('maps subagent:tool:end event forwarding callId', () => {
+      const result = AgentSession.mapEvent({
+        type: 'subagent:tool:end',
+        subtaskId: 'helper-1',
+        subagentName: 'helper',
+        callId: 'call-x',
+        result: 'file contents',
+      } as any);
+      expect(result).toEqual({
+        event: 'subagent-tool-end',
+        data: {
+          subtaskId: 'helper-1',
+          name: 'helper',
+          callId: 'call-x',
+          result: 'file contents',
+        },
+      });
+    });
+
+    it('maps subagent:tools:start (plural) to array of subagent-tool-start events', () => {
+      const result = AgentSession.mapEvent({
+        type: 'subagent:tools:start',
+        subtaskId: 'helper-1',
+        subagentName: 'helper',
+        actions: [
+          { id: 'c1', tool: 'tool_a', arguments: { q: 1 } },
+          { id: 'c2', tool: 'tool_b', arguments: { q: 2 } },
+        ],
+      } as any);
+      expect(Array.isArray(result)).toBe(true);
+      const events = result as SSEEvent[];
+      expect(events).toHaveLength(2);
+      expect(events[0]).toEqual({
+        event: 'subagent-tool-start',
+        data: {
+          subtaskId: 'helper-1',
+          name: 'helper',
+          action: { id: 'c1', tool: 'tool_a', arguments: { q: 1 } },
+        },
+      });
+      expect(events[1]).toEqual({
+        event: 'subagent-tool-start',
+        data: {
+          subtaskId: 'helper-1',
+          name: 'helper',
+          action: { id: 'c2', tool: 'tool_b', arguments: { q: 2 } },
+        },
+      });
+    });
+
+    it('maps subagent:tools:end (plural) to array of subagent-tool-end events', () => {
+      const result = AgentSession.mapEvent({
+        type: 'subagent:tools:end',
+        subtaskId: 'helper-1',
+        subagentName: 'helper',
+        results: { c1: 'result-a', c2: { rows: 3 } },
+      } as any);
+      expect(Array.isArray(result)).toBe(true);
+      const events = result as SSEEvent[];
+      expect(events).toHaveLength(2);
+      expect(events[0]).toEqual({
+        event: 'subagent-tool-end',
+        data: {
+          subtaskId: 'helper-1',
+          name: 'helper',
+          callId: 'c1',
+          result: 'result-a',
+        },
+      });
+      expect(events[1]).toEqual({
+        event: 'subagent-tool-end',
+        data: {
+          subtaskId: 'helper-1',
+          name: 'helper',
+          callId: 'c2',
+          result: JSON.stringify({ rows: 3 }, null, 2),
+        },
+      });
+    });
+
     it('maps subagent:end event with DelegateResult object', () => {
       const result = AgentSession.mapEvent({
         type: 'subagent:end',

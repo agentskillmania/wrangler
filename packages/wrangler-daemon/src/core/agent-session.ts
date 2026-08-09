@@ -636,6 +636,8 @@ export class AgentSession {
         'subagent:thinking',
         'subagent:tool:start',
         'subagent:tool:end',
+        'subagent:tools:start',
+        'subagent:tools:end',
         'llm:request',
         'llm:response',
         'todo:list',
@@ -936,9 +938,45 @@ export class AgentSession {
           data: {
             subtaskId: event.subtaskId,
             name: event.subagentName,
+            callId: (event as unknown as { callId: string }).callId,
             result: event.result,
           },
         };
+
+      // Parallel tool calls inside a sub-agent: the delegate forwards
+      // tools:start/tools:end as-is, so split them into per-call frames like
+      // the top-level tools:start/tools:end cases — each subagent-tool-start
+      // creates a streaming block keyed by call id, each subagent-tool-end
+      // completes exactly its own block.
+      case 'subagent:tools:start':
+        return (
+          event as unknown as {
+            subtaskId: string;
+            subagentName: string;
+            actions: Array<{ id: string; tool: string; arguments: unknown }>;
+          }
+        ).actions.map((action) => ({
+          event: 'subagent-tool-start' as const,
+          data: {
+            subtaskId: event.subtaskId,
+            name: event.subagentName,
+            action,
+          },
+        }));
+
+      case 'subagent:tools:end':
+        return Object.entries(
+          (event as unknown as { results: Record<string, unknown> }).results
+        ).map(([callId, result]) => ({
+          event: 'subagent-tool-end' as const,
+          data: {
+            subtaskId: event.subtaskId,
+            name: event.subagentName,
+            callId,
+            result:
+              typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result),
+          },
+        }));
 
       case 'llm:request':
         return {
