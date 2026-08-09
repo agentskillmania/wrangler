@@ -114,8 +114,12 @@ export class SessionStore {
     return this._sessionDir ?? sessionId ?? '_unknown_';
   }
 
-  /** Create session with specified ID and agent name */
-  async createWithId(sessionId: string, agentName: string): Promise<string> {
+  /** Create session with specified ID and agent name.
+   *  Pass undefined for sessionId in dir-bound mode. */
+  async createWithId(
+    sessionId: string | undefined,
+    agentName: string
+  ): Promise<string | undefined> {
     const dir = this.getSessionDir(sessionId);
     await mkdir(dir, { recursive: true });
 

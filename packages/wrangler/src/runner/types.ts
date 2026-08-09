@@ -123,8 +123,13 @@ export interface ThinkingConfig {
 export interface SessionConfig {
   /** Enable session persistence (default: true) */
   enabled?: boolean;
-  /** Session storage root directory */
+  /** Session storage root directory (standard mode) */
   baseDir?: string;
+  /** Pin the session to this exact directory (dir-bound mode). When set,
+   *  state.json + meta.yaml live directly in this directory — no session ID
+   *  subdirectory is created. Used when the session directory is owned by
+   *  an external system (e.g. gmemo's per-note directory). */
+  sessionDir?: string;
 }
 
 export interface DelegationConfig {

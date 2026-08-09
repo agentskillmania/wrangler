@@ -44,8 +44,8 @@ export type SessionSource =
   | { type: 'code' };
 
 export interface SessionMeta {
-  /** Session ID (= state.id) */
-  id: string;
+  /** Session ID (= state.id). Undefined in dir-bound mode (no id concept). */
+  id?: string;
   /** Human-readable session title. Missing → frontend shows "Untitled". */
   title?: string;
   /** How the title was set. Used to decide whether Phase 2 should upgrade it. */

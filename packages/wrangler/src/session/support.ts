@@ -31,6 +31,9 @@ export function createSessionSupport(options: {
   workspacePath: string;
   /** session 存储根目录（默认 {appDir}/sessions） */
   sessionBaseDir?: string;
+  /** Pin the session to this directory (dir-bound mode). When set, overrides
+   *  sessionBaseDir — state.json + meta.yaml live directly in this dir. */
+  sessionDir?: string;
   /** 可选 LLM provider for Phase 2 title upgrade */
   llmClient?: ILLMProvider;
   /** Model to use for Phase 2 title generation */
@@ -43,8 +46,11 @@ export function createSessionSupport(options: {
   middlewares: AgentMiddleware[];
   store: SessionStore;
 } {
-  const sessionBaseDir = options.sessionBaseDir ?? join(appDir(), 'sessions');
-  const store = new SessionStore(sessionBaseDir, options.workspacePath);
+  // Dir-bound mode: session lives directly in the given directory.
+  // Standard mode: session at {baseDir}/{hash(workspacePath)}/{sessionId}/.
+  const store = options.sessionDir
+    ? SessionStore.fromDir(options.sessionDir)
+    : new SessionStore(options.sessionBaseDir ?? join(appDir(), 'sessions'), options.workspacePath);
 
   const sessionMiddleware = createSessionMiddleware(store, {
     runnerConfigSnapshot: options.runnerConfigSnapshot,

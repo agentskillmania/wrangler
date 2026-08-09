@@ -18,16 +18,21 @@ export function createSessionMiddleware(
     source?: SessionSource;
   }
 ): AgentMiddleware {
+  // Dir-bound stores don't accept a sessionId — pass undefined instead.
+  // Standard stores need it to select the session subdirectory.
+  const resolveSid = (ctx: { state: { id?: string } }) =>
+    store.isDirBound ? undefined : ctx.state.id;
+
   return {
     name: 'session',
 
     beforeRun: async (ctx) => {
-      const sessionId = ctx.state.id;
+      const sid = resolveSid(ctx);
 
-      if (!(await store.existsAsync(sessionId))) {
-        await store.createWithId(sessionId, ctx.state.config.name);
+      if (!(await store.existsAsync(sid))) {
+        await store.createWithId(sid, ctx.state.config.name);
         if (options?.runnerConfigSnapshot || options?.source) {
-          await store.updateMeta(sessionId, {
+          await store.updateMeta(sid, {
             runnerConfig: options.runnerConfigSnapshot,
             source: options.source,
           });
@@ -36,11 +41,11 @@ export function createSessionMiddleware(
     },
 
     afterRun: async (ctx) => {
-      const sessionId = ctx.state.id;
+      const sid = resolveSid(ctx);
 
-      await store.saveState(sessionId, ctx.state);
+      await store.saveState(sid, ctx.state);
 
-      await store.updateMeta(sessionId, {
+      await store.updateMeta(sid, {
         updatedAt: new Date().toISOString(),
       });
     },

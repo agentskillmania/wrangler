@@ -18,16 +18,9 @@ import {
   EnhancedRunner,
   SessionStore,
   createLLMClient,
-  readMeta,
   resolveDefaultModel,
-  writeMeta,
 } from '@agentskillmania/wrangler';
-import type {
-  SessionMeta,
-  SubAgentConfig,
-  LimitsConfig,
-  SandboxConfig,
-} from '@agentskillmania/wrangler';
+import type { SubAgentConfig, LimitsConfig, SandboxConfig } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
@@ -225,7 +218,15 @@ export class AgentSession {
         mcpConfigPaths: options.tools?.mcpConfigPaths ?? [],
         askHumanHandler,
       },
-      session: { enabled: options.session?.enabled ?? true, baseDir: options.sessionBaseDir },
+      session: {
+        enabled: options.session?.enabled ?? true,
+        baseDir: options.sessionBaseDir,
+        // Pass sessionDir so EnhancedRunner builds a dir-bound store and
+        // SessionMiddleware writes to the correct directory.
+        sessionDir: options.sessionStore?.isDirBound
+          ? options.sessionStore.getSessionDir(undefined)
+          : undefined,
+      },
       todolist: { enabled: options.todolist?.enabled ?? true },
       specPlan: { enabled: options.specPlan?.enabled ?? true },
       commands: { enabled: options.commands?.enabled ?? true },
@@ -353,37 +354,10 @@ export class AgentSession {
     return this.state;
   }
 
-  /**
-   * Save current state to disk via SessionStore.
-   */
-  async saveState(): Promise<void> {
-    if (this.sessionStore) {
-      if (this.sessionStore.isDirBound) {
-        // Directory-bound store (explicit sessionDir): sessionId is not
-        // accepted — write state + meta directly into the bound directory
-        // (mirrors the daemon's persist_session for explicit dirs).
-        const dir = this.sessionStore.getSessionDir(undefined);
-        await this.sessionStore.saveState(undefined, this.state);
-        const now = new Date().toISOString();
-        const existing = await readMeta(dir);
-        const meta: SessionMeta = {
-          id: existing?.id ?? this.sessionId,
-          title: existing?.title,
-          titleSource: existing?.titleSource,
-          workspacePath: this.workspacePath,
-          createdAt: existing?.createdAt ?? now,
-          updatedAt: now,
-          agentName: this.agentName,
-          runnerConfig: { model: this.model },
-          source: existing?.source,
-          metadata: existing?.metadata,
-        };
-        await writeMeta(dir, meta);
-      } else {
-        await this.sessionStore.saveState(this.sessionId, this.state);
-      }
-    }
-  }
+  // NOTE: saveState() was removed — persistence is now solely handled by
+  // SessionMiddleware.afterRun inside EnhancedRunner.run(). The middleware
+  // writes to the same store (dir-bound or standard) that EnhancedRunner
+  // creates from the sessionDir we pass in create/resume.
 
   /**
    * Build unified diagnostics snapshot combining runner capabilities, agent state,
@@ -708,7 +682,8 @@ export class AgentSession {
             handlers[type] as (...args: unknown[]) => void
           );
         }
-        await this.saveState().catch(() => {});
+        // Persistence is handled by SessionMiddleware.afterRun inside
+        // runner.run() — no manual saveState needed here.
         this._busy = false;
         this.sendStateSnapshot();
         this.signalDone();

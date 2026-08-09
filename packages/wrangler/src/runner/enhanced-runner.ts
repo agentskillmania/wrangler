@@ -249,6 +249,7 @@ export class EnhancedRunner {
       ? createSessionSupport({
           workspacePath,
           sessionBaseDir: options.session?.baseDir,
+          sessionDir: options.session?.sessionDir,
           llmClient,
           model: resolvedModel,
           runnerConfigSnapshot: {
@@ -594,7 +595,7 @@ export class EnhancedRunner {
         builtinFilter: rc.builtinTools as Record<string, boolean> | undefined,
       },
       sandbox: rc.sandbox !== undefined ? { enabled: rc.sandbox } : undefined,
-      session: { enabled: rc.enableSession },
+      session: { enabled: rc.enableSession, sessionDir },
       todolist: { enabled: rc.enableTodolist },
       specPlan: { enabled: rc.enableSpecPlan },
       commands: { enabled: rc.enableCommands },
