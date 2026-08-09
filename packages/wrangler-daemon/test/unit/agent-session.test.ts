@@ -295,12 +295,21 @@ describe('AgentSession', () => {
         messages: [{ role: 'user', content: 'hi' }],
         tools: ['read_file'],
         skill: null,
+        model: 'claude-sonnet-4-20250514',
+        contextWindow: 200000,
         timestamp: 0,
       } as any);
       expect(result!.event).toBe('llm-request');
-      const data = result!.data as { messages: unknown[]; tools: string[] };
+      const data = result!.data as {
+        messages: unknown[];
+        tools: string[];
+        model: string;
+        contextWindow: number;
+      };
       expect(data.messages).toHaveLength(1);
       expect(data.tools).toEqual(['read_file']);
+      expect(data.model).toBe('claude-sonnet-4-20250514');
+      expect(data.contextWindow).toBe(200000);
     });
 
     it('maps llm:response event with tokens', () => {

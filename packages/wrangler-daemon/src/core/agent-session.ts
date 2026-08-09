@@ -973,8 +973,7 @@ export class AgentSession {
             subtaskId: event.subtaskId,
             name: event.subagentName,
             callId,
-            result:
-              typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result),
+            result: typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result),
           },
         }));
 
@@ -985,6 +984,8 @@ export class AgentSession {
             messages: (event as unknown as { messages: unknown }).messages,
             tools: (event as unknown as { tools: unknown }).tools,
             skill: (event as unknown as { skill: unknown }).skill,
+            model: (event as unknown as { model: string }).model,
+            contextWindow: (event as unknown as { contextWindow: number }).contextWindow,
           },
         };
 
