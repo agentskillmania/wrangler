@@ -234,6 +234,7 @@ export class EnhancedRunner {
             web_fetch: 'webFetch',
             python: 'python',
             git: 'git',
+            list_dir: 'listDir',
           };
           const key = toggleMap[tool.name as string];
           if (!key || !(key in toolToggles)) return false;

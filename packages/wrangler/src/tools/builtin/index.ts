@@ -10,6 +10,7 @@ import { createFileWriteTool } from './file-write.js';
 import { createGitTool } from './git.js';
 import { createGlobTool } from './glob.js';
 import { createGrepTool } from './grep.js';
+import { createListDirTool } from './list-dir.js';
 import { createPythonTool } from './python.js';
 import { createShellTool } from './shell.js';
 import { createWebFetchTool } from './web-fetch.js';
@@ -54,6 +55,7 @@ export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAn
     createFileEditTool(deps),
     createGlobTool(deps),
     createGrepTool(deps),
+    createListDirTool(deps),
     createShellTool(deps, options.maxToolOutput),
     createPythonTool(deps),
     createGitTool(deps),
@@ -74,6 +76,7 @@ export { createWebSearchTool } from './web-search.js';
 export { createShellTool } from './shell.js';
 export { createPythonTool } from './python.js';
 export { createGitTool } from './git.js';
+export { createListDirTool } from './list-dir.js';
 export type { SearchProvider, SearchResult } from './web-search.js';
 export { truncateOutput, isBinaryFile } from './workspace-deps.js';
 export type { ToolDeps, ExecResult } from './workspace-deps.js';

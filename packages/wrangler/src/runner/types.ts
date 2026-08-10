@@ -55,6 +55,7 @@ export interface BuiltinToolFilter {
   webFetch?: boolean;
   python?: boolean;
   git?: boolean;
+  listDir?: boolean;
 }
 
 // ── Structured config groups ─────────────────────────────────────

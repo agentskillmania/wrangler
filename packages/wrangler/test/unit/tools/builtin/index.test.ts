@@ -18,7 +18,7 @@ afterAll(() => {
 describe('createBuiltinTools', () => {
   it('returns 11 colts Tool instances (calculator + 10 builtin)', () => {
     const tools = createBuiltinTools({ workspacePath: testWorkspace });
-    expect(tools).toHaveLength(11);
+    expect(tools).toHaveLength(12);
     for (const tool of tools) {
       expect(tool).toHaveProperty('name');
       expect(tool).toHaveProperty('description');
@@ -90,7 +90,7 @@ describe('createBuiltinTools', () => {
       workspacePath: testWorkspace,
       sandbox: mockSandbox,
     });
-    expect(tools).toHaveLength(11);
+    expect(tools).toHaveLength(12);
     const shell = tools.find((t) => t.name === 'shell')!;
     const result = await shell.execute({ command: 'echo hi' });
     expect(result).toContain('sandbox output');
@@ -114,7 +114,7 @@ describe('createBuiltinTools', () => {
       workspacePath: testWorkspace,
       toolTimeout: 30_000,
     });
-    expect(tools).toHaveLength(11);
+    expect(tools).toHaveLength(12);
     // The timeout is applied internally to HostToolDeps/SandboxToolDeps;
     // verify the shell tool still works with a quick command
     const shell = tools.find((t) => t.name === 'shell')!;
@@ -127,7 +127,7 @@ describe('createBuiltinTools', () => {
       workspacePath: testWorkspace,
       askHumanHandler: handler as never,
     });
-    expect(tools).toHaveLength(12);
+    expect(tools).toHaveLength(13);
     expect(tools.map((t) => t.name)).toContain('ask_human');
   });
 
