@@ -17,8 +17,9 @@ const execFileAsync = promisify(execFile);
 /**
  * Default tool-output truncation cap (characters) — single source of truth
  * shared by the tool-deps defaults, `createBuiltinTools`, and the enhanced
- * runner (`runner.limits.maxToolOutput ?? this`). Mirrors the Rust
- * `DEFAULT_MAX_TOOL_OUTPUT` / `defaults::MAX_TOOL_OUTPUT` value.
+ * runner (`runner.limits.maxToolOutput ?? this`). Same name + value as the
+ * Rust `DEFAULT_MAX_TOOL_OUTPUT` (defined in the mirror file
+ * `workspace_deps.rs`).
  */
 export const DEFAULT_MAX_TOOL_OUTPUT = 100_000;
 
