@@ -519,7 +519,7 @@ export class EnhancedRunner {
       thinkingEnabled: options.thinking?.enabled,
       enablePromptThinking: options.thinking?.promptLevel,
       temperature: options.llm?.temperature,
-      requestTimeout: options.llm?.requestTimeout,
+      requestTimeout: options.limits?.requestTimeout ?? options.llm?.requestTimeout,
       maxSteps: options.limits?.maxSteps,
       compressor: compressorInstance,
       messageAssembler: new MarkdownMessageAssembler(subAgentConfigs),
