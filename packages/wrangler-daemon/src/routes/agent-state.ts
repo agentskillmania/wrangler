@@ -59,6 +59,7 @@ export async function agentStateRoutes(fastify: FastifyInstance): Promise<void> 
       const ctx = persistedState?.context;
       const tokensIn = ctx?.totalTokens?.input;
       const tokensOut = ctx?.totalTokens?.output;
+      const rc = info.runnerConfig;
       writeSSE(reply, 'agent-diagnostics', {
         runner: { features: null, tools: [], skills: [] },
         agent: persistedState ?? { status: 'no-state' },
@@ -67,12 +68,14 @@ export async function agentStateRoutes(fastify: FastifyInstance): Promise<void> 
           overview: {
             title: info.title,
             agentName: info.agentName,
-            model: info.runnerConfig?.model,
+            model: rc?.model,
             stepCount: ctx?.stepCount ?? 0,
             messageCount: ctx?.messages?.length ?? 0,
             tokensIn,
             tokensOut,
             tokensTotal: tokensIn != null && tokensOut != null ? tokensIn + tokensOut : undefined,
+            estimatedContextSize: ctx?.estimatedContextSize,
+            contextWindow: rc?.contextWindow,
             status,
             createdAt: info.createdAt,
             updatedAt: info.updatedAt,
@@ -80,7 +83,14 @@ export async function agentStateRoutes(fastify: FastifyInstance): Promise<void> 
           info: {
             sessionId,
             agentName: info.agentName,
+            model: rc?.model ?? '',
+            tokensIn,
+            tokensOut,
+            tokensTotal: tokensIn != null && tokensOut != null ? tokensIn + tokensOut : undefined,
             workspacePath: info.workspacePath,
+            skillDirs: rc?.skillDirs ?? [],
+            mcpConfigPaths: rc?.mcpConfigPaths ?? [],
+            contextWindow: rc?.contextWindow,
           },
         },
       });

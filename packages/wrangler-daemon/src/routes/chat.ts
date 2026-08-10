@@ -1,4 +1,9 @@
-import { SessionNotFoundError, SessionStore, crewToRunnerOptions, readMeta } from '@agentskillmania/wrangler';
+import {
+  SessionNotFoundError,
+  SessionStore,
+  crewToRunnerOptions,
+  readMeta,
+} from '@agentskillmania/wrangler';
 import type { SessionMeta } from '@agentskillmania/wrangler';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -472,11 +477,27 @@ async function streamAgentSession(
   reply.raw.on('close', onDisconnect);
 
   if (opts.emitSessionStart) {
-    writeSSE(reply, 'session-start', { sessionId: opts.sessionId });
-    agentSession.emitCockpitEvent({
-      event: 'session-start',
-      data: { sessionId: opts.sessionId },
-    });
+    const config = agentSession.runner.getConfig();
+    const startData = {
+      sessionId: opts.sessionId,
+      model: config.model,
+      contextWindow: config.contextWindow,
+      thinkingEnabled: config.thinkingEnabled,
+      enablePromptThinking: config.enablePromptThinking,
+      sandbox: config.sandbox,
+      compression: { enabled: config.compressorEnabled },
+      features: {
+        session: config.enableSession,
+        todolist: config.enableTodolist,
+        specPlan: config.enableSpecPlan,
+        commands: config.enableCommands,
+        a2ui: config.a2ui?.enabled ?? false,
+      },
+      skillDirs: config.skillDirs,
+      mcpConfigPaths: config.mcpConfigPaths,
+    };
+    writeSSE(reply, 'session-start', startData);
+    agentSession.emitCockpitEvent({ event: 'session-start', data: startData });
   }
 
   try {

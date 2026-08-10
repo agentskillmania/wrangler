@@ -48,8 +48,10 @@ export interface SessionInfo {
   agentName: string;
   /** Agent definition file path. */
   agentConfigPath?: string;
-  /** Resolved model. */
+  /** Resolved model (per-request override if available, else session default). */
   model: string;
+  /** Context window (tokens) of the model. */
+  contextWindow?: number;
   /** Cumulative input tokens (exact number). */
   tokensIn?: number;
   /** Cumulative output tokens (exact number). */

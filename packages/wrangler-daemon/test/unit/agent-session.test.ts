@@ -714,7 +714,9 @@ describe('AgentSession', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([{ event: 'done', data: {} }]);
+      expect(events).toHaveLength(1);
+      expect(events[0].event).toBe('done');
+      expect(events[0].data).toHaveProperty('timestamp');
     });
 
     it('accepts options parameter without thinkingEnabled', async () => {
@@ -723,7 +725,9 @@ describe('AgentSession', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([{ event: 'done', data: {} }]);
+      expect(events).toHaveLength(1);
+      expect(events[0].event).toBe('done');
+      expect(events[0].data).toHaveProperty('timestamp');
     });
 
     it('handles undefined options parameter', async () => {
@@ -732,7 +736,9 @@ describe('AgentSession', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([{ event: 'done', data: {} }]);
+      expect(events).toHaveLength(1);
+      expect(events[0].event).toBe('done');
+      expect(events[0].data).toHaveProperty('timestamp');
     });
 
     it('passes thinkingEnabled option to runner when provided', async () => {

@@ -155,7 +155,13 @@ export class AgentSession {
   /** Max input length in characters, enforced in handleMessage. */
   private readonly maxInputLength?: number;
   /** Latest LLM request captured from llm:request stream events */
-  private lastLLMRequest: { messages: unknown[]; tools?: unknown[]; skill?: string } | null = null;
+  private lastLLMRequest: {
+    messages: unknown[];
+    tools?: unknown[];
+    skill?: string;
+    model?: string;
+    contextWindow?: number;
+  } | null = null;
   /** Full system prompt extracted from first message of llm-request */
   private lastSystemPrompt: string | null = null;
 
@@ -411,7 +417,7 @@ export class AgentSession {
     return {
       title: meta?.title,
       agentName: this.state?.config?.name ?? '',
-      model: this.model,
+      model: this.lastLLMRequest?.model ?? this.model,
       stepCount: ctx?.stepCount ?? 0,
       messageCount: ctx?.messages?.length ?? 0,
       tokensIn: ctx?.totalTokens?.input,
@@ -421,7 +427,7 @@ export class AgentSession {
           ? ctx.totalTokens.input + ctx.totalTokens.output
           : undefined,
       estimatedContextSize: ctx?.estimatedContextSize,
-      contextWindow: runnerConfig.contextWindow,
+      contextWindow: this.lastLLMRequest?.contextWindow ?? runnerConfig.contextWindow,
       status: (this.sessionManager?.getStatus(this.sessionId) ?? 'idle') as SessionStatus,
       createdAt: meta?.createdAt ?? new Date().toISOString(),
       updatedAt: meta?.updatedAt ?? new Date().toISOString(),
@@ -620,6 +626,7 @@ export class AgentSession {
         'waiting-human',
         'complete',
         'error',
+        'abort',
       ];
 
       const handlers: Record<string, (data: unknown) => void> = {};
@@ -629,6 +636,11 @@ export class AgentSession {
           const mapped = AgentSession.mapEvent(eventObj as RunStreamEvent);
           const events = Array.isArray(mapped) ? mapped : [mapped];
           for (const sse of events) {
+            // Inject daemon-side timestamp for every event — consumers can
+            // use it for ordering and latency measurement.
+            if (typeof sse.data === 'object' && sse.data !== null) {
+              (sse.data as Record<string, unknown>).timestamp = Date.now();
+            }
             this.pushEvent(sse);
             this._broadcastToCockpit(sse);
             this.eventHistory.push(sse);
@@ -643,6 +655,8 @@ export class AgentSession {
                   messages: d.messages,
                   tools: Array.isArray(d.tools) ? d.tools : undefined,
                   skill: typeof d.skill === 'string' ? d.skill : undefined,
+                  model: typeof d.model === 'string' ? d.model : undefined,
+                  contextWindow: typeof d.contextWindow === 'number' ? d.contextWindow : undefined,
                 };
                 const firstMsg = d.messages[0] as Record<string, unknown> | undefined;
                 if (firstMsg && typeof firstMsg.content === 'string') {
@@ -774,15 +788,19 @@ export class AgentSession {
       case 'step:start':
         return { event: 'step-start', data: { step: event.step } };
 
-      case 'step:end':
+      case 'step:end': {
+        const result = (event as unknown as { result: Record<string, unknown> }).result;
         return {
           event: 'step-end',
           data: {
             step: event.step,
-            tokens: (event as unknown as { result: { tokens?: unknown } }).result?.tokens,
-            duration: (event as unknown as { result: { duration?: unknown } }).result?.duration,
+            type: result?.type,
+            tokens: result?.tokens,
+            duration: result?.duration,
+            result,
           },
         };
+      }
 
       case 'phase-change':
         return { event: 'phase-change', data: { from: event.from, to: event.to } };
@@ -1020,11 +1038,27 @@ export class AgentSession {
         };
       }
 
-      case 'error':
+      case 'error': {
+        const errEvent = event as unknown as {
+          error: { message: string };
+          context?: { toolName?: string; step?: number };
+        };
         return {
           event: 'error',
           data: {
-            message: (event as unknown as { error: { message: string } }).error.message,
+            message: errEvent.error.message,
+            toolName: errEvent.context?.toolName,
+            step: errEvent.context?.step,
+          },
+        };
+      }
+
+      case 'abort':
+        return {
+          event: 'abort',
+          data: {
+            step: event.step,
+            totalSteps: event.totalSteps,
           },
         };
 
