@@ -246,44 +246,6 @@ export class EnhancedRunner {
       (llmQuickInit?.providers ? resolveDefaultModel(llmQuickInit.providers) : 'glm-5.1');
 
     const sessionEnabled = options.session?.enabled !== false;
-    const sessionSupport = sessionEnabled
-      ? createSessionSupport({
-          workspacePath,
-          sessionBaseDir: options.session?.baseDir,
-          sessionDir: options.session?.sessionDir,
-          llmClient,
-          model: resolvedModel,
-          runnerConfigSnapshot: {
-            model: resolvedModel,
-            thinking: options.thinking,
-            limits: options.limits,
-            // compression: if the caller explicitly passed false, it's off;
-            // otherwise it's on (default). A custom compressor instance is
-            // also "on". We store the boolean here; the actual instance is
-            // rebuilt on resume from the same defaults.
-            compression: options.compression === false ? { enabled: false } : { enabled: true },
-            search: options.search
-              ? {
-                  provider:
-                    typeof options.search.provider === 'string'
-                      ? options.search.provider
-                      : undefined,
-                }
-              : undefined,
-            skillDirs: options.skills?.dirs,
-            mcpConfigPaths,
-            builtinTools: options.tools?.builtinFilter as Record<string, boolean> | undefined,
-            sandbox: sandboxEnabled,
-            enableSession: options.session?.enabled,
-            enableTodolist: options.todolist?.enabled,
-            enableSpecPlan: options.specPlan?.enabled,
-            enableCommands: options.commands?.enabled,
-            a2ui: options.a2ui as { enabled: boolean } | undefined,
-            crewId: options.crewId,
-          },
-          source: options.source,
-        })
-      : { middlewares: [{ name: 'session' }] };
 
     const todolistEnabled = options.todolist?.enabled !== false;
     const todolistSupport = todolistEnabled
@@ -474,6 +436,44 @@ export class EnhancedRunner {
 
     // Reuse pre-resolved model metadata for diagnostics
     const contextWindow = modelMeta?.contextWindow;
+
+    // Now that modelMeta + compressorInstance are resolved, construct the
+    // session support with a COMPLETE runnerConfigSnapshot — no fields lost.
+    const sessionSupport = sessionEnabled
+      ? createSessionSupport({
+          workspacePath,
+          sessionBaseDir: options.session?.baseDir,
+          sessionDir: options.session?.sessionDir,
+          llmClient,
+          model: resolvedModel,
+          runnerConfigSnapshot: {
+            model: resolvedModel,
+            contextWindow,
+            thinking: options.thinking,
+            limits: options.limits,
+            compression: { enabled: !!compressorInstance },
+            search: options.search
+              ? {
+                  provider:
+                    typeof options.search.provider === 'string'
+                      ? options.search.provider
+                      : undefined,
+                }
+              : undefined,
+            skillDirs: options.skills?.dirs,
+            mcpConfigPaths,
+            builtinTools: options.tools?.builtinFilter as Record<string, boolean> | undefined,
+            sandbox: sandboxEnabled,
+            enableSession: options.session?.enabled,
+            enableTodolist: options.todolist?.enabled,
+            enableSpecPlan: options.specPlan?.enabled,
+            enableCommands: options.commands?.enabled,
+            a2ui: options.a2ui as { enabled: boolean } | undefined,
+            crewId: options.crewId,
+          },
+          source: options.source,
+        })
+      : { middlewares: [{ name: 'session' }] };
 
     // Build skill metadata from the resolved skill provider (if any).
     // The AgentRunner's FilesystemSkillProvider is constructed inside AgentRunner
