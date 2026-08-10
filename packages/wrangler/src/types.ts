@@ -15,6 +15,25 @@ export type TitleSource = 'auto' | 'generated' | 'manual';
 export interface RunnerConfigSnapshot {
   /** Model used for this session */
   model: string;
+  /** Context window (tokens) of the model — from getModelMeta at create time */
+  contextWindow?: number;
+  /** Thinking/reasoning mode */
+  thinking?: {
+    enabled?: boolean;
+    promptLevel?: boolean;
+  };
+  /** Execution limits */
+  limits?: {
+    maxSteps?: number;
+    requestTimeout?: number;
+    maxInputLength?: number;
+    maxToolOutput?: number;
+    toolTimeout?: number;
+  };
+  /** Context compression */
+  compression?: { enabled: boolean };
+  /** Search provider */
+  search?: { provider?: string };
   /** Skill directories */
   skillDirs?: string[];
   /** MCP configuration file paths */

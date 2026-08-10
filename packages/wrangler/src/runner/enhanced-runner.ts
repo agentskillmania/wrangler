@@ -35,6 +35,7 @@ import type {
   SandboxConfig,
   BuiltinToolFilter,
   LLMConfig,
+  SearchConfig,
 } from './types.js';
 import { createCommandMiddleware } from '../command/command-middleware.js';
 import { createClearHandler } from '../command/handlers/clear.js';
@@ -254,6 +255,21 @@ export class EnhancedRunner {
           model: resolvedModel,
           runnerConfigSnapshot: {
             model: resolvedModel,
+            thinking: options.thinking,
+            limits: options.limits,
+            // compression: if the caller explicitly passed false, it's off;
+            // otherwise it's on (default). A custom compressor instance is
+            // also "on". We store the boolean here; the actual instance is
+            // rebuilt on resume from the same defaults.
+            compression: options.compression === false ? { enabled: false } : { enabled: true },
+            search: options.search
+              ? {
+                  provider:
+                    typeof options.search.provider === 'string'
+                      ? options.search.provider
+                      : undefined,
+                }
+              : undefined,
             skillDirs: options.skills?.dirs,
             mcpConfigPaths,
             builtinTools: options.tools?.builtinFilter as Record<string, boolean> | undefined,
@@ -587,7 +603,14 @@ export class EnhancedRunner {
         client: resolveLLMClient(options),
         model: options.model ?? rc.model,
       },
-      thinking: { enabled: options.thinkingEnabled },
+      // Restore thinking config from snapshot unless caller overrides.
+      thinking: {
+        enabled: options.thinkingEnabled ?? rc.thinking?.enabled,
+        promptLevel: rc.thinking?.promptLevel,
+      },
+      limits: rc.limits,
+      compression: rc.compression?.enabled === false ? false : undefined,
+      search: rc.search as SearchConfig | undefined,
       workspacePath: meta.workspacePath,
       skills: { dirs: rc.skillDirs },
       tools: {
@@ -600,10 +623,6 @@ export class EnhancedRunner {
       specPlan: { enabled: rc.enableSpecPlan },
       commands: { enabled: rc.enableCommands },
       a2ui: rc.a2ui as { enabled: boolean } | undefined,
-      // Session base dir is NOT reverse-derived from the session dir: the
-      // library default ({appDir}/sessions) matches the standard
-      // {base}/{hash}/{id} shape, so resume lands back in the same place.
-      // Explicit sessionDir resume persists via a directory-bound store.
       source: meta.source,
       delegation: { subAgents: options.subAgents },
     });
