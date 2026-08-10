@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SandboxToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import {
+  DEFAULT_TOOL_OUTPUT_LIMIT,
+  SandboxToolDeps,
+} from '../../../../src/tools/builtin/workspace-deps.js';
 import type { Sandbox } from '@agentskillmania/sandbox';
 
 function createMockSandbox() {
@@ -39,7 +42,7 @@ describe('SandboxToolDeps (mock sandbox)', () => {
       // SandboxToolDeps.exec ignores timeout (sandbox has its own), so we just
       // verify construction with default succeeds. The timeout is stored
       // internally and used by host-side execArray callers that support it.
-      expect(d.maxOutputSize).toBe(1024 * 1024);
+      expect(d.maxOutputSize).toBe(DEFAULT_TOOL_OUTPUT_LIMIT);
       // exec delegates to sandbox.run — verify it still works
       (sandbox.run as ReturnType<typeof vi.fn>).mockResolvedValue({
         stdout: 'ok',

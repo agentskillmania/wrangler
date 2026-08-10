@@ -57,7 +57,11 @@ import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js
 import { createBuiltinTools } from '../tools/builtin/index.js';
 import type { SearchProvider } from '../tools/builtin/index.js';
 import { SogouScrapeSearchProvider } from '../tools/builtin/sogou-scrape-search.js';
-import { HostToolDeps, SandboxToolDeps } from '../tools/builtin/workspace-deps.js';
+import {
+  DEFAULT_TOOL_OUTPUT_LIMIT,
+  HostToolDeps,
+  SandboxToolDeps,
+} from '../tools/builtin/workspace-deps.js';
 import type { ToolDeps } from '../tools/builtin/workspace-deps.js';
 import { loadMCPTools } from '../tools/mcp/index.js';
 import { createReadResourceTool } from '../tools/skill/read-resource.js';
@@ -283,7 +287,7 @@ export class EnhancedRunner {
     const skillTools: Tool<ZodTypeAny>[] = [];
     if (resolvedSkillDirsForTools.length > 0) {
       const skillProviderForTools = new FilesystemSkillProvider(resolvedSkillDirsForTools);
-      const maxOutputSize = options.limits?.maxToolOutput ?? 1024 * 1024;
+      const maxOutputSize = options.limits?.maxToolOutput ?? DEFAULT_TOOL_OUTPUT_LIMIT;
       const toolTimeout = options.limits?.toolTimeout ?? 600_000;
       const depsForSkills: ToolDeps = sandboxInstance
         ? new SandboxToolDeps(sandboxInstance, maxOutputSize, toolTimeout)
