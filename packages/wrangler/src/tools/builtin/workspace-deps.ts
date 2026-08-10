@@ -18,9 +18,9 @@ const execFileAsync = promisify(execFile);
  * Default tool-output truncation cap (characters) — single source of truth
  * shared by the tool-deps defaults, `createBuiltinTools`, and the enhanced
  * runner (`runner.limits.maxToolOutput ?? this`). Mirrors the Rust
- * `DEFAULT_MAX_OUTPUT` / `defaults::MAX_TOOL_OUTPUT` value.
+ * `DEFAULT_MAX_TOOL_OUTPUT` / `defaults::MAX_TOOL_OUTPUT` value.
  */
-export const DEFAULT_TOOL_OUTPUT_LIMIT = 100_000;
+export const DEFAULT_MAX_TOOL_OUTPUT = 100_000;
 
 /**
  * Wrap a string in POSIX single-quotes, escaping internal single-quotes via
@@ -219,7 +219,7 @@ export class HostToolDeps implements ToolDeps {
 
   constructor(
     workspaceRoot: string,
-    maxOutputSize: number = DEFAULT_TOOL_OUTPUT_LIMIT,
+    maxOutputSize: number = DEFAULT_MAX_TOOL_OUTPUT,
     shell?: ShellInfo,
     defaultTimeout: number = 600_000
   ) {
@@ -431,7 +431,7 @@ export class SandboxToolDeps implements ToolDeps {
 
   constructor(
     sandbox: Sandbox,
-    maxOutputSize: number = DEFAULT_TOOL_OUTPUT_LIMIT,
+    maxOutputSize: number = DEFAULT_MAX_TOOL_OUTPUT,
     defaultTimeout: number = 600_000
   ) {
     this.sandbox = sandbox;
@@ -672,7 +672,7 @@ export function truncateOutput(
   output: string,
   maxSize?: number
 ): { content: string; truncated: boolean } {
-  const limit = maxSize ?? DEFAULT_TOOL_OUTPUT_LIMIT;
+  const limit = maxSize ?? DEFAULT_MAX_TOOL_OUTPUT;
   const marker = '\n...[truncated]';
   const byteLen = Buffer.byteLength(output, 'utf8');
   if (byteLen <= limit) return { content: output, truncated: false };

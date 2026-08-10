@@ -15,7 +15,7 @@ import { createShellTool } from './shell.js';
 import { createWebFetchTool } from './web-fetch.js';
 import type { SearchProvider } from './web-search.js';
 import { createWebSearchTool } from './web-search.js';
-import { HostToolDeps, SandboxToolDeps, DEFAULT_TOOL_OUTPUT_LIMIT } from './workspace-deps.js';
+import { HostToolDeps, SandboxToolDeps, DEFAULT_MAX_TOOL_OUTPUT } from './workspace-deps.js';
 import type { ToolDeps } from './workspace-deps.js';
 
 export interface BuiltinToolsOptions {
@@ -34,7 +34,7 @@ export interface BuiltinToolsOptions {
 }
 
 export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAny>[] {
-  const maxOutputSize = options.maxOutputSize ?? DEFAULT_TOOL_OUTPUT_LIMIT;
+  const maxOutputSize = options.maxOutputSize ?? DEFAULT_MAX_TOOL_OUTPUT;
   const toolTimeout = options.toolTimeout ?? 600_000;
   const deps: ToolDeps = options.sandbox
     ? new SandboxToolDeps(options.sandbox, maxOutputSize, toolTimeout)
