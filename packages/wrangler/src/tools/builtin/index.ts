@@ -3,7 +3,7 @@ import { calculatorTool, createAskHumanTool } from '@agentskillmania/colts';
 import type { Sandbox } from '@agentskillmania/sandbox';
 import type { ZodTypeAny } from 'zod';
 
-import { BingScrapeSearchProvider } from './bing-scrape-search.js';
+import { SogouScrapeSearchProvider } from './sogou-scrape-search.js';
 import { createFileEditTool } from './file-edit.js';
 import { createFileReadTool } from './file-read.js';
 import { createFileWriteTool } from './file-write.js';
@@ -41,7 +41,8 @@ export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAn
     ? new SandboxToolDeps(options.sandbox, maxOutputSize, toolTimeout)
     : new HostToolDeps(options.workspacePath, maxOutputSize, undefined, toolTimeout);
 
-  const searchProvider = options.searchProvider ?? new BingScrapeSearchProvider();
+  // Default provider matches the enhanced runner + Rust (sogou).
+  const searchProvider = options.searchProvider ?? new SogouScrapeSearchProvider();
 
   // widenTool bridges specific Zod schemas to ZodTypeAny for uniform storage
   const widen = <T extends ZodTypeAny>(tool: Tool<T>): Tool<ZodTypeAny> =>
