@@ -19,7 +19,7 @@ export function createLLMClient(providers: LLMProviderEntry[]): LLMClient {
   const client = new LLMClient();
 
   for (const provider of providers) {
-    const providerConcurrency = provider.maxConcurrency ?? 10;
+    const providerConcurrency = provider.maxConcurrency ?? 5;
 
     client.registerProvider({
       name: provider.name,
