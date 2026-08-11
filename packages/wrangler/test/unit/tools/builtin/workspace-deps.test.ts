@@ -11,6 +11,7 @@ import {
   detectShell,
 } from '../../../../src/tools/builtin/workspace-deps.js';
 import type { ShellInfo } from '../../../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../../../src/host-env/index.js';
 
 describe('workspace-deps', () => {
   let workspace: string;
@@ -139,7 +140,7 @@ describe('HostToolDeps', () => {
   beforeEach(() => {
     tempDir = join(tmpdir(), `host-deps-test-${Date.now()}`);
     mkdirSync(tempDir, { recursive: true });
-    deps = new HostToolDeps(tempDir);
+    deps = new HostToolDeps(new NodeHostEnv(), tempDir);
   });
 
   afterEach(async () => {
@@ -319,7 +320,7 @@ describe('HostToolDeps', () => {
 
     it('should accept explicit shell override', () => {
       const customShell: ShellInfo = { path: '/bin/custom', name: 'custom' };
-      const customDeps = new HostToolDeps(tempDir, 1024, customShell);
+      const customDeps = new HostToolDeps(new NodeHostEnv(), tempDir, 1024, customShell);
       expect(customDeps.shell).toEqual(customShell);
     });
 
@@ -334,7 +335,7 @@ describe('HostToolDeps', () => {
     it('defaults to 600000ms when not specified', () => {
       // The constructor default is 600000 (10 min). We verify the timeout is
       // applied by passing a short command — exec should succeed quickly.
-      const d = new HostToolDeps(tempDir);
+      const d = new HostToolDeps(new NodeHostEnv(), tempDir);
       // No direct getter; verify via a fast exec call
       return expect(d.exec('echo ok')).resolves.toMatchObject({ exitCode: 0 });
     });
@@ -342,7 +343,7 @@ describe('HostToolDeps', () => {
     it('accepts custom defaultTimeout', async () => {
       // Use a very short timeout (50ms) and a command that sleeps longer.
       // The exec should time out and return a non-zero exit code.
-      const d = new HostToolDeps(tempDir, 1024 * 1024, undefined, 50);
+      const d = new HostToolDeps(new NodeHostEnv(), tempDir, 1024 * 1024, undefined, 50);
       const result = await d.exec('sleep 2');
       // Node exec timeout kills the process → exitCode is non-zero (122 or 1)
       expect(result.exitCode).not.toBe(0);
@@ -350,7 +351,7 @@ describe('HostToolDeps', () => {
 
     it('per-call timeout option overrides defaultTimeout', async () => {
       // defaultTimeout is 60s but we pass a 50ms per-call timeout
-      const d = new HostToolDeps(tempDir);
+      const d = new HostToolDeps(new NodeHostEnv(), tempDir);
       const result = await d.exec('sleep 2', { timeout: 50 });
       expect(result.exitCode).not.toBe(0);
     });

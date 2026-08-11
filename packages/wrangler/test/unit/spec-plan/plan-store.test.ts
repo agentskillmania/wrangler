@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PlanStore } from '../../../src/spec-plan/plan-store.js';
 import type { PlanDocument } from '../../../src/spec-plan/types.js';
+import { NodeHostEnv } from '../../../src/host-env/node-host-env.js';
 
 describe('PlanStore', () => {
   let testDir: string;
@@ -27,7 +28,7 @@ describe('PlanStore', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), `plan-store-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
-    store = new PlanStore(testDir);
+    store = new PlanStore(testDir, new NodeHostEnv());
   });
 
   afterEach(async () => {
@@ -100,7 +101,7 @@ describe('PlanStore', () => {
     it('handles non-existent directory gracefully', async () => {
       const tempDir = join(tmpdir(), `empty-plan-${Date.now()}`);
       try {
-        const emptyStore = new PlanStore(tempDir);
+        const emptyStore = new PlanStore(tempDir, new NodeHostEnv());
         const list = await emptyStore.list();
         expect(list).toEqual([]);
       } finally {
@@ -138,7 +139,7 @@ describe('PlanStore', () => {
 
     it('returns null when directory does not exist', async () => {
       const tempDir = join(tmpdir(), `nonexistent-plan-${Date.now()}`);
-      const emptyStore = new PlanStore(tempDir);
+      const emptyStore = new PlanStore(tempDir, new NodeHostEnv());
       const doc = await emptyStore.get('anything', 1, 1);
       expect(doc).toBeNull();
     });
@@ -173,7 +174,7 @@ describe('PlanStore', () => {
 
     it('returns null when directory does not exist', async () => {
       const tempDir = join(tmpdir(), `nonexistent-latest-plan-${Date.now()}`);
-      const emptyStore = new PlanStore(tempDir);
+      const emptyStore = new PlanStore(tempDir, new NodeHostEnv());
       const doc = await emptyStore.getLatestForSpec('anything');
       expect(doc).toBeNull();
     });

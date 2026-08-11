@@ -22,6 +22,7 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 
 import { detectShell, HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../../../src/host-env/index.js';
 import { execSync } from 'node:child_process';
 import { statSync } from 'node:fs';
 
@@ -214,7 +215,7 @@ describe('shell detection (windows paths)', () => {
     const tempDir = join(tmpdir(), `shell-win-test-${Date.now()}`);
     mkdirSync(tempDir, { recursive: true });
     const customShell = { path: 'C:\\pwsh.exe', name: 'pwsh' };
-    const deps = new HostToolDeps(tempDir, 1024, customShell);
+    const deps = new HostToolDeps(new NodeHostEnv(), tempDir, 1024, customShell);
     expect(deps.shell).toEqual(customShell);
   });
 });

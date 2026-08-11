@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { SpecStore } from '../../../../src/spec-plan/spec-store.js';
 import { createUpdateSpecStatusTool } from '../../../../src/tools/spec-plan/update-spec-status.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 import { z } from 'zod';
 
 describe('update_spec_status tool', () => {
@@ -13,7 +14,7 @@ describe('update_spec_status tool', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), `update-spec-status-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
-    store = new SpecStore(testDir);
+    store = new SpecStore(testDir, new NodeHostEnv());
   });
 
   afterEach(async () => {

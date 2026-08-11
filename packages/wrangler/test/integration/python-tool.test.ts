@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
 import { createPythonTool } from '../../src/tools/builtin/python.js';
 import { HostToolDeps } from '../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../src/host-env/index.js';
 
 const PYTHON_AVAILABLE = (() => {
   try {
@@ -34,7 +35,7 @@ describe.skipIf(!PYTHON_AVAILABLE)('Integration: python tool (real python3)', ()
 
   beforeEach(() => {
     workspace = mkdtempSync(join(tmpdir(), 'wrangler-int-python-'));
-    deps = new HostToolDeps(workspace);
+    deps = new HostToolDeps(new NodeHostEnv(), workspace);
   });
 
   afterEach(() => {

@@ -4,6 +4,7 @@ import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { SessionStore } from '../../../src/session/session-store.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+import { NodeHostEnv } from '../../../src/host-env/node-host-env.js';
 
 describe('SessionStore', () => {
   let store: SessionStore;
@@ -13,7 +14,7 @@ describe('SessionStore', () => {
   beforeEach(async () => {
     testBaseDir = join(tmpdir(), `wrangler-test-store-${Date.now()}`);
     await mkdir(testBaseDir, { recursive: true });
-    store = new SessionStore(testBaseDir, workspacePath);
+    store = new SessionStore(testBaseDir, workspacePath, new NodeHostEnv());
   });
 
   afterEach(async () => {
@@ -21,13 +22,13 @@ describe('SessionStore', () => {
   });
 
   describe('exists / existsAsync', () => {
-    it('should return false for non-existent session', () => {
-      expect(store.exists('nonexistent-id')).toBe(false);
+    it('should return false for non-existent session', async () => {
+      expect(await store.exists('nonexistent-id')).toBe(false);
     });
 
     it('should return true after createWithId', async () => {
       const sessionId = await store.createWithId('1745800000-test', 'test-agent');
-      expect(store.exists(sessionId)).toBe(true);
+      expect(await store.exists(sessionId)).toBe(true);
     });
   });
 
@@ -162,7 +163,7 @@ describe('SessionStore', () => {
     it('should not list sessions from different workspace', async () => {
       await store.createWithId('1745800001-test1', 'test-agent');
 
-      const otherStore = new SessionStore(testBaseDir, '/other/workspace');
+      const otherStore = new SessionStore(testBaseDir, '/other/workspace', new NodeHostEnv());
       const sessions = await otherStore.listSessions();
       expect(sessions).toHaveLength(0);
     });
@@ -198,8 +199,8 @@ describe('SessionStore', () => {
       // Construct a relative path that resolves back to the same absolute path
       const relPath = relative(process.cwd(), absPath);
 
-      const absStore = new SessionStore(testBaseDir, absPath);
-      const relStore = new SessionStore(testBaseDir, relPath);
+      const absStore = new SessionStore(testBaseDir, absPath, new NodeHostEnv());
+      const relStore = new SessionStore(testBaseDir, relPath, new NodeHostEnv());
 
       const sessionId = '1745800000-norm';
       await absStore.createWithId(sessionId, 'GLM-4.7', 'test-agent');
@@ -214,10 +215,10 @@ describe('SessionStore', () => {
     it('should remove session directory', async () => {
       const sessionId = '1745800000-test';
       await store.createWithId(sessionId, 'test-agent');
-      expect(store.exists(sessionId)).toBe(true);
+      expect(await store.exists(sessionId)).toBe(true);
 
       await store.deleteSession(sessionId);
-      expect(store.exists(sessionId)).toBe(false);
+      expect(await store.exists(sessionId)).toBe(false);
     });
   });
 
@@ -269,7 +270,7 @@ describe('SessionStore', () => {
       await store.createWithId(sessionId, 'test-agent');
       const dir = store.getSessionDir(sessionId);
 
-      const boundStore = SessionStore.fromDir(dir);
+      const boundStore = SessionStore.fromDir(dir, new NodeHostEnv());
       const meta = await boundStore.getMeta();
       expect(meta).not.toBeNull();
       expect(meta!.id).toBe(sessionId);
@@ -283,7 +284,7 @@ describe('SessionStore', () => {
       await store.saveState(sessionId, agentState);
       const dir = store.getSessionDir(sessionId);
 
-      const boundStore = SessionStore.fromDir(dir);
+      const boundStore = SessionStore.fromDir(dir, new NodeHostEnv());
       const loaded = await boundStore.loadState();
       expect(loaded).not.toBeNull();
       expect(loaded!.id).toBe(agentState.id);
@@ -294,7 +295,7 @@ describe('SessionStore', () => {
       await store.createWithId(sessionId, 'test-agent');
       const dir = store.getSessionDir(sessionId);
 
-      const boundStore = SessionStore.fromDir(dir);
+      const boundStore = SessionStore.fromDir(dir, new NodeHostEnv());
       const newState = createAgentState({ name: 'updated-agent', tools: [] });
       await boundStore.saveState(undefined, newState);
 
@@ -308,7 +309,7 @@ describe('SessionStore', () => {
       await store.createWithId(sessionId, 'test-agent');
       const dir = store.getSessionDir(sessionId);
 
-      const boundStore = SessionStore.fromDir(dir);
+      const boundStore = SessionStore.fromDir(dir, new NodeHostEnv());
       await expect(boundStore.getMeta(sessionId)).rejects.toThrow(
         'Directory-bound SessionStore does not accept sessionId'
       );

@@ -1,6 +1,3 @@
-import { createRequire } from 'node:module';
-import path from 'node:path';
-
 import {
   AgentRunner,
   FilesystemSkillProvider,
@@ -17,7 +14,6 @@ import type {
   CompressionConfig,
   ILLMProvider,
   IToolRegistry,
-  LLMQuickInit,
 } from '@agentskillmania/colts';
 import type { Tool } from '@agentskillmania/colts';
 import { Sandbox } from '@agentskillmania/sandbox';
@@ -32,7 +28,6 @@ import type {
   ToolMetadata,
   SkillMetadata,
   ResumeOptions,
-  SandboxConfig,
   BuiltinToolFilter,
   LLMConfig,
   SearchConfig,
@@ -46,8 +41,9 @@ import { CommandRegistry } from '../command/registry.js';
 import { createLLMClient, resolveDefaultModel } from '../llm/client.js';
 import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
-import { appDir } from '../session/support.js';
 import { createSessionSupport } from '../session/support.js';
+import { NodeHostEnv } from '../host-env/node-host-env.js';
+import type { HostEnv } from '../host-env/index.js';
 import { PlanStore } from '../spec-plan/plan-store.js';
 import { SpecStore } from '../spec-plan/spec-store.js';
 import { createDelegateTool } from '../subagent/delegate-tool.js';
@@ -68,8 +64,6 @@ import { createReadResourceTool } from '../tools/skill/read-resource.js';
 import { createRunScriptTool } from '../tools/skill/run-script.js';
 import { createSpecPlanTools } from '../tools/spec-plan/index.js';
 
-const nodeRequire = typeof require === 'function' ? require : createRequire(import.meta.url);
-
 function resolveSearchProvider(provider?: SearchProvider | 'bing' | 'sogou'): SearchProvider {
   if (!provider || provider === 'sogou') return new SogouScrapeSearchProvider();
   if (provider === 'bing') return new BingScrapeSearchProvider();
@@ -78,17 +72,13 @@ function resolveSearchProvider(provider?: SearchProvider | 'bing' | 'sogou'): Se
 
 /**
  * Build the base skill directory list: user-provided skill dirs plus the
- * built-in wrangler spec-plan skills (resolved from the installed package).
+ * built-in wrangler spec-plan skills (resolved via runtime.resources).
  * Returns a fresh array the caller may extend.
  */
-function collectSkillDirs(options: EnhancedRunnerOptions): string[] {
+function collectSkillDirs(options: EnhancedRunnerOptions, runtime: HostEnv): string[] {
   const dirs = [...(options.skills?.dirs ?? [])];
-  try {
-    const wranglerRoot = nodeRequire.resolve('@agentskillmania/wrangler/package.json');
-    dirs.push(path.join(path.dirname(wranglerRoot), 'dist', 'spec-plan', 'skills'));
-  } catch {
-    /* package resolution failed — skip built-in skills */
-  }
+  const builtinDirs = runtime.resources.builtinSkillDirs();
+  dirs.push(...builtinDirs);
   return dirs;
 }
 
@@ -186,7 +176,12 @@ export class EnhancedRunner {
    * @returns Configured EnhancedRunner instance
    */
   static async create(options: EnhancedRunnerOptions): Promise<EnhancedRunner> {
-    const workspacePath = options.workspacePath ?? process.cwd();
+    // 宿主环境运行时（默认 NodeHostEnv，daemon 零改动；浏览器传 BrowserHostEnv）
+    const runtime: HostEnv = options.runtime ?? new NodeHostEnv();
+    const workspacePath = options.workspacePath ?? runtime.env.cwd();
+    // Resolve skill dirs once and reuse across all consumers below (avoids
+    // repeated array allocation + repeated runtime.resources.builtinSkillDirs()).
+    const resolvedSkillDirs = collectSkillDirs(options, runtime);
     const llmClient = resolveLLMClient(options);
 
     const searchProvider = resolveSearchProvider(options.search?.provider);
@@ -259,12 +254,12 @@ export class EnhancedRunner {
 
     // Spec-plan support (conditional)
     const specPlanEnabled = options.specPlan?.enabled !== false;
-    // Fixed unified root: {appDir}/spec-plan. Decoupled from the session
+    // Fixed unified root: {appDataDir}/spec-plan. Decoupled from the session
     // base dir (the two concerns used to share a setting, which broke the
     // daemon: sessions at {root}/sessions but specs under {root}/sessions).
-    const specPlanBaseDir = path.join(appDir(), 'spec-plan');
-    const specStore = new SpecStore(path.join(specPlanBaseDir, 'specs'));
-    const planStore = new PlanStore(path.join(specPlanBaseDir, 'plans'));
+    const specPlanBaseDir = runtime.path.join(runtime.env.appDataDir(), 'spec-plan');
+    const specStore = new SpecStore(runtime.path.join(specPlanBaseDir, 'specs'), runtime);
+    const planStore = new PlanStore(runtime.path.join(specPlanBaseDir, 'plans'), runtime);
     const specPlanTools = specPlanEnabled ? createSpecPlanTools(specStore, planStore) : [];
 
     // A2UI support (conditional)
@@ -284,7 +279,7 @@ export class EnhancedRunner {
     // Build skill-resource tools (read_skill_resource + run_skill_script) when
     // skill directories are configured. These complement load_skill by giving
     // the agent access to reference docs and bundled scripts.
-    const resolvedSkillDirsForTools = collectSkillDirs(options);
+    const resolvedSkillDirsForTools = resolvedSkillDirs;
     const skillTools: Tool<ZodTypeAny>[] = [];
     if (resolvedSkillDirsForTools.length > 0) {
       const skillProviderForTools = new FilesystemSkillProvider(resolvedSkillDirsForTools);
@@ -292,7 +287,7 @@ export class EnhancedRunner {
       const toolTimeout = options.limits?.toolTimeout ?? 600_000;
       const depsForSkills: ToolDeps = sandboxInstance
         ? new SandboxToolDeps(sandboxInstance, maxOutputSize, toolTimeout)
-        : new HostToolDeps(workspacePath, maxOutputSize, undefined, toolTimeout);
+        : new HostToolDeps(runtime, workspacePath, maxOutputSize, undefined, toolTimeout);
       skillTools.push(createReadResourceTool(skillProviderForTools));
       skillTools.push(createRunScriptTool(depsForSkills, skillProviderForTools));
     }
@@ -391,14 +386,12 @@ export class EnhancedRunner {
       commandRegistry.register(createCompactHandler());
       {
         // When a2ui is enabled, automatically include the a2ui-generation skill from @agentskillmania/genui
-        const skillDirs = collectSkillDirs(options);
+        const skillDirs = [...resolvedSkillDirs];
         if (a2uiEnabled) {
-          try {
-            const genuiRoot = nodeRequire.resolve('@agentskillmania/genui/package.json');
-            const genuiSkillsDir = path.join(path.dirname(genuiRoot), 'skills');
+          const genuiRoot = runtime.resources.resolvePackagePath('@agentskillmania/genui');
+          if (genuiRoot) {
+            const genuiSkillsDir = runtime.path.join(genuiRoot, 'skills');
             skillDirs.push(genuiSkillsDir);
-          } catch {
-            /* genui not installed — skip */
           }
         }
         if (skillDirs.length > 0) {
@@ -446,6 +439,7 @@ export class EnhancedRunner {
     // session support with a COMPLETE runnerConfigSnapshot — no fields lost.
     const sessionSupport = sessionEnabled
       ? createSessionSupport({
+          runtime,
           workspacePath,
           sessionBaseDir: options.session?.baseDir,
           sessionDir: options.session?.sessionDir,
@@ -483,7 +477,6 @@ export class EnhancedRunner {
     // Build skill metadata from the resolved skill provider (if any).
     // The AgentRunner's FilesystemSkillProvider is constructed inside AgentRunner
     // from skillDirs, so we list skills from our own provider to capture source.
-    const resolvedSkillDirs = collectSkillDirs(options);
     const skillMeta: SkillMetadata[] =
       resolvedSkillDirs.length > 0
         ? new FilesystemSkillProvider(resolvedSkillDirs)
@@ -516,7 +509,7 @@ export class EnhancedRunner {
         ...a2uiMiddleware,
       ],
       systemPrompt: buildTimeContext(),
-      skillDirs: collectSkillDirs(options),
+      skillDirs: resolvedSkillDirs,
       thinkingEnabled: options.thinking?.enabled,
       enablePromptThinking: options.thinking?.promptLevel,
       temperature: options.llm?.temperature,
@@ -587,7 +580,8 @@ export class EnhancedRunner {
     sessionDir: string,
     options: ResumeOptions
   ): Promise<{ runner: EnhancedRunner; state: AgentState }> {
-    const store = SessionStore.fromDir(sessionDir);
+    const runtime: HostEnv = options.runtime ?? new NodeHostEnv();
+    const store = SessionStore.fromDir(sessionDir, runtime);
 
     const meta = await store.getMeta();
     if (!meta) {

@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { createWebFetchTool } from '../../../../src/tools/builtin/web-fetch.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../../../src/host-env/index.js';
 
 describe('web_fetch', () => {
   let deps: HostToolDeps;
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
-    deps = new HostToolDeps('/tmp');
+    deps = new HostToolDeps(new NodeHostEnv(), '/tmp');
     originalFetch = globalThis.fetch;
   });
 

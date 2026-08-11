@@ -1,18 +1,13 @@
 import { Buffer } from 'node:buffer';
-import { exec, execFile, execSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { statSync } from 'node:fs';
-import * as fs from 'node:fs/promises';
 import { resolve, sep, join, basename, dirname } from 'node:path';
-import { promisify } from 'node:util';
 
 import type { Sandbox } from '@agentskillmania/sandbox';
-import fglob from 'fast-glob';
 import { isBinaryFile as detectBinary } from 'isbinaryfile';
-import { rgPath } from 'ripgrep';
 import { quote } from 'shell-quote';
 
-const execAsync = promisify(exec);
-const execFileAsync = promisify(execFile);
+import type { HostEnv } from '../../host-env/index.js';
 
 /**
  * Default tool-output truncation cap (characters) — single source of truth
@@ -219,6 +214,7 @@ export class HostToolDeps implements ToolDeps {
   private readonly defaultTimeout: number;
 
   constructor(
+    private readonly runtime: HostEnv,
     workspaceRoot: string,
     maxOutputSize: number = DEFAULT_MAX_TOOL_OUTPUT,
     shell?: ShellInfo,
@@ -226,13 +222,13 @@ export class HostToolDeps implements ToolDeps {
   ) {
     this.workspaceRoot = workspaceRoot;
     this.maxOutputSize = maxOutputSize;
-    this.shell = shell ?? detectShell();
+    this.shell = shell ?? runtime.env.detectShell() ?? { path: '/bin/sh', name: 'sh' };
     this.defaultTimeout = defaultTimeout;
   }
 
   resolvePath(filePath: string): string {
-    const absolute = resolve(this.workspaceRoot, filePath);
-    const prefix = this.workspaceRoot + sep;
+    const absolute = this.runtime.path.resolve(this.workspaceRoot, filePath);
+    const prefix = this.workspaceRoot + this.runtime.path.sep;
     if (absolute !== this.workspaceRoot && !absolute.startsWith(prefix)) {
       throw new Error(`Path traversal detected: ${filePath}`);
     }
@@ -241,22 +237,12 @@ export class HostToolDeps implements ToolDeps {
 
   async exec(command: string, options?: { timeout?: number }): Promise<ExecResult> {
     const timeout = options?.timeout ?? this.defaultTimeout;
-    try {
-      const { stdout, stderr } = await execAsync(command, {
-        timeout,
-        maxBuffer: this.maxOutputSize,
-        shell: this.shell.path,
-        cwd: this.workspaceRoot,
-      });
-      return { stdout, stderr, exitCode: 0 };
-    } catch (error) {
-      const err = error as { stdout?: string; stderr?: string; code?: number };
-      return {
-        stdout: err.stdout ?? '',
-        stderr: err.stderr ?? '',
-        exitCode: err.code ?? 1,
-      };
-    }
+    return this.runtime.process.exec(command, {
+      timeout,
+      maxBuffer: this.maxOutputSize,
+      shell: this.shell.path,
+      cwd: this.workspaceRoot,
+    });
   }
 
   /**
@@ -274,33 +260,21 @@ export class HostToolDeps implements ToolDeps {
     options?: { timeout?: number }
   ): Promise<ExecResult> {
     const timeout = options?.timeout ?? this.defaultTimeout;
-    try {
-      const { stdout, stderr } = await execFileAsync(exe, args, {
-        timeout,
-        maxBuffer: this.maxOutputSize,
-        cwd: this.workspaceRoot,
-      });
-      return { stdout, stderr, exitCode: 0 };
-    } catch (error) {
-      const err = error as { stdout?: string; stderr?: string; code?: number };
-      return {
-        stdout: err.stdout ?? '',
-        stderr: err.stderr ?? '',
-        exitCode: err.code ?? 1,
-      };
-    }
+    return this.runtime.process.execArray(exe, args, {
+      timeout,
+      maxBuffer: this.maxOutputSize,
+      cwd: this.workspaceRoot,
+    });
   }
 
   async readFile(filePath: string): Promise<string> {
-    const absolute = this.resolvePath(filePath);
-    return await fs.readFile(absolute, 'utf-8');
+    return await this.runtime.fs.readFile(this.resolvePath(filePath));
   }
 
   async writeFile(filePath: string, content: string): Promise<void> {
     const absolute = this.resolvePath(filePath);
-    const directory = resolve(absolute, '..');
-    await fs.mkdir(directory, { recursive: true });
-    await fs.writeFile(absolute, content, 'utf-8');
+    await this.runtime.fs.mkdir(this.runtime.path.dirname(absolute), { recursive: true });
+    await this.runtime.fs.writeFile(absolute, content);
   }
 
   async editFile(
@@ -336,12 +310,13 @@ export class HostToolDeps implements ToolDeps {
 
   async glob(pattern: string, options?: { cwd?: string }): Promise<string[]> {
     const cwd = options?.cwd ?? this.workspaceRoot;
-    const files = await fglob(pattern, {
-      cwd,
-      absolute: true,
-      onlyFiles: true,
-    });
-    return files;
+    const files = await this.runtime.fs.glob(pattern, { cwd });
+    // runtime.fs.glob returns paths relative to cwd; resolve to absolute to
+    // preserve the historical contract (e.g. createGlobTool slices results
+    // against workspaceRoot and expects them to start with it).
+    return files.map((f) =>
+      this.runtime.path.isAbsolute(f) ? f : this.runtime.path.resolve(cwd, f)
+    );
   }
 
   async grep(
@@ -349,67 +324,25 @@ export class HostToolDeps implements ToolDeps {
     path: string,
     options?: { cwd?: string; include?: string }
   ): Promise<string> {
-    const cwd = options?.cwd ?? this.workspaceRoot;
-    const searchPath = resolve(cwd, path);
-    // Pass pattern and glob as literal args via execFile (no shell).
-    // This is critical: `pattern` is an untrusted regex from the LLM and may
-    // contain shell metacharacters ($(), ``, ;). Using execArray ensures they
-    // are treated as literal characters, not shell syntax (SEC1).
-    const args = [pattern, searchPath, '--no-heading', '--line-number'];
-
-    if (options?.include) {
-      // No shell quoting needed — execFile passes the glob verbatim to rg.
-      args.push('--glob', options.include);
-    }
-
-    try {
-      const result = await this.execArray(rgPath, args);
-      return result.stdout || 'No matches found';
-    } catch {
-      return 'No matches found';
-    }
+    return this.runtime.fs.grep(pattern, path, {
+      cwd: options?.cwd ?? this.workspaceRoot,
+      include: options?.include,
+    });
   }
 
   async statFile(filePath: string): Promise<{ exists: boolean; isFile: boolean }> {
-    const absolute = this.resolvePath(filePath);
-    try {
-      const s = await fs.stat(absolute);
-      return { exists: true, isFile: s.isFile() };
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'EACCES') {
-        throw new Error(`Permission denied: ${filePath}`);
-      }
-      if (code === 'ENOENT') {
-        return { exists: false, isFile: false };
-      }
-      throw new Error(`Failed to access file: ${filePath} (${(error as Error).message})`);
-    }
+    const stat = await this.runtime.fs.stat(this.resolvePath(filePath));
+    return { exists: stat.exists, isFile: stat.isFile };
   }
 
   async isBinaryFile(filePath: string): Promise<boolean> {
-    // Sandbox-internal paths (/...) are unreachable from the host filesystem,
-    // so inspect the content inside the sandbox: compare the raw byte count
-    // with the null-byte-stripped count (mirrors the Rust SandboxToolDeps).
-    //
-    // TODO(binary-detection): NUL-presence is a deliberate, documented
-    // divergence from the Rust side, which uses binaryornot-rs's trained
-    // decision-tree classifier (signatures + byte statistics). The plan is to
-    // lift THIS side up to the classifier (WASM wrapper of binaryornot-rs),
-    // not to drag Rust down to the NUL check — see the Rust workspace_deps.rs
-    // doc comment for the full rationale.
+    // Guard the missing-file case: runtime.fs.isBinary maps read failures to
+    // `true`, but the historical contract (and the top-level isBinaryFile)
+    // treat an unreadable/missing file as "not binary" (false).
     const absolute = this.resolvePath(filePath);
-    const q = shellSingleQuote(absolute);
-    const [raw, stripped] = await Promise.all([
-      this.exec(`wc -c < ${q}`),
-      this.exec(`tr -d '\\000' < ${q} | wc -c`),
-    ]);
-    if (raw.exitCode !== 0 || stripped.exitCode !== 0) {
-      return false;
-    }
-    const rawN = Number.parseInt(raw.stdout.trim(), 10);
-    const strippedN = Number.parseInt(stripped.stdout.trim(), 10);
-    return Number.isFinite(rawN) && Number.isFinite(strippedN) && rawN !== strippedN;
+    const stat = await this.runtime.fs.stat(absolute);
+    if (!stat.exists) return false;
+    return this.runtime.fs.isBinary(absolute);
   }
 }
 
@@ -428,16 +361,14 @@ export class SandboxToolDeps implements ToolDeps {
   readonly maxOutputSize: number;
 
   private readonly sandbox: Sandbox;
-  private readonly defaultTimeout: number;
 
   constructor(
     sandbox: Sandbox,
     maxOutputSize: number = DEFAULT_MAX_TOOL_OUTPUT,
-    defaultTimeout: number = 600_000
+    _defaultTimeout: number = 600_000
   ) {
     this.sandbox = sandbox;
     this.maxOutputSize = maxOutputSize;
-    this.defaultTimeout = defaultTimeout;
   }
 
   resolvePath(filePath: string): string {
@@ -671,16 +602,20 @@ export function resolvePath(deps: WorkspaceToolDeps, filePath: string): string {
 /** Truncate output to max byte size with UTF-8 safe boundary */
 export function truncateOutput(
   output: string,
-  maxSize?: number
+  maxSize?: number,
+  runtime?: HostEnv
 ): { content: string; truncated: boolean } {
   const limit = maxSize ?? DEFAULT_MAX_TOOL_OUTPUT;
   const marker = '\n...[truncated]';
-  const byteLen = Buffer.byteLength(output, 'utf8');
+  const byteLenFn = runtime
+    ? (s: string) => runtime.process.byteLength(s)
+    : (s: string) => Buffer.byteLength(s, 'utf8');
+  const byteLen = byteLenFn(output);
   if (byteLen <= limit) return { content: output, truncated: false };
 
   // Shrink from end until byte length fits (including marker)
   let end = output.length;
-  while (end > 0 && Buffer.byteLength(output.slice(0, end) + marker, 'utf8') > limit) {
+  while (end > 0 && byteLenFn(output.slice(0, end) + marker) > limit) {
     end--;
   }
   // If end lands on a low surrogate (trailing half of a pair), back up one
@@ -694,7 +629,11 @@ export function truncateOutput(
 }
 
 /** Detect binary files using magic bytes and extension analysis */
-export async function isBinaryFile(filePath: string): Promise<boolean> {
+export async function isBinaryFile(filePath: string, runtime?: HostEnv): Promise<boolean> {
+  // When a HostEnv is provided, delegate to its binary detector (works in
+  // browsers too). Without one, fall back to the `isbinaryfile` package —
+  // a Node-only convenience for callers that haven't been migrated yet.
+  if (runtime) return runtime.fs.isBinary(filePath);
   // TODO(binary-detection): `isbinaryfile`'s NUL-presence rule is a
   // deliberate, documented divergence from the Rust side (binaryornot-rs
   // decision-tree classifier). Plan: lift this side UP to the classifier

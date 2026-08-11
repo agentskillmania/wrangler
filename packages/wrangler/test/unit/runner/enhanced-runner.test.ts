@@ -13,6 +13,7 @@ import type { ILLMProvider, Tool } from '@agentskillmania/colts';
 import { createAgentState } from '@agentskillmania/colts';
 import { SessionStore } from '../../../src/session/session-store.js';
 import { writeMeta } from '../../../src/session/meta.js';
+import { NodeHostEnv } from '../../../src/host-env/node-host-env.js';
 
 // Use a stable reference so each test can configure mockRun
 const { mockRun, mockRunStream, mockOn } = vi.hoisted(() => ({
@@ -536,8 +537,8 @@ describe('EnhancedRunner', () => {
         makeOptions({ session: { baseDir: join(appRoot, 'sessions') } })
       );
 
-      expect(SpecStore).toHaveBeenCalledWith(join(appRoot, 'spec-plan', 'specs'));
-      expect(PlanStore).toHaveBeenCalledWith(join(appRoot, 'spec-plan', 'plans'));
+      expect(SpecStore).toHaveBeenCalledWith(join(appRoot, 'spec-plan', 'specs'), expect.any(NodeHostEnv));
+      expect(PlanStore).toHaveBeenCalledWith(join(appRoot, 'spec-plan', 'plans'), expect.any(NodeHostEnv));
     } finally {
       vi.unstubAllEnvs();
       await rm(appRoot, { recursive: true, force: true });
@@ -1166,7 +1167,7 @@ describe('EnhancedRunner', () => {
   describe('resume', () => {
     it('resumes from session directory', async () => {
       const sessionId = '1745800000-resume-test';
-      const store = new SessionStore(testBaseDir, '/test/workspace');
+      const store = new SessionStore(testBaseDir, '/test/workspace', new NodeHostEnv());
       await store.createWithId(sessionId, 'test-agent');
       await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
       const agentState = createAgentState({ name: 'test-agent', tools: [] });
@@ -1184,7 +1185,7 @@ describe('EnhancedRunner', () => {
 
     it('resume returns runner that can run', async () => {
       const sessionId = '1745800000-resume-run';
-      const store = new SessionStore(testBaseDir, '/test/workspace');
+      const store = new SessionStore(testBaseDir, '/test/workspace', new NodeHostEnv());
       await store.createWithId(sessionId, 'test-agent');
       await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
       const agentState = createAgentState({ name: 'test-agent', tools: [] });
@@ -1201,7 +1202,7 @@ describe('EnhancedRunner', () => {
 
     it('resume synchronizes state.config.tools with runner tools', async () => {
       const sessionId = '1745800000-resume-tools';
-      const store = new SessionStore(testBaseDir, '/test/workspace');
+      const store = new SessionStore(testBaseDir, '/test/workspace', new NodeHostEnv());
       await store.createWithId(sessionId, 'test-agent');
       await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
       const agentState = createAgentState({
@@ -1221,7 +1222,7 @@ describe('EnhancedRunner', () => {
 
     it('resume uses options.model to override snapshot model', async () => {
       const sessionId = '1745800000-resume-model';
-      const store = new SessionStore(testBaseDir, '/test/workspace');
+      const store = new SessionStore(testBaseDir, '/test/workspace', new NodeHostEnv());
       await store.createWithId(sessionId, 'test-agent');
       await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
       const agentState = createAgentState({ name: 'test-agent', tools: [] });
@@ -1238,7 +1239,7 @@ describe('EnhancedRunner', () => {
 
     it('resume throws when llm/llmClient not provided', async () => {
       const sessionId = '1745800000-resume-nollm';
-      const store = new SessionStore(testBaseDir, '/test/workspace');
+      const store = new SessionStore(testBaseDir, '/test/workspace', new NodeHostEnv());
       await store.createWithId(sessionId, 'test-agent');
       await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
       const agentState = createAgentState({ name: 'test-agent', tools: [] });
@@ -1263,13 +1264,13 @@ describe('EnhancedRunner', () => {
 
     it('resume throws when runnerConfig snapshot is missing', async () => {
       const sessionId = '1745800000-resume-noconfig';
-      const store = new SessionStore(testBaseDir, '/test/workspace');
+      const store = new SessionStore(testBaseDir, '/test/workspace', new NodeHostEnv());
       await store.createWithId(sessionId, 'test-agent');
       // Manually clear runnerConfig to simulate legacy session
       const meta = await store.getMeta(sessionId);
       if (meta) {
         delete (meta as any).runnerConfig;
-        await writeMeta(store.getSessionDir(sessionId), meta);
+        await writeMeta(store.getSessionDir(sessionId), meta, new NodeHostEnv());
       }
       const agentState = createAgentState({ name: 'test-agent', tools: [] });
       await store.saveState(sessionId, agentState);
@@ -1286,7 +1287,7 @@ describe('EnhancedRunner', () => {
 
     it('resume throws when state.json is missing', async () => {
       const sessionId = '1745800000-resume-nostate';
-      const store = new SessionStore(testBaseDir, '/test/workspace');
+      const store = new SessionStore(testBaseDir, '/test/workspace', new NodeHostEnv());
       await store.createWithId(sessionId, 'test-agent');
       await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
       // Intentionally do NOT call saveState — state.json is missing
@@ -1303,7 +1304,7 @@ describe('EnhancedRunner', () => {
 
     it('resume creates runner with subAgents (delegate tool registered post-construction)', async () => {
       const sessionId = '1745800000-resume-crew';
-      const store = new SessionStore(testBaseDir, '/test/workspace');
+      const store = new SessionStore(testBaseDir, '/test/workspace', new NodeHostEnv());
       await store.createWithId(sessionId, 'test-agent');
       await store.updateMeta(sessionId, {
         runnerConfig: { model: 'gpt-4', crewId: 'my-crew' },
@@ -1336,7 +1337,7 @@ describe('EnhancedRunner', () => {
 
     it('resume creates runner without delegate tool when subAgents not provided', async () => {
       const sessionId = '1745800000-resume-nocrew';
-      const store = new SessionStore(testBaseDir, '/test/workspace');
+      const store = new SessionStore(testBaseDir, '/test/workspace', new NodeHostEnv());
       await store.createWithId(sessionId, 'test-agent');
       await store.updateMeta(sessionId, { runnerConfig: { model: 'gpt-4' } });
       const agentState = createAgentState({ name: 'test-agent', tools: [] });

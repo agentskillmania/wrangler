@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { SpecStore } from '../../../../src/spec-plan/spec-store.js';
 import { createListSpecsTool } from '../../../../src/tools/spec-plan/list-specs.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 import { z } from 'zod';
 
 describe('list_specs tool', () => {
@@ -13,7 +14,7 @@ describe('list_specs tool', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), `list-specs-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
-    store = new SpecStore(testDir);
+    store = new SpecStore(testDir, new NodeHostEnv());
   });
 
   afterEach(async () => {
@@ -75,7 +76,7 @@ describe('list_specs tool', () => {
 
   it('handles directory that does not exist', async () => {
     const tempDir = join(tmpdir(), `empty-list-${Date.now()}`);
-    const emptyStore = new SpecStore(tempDir);
+    const emptyStore = new SpecStore(tempDir, new NodeHostEnv());
     const tool = createListSpecsTool(emptyStore);
     const result = await tool.execute({});
     expect(result).toContain('No specs found');

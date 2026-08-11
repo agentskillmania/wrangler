@@ -1,8 +1,6 @@
-import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
-
 import yaml from 'js-yaml';
 
+import type { HostEnv, DirEntry } from '../host-env/index.js';
 import { formatPlanFileName, parsePlanFileName } from './naming.js';
 import type { PlanDocument, PlanMeta, PlanStatus } from './types.js';
 
@@ -20,9 +18,14 @@ const VALID_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
  * 直接在 baseDir 下存储 plan 文档，不再使用 workspace hash 子目录。
  * plan 文件名包含 spec 版本和 plan 版本，可追溯到对应 spec。
  * 文件名：{name}-v{specVersion}-plan-v{version}.md
+ *
+ * 所有 fs/path 操作通过 HostEnv 注入（浏览器走 OPFS，Node 走 node:fs）。
  */
 export class PlanStore {
-  constructor(private readonly baseDir: string) {}
+  constructor(
+    private readonly baseDir: string,
+    private readonly runtime: HostEnv,
+  ) {}
 
   private getWorkspaceDir(): string {
     return this.baseDir;
@@ -31,14 +34,14 @@ export class PlanStore {
   /** 保存 plan 文档 */
   async save(doc: PlanDocument): Promise<void> {
     const dir = this.getWorkspaceDir();
-    await mkdir(dir, { recursive: true });
+    await this.runtime.fs.mkdir(dir, { recursive: true });
 
     const fileName = formatPlanFileName({
       name: doc.meta.name,
       specVersion: doc.meta.specVersion,
       version: doc.meta.version,
     });
-    const filePath = join(dir, fileName);
+    const filePath = this.runtime.path.join(dir, fileName);
 
     const yamlFront = yaml.dump({
       name: doc.meta.name,
@@ -53,24 +56,24 @@ export class PlanStore {
     });
 
     const content = `---\n${yamlFront}---\n${doc.body}`;
-    await writeFile(filePath, content, 'utf-8');
+    await this.runtime.fs.writeFile(filePath, content);
   }
 
   /** 列出当前目录的所有 plan，按时间倒序 */
   async list(): Promise<PlanDocument[]> {
     const dir = this.getWorkspaceDir();
-    let entries: string[];
+    let entries: DirEntry[];
     try {
-      entries = await readdir(dir);
+      entries = await this.runtime.fs.readdir(dir);
     } catch {
       return [];
     }
 
     const docs: PlanDocument[] = [];
     for (const entry of entries) {
-      const parsed = parsePlanFileName(entry);
+      const parsed = parsePlanFileName(entry.name);
       if (!parsed) continue;
-      const doc = await this.readFile(join(dir, entry));
+      const doc = await this.readPlanFile(this.runtime.path.join(dir, entry.name));
       if (doc) docs.push(doc);
     }
 
@@ -80,22 +83,22 @@ export class PlanStore {
   /** 获取指定 plan，不存在返回 null */
   async get(name: string, specVersion: number, version: number): Promise<PlanDocument | null> {
     const dir = this.getWorkspaceDir();
-    let entries: string[];
+    let entries: DirEntry[];
     try {
-      entries = await readdir(dir);
+      entries = await this.runtime.fs.readdir(dir);
     } catch {
       return null;
     }
 
     for (const entry of entries) {
-      const parsed = parsePlanFileName(entry);
+      const parsed = parsePlanFileName(entry.name);
       if (
         parsed &&
         parsed.name === name &&
         parsed.specVersion === specVersion &&
         parsed.version === version
       ) {
-        return this.readFile(join(dir, entry));
+        return this.readPlanFile(this.runtime.path.join(dir, entry.name));
       }
     }
     return null;
@@ -104,9 +107,9 @@ export class PlanStore {
   /** 获取指定 spec 的最新 plan */
   async getLatestForSpec(specName: string, specVersion?: number): Promise<PlanDocument | null> {
     const dir = this.getWorkspaceDir();
-    let entries: string[];
+    let entries: DirEntry[];
     try {
-      entries = await readdir(dir);
+      entries = await this.runtime.fs.readdir(dir);
     } catch {
       return null;
     }
@@ -114,11 +117,11 @@ export class PlanStore {
     let latestDoc: PlanDocument | null = null;
 
     for (const entry of entries) {
-      const parsed = parsePlanFileName(entry);
+      const parsed = parsePlanFileName(entry.name);
       if (!parsed) continue;
       if (specVersion !== undefined && parsed.specVersion !== specVersion) continue;
 
-      const doc = await this.readFile(join(dir, entry));
+      const doc = await this.readPlanFile(this.runtime.path.join(dir, entry.name));
       if (!doc) continue;
       if (doc.meta.specName !== specName) continue;
 
@@ -135,7 +138,7 @@ export class PlanStore {
     name: string,
     specVersion: number,
     version: number,
-    newStatus: PlanStatus
+    newStatus: PlanStatus,
   ): Promise<void> {
     const doc = await this.get(name, specVersion, version);
     if (!doc) throw new Error(`Plan not found: ${name} v${version} (spec v${specVersion})`);
@@ -153,9 +156,9 @@ export class PlanStore {
   }
 
   /** 读取并解析单个 plan 文件 */
-  private async readFile(filePath: string): Promise<PlanDocument | null> {
+  private async readPlanFile(filePath: string): Promise<PlanDocument | null> {
     try {
-      const content = await readFile(filePath, 'utf-8');
+      const content = await this.runtime.fs.readFile(filePath);
       return this.parseDocument(content);
     } catch {
       return null;

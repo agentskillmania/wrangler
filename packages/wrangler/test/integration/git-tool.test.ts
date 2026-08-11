@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createGitTool } from '../../src/tools/builtin/git.js';
 import { HostToolDeps } from '../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../src/host-env/index.js';
 
 describe('Integration: git tool (real git)', () => {
   let workspace: string;
@@ -22,7 +23,7 @@ describe('Integration: git tool (real git)', () => {
 
   beforeEach(async () => {
     workspace = mkdtempSync(join(tmpdir(), 'wrangler-int-git-'));
-    deps = new HostToolDeps(workspace);
+    deps = new HostToolDeps(new NodeHostEnv(), workspace);
     // Initialize a real git repo for the tests
     await deps.exec('git init');
     await deps.exec('git config user.email test@test.com');

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PlanStore } from '../../../../src/spec-plan/plan-store.js';
 import { createReadPlanTool } from '../../../../src/tools/spec-plan/read-plan.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 import { z } from 'zod';
 
 describe('read_plan tool', () => {
@@ -13,7 +14,7 @@ describe('read_plan tool', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), `read-plan-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
-    store = new PlanStore(testDir);
+    store = new PlanStore(testDir, new NodeHostEnv());
   });
 
   afterEach(async () => {

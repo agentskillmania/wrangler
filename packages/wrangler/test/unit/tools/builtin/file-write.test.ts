@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createFileWriteTool } from '../../../../src/tools/builtin/file-write.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../../../src/host-env/index.js';
 import { createMockToolDeps } from '../../helpers/create-mock-deps.js';
 
 describe('file_write', () => {
@@ -14,7 +15,7 @@ describe('file_write', () => {
   beforeEach(async () => {
     workspace = join(tmpdir(), `wrangler-test-fw-${Date.now()}`);
     await mkdir(workspace, { recursive: true });
-    deps = new HostToolDeps(workspace);
+    deps = new HostToolDeps(new NodeHostEnv(), workspace);
   });
 
   afterEach(async () => {

@@ -1,36 +1,27 @@
 // packages/core/src/session/session-store.ts
 
-import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { mkdir, rm, readFile, writeFile, readdir, stat } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-
 import { serializeState, deserializeState } from '@agentskillmania/colts';
 import type { AgentState } from '@agentskillmania/colts';
 
 import { writeMeta, readMeta } from './meta.js';
+import type { HostEnv } from '../host-env/index.js';
 import type { SessionMeta } from '../types.js';
-
-/**
- * Compute MD5 hash of workspace path for session directory grouping.
- */
-function hashWorkspacePath(workspacePath: string): string {
-  const absolute = resolve(workspacePath);
-  return createHash('md5').update(absolute).digest('hex');
-}
 
 /**
  * Session persistence manager.
  *
- * Sessions are stored grouped by workspace path MD5 hash.
+ * Sessions are stored grouped by workspace path hash.
  * Session ID uses colts state.id directly ({timestamp}-{random}, no prefix).
  *
  * Directory structure:
- * {baseDir}/{md5(workspacePath)}/{sessionId}/
+ * {baseDir}/{hash(workspacePath)}/{sessionId}/
  *   ├── meta.yaml
  *   └── state.json
+ *
+ * 所有 fs/path/crypto 操作通过 HostEnv 注入（浏览器走 OPFS，Node 走 node:fs）。
  */
 export class SessionStore {
+  /** workspace 路径的 hash（用于目录分组）。构造时同步计算，两端 hash 实现均同步。 */
   private readonly workspaceHash: string;
   /** Per-session write queue to prevent concurrent file corruption */
   private readonly writeQueues = new Map<string, Promise<unknown>>();
@@ -43,17 +34,19 @@ export class SessionStore {
 
   constructor(
     private readonly baseDir: string,
-    private readonly workspacePath: string
+    private readonly workspacePath: string,
+    private readonly runtime: HostEnv,
   ) {
-    this.workspaceHash = hashWorkspacePath(workspacePath);
+    const absolute = this.runtime.path.resolve(workspacePath);
+    this.workspaceHash = this.runtime.crypto.hash(absolute);
   }
 
   /**
    * Create a SessionStore directly bound to a session directory.
    * All operations target this directory without requiring sessionId.
    */
-  static fromDir(sessionDir: string): SessionStore {
-    const store = new SessionStore('', '');
+  static fromDir(sessionDir: string, runtime: HostEnv): SessionStore {
+    const store = new SessionStore('', '', runtime);
     store._sessionDir = sessionDir;
     return store;
   }
@@ -78,7 +71,7 @@ export class SessionStore {
 
   /** Get workspace group directory */
   private getWorkspaceDir(): string {
-    return join(this.baseDir, this.workspaceHash);
+    return this.runtime.path.join(this.baseDir, this.workspaceHash);
   }
 
   /** Get full path to session directory */
@@ -92,22 +85,21 @@ export class SessionStore {
     if (sessionId === undefined) {
       throw new Error('sessionId is required for workspace-based SessionStore');
     }
-    return join(this.getWorkspaceDir(), sessionId);
+    return this.runtime.path.join(this.getWorkspaceDir(), sessionId);
   }
 
-  /** Check if session exists (synchronous) */
-  exists(sessionId?: string): boolean {
-    return existsSync(this.getSessionDir(sessionId));
+  /**
+   * Check if session exists.
+   * 注意：原 Node 版用 existsSync（同步），现在走 runtime.fs.exists（异步）。
+   * 调用方如果需要同步语义，请改用 existsAsync()。
+   */
+  async exists(sessionId?: string): Promise<boolean> {
+    return this.runtime.fs.exists(this.getSessionDir(sessionId));
   }
 
   /** Check if session directory exists (async) */
   async existsAsync(sessionId?: string): Promise<boolean> {
-    try {
-      await stat(this.getSessionDir(sessionId));
-      return true;
-    } catch {
-      return false;
-    }
+    return this.runtime.fs.exists(this.getSessionDir(sessionId));
   }
 
   private getQueueKey(sessionId?: string): string {
@@ -118,10 +110,10 @@ export class SessionStore {
    *  Pass undefined for sessionId in dir-bound mode. */
   async createWithId(
     sessionId: string | undefined,
-    agentName: string
+    agentName: string,
   ): Promise<string | undefined> {
     const dir = this.getSessionDir(sessionId);
-    await mkdir(dir, { recursive: true });
+    await this.runtime.fs.mkdir(dir, { recursive: true });
 
     const now = new Date().toISOString();
     const meta: SessionMeta = {
@@ -132,7 +124,7 @@ export class SessionStore {
       agentName,
       runnerConfig: { model: '' },
     };
-    await writeMeta(dir, meta);
+    await writeMeta(dir, meta, this.runtime);
 
     return sessionId;
   }
@@ -142,7 +134,7 @@ export class SessionStore {
     return this.serialize(this.getQueueKey(sessionId), async () => {
       const dir = this.getSessionDir(sessionId);
       const json = serializeState(state);
-      await writeFile(join(dir, 'state.json'), json, 'utf-8');
+      await this.runtime.fs.writeFile(this.runtime.path.join(dir, 'state.json'), json);
     });
   }
 
@@ -150,7 +142,7 @@ export class SessionStore {
   async loadState(sessionId?: string): Promise<AgentState | null> {
     try {
       const dir = this.getSessionDir(sessionId);
-      const raw = await readFile(join(dir, 'state.json'), 'utf-8');
+      const raw = await this.runtime.fs.readFile(this.runtime.path.join(dir, 'state.json'));
       return deserializeState(raw);
     } catch {
       return null;
@@ -161,29 +153,29 @@ export class SessionStore {
   async updateMeta(sessionId: string | undefined, updates: Partial<SessionMeta>): Promise<void> {
     return this.serialize(this.getQueueKey(sessionId), async () => {
       const dir = this.getSessionDir(sessionId);
-      const existing = await readMeta(dir);
+      const existing = await readMeta(dir, this.runtime);
       if (!existing) return;
       const updated: SessionMeta = { ...existing, ...updates, id: existing.id };
-      await writeMeta(dir, updated);
+      await writeMeta(dir, updated, this.runtime);
     });
   }
 
   /** Get session metadata */
   async getMeta(sessionId?: string): Promise<SessionMeta | null> {
     const dir = this.getSessionDir(sessionId);
-    return readMeta(dir);
+    return readMeta(dir, this.runtime);
   }
 
   /** List all sessions for current workspace */
   async listSessions(): Promise<SessionMeta[]> {
     try {
       const wsDir = this.getWorkspaceDir();
-      const entries = await readdir(wsDir, { withFileTypes: true });
+      const entries = await this.runtime.fs.readdir(wsDir);
       const metas: SessionMeta[] = [];
 
       for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const meta = await readMeta(join(wsDir, entry.name));
+        if (!entry.isDirectory) continue;
+        const meta = await readMeta(this.runtime.path.join(wsDir, entry.name), this.runtime);
         if (meta) {
           metas.push(meta);
         }
@@ -198,7 +190,7 @@ export class SessionStore {
   /** Delete session */
   async deleteSession(sessionId?: string): Promise<void> {
     const dir = this.getSessionDir(sessionId);
-    await rm(dir, { recursive: true, force: true });
+    await this.runtime.fs.rm(dir, { recursive: true, force: true });
   }
 
   /**

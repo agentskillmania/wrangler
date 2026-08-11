@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { writeMeta, readMeta } from '../../../src/session/meta.js';
 import type { SessionMeta } from '../../../src/types.js';
+import { NodeHostEnv } from '../../../src/host-env/node-host-env.js';
 
 describe('session/meta', () => {
   let testDir: string;
@@ -28,7 +29,7 @@ describe('session/meta', () => {
 
   describe('writeMeta', () => {
     it('should write meta.yaml to the session directory', async () => {
-      await writeMeta(testDir, sampleMeta);
+      await writeMeta(testDir, sampleMeta, new NodeHostEnv());
       const content = await readFile(join(testDir, 'meta.yaml'), 'utf-8');
       expect(content).toContain('1745848800000-abc123xyz');
       expect(content).toContain('/Users/dev/my-project');
@@ -36,9 +37,9 @@ describe('session/meta', () => {
     });
 
     it('should overwrite existing meta.yaml', async () => {
-      await writeMeta(testDir, sampleMeta);
+      await writeMeta(testDir, sampleMeta, new NodeHostEnv());
       const updated = { ...sampleMeta, agentName: 'updated-agent' };
-      await writeMeta(testDir, updated);
+      await writeMeta(testDir, updated, new NodeHostEnv());
       const content = await readFile(join(testDir, 'meta.yaml'), 'utf-8');
       expect(content).toContain('updated-agent');
     });
@@ -46,18 +47,18 @@ describe('session/meta', () => {
 
   describe('readMeta', () => {
     it('should read and parse meta.yaml', async () => {
-      await writeMeta(testDir, sampleMeta);
-      const meta = await readMeta(testDir);
+      await writeMeta(testDir, sampleMeta, new NodeHostEnv());
+      const meta = await readMeta(testDir, new NodeHostEnv());
       expect(meta).toEqual(sampleMeta);
     });
 
     it('should return null when meta.yaml does not exist', async () => {
-      const meta = await readMeta(testDir);
+      const meta = await readMeta(testDir, new NodeHostEnv());
       expect(meta).toBeNull();
     });
 
     it('should return null when directory does not exist', async () => {
-      const meta = await readMeta(join(tmpdir(), 'nonexistent-dir-xyz'));
+      const meta = await readMeta(join(tmpdir(), 'nonexistent-dir-xyz'), new NodeHostEnv());
       expect(meta).toBeNull();
     });
   });

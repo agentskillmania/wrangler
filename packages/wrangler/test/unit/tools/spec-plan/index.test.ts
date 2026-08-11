@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { SpecStore } from '../../../../src/spec-plan/spec-store.js';
 import { PlanStore } from '../../../../src/spec-plan/plan-store.js';
 import { createSpecPlanTools } from '../../../../src/tools/spec-plan/index.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 
 describe('createSpecPlanTools', () => {
   let testDir: string;
@@ -14,8 +15,8 @@ describe('createSpecPlanTools', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), `spec-plan-tools-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
-    specStore = new SpecStore(join(testDir, 'specs'));
-    planStore = new PlanStore(join(testDir, 'plans'));
+    specStore = new SpecStore(join(testDir, 'specs'), new NodeHostEnv());
+    planStore = new PlanStore(join(testDir, 'plans'), new NodeHostEnv());
   });
 
   afterEach(async () => {

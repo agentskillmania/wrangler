@@ -1,24 +1,12 @@
 // packages/core/src/session/support.ts
 
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
 import type { AgentMiddleware, ILLMProvider } from '@agentskillmania/colts';
 
 import { SessionStore } from './session-store.js';
 import { createSessionMiddleware } from '../middleware/session-middleware.js';
 import { createSessionNamingMiddleware } from '../middleware/session-naming-middleware.js';
+import type { HostEnv } from '../host-env/index.js';
 import type { RunnerConfigSnapshot, SessionSource } from '../types.js';
-
-/**
- * Resolve the application root: `AGENTSKILLMANIA_APP_DIR` env override, else
- * `~/.agentskillmania/skill-studio`. Mirrors the daemon's `APP_DIR`.
- */
-export function appDir(): string {
-  const env = process.env.AGENTSKILLMANIA_APP_DIR;
-  if (env && env.trim()) return env;
-  return join(homedir(), '.agentskillmania', 'skill-studio');
-}
 
 /**
  * Session 持久化支持 — 返回 middleware 和 SessionStore。
@@ -27,9 +15,11 @@ export function appDir(): string {
  * createBuiltinTools，与 enableSession 开关解耦。
  */
 export function createSessionSupport(options: {
+  /** HostEnv（必传）—— 提供文件系统、路径、appDataDir 等 */
+  runtime: HostEnv;
   /** workspace 目录路径（session 按此分组） */
   workspacePath: string;
-  /** session 存储根目录（默认 {appDir}/sessions） */
+  /** session 存储根目录（默认 {appDataDir}/sessions） */
   sessionBaseDir?: string;
   /** Pin the session to this directory (dir-bound mode). When set, overrides
    *  sessionBaseDir — state.json + meta.yaml live directly in this dir. */
@@ -46,11 +36,16 @@ export function createSessionSupport(options: {
   middlewares: AgentMiddleware[];
   store: SessionStore;
 } {
+  const { runtime } = options;
   // Dir-bound mode: session lives directly in the given directory.
   // Standard mode: session at {baseDir}/{hash(workspacePath)}/{sessionId}/.
   const store = options.sessionDir
-    ? SessionStore.fromDir(options.sessionDir)
-    : new SessionStore(options.sessionBaseDir ?? join(appDir(), 'sessions'), options.workspacePath);
+    ? SessionStore.fromDir(options.sessionDir, runtime)
+    : new SessionStore(
+        options.sessionBaseDir ?? runtime.path.join(runtime.env.appDataDir(), 'sessions'),
+        options.workspacePath,
+        runtime,
+      );
 
   const sessionMiddleware = createSessionMiddleware(store, {
     runnerConfigSnapshot: options.runnerConfigSnapshot,

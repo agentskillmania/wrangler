@@ -1,8 +1,7 @@
-import { readFile, readdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-
 import yaml from 'js-yaml';
 
+import { NodeHostEnv } from '../host-env/node-host-env.js';
+import type { HostEnv } from '../host-env/index.js';
 import type { CrewConfig } from './types.js';
 import { parseAgentMd } from '../agent/agent-parser.js';
 import type { ParsedAgent } from '../agent/agent-parser.js';
@@ -23,23 +22,27 @@ interface CrewMeta {
  * - skills/ (skill directories)
  */
 export class CrewLoader {
-  constructor(private crewDir: string) {}
+  constructor(
+    private crewDir: string,
+    private runtime: HostEnv = new NodeHostEnv(),
+  ) {}
 
   async load(): Promise<CrewConfig> {
-    const absDir = resolve(this.crewDir);
+    const rt = this.runtime;
+    const absDir = rt.path.resolve(this.crewDir);
 
     // Verify directory exists
     try {
-      await readdir(absDir);
+      await rt.fs.readdir(absDir);
     } catch {
       throw new Error(`Crew directory not found: ${absDir}`);
     }
 
     // 1. Parse CREW.md
-    const crewMdPath = join(absDir, 'CREW.md');
+    const crewMdPath = rt.path.join(absDir, 'CREW.md');
     let crewMdContent: string;
     try {
-      crewMdContent = await readFile(crewMdPath, 'utf-8');
+      crewMdContent = await rt.fs.readFile(crewMdPath);
     } catch {
       throw new Error(`CREW.md not found in: ${absDir}`);
     }
@@ -47,10 +50,10 @@ export class CrewLoader {
     const { meta, memory } = this.parseCrewMd(crewMdContent);
 
     // 2. Parse agents/*.md
-    const agentDefs = await this.loadAgents(absDir);
+    const agentDefs = await this.loadAgents(absDir, rt);
 
     // 3. Scan skills/
-    const skillDirs = await this.loadSkillDirs(absDir);
+    const skillDirs = await this.loadSkillDirs(absDir, rt);
 
     return {
       meta: {
@@ -87,17 +90,17 @@ export class CrewLoader {
     return { meta, memory };
   }
 
-  private async loadAgents(absDir: string): Promise<Record<string, ParsedAgent>> {
-    const agentsDir = join(absDir, 'agents');
+  private async loadAgents(absDir: string, rt: HostEnv): Promise<Record<string, ParsedAgent>> {
+    const agentsDir = rt.path.join(absDir, 'agents');
     const agentDefs: Record<string, ParsedAgent> = {};
 
     try {
-      const entries = await readdir(agentsDir);
-      const mdFiles = entries.filter((f) => f.endsWith('.md'));
+      const entries = await rt.fs.readdir(agentsDir);
+      const mdFiles = entries.filter((f) => f.name.endsWith('.md'));
 
       for (const file of mdFiles) {
-        const content = await readFile(join(agentsDir, file), 'utf-8');
-        const parsed = parseAgentMd(content, file.replace(/\.md$/, ''));
+        const content = await rt.fs.readFile(rt.path.join(agentsDir, file.name));
+        const parsed = parseAgentMd(content, file.name.replace(/\.md$/, ''));
         agentDefs[parsed.name] = parsed;
       }
     } catch {
@@ -107,14 +110,14 @@ export class CrewLoader {
     return agentDefs;
   }
 
-  private async loadSkillDirs(absDir: string): Promise<string[]> {
-    const skillsDir = join(absDir, 'skills');
+  private async loadSkillDirs(absDir: string, rt: HostEnv): Promise<string[]> {
+    const skillsDir = rt.path.join(absDir, 'skills');
     const skillDirs: string[] = [];
 
     try {
-      const entries = await readdir(skillsDir);
+      const entries = await rt.fs.readdir(skillsDir);
       for (const entry of entries) {
-        skillDirs.push(join(skillsDir, entry));
+        skillDirs.push(rt.path.join(skillsDir, entry.name));
       }
     } catch {
       // skills/ directory doesn't exist — empty array is fine

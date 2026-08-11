@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createListDirTool } from '../../../../src/tools/builtin/list-dir.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../../../src/host-env/index.js';
 
 describe('list_dir', () => {
   let workspace: string;
@@ -12,7 +13,7 @@ describe('list_dir', () => {
   beforeEach(async () => {
     workspace = join(tmpdir(), `wrangler-test-listdir-${Date.now()}`);
     await mkdir(workspace, { recursive: true });
-    deps = new HostToolDeps(workspace);
+    deps = new HostToolDeps(new NodeHostEnv(), workspace);
   });
 
   afterEach(async () => {

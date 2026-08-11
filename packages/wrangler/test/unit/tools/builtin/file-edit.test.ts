@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createFileEditTool } from '../../../../src/tools/builtin/file-edit.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../../../src/host-env/index.js';
 
 describe('file_edit', () => {
   let workspace: string;
@@ -13,7 +14,7 @@ describe('file_edit', () => {
   beforeEach(async () => {
     workspace = join(tmpdir(), `wrangler-test-fe-${Date.now()}`);
     await mkdir(workspace, { recursive: true });
-    deps = new HostToolDeps(workspace);
+    deps = new HostToolDeps(new NodeHostEnv(), workspace);
   });
 
   afterEach(async () => {

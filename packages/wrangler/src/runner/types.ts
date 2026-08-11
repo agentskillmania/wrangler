@@ -10,6 +10,7 @@ import type {
 import type { ZodTypeAny } from 'zod';
 
 import type { CommandHandler } from '../command/types.js';
+import type { HostEnv } from '../host-env/index.js';
 import type { SubAgentRunnerFactory } from '../subagent/delegate-tool.js';
 import type { SubAgentConfig } from '../subagent/types.js';
 import type { SearchProvider } from '../tools/builtin/index.js';
@@ -164,6 +165,13 @@ export interface EnhancedRunnerOptions {
   // ── Core ──
   workspacePath?: string;
 
+  /**
+   * 宿主环境运行时（新增）—— 引擎核心通过它访问一切 OS 资源。
+   * 默认 NodeHostEnv（daemon / CLI 零改动）。
+   * 浏览器扩展装配时传 BrowserHostEnv。
+   */
+  runtime?: HostEnv;
+
   // ── Structured groups ──
   llm?: LLMConfig;
   skills?: SkillsConfig;
@@ -244,6 +252,8 @@ export interface ResolvedRunnerConfig {
  * Options for EnhancedRunner.resume() — from session directory.
  */
 export interface ResumeOptions {
+  /** HostEnv（与 EnhancedRunnerOptions.runtime 一致，默认 NodeHostEnv） */
+  runtime?: HostEnv;
   /** LLM config: provider injection (client) or quick-init (quickInit). */
   llm?: LLMConfig;
   /** Optional model override */

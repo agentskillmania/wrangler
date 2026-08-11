@@ -8,7 +8,7 @@ import './types/colts-augmentation.js';
 export type { SessionMeta, SessionSource, RunnerConfigSnapshot } from './types.js';
 
 // Session support
-export { appDir, createSessionSupport } from './session/support.js';
+export { createSessionSupport } from './session/support.js';
 export { SessionStore } from './session/session-store.js';
 export { writeMeta, readMeta } from './session/meta.js';
 export { SessionNotFoundError } from './session/errors.js';
@@ -115,3 +115,19 @@ export type { CrewConfig, CrewRunnerOptions } from './crew/index.js';
 // Loader (Layer 4)
 export { AgentLoader } from './loader/index.js';
 export type { AgentLoadResult } from './loader/index.js';
+
+// HostEnv (宿主环境抽象层 — 引擎核心通过它访问 OS 资源)
+export type {
+  HostEnv,
+  HostEnvFs,
+  HostEnvProcess,
+  HostEnvPath,
+  HostEnvCrypto,
+  HostEnvEnv,
+  HostEnvResources,
+  ShellInfo,
+  DirEntry,
+  RuntimeStat,
+  GrepResult,
+} from './host-env/index.js';
+export { NodeHostEnv, defaultNodeHostEnv, RuntimeCapabilityError } from './host-env/index.js';

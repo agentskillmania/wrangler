@@ -13,6 +13,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { createShellTool } from '../../src/tools/builtin/shell.js';
 import { HostToolDeps } from '../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../src/host-env/index.js';
 import { MarkdownMessageAssembler } from '../../src/runner/markdown-assembler.js';
 import { testConfig, itif } from './config.js';
 import { tmpdir } from 'node:os';
@@ -25,7 +26,7 @@ let deps: HostToolDeps;
 beforeAll(async () => {
   workspace = join(tmpdir(), `wrangler-shell-intg-${Date.now()}`);
   await mkdir(workspace, { recursive: true });
-  deps = new HostToolDeps(workspace);
+  deps = new HostToolDeps(new NodeHostEnv(), workspace);
 
   if (testConfig.enabled) {
     console.log(

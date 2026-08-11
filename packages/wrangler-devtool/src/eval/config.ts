@@ -13,7 +13,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { LLMQuickInit } from '@agentskillmania/colts';
-import { appDir } from '@agentskillmania/wrangler';
+import { NodeHostEnv } from '@agentskillmania/wrangler';
 
 /** Result of loading LLM config. */
 export interface EvalLlmConfig {
@@ -50,7 +50,7 @@ export async function loadEvalLlmConfig(
     searchPaths.push(join(opts.projectDir, 'eval-config.yaml'));
     searchPaths.push(join(opts.projectDir, 'wrangler.yaml'));
   }
-  const globalDir = opts.globalDir ?? appDir();
+  const globalDir = opts.globalDir ?? new NodeHostEnv().env.appDataDir();
   searchPaths.push(join(globalDir, 'config.yaml'));
 
   const yaml = await import('js-yaml');

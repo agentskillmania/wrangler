@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createSessionMiddleware } from '../../../src/middleware/session-middleware.js';
 import { SessionStore } from '../../../src/session/session-store.js';
+import { NodeHostEnv } from '../../../src/host-env/node-host-env.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import type { AgentMiddleware, RunnerOptions } from '@agentskillmania/colts';
 
@@ -20,7 +21,7 @@ describe('createSessionMiddleware', () => {
   beforeEach(async () => {
     testBaseDir = join(tmpdir(), `wrangler-test-mw-${Date.now()}`);
     await mkdir(testBaseDir, { recursive: true });
-    store = new SessionStore(testBaseDir, '/test/workspace');
+    store = new SessionStore(testBaseDir, '/test/workspace', new NodeHostEnv());
     middleware = createSessionMiddleware(store);
   });
 

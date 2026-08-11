@@ -2,110 +2,90 @@
  * @fileoverview Unit tests for HostToolDeps command execution contract.
  *
  * Source file under test: src/tools/builtin/workspace-deps.ts (HostToolDeps).
- * Layer: UNIT — mocks node:child_process so no real process is spawned.
  *
- * These tests verify the EXECUTION CONTRACT of HostToolDeps methods that run
- * external commands:
- * - WHICH function is called (execFile vs exec)
- * - WHICH executable is invoked
- * - HOW arguments are passed (array vs string-concatenation)
+ * After the HostEnv refactor, HostToolDeps.grep delegates to
+ * `runtime.fs.grep`. In the Node runtime, NodeHostEnvFs.grep invokes ripgrep
+ * via execFileAsync (no shell) — identical to the original implementation.
  *
- * This is the unit-level home of the SEC1 regression guard: it asserts that
- * HostToolDeps.grep passes the untrusted pattern as a LITERAL array element to
- * execFile, never through a shell. This guard is environment-independent
- * (no ripgrep, no filesystem, no `touch` required).
+ * These tests use a real temp workspace + real NodeHostEnv + real ripgrep to
+ * verify: (1) grep finds matches correctly, (2) patterns containing shell
+ * metacharacters ($(), backticks, ;) are treated as literal regex by ripgrep,
+ * never as shell syntax (SEC1), (3) output format and include filter.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 
-// Capture calls to both exec and execFile so we can assert WHICH path the
-// method under test took. Both mocks satisfy promisify's (err, value) callback
-// contract so no real process is spawned and no test hangs.
-const execFileMock = vi.fn();
-const execMock = vi.fn();
-vi.mock('node:child_process', () => ({
-  exec: (...args: unknown[]) => {
-    execMock(...args);
-    const cb = args[args.length - 1] as (err: unknown, out: unknown) => void;
-    if (typeof cb === 'function') cb(null, { stdout: '', stderr: '' });
-  },
-  execFile: (...args: unknown[]) => {
-    execFileMock(...args);
-    const cb = args[args.length - 1] as (err: unknown, out: unknown) => void;
-    if (typeof cb === 'function') cb(null, { stdout: '', stderr: '' });
-  },
-  execSync: vi.fn(),
-}));
+import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../../../src/host-env/index.js';
 
-// Import AFTER mock is registered.
-const { HostToolDeps } = await import('../../../../src/tools/builtin/workspace-deps.js');
-
-describe('HostToolDeps command execution contract (unit, mocked child_process)', () => {
-  let deps: InstanceType<typeof HostToolDeps>;
+describe('HostToolDeps command execution contract (real ripgrep)', () => {
+  let workspace: string;
 
   beforeEach(() => {
-    execFileMock.mockClear();
-    execMock.mockClear();
-    deps = new HostToolDeps(join(tmpdir(), `sec1-unit-${Date.now()}`));
+    workspace = mkdtempSync(join(tmpdir(), `sec1-${Date.now()}-`));
   });
 
-  describe('SEC1: grep must pass pattern as a literal execFile argument', () => {
-    it('calls execFile (NOT exec) with rgPath as the executable', async () => {
-      await deps.grep('foo', '.');
-      expect(execFileMock).toHaveBeenCalledTimes(1);
-      // First positional arg is the executable path — must be ripgrep.
-      const exe = execFileMock.mock.calls[0]?.[0];
-      expect(typeof exe).toBe('string');
-      expect(exe).toMatch(/rg|ripgrep/);
+  afterEach(() => {
+    rmSync(workspace, { recursive: true, force: true });
+  });
+
+  describe('SEC1: grep treats untrusted patterns as literal regex (not shell syntax)', () => {
+    it('treats a pattern containing $() as a literal regex', async () => {
+      writeFileSync(join(workspace, 'a.ts'), 'has $(touch /tmp/should-not-exist) inside\n');
+      const deps = new HostToolDeps(new NodeHostEnv(), workspace);
+      // ripgrep receives the pattern as a literal argv element (execFile,
+      // no shell). $() is regex syntax, never command substitution.
+      const out = await deps.grep('\\$\\(touch /tmp/should-not-exist\\)', '.');
+      expect(out).not.toBe('No matches found');
     });
 
-    it('passes the pattern VERBATIM as args[0], even with shell metacharacters', async () => {
-      // A pattern that would be catastrophic if interpreted by a shell.
-      const malicious = '$(rm -rf /); `whoami`; echo INJECTED';
-      await deps.grep(malicious, '.');
-
-      const args = execFileMock.mock.calls[0]?.[1] as unknown[];
-      // The pattern must be the first element of the args array, byte-for-byte
-      // equal to the input — no shell escaping, no truncation, no execution.
-      expect(args[0]).toBe(malicious);
+    it('treats a pattern containing backticks as a literal regex', async () => {
+      writeFileSync(join(workspace, 'a.ts'), 'echo `whoami` here\n');
+      const deps = new HostToolDeps(new NodeHostEnv(), workspace);
+      const out = await deps.grep('`whoami`', '.');
+      expect(out).not.toBe('No matches found');
     });
 
-    it('passes the pattern as a literal value when it contains $()', async () => {
-      await deps.grep('$(touch /tmp/should-not-exist)', '.');
-      const args = execFileMock.mock.calls[0]?.[1] as unknown[];
-      expect(args[0]).toBe('$(touch /tmp/should-not-exist)');
+    it('treats a pattern containing a semicolon as a literal regex', async () => {
+      writeFileSync(join(workspace, 'a.ts'), 'foo; bar\n');
+      const deps = new HostToolDeps(new NodeHostEnv(), workspace);
+      const out = await deps.grep('foo; bar', '.');
+      expect(out).not.toBe('No matches found');
+    });
+  });
+
+  describe('grep output format (ripgrep raw output)', () => {
+    it('returns ripgrep-style file:line:content lines', async () => {
+      writeFileSync(join(workspace, 'a.ts'), 'first\nhello world\nthird\n');
+      const deps = new HostToolDeps(new NodeHostEnv(), workspace);
+      const out = await deps.grep('hello', '.');
+      expect(out).not.toBe('No matches found');
+      // ripgrep output: path:line:content
+      for (const line of out.split('\n')) {
+        if (line.trim()) {
+          expect(line.startsWith(`${join(workspace, 'a.ts')}:2:`)).toBe(true);
+        }
+      }
     });
 
-    it('passes the pattern as a literal value when it contains backticks', async () => {
-      await deps.grep('`touch /tmp/should-not-exist`', '.');
-      const args = execFileMock.mock.calls[0]?.[1] as unknown[];
-      expect(args[0]).toBe('`touch /tmp/should-not-exist`');
+    it('returns "No matches found" when nothing matches', async () => {
+      writeFileSync(join(workspace, 'a.ts'), 'nothing here\n');
+      const deps = new HostToolDeps(new NodeHostEnv(), workspace);
+      const out = await deps.grep('zzz-nope', '.');
+      expect(out).toBe('No matches found');
     });
 
-    it('passes the pattern as a literal value when it contains a semicolon', async () => {
-      await deps.grep('foo; touch /tmp/should-not-exist', '.');
-      const args = execFileMock.mock.calls[0]?.[1] as unknown[];
-      expect(args[0]).toBe('foo; touch /tmp/should-not-exist');
-    });
-
-    it('passes the --glob include option without shell single-quote wrapping', async () => {
-      // execFile does not go through a shell, so glob patterns must NOT be
-      // wrapped in extra quotes (which rg would treat as literal characters).
-      await deps.grep('foo', '.', { include: '*.ts' });
-      const args = execFileMock.mock.calls[0]?.[1] as unknown[];
-      const globIdx = args.indexOf('--glob');
-      expect(globIdx).not.toBe(-1);
-      expect(args[globIdx + 1]).toBe('*.ts'); // not "'*.ts'"
-    });
-
-    it('does NOT call exec (the shell-based path) for grep', async () => {
-      // The secure implementation must route through execFile, not exec.
-      // If grep regresses to string-concatenation + exec, this fails.
-      await deps.grep('foo', '.');
-      expect(execMock).not.toHaveBeenCalled();
-      expect(execFileMock).toHaveBeenCalledTimes(1);
+    it('applies the include filter (ripgrep --glob, recursive)', async () => {
+      mkdirSync(join(workspace, 'src'), { recursive: true });
+      writeFileSync(join(workspace, 'src', 'a.ts'), 'const foo = 1;');
+      writeFileSync(join(workspace, 'src', 'b.js'), 'const foo = 2;');
+      const deps = new HostToolDeps(new NodeHostEnv(), workspace);
+      const out = await deps.grep('foo', '.', { include: '*.ts' });
+      expect(out).toContain('a.ts');
+      expect(out).not.toContain('b.js');
     });
   });
 });

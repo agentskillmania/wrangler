@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createSessionSupport } from '../../../src/session/support.js';
 import { SessionStore } from '../../../src/session/session-store.js';
+import { NodeHostEnv } from '../../../src/host-env/node-host-env.js';
 import { mkdir, rm, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -25,10 +26,11 @@ describe('createSessionSupport', () => {
     vi.restoreAllMocks();
   });
 
-  it('should return middlewares and store (no tools — moved to builtin)', () => {
+  it('should return middlewares and store (no tools — moved to builtin)', async () => {
     // calculate and ask_human were moved from session support to createBuiltinTools.
     // createSessionSupport now returns only { middlewares, store }.
     const result = createSessionSupport({
+      runtime: new NodeHostEnv(),
       workspacePath: '/test',
       sessionBaseDir: testBaseDir,
     });
@@ -37,13 +39,14 @@ describe('createSessionSupport', () => {
     expect(result.middlewares[0].name).toBe('session');
     expect(result.middlewares[1].name).toBe('session-naming');
     expect(result.store).toBeInstanceOf(SessionStore);
-    expect(result.store.exists('never-created')).toBe(false);
+    expect(await result.store.exists('never-created')).toBe(false);
     // No tools property — tools are now registered via createBuiltinTools
     expect((result as { tools?: unknown }).tools).toBeUndefined();
   });
 
   it('should create session files when store is used directly', async () => {
     const session = createSessionSupport({
+      runtime: new NodeHostEnv(),
       workspacePath: '/test/workspace',
       sessionBaseDir: testBaseDir,
     });
@@ -61,7 +64,7 @@ describe('createSessionSupport', () => {
     const appDir = join(tmpdir(), `agentskillmania-app-${Date.now()}`);
     vi.stubEnv('AGENTSKILLMANIA_APP_DIR', appDir);
     try {
-      const session = createSessionSupport({ workspacePath: '/test/workspace' });
+      const session = createSessionSupport({ runtime: new NodeHostEnv(), workspacePath: '/test/workspace' });
 
       await session.store.createWithId('default-location-session', 'test-model', 'test-agent');
 
@@ -78,6 +81,7 @@ describe('createSessionSupport', () => {
   describe('middlewares', () => {
     it('should have correct name', () => {
       const result = createSessionSupport({
+        runtime: new NodeHostEnv(),
         workspacePath: '/test',
         sessionBaseDir: testBaseDir,
       });
@@ -86,6 +90,7 @@ describe('createSessionSupport', () => {
 
     it('should create session in beforeRun when session does not exist', async () => {
       const result = createSessionSupport({
+        runtime: new NodeHostEnv(),
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });
@@ -108,6 +113,7 @@ describe('createSessionSupport', () => {
 
     it('should not crash when beforeRun is called with empty messages', async () => {
       const result = createSessionSupport({
+        runtime: new NodeHostEnv(),
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });
@@ -129,6 +135,7 @@ describe('createSessionSupport', () => {
 
     it('should return undefined from beforeRun (no stop signal)', async () => {
       const result = createSessionSupport({
+        runtime: new NodeHostEnv(),
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });

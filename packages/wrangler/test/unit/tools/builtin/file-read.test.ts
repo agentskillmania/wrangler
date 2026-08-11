@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { createFileReadTool } from '../../../../src/tools/builtin/file-read.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
 import type { ToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../../../src/host-env/index.js';
 
 /**
  * Create a mock ToolDeps with default implementations.
@@ -35,7 +36,7 @@ describe('file_read', () => {
   beforeEach(async () => {
     workspace = join(tmpdir(), `wrangler-test-fr-${Date.now()}`);
     await mkdir(workspace, { recursive: true });
-    deps = new HostToolDeps(workspace);
+    deps = new HostToolDeps(new NodeHostEnv(), workspace);
   });
 
   afterEach(async () => {

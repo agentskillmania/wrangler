@@ -1,8 +1,6 @@
-import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
-
 import yaml from 'js-yaml';
 
+import type { HostEnv } from '../host-env/index.js';
 import { formatSpecFileName, parseSpecFileName } from './naming.js';
 import type { SpecDocument, SpecMeta, SpecStatus } from './types.js';
 
@@ -19,9 +17,14 @@ const VALID_TRANSITIONS: Record<SpecStatus, SpecStatus[]> = {
  * 直接在 baseDir 下存储 spec 文档，不再使用 workspace hash 子目录。
  * 文档格式为 YAML frontmatter + markdown body。
  * 文件名：{name}-spec-v{version}.md
+ *
+ * 所有 fs/path 操作通过 HostEnv 注入（浏览器走 OPFS，Node 走 node:fs）。
  */
 export class SpecStore {
-  constructor(private readonly baseDir: string) {}
+  constructor(
+    private readonly baseDir: string,
+    private readonly runtime: HostEnv,
+  ) {}
 
   private getWorkspaceDir(): string {
     return this.baseDir;
@@ -30,13 +33,13 @@ export class SpecStore {
   /** 保存 spec 文档 */
   async save(doc: SpecDocument): Promise<void> {
     const dir = this.getWorkspaceDir();
-    await mkdir(dir, { recursive: true });
+    await this.runtime.fs.mkdir(dir, { recursive: true });
 
     const fileName = formatSpecFileName({
       name: doc.meta.name,
       version: doc.meta.version,
     });
-    const filePath = join(dir, fileName);
+    const filePath = this.runtime.path.join(dir, fileName);
 
     const yamlFront = yaml.dump({
       name: doc.meta.name,
@@ -49,24 +52,24 @@ export class SpecStore {
     });
 
     const content = `---\n${yamlFront}---\n${doc.body}`;
-    await writeFile(filePath, content, 'utf-8');
+    await this.runtime.fs.writeFile(filePath, content);
   }
 
   /** 列出当前目录的所有 spec，按时间倒序 */
   async list(): Promise<SpecDocument[]> {
     const dir = this.getWorkspaceDir();
-    let entries: string[];
+    let entries: import('../host-env/index.js').DirEntry[];
     try {
-      entries = await readdir(dir);
+      entries = await this.runtime.fs.readdir(dir);
     } catch {
       return [];
     }
 
     const docs: SpecDocument[] = [];
     for (const entry of entries) {
-      const parsed = parseSpecFileName(entry);
+      const parsed = parseSpecFileName(entry.name);
       if (!parsed) continue;
-      const doc = await this.readFile(join(dir, entry));
+      const doc = await this.readSpecFile(this.runtime.path.join(dir, entry.name));
       if (doc) docs.push(doc);
     }
 
@@ -76,17 +79,17 @@ export class SpecStore {
   /** 获取指定名称和版本的 spec，不存在返回 null */
   async get(name: string, version: number): Promise<SpecDocument | null> {
     const dir = this.getWorkspaceDir();
-    let entries: string[];
+    let entries: import('../host-env/index.js').DirEntry[];
     try {
-      entries = await readdir(dir);
+      entries = await this.runtime.fs.readdir(dir);
     } catch {
       return null;
     }
 
     for (const entry of entries) {
-      const parsed = parseSpecFileName(entry);
+      const parsed = parseSpecFileName(entry.name);
       if (parsed && parsed.name === name && parsed.version === version) {
-        return this.readFile(join(dir, entry));
+        return this.readSpecFile(this.runtime.path.join(dir, entry.name));
       }
     }
     return null;
@@ -95,9 +98,9 @@ export class SpecStore {
   /** 获取指定名称的最新版本 spec */
   async getLatest(name: string): Promise<SpecDocument | null> {
     const dir = this.getWorkspaceDir();
-    let entries: string[];
+    let entries: import('../host-env/index.js').DirEntry[];
     try {
-      entries = await readdir(dir);
+      entries = await this.runtime.fs.readdir(dir);
     } catch {
       return null;
     }
@@ -106,15 +109,15 @@ export class SpecStore {
     let latestFile: string | null = null;
 
     for (const entry of entries) {
-      const parsed = parseSpecFileName(entry);
+      const parsed = parseSpecFileName(entry.name);
       if (parsed && parsed.name === name && parsed.version > latestVersion) {
         latestVersion = parsed.version;
-        latestFile = entry;
+        latestFile = entry.name;
       }
     }
 
     if (!latestFile) return null;
-    return this.readFile(join(dir, latestFile));
+    return this.readSpecFile(this.runtime.path.join(dir, latestFile));
   }
 
   /** 更新 spec 状态（仅允许合法转换） */
@@ -135,9 +138,9 @@ export class SpecStore {
   }
 
   /** 读取并解析单个 spec 文件 */
-  private async readFile(filePath: string): Promise<SpecDocument | null> {
+  private async readSpecFile(filePath: string): Promise<SpecDocument | null> {
     try {
-      const content = await readFile(filePath, 'utf-8');
+      const content = await this.runtime.fs.readFile(filePath);
       return this.parseDocument(content);
     } catch {
       return null;
