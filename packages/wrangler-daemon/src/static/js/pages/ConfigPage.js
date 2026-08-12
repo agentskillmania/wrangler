@@ -52,7 +52,7 @@ export function ConfigPage() {
   function loadFile() {
     if (!filePath.trim()) { setFileMessage('Path is required'); return; }
     setFileMessage('loading...');
-    api.get('/api/config/file?path=' + encodeURIComponent(filePath.trim())).then(function (res) {
+    api.get('/api/config/raw?path=' + encodeURIComponent(filePath.trim())).then(function (res) {
       if (res && res.error) { setFileMessage('Error: ' + res.error); }
       else {
         setFileContent(typeof res.content === 'string' ? res.content : JSON.stringify(res.content, null, 2));
@@ -67,7 +67,7 @@ export function ConfigPage() {
   function saveFile() {
     if (!filePath.trim()) { setFileMessage('Path is required'); return; }
     setFileMessage('saving...');
-    api.put('/api/config/file', { path: filePath.trim(), content: fileContent }).then(function (res) {
+    api.put('/api/config/raw', { path: filePath.trim(), content: fileContent }).then(function (res) {
       if (res && res.error) { setFileMessage('Error: ' + res.error); }
       else { setFileMessage('Saved'); setTimeout(function () { setFileMessage(''); }, 2000); }
     }).catch(function (e) {

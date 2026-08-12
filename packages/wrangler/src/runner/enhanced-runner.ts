@@ -414,7 +414,13 @@ export class EnhancedRunner {
         ) {
           compressorInstance = options.compression as IContextCompressor;
         } else {
-          const compressionConfig = { ...((options.compression as CompressionConfig) ?? {}) };
+          // Default strategy = 'summarize' (LLM-generated summary of dropped
+          // messages). Mirrors the Rust daemon's 3ab40fe default. The caller
+          // can override with strategy: 'truncate' to just drop old messages.
+          const compressionConfig = {
+            strategy: 'summarize' as const,
+            ...((options.compression as CompressionConfig) ?? {}),
+          };
           // Auto-detect context window size from pre-resolved model metadata
           if (!compressionConfig.contextWindowSize && modelMeta) {
             compressionConfig.contextWindowSize = modelMeta.contextWindow;

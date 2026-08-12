@@ -39,7 +39,10 @@ export function eventToTag(ev) {
   if (ev === 'subagent-token' || ev === 'subagent-thinking') return 'subagent';
   if (ev === 'subagent-tool-start' || ev === 'subagent-tool-end') return 'subagent';
   if (ev === 'compressing' || ev === 'compressed') return 'step';
-  if (ev === 'waiting-human' || ev === 'human-input' || ev === 'human-input-resolved') return 'ask';
+  if (ev === 'session-cleared') return 'session';
+  if (ev === 'todo-list') return 'todo';
+  if (ev === 'abort') return 'error';
+  if (ev === 'human-input' || ev === 'human-input-resolved') return 'ask';
   if (ev === 'error') return 'error';
   if (ev === 'done') return 'done';
   if (ev === 'agent-state') return 'session';
@@ -96,7 +99,9 @@ export function formatEventData(ev, p) {
   }
   if (ev === 'compressing') return 'Compressing context...';
   if (ev === 'compressed') return 'Context compressed: ' + (p.summary || '') + ' (' + (p.removedCount || 0) + ' removed)';
-  if (ev === 'waiting-human') return 'Waiting for human input: ' + JSON.stringify(p.request || {});
+  if (ev === 'session-cleared') return 'Session cleared (/clear)';
+  if (ev === 'todo-list') return 'Todo list: ' + (Array.isArray(p.items) ? p.items.length : 0) + ' items';
+  if (ev === 'abort') return 'Aborted at step ' + (p.step != null ? p.step : '?');
   if (ev === 'human-input') {
     var questions = Array.isArray(p.questions) ? p.questions.join('; ') : String(p.questions || '');
     return 'Human input requested (' + (p.requestId || '') + '): ' + questions;

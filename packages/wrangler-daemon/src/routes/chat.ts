@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import {
   SessionNotFoundError,
   SessionStore,
@@ -95,21 +98,31 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
    * Reads the full AgentState from state.json — includes thinking,
    * tool calls, and tool results (unlike the old session.jsonl format).
    */
-  fastify.get('/api/chat/:sessionId/messages', async (request) => {
+  fastify.get('/api/chat/:sessionId/messages', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
+    const query = request.query as { sessionDir?: string };
 
-    const info = await sessionManager().getInfo(sessionId);
-    if (!info) {
-      return { error: 'Session not found' };
+    // Explicit sessionDir: read state.json directly. Missing state is a HARD
+    // 404 so the client can distinguish "no session yet" from "unreadable"
+    // (mirrors Rust chat_messages sessionDir path).
+    if (query.sessionDir) {
+      try {
+        const raw = await readFile(join(query.sessionDir, 'state.json'), 'utf-8');
+        const state = JSON.parse(raw) as { context?: { messages?: unknown[] } };
+        return { messages: state.context?.messages ?? [] };
+      } catch {
+        reply.code(404);
+        return { error: 'Session state not found' };
+      }
     }
+
+    // Standard tree: 200 empty when not found (mirrors Rust — NOT an error).
+    const info = await sessionManager().getInfo(sessionId);
+    if (!info) return { messages: [] };
 
     const store = sessionManager().getSessionStore(info.workspacePath);
     const state = await store.loadState(sessionId);
-    if (!state) {
-      return { messages: [] };
-    }
-
-    return { messages: state.context.messages };
+    return { messages: state?.context.messages ?? [] };
   });
 
   /**
@@ -180,46 +193,43 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     const workspacePath = body.workspacePath;
 
+    // Daemon-level runner defaults (three-tier merge: body > agent > config.runner).
+    const config = configManager().get();
+    const rc = config.runner;
+
     const sessionOptions: AgentSessionOptions = {
       workspacePath,
       agentName: agentDetail.name,
       agentInstructions: agentDetail.instructions,
       model: agentDetail.model,
-      // Structured config groups from request body, falling back to the
-      // agent definition. Builtin skills dir always appended.
+      // skills.dirs: body > agent.skillDirs > config.runner.skillDirs > []
       skills: {
         dirs: [
-          ...(body.config?.skills?.dirs ?? agentDetail.skillDirs ?? []),
-          BUILTIN_SKILLS_DIR, // always include devtool's built-in skills (architect/reviewer/curator)
+          ...(body.config?.skills?.dirs ?? agentDetail.skillDirs ?? rc?.skillDirs ?? []),
+          BUILTIN_SKILLS_DIR,
         ],
       },
       tools: {
-        mcpConfigPaths: body.config?.tools?.mcpConfigPaths ?? agentDetail.mcpPaths,
-        builtinFilter: body.config?.tools?.builtinFilter,
+        mcpConfigPaths: body.config?.tools?.mcpConfigPaths ?? agentDetail.mcpPaths ?? rc?.mcpConfigPaths ?? [],
+        builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
       },
-      // Explicit sessionDir ("notebook dir is the session"): bind the store
-      // directly to that directory so persistence lands there.
-      sessionStore: body.sessionDir ? SessionStore.fromDir(body.sessionDir) : undefined,
+      sessionStore: body.sessionDir ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv) : undefined,
       sessionManager: sessionManager(),
-      // The daemon decides where sessions live (configurable via APP_DIR /
-      // SessionManager baseDir); the runner's session middleware must write
-      // to the SAME base dir or resume can't find sessions on disk.
       sessionBaseDir: sessionManager().baseDir,
       agentConfigPath: agentDetail.path,
-      // Structured config groups from request body
-      thinking: body.config?.thinking,
-      session: body.config?.session,
-      todolist: body.config?.todolist,
-      specPlan: body.config?.specPlan,
-      commands: body.config?.commands,
+      // Feature toggles + groups: body > config.runner (two-tier for toggles)
+      thinking: body.config?.thinking ?? rc?.thinking,
+      session: body.config?.session ?? rc?.session,
+      todolist: body.config?.todolist ?? rc?.todolist,
+      specPlan: body.config?.specPlan ?? rc?.specPlan,
+      commands: body.config?.commands ?? rc?.commands,
       sandbox: body.config?.sandbox,
-      a2ui: body.config?.a2ui,
-      search: body.config?.search,
-      compression: body.config?.compression,
-      limits: body.config?.limits,
+      a2ui: body.config?.a2ui ?? rc?.a2ui,
+      search: body.config?.search ?? (config.search?.defaultProvider ? { provider: config.search.defaultProvider } : undefined),
+      compression: body.config?.compression ?? rc?.compression,
+      limits: body.config?.limits ?? rc?.limits,
     };
 
-    const config = configManager().get();
     const agentSession = await AgentSession.create(sessionOptions, config);
     const sessionId = agentSession.sessionId;
 
@@ -379,43 +389,39 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const runnerOpts = crewToRunnerOptions(crewConfig);
     const workspacePath = body.workspacePath;
 
+    // Daemon-level runner defaults (three-tier: body > crew > config.runner).
+    const config = configManager().get();
+    const rc = config.runner;
+
     const sessionOptions: AgentSessionOptions = {
       workspacePath,
       agentName: runnerOpts.primaryAgent,
-      // The crew's composed system prompt (memory + primary instructions +
-      // sub-agent catalog) is injected as the primary agent's instructions.
       agentInstructions: runnerOpts.systemPrompt,
       subAgents: runnerOpts.subAgents,
       crewId: id,
       model: body.model ?? runnerOpts.model,
       sandbox: body.config?.sandbox ?? true,
-      // Structured config groups from request body — same field set as the
-      // agent route. Crew skill dirs (from CREW.md + builtin) are the base;
-      // request body overrides the search paths.
       skills: {
-        dirs: [...(body.config?.skills?.dirs ?? runnerOpts.skillDirs ?? []), BUILTIN_SKILLS_DIR],
+        dirs: [...(body.config?.skills?.dirs ?? runnerOpts.skillDirs ?? rc?.skillDirs ?? []), BUILTIN_SKILLS_DIR],
       },
       tools: {
-        mcpConfigPaths: body.config?.tools?.mcpConfigPaths ?? [],
-        builtinFilter: body.config?.tools?.builtinFilter,
+        mcpConfigPaths: body.config?.tools?.mcpConfigPaths ?? rc?.mcpConfigPaths ?? [],
+        builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
       },
-      sessionStore: body.sessionDir ? SessionStore.fromDir(body.sessionDir) : undefined,
+      sessionStore: body.sessionDir ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv) : undefined,
       sessionManager: sessionManager(),
-      // Same base-dir contract as the agent route: the daemon decides where
-      // sessions live, and the runner's session middleware must write there.
       sessionBaseDir: sessionManager().baseDir,
-      thinking: body.config?.thinking,
-      session: body.config?.session,
-      todolist: body.config?.todolist,
-      specPlan: body.config?.specPlan,
-      commands: body.config?.commands,
-      a2ui: body.config?.a2ui,
-      search: body.config?.search,
-      compression: body.config?.compression,
-      limits: body.config?.limits,
+      thinking: body.config?.thinking ?? rc?.thinking,
+      session: body.config?.session ?? rc?.session,
+      todolist: body.config?.todolist ?? rc?.todolist,
+      specPlan: body.config?.specPlan ?? rc?.specPlan,
+      commands: body.config?.commands ?? rc?.commands,
+      a2ui: body.config?.a2ui ?? rc?.a2ui,
+      search: body.config?.search ?? (config.search?.defaultProvider ? { provider: config.search.defaultProvider } : undefined),
+      compression: body.config?.compression ?? rc?.compression,
+      limits: body.config?.limits ?? rc?.limits,
     };
 
-    const config = configManager().get();
     const agentSession = await AgentSession.create(sessionOptions, config);
     const sessionId = agentSession.sessionId;
 

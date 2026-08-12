@@ -7,6 +7,32 @@ import type { SessionManager } from './core/session-manager.js';
 /** Daemon configuration stored in config.yaml */
 import type { SandboxConfig } from '@agentskillmania/wrangler';
 
+/**
+ * Daemon-level runner defaults (mirrors Rust `RunnerConfig`).
+ * Every field is optional — an absent group keeps the runner's built-in default.
+ * Merged with per-request body.config and agent-definition defaults:
+ * body > agent > config.runner > built-in.
+ */
+export interface RunnerConfig {
+  thinking?: { enabled?: boolean; promptLevel?: boolean };
+  limits?: {
+    maxInputLength?: number;
+    maxSteps?: number;
+    requestTimeout?: number;
+    maxToolOutput?: number;
+    toolTimeout?: number;
+  };
+  tools?: { builtinTools?: Record<string, boolean> };
+  session?: { enabled?: boolean };
+  todolist?: { enabled?: boolean };
+  specPlan?: { enabled?: boolean };
+  commands?: { enabled?: boolean };
+  a2ui?: { enabled?: boolean };
+  compression?: { enabled?: boolean; strategy?: string };
+  skillDirs?: string[];
+  mcpConfigPaths?: string[];
+}
+
 export interface DaemonConfig {
   llm: LLMQuickInit;
   server: {
@@ -15,6 +41,13 @@ export interface DaemonConfig {
   };
   /** Sandbox execution defaults for all sessions (overridable per request). */
   sandbox?: SandboxConfig;
+  /** Daemon-level runner config defaults (merged per-request: body > agent > runner). */
+  runner?: RunnerConfig;
+  /** Search provider registry (providers with apiKey + defaultProvider). */
+  search?: {
+    defaultProvider?: string;
+    providers?: Array<{ name: string; apiKey: string; baseUrl?: string }>;
+  };
   [key: string]: unknown; // Index signature for settings-yaml compatibility
 }
 

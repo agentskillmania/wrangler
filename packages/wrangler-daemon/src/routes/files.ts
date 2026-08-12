@@ -3,6 +3,8 @@ import { dirname, basename, relative, join } from 'node:path';
 
 import type { FastifyInstance } from 'fastify';
 
+import { readMeta, defaultNodeHostEnv } from '@agentskillmania/wrangler';
+
 import type { DecoratedFastifyInstance } from '../types.js';
 import { resolveWithinRoot } from '../utils.js';
 
@@ -70,28 +72,42 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
    * Returns the recursive file tree for a session's workspace.
    * Filters out hidden files and node_modules.
    */
+  /**
+   * Resolve the workspace path for a session — either from an explicit
+   * sessionDir (notebook-dir sessions, reads meta.yaml) or the standard tree.
+   */
+  async function resolveWorkspace(sessionId: string, sessionDir?: string): Promise<string | null> {
+    if (sessionDir) {
+      const meta = await readMeta(sessionDir, defaultNodeHostEnv);
+      return meta?.workspacePath ?? null;
+    }
+    const info = await sessionManager().getInfo(sessionId);
+    return info?.workspacePath ?? null;
+  }
+
   fastify.get('/api/files/:sessionId/tree', async (request) => {
     const { sessionId } = request.params as { sessionId: string };
-    const info = await sessionManager().getInfo(sessionId);
-    if (!info) return { error: 'Session not found' };
-    return buildFileTree(info.workspacePath, info.workspacePath);
+    const query = request.query as { sessionDir?: string };
+    const workspacePath = await resolveWorkspace(sessionId, query.sessionDir);
+    if (!workspacePath) return { error: 'Session not found' };
+    return buildFileTree(workspacePath, workspacePath);
   });
 
   /**
-   * GET /api/files/:sessionId/content?path=<relativePath>
+   * GET /api/files/:sessionId/content?path=<relativePath>&sessionDir=<dir>
    *
    * Returns the text content of a file in the session's workspace.
    * Query parameter `path` is required.
    */
   fastify.get('/api/files/:sessionId/content', async (request) => {
     const { sessionId } = request.params as { sessionId: string };
-    const query = request.query as { path?: string };
-    const info = await sessionManager().getInfo(sessionId);
-    if (!info) return { error: 'Session not found' };
+    const query = request.query as { path?: string; sessionDir?: string };
+    const workspacePath = await resolveWorkspace(sessionId, query.sessionDir);
+    if (!workspacePath) return { error: 'Session not found' };
     if (!query.path) return { error: 'path is required' };
 
     try {
-      const fullPath = resolveWithinRoot(info.workspacePath, query.path);
+      const fullPath = resolveWithinRoot(workspacePath, query.path);
       const content = await readFile(fullPath, 'utf-8');
       return { content, path: query.path };
     } catch {

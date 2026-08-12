@@ -386,44 +386,36 @@ export function useCrewChatState() {
   }
 
   function buildRunnerConfig() {
-    var result = {
+    var config = {
       sandbox: cfgSandbox,
-      enableSession: cfgSession,
-      enableTodolist: cfgTodolist,
-      enableCommands: cfgCommands,
-      builtinTools: {
-        shell: cfgBShell,
-        webSearch: cfgBWebSearch,
-        webFetch: cfgBWebFetch,
-        python: cfgBPython,
-        git: cfgBGit,
-        fileRead: cfgBFileRead,
-        fileWrite: cfgBFileWrite,
-        fileEdit: cfgBFileEdit,
-        glob: cfgBGlob,
-        grep: cfgBGrep,
+      session: { enabled: cfgSession },
+      todolist: { enabled: cfgTodolist },
+      commands: { enabled: cfgCommands },
+      tools: {
+        builtinFilter: {
+          shell: cfgBShell,
+          webSearch: cfgBWebSearch,
+          webFetch: cfgBWebFetch,
+          python: cfgBPython,
+          git: cfgBGit,
+          fileRead: cfgBFileRead,
+          fileWrite: cfgBFileWrite,
+          fileEdit: cfgBFileEdit,
+          glob: cfgBGlob,
+          grep: cfgBGrep,
+        },
       },
-      a2ui: {
-        enabled: cfgA2ui,
-      },
+      a2ui: { enabled: cfgA2ui },
     };
     if (cfgSkillDirs.trim()) {
-      result.skillDirs = cfgSkillDirs
-        .split(',')
-        .map(function (s) {
-          return s.trim();
-        })
-        .filter(Boolean);
+      config.skills = {
+        dirs: cfgSkillDirs.split(',').map(function (s) { return s.trim(); }).filter(Boolean),
+      };
     }
     if (cfgMcpPaths.trim()) {
-      result.mcpConfigPaths = cfgMcpPaths
-        .split(',')
-        .map(function (s) {
-          return s.trim();
-        })
-        .filter(Boolean);
+      config.tools.mcpConfigPaths = cfgMcpPaths.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
     }
-    return result;
+    return config;
   }
 
   function doStream(url, body) {

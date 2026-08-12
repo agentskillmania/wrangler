@@ -192,11 +192,11 @@ describe('Chat API', () => {
       expect(Array.isArray(body.messages)).toBe(true);
     });
 
-    it('returns error for non-existent session', async () => {
+    it('returns empty messages for non-existent session (standard tree, 200)', async () => {
       const res = await fetch(`${getUrl()}/api/chat/nonexistent-session/messages`);
       expect(res.ok).toBe(true);
       const body = await res.json();
-      expect(body.error).toBe('Session not found');
+      expect(body.messages).toEqual([]);
     });
   });
 
