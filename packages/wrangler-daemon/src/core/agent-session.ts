@@ -20,7 +20,7 @@ import {
   createLLMClient,
   resolveDefaultModel,
 } from '@agentskillmania/wrangler';
-import type { SubAgentConfig, LimitsConfig, SandboxConfig } from '@agentskillmania/wrangler';
+import type { SubAgentConfig, LimitsConfig, SandboxConfig, HostEnv } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
@@ -85,6 +85,8 @@ export function mergeSandboxConfig(
 /** Options for creating an AgentSession */
 export interface AgentSessionOptions {
   sessionId?: string;
+  /** HostEnv — injected into EnhancedRunner. Browser extensions pass BrowserHostEnv; omit for Node. */
+  runtime?: HostEnv;
   workspacePath: string;
   agentName: string;
   agentInstructions?: string;
@@ -215,6 +217,7 @@ export class AgentSession {
     const mergedSandbox = mergeSandboxConfig(config.sandbox, options.sandbox);
 
     const runner = await EnhancedRunner.create({
+      runtime: options.runtime,
       llm: { client: llmClient, model: llmModel },
       workspacePath: options.workspacePath,
       sandbox: mergedSandbox,

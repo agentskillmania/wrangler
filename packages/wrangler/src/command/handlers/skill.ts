@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { FilesystemSkillProvider } from '@agentskillmania/colts';
 import { addAssistantMessage, addToolMessage, loadSkill } from '@agentskillmania/colts';
 
@@ -62,7 +60,7 @@ export function createSkillHandler(skillProvider: FilesystemSkillProvider): Comm
         // an assistant message carrying the toolCall, followed by a tool message
         // whose content is the skill instructions. This is the single point where
         // instructions enter conversation history for the slash-command path.
-        const toolCallId = randomUUID();
+        const toolCallId = globalThis.crypto.randomUUID();
         newState = addAssistantMessage(newState, '', {
           toolCalls: [{ id: toolCallId, name: 'load_skill', arguments: { name: skillName } }],
         });

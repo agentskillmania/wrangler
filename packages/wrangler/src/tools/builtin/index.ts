@@ -27,6 +27,11 @@ export interface BuiltinToolsOptions {
   searchProvider?: SearchProvider;
   /** When provided, all tools operate through sandbox.run() with / paths */
   sandbox?: Sandbox;
+  /**
+   * External ToolDeps injection — overrides HostToolDeps/SandboxToolDeps.
+   * Browser extensions pass BrowserToolDeps here; omit for Node.
+   */
+  deps?: ToolDeps;
   /** When provided, registers the ask_human tool */
   askHumanHandler?: AskHumanHandler;
   /** Maximum tool output length in characters (default 100000). */
@@ -38,9 +43,10 @@ export interface BuiltinToolsOptions {
 export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAny>[] {
   const maxOutputSize = options.maxOutputSize ?? DEFAULT_MAX_TOOL_OUTPUT;
   const toolTimeout = options.toolTimeout ?? 600_000;
-  const deps: ToolDeps = options.sandbox
-    ? new SandboxToolDeps(options.sandbox, maxOutputSize, toolTimeout)
-    : new HostToolDeps(new NodeHostEnv(), options.workspacePath, maxOutputSize, undefined, toolTimeout);
+  const deps: ToolDeps = options.deps
+    ?? (options.sandbox
+      ? new SandboxToolDeps(options.sandbox, maxOutputSize, toolTimeout)
+      : new HostToolDeps(new NodeHostEnv(), options.workspacePath, maxOutputSize, undefined, toolTimeout));
 
   // Default provider matches the enhanced runner + Rust (sogou).
   const searchProvider = options.searchProvider ?? new SogouScrapeSearchProvider();

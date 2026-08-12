@@ -202,6 +202,7 @@ export class EnhancedRunner {
       workspacePath,
       searchProvider,
       sandbox: sandboxInstance,
+      deps: options.tools?.deps,
       askHumanHandler: options.tools?.askHumanHandler,
       maxToolOutput: options.limits?.maxToolOutput,
       toolTimeout: options.limits?.toolTimeout,
@@ -285,9 +286,10 @@ export class EnhancedRunner {
       const skillProviderForTools = new FilesystemSkillProvider(resolvedSkillDirsForTools);
       const maxOutputSize = options.limits?.maxToolOutput ?? DEFAULT_MAX_TOOL_OUTPUT;
       const toolTimeout = options.limits?.toolTimeout ?? 600_000;
-      const depsForSkills: ToolDeps = sandboxInstance
-        ? new SandboxToolDeps(sandboxInstance, maxOutputSize, toolTimeout)
-        : new HostToolDeps(runtime, workspacePath, maxOutputSize, undefined, toolTimeout);
+      const depsForSkills: ToolDeps = options.tools?.deps
+        ?? (sandboxInstance
+          ? new SandboxToolDeps(sandboxInstance, maxOutputSize, toolTimeout)
+          : new HostToolDeps(runtime, workspacePath, maxOutputSize, undefined, toolTimeout));
       skillTools.push(createReadResourceTool(skillProviderForTools));
       skillTools.push(createRunScriptTool(depsForSkills, skillProviderForTools));
     }

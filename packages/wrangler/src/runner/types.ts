@@ -14,6 +14,7 @@ import type { HostEnv } from '../host-env/index.js';
 import type { SubAgentRunnerFactory } from '../subagent/delegate-tool.js';
 import type { SubAgentConfig } from '../subagent/types.js';
 import type { SearchProvider } from '../tools/builtin/index.js';
+import type { ToolDeps } from '../tools/builtin/workspace-deps.js';
 import type { SessionSource } from '../types.js';
 
 // ---- Tool & Skill metadata for diagnostics ----
@@ -82,6 +83,11 @@ export interface SkillsConfig {
 export interface ToolsConfig {
   /** Builtin tool whitelist. Omit to load all; pass to filter. */
   builtinFilter?: BuiltinToolFilter;
+  /**
+   * External ToolDeps injection — overrides the default HostToolDeps/SandboxToolDeps.
+   * Browser extensions pass BrowserToolDeps here; omit for Node (daemon/CLI).
+   */
+  deps?: ToolDeps;
   /** MCP config file paths */
   mcpConfigPaths?: string[];
   /** Extra custom tools */
