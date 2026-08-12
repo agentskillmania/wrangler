@@ -3,7 +3,8 @@ import { dirname, basename, relative, join } from 'node:path';
 
 import type { FastifyInstance } from 'fastify';
 
-import { readMeta, defaultNodeHostEnv } from '@agentskillmania/wrangler';
+import { readMeta } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 
 import type { DecoratedFastifyInstance } from '../types.js';
 import { resolveWithinRoot } from '../utils.js';

@@ -89,6 +89,6 @@ export async function skillRoutes(fastify: FastifyInstance): Promise<void> {
       ...(query.dirs?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),
     ];
     const provider = new FilesystemSkillProvider(dirs);
-    return { skills: provider.listSkills() };
+    return { skills: await provider.listSkills() };
   });
 }

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { createFileReadTool } from '../../../../src/tools/builtin/file-read.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
 import type { ToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
-import { NodeHostEnv } from '../../../../src/host-env/index.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 
 /**
  * Create a mock ToolDeps with default implementations.

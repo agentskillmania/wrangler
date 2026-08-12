@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 
-import { PlanStore, defaultNodeHostEnv } from '@agentskillmania/wrangler';
+import { PlanStore } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import type { PlanStatus } from '@agentskillmania/wrangler';
 import type { FastifyInstance } from 'fastify';
 

@@ -27,9 +27,9 @@ export function createReadResourceTool(skillProvider: ISkillProvider): Tool<ZodT
       resource_path: z.string().describe('Path to the resource, relative to the skill directory'),
     }),
     execute: async ({ skill_name, resource_path }): Promise<string> => {
-      const manifest = skillProvider.getManifest(skill_name);
+      const manifest = await skillProvider.getManifest(skill_name);
       if (!manifest) {
-        const available = skillProvider.listSkills().map((s) => s.name);
+        const available = (await skillProvider.listSkills()).map((s) => s.name);
         return `Skill '${skill_name}' not found. Available: ${available.join(', ')}`;
       }
       return skillProvider.loadResource(skill_name, resource_path);

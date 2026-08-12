@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createGrepTool } from '../../src/tools/builtin/grep.js';
 import { HostToolDeps } from '../../src/tools/builtin/workspace-deps.js';
-import { NodeHostEnv } from '../../src/host-env/index.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 
 describe('Integration: grep tool (real ripgrep)', () => {
   let workspace: string;

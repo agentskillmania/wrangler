@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createShellTool } from '../../../../src/tools/builtin/shell.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
-import { NodeHostEnv } from '../../../../src/host-env/index.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';

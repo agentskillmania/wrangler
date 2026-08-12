@@ -45,7 +45,7 @@ export function createSkillHandler(skillProvider: ISkillProvider): CommandHandle
       }
 
       try {
-        const manifest = skillProvider.getManifest(skillName);
+        const manifest = await skillProvider.getManifest(skillName);
         if (!manifest) {
           return { handled: true, response: `Skill '${skillName}' not found.` };
         }

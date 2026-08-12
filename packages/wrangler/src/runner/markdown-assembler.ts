@@ -14,11 +14,11 @@
  * - Same-turn thoughts (after last user message) included; cross-turn skipped
  */
 
-import type { AgentState } from '@agentskillmania/colts';
 import type {
+  AgentState,
   BuildMessagesOptions,
   IMessageAssembler,
-} from '@agentskillmania/colts/dist/message-assembler/index.js';
+} from '@agentskillmania/colts';
 import type { Message as PiAIMessage, TextContent, ToolCall } from '@mariozechner/pi-ai';
 
 import { shiftHeadings } from './shift-headings.js';
@@ -52,12 +52,12 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
     this.subAgentConfigs = subAgentConfigs;
   }
 
-  build(state: AgentState, opts: BuildMessagesOptions): PiAIMessage[] {
+  async build(state: AgentState, opts: BuildMessagesOptions): Promise<PiAIMessage[]> {
     const messages: PiAIMessage[] = [];
     const now = Date.now();
 
     // -- Static prefix --
-    const systemDoc = this.buildSystemDocument(state, opts);
+    const systemDoc = await this.buildSystemDocument(state, opts);
 
     if (systemDoc) {
       messages.push({
@@ -237,7 +237,10 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
    * Contains ONLY static content for KV-cache friendliness.
    * Dynamic content (todolist) is in buildDynamicReminder().
    */
-  private buildSystemDocument(state: AgentState, opts: BuildMessagesOptions): string | null {
+  private async buildSystemDocument(
+    state: AgentState,
+    opts: BuildMessagesOptions
+  ): Promise<string | null> {
     const sections: string[] = [];
 
     // Start with system prompt (YAML frontmatter from buildTimeContext)
@@ -252,7 +255,7 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
 
     // Available Skills section
     if (opts.skillProvider) {
-      const skills = opts.skillProvider.listSkills();
+      const skills = await opts.skillProvider.listSkills();
       if (skills.length > 0) {
         const skillLines = skills
           .map((s: { name: string; description: string }) => `- ${s.name}: ${s.description}`)

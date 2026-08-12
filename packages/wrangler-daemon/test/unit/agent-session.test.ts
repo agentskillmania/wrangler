@@ -141,6 +141,10 @@ vi.mock('@agentskillmania/colts', () => ({
     context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
   }),
   addUserMessage: vi.fn((state, _msg, _maxLength?) => state),
+  updateState: vi.fn((state) => state),
+  FilesystemSkillProvider: vi.fn(),
+  // Called at agent-session.ts module load to register the Node SkillFsOps.
+  setDefaultSkillFsOps: vi.fn(),
 }));
 
 const testConfig = {
@@ -907,7 +911,8 @@ describe('AgentSession', () => {
       expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           workspacePath: '/tmp/test-workspace',
-          skills: { dirs: skillDirs },
+          // provider is also passed through; assert only the dirs passthrough
+          skills: expect.objectContaining({ dirs: skillDirs }),
           tools: expect.objectContaining({ mcpConfigPaths }),
         })
       );

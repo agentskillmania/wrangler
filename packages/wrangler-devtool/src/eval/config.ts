@@ -13,7 +13,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { LLMQuickInit } from '@agentskillmania/colts';
-import { NodeHostEnv } from '@agentskillmania/wrangler';
+import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 
 /** Result of loading LLM config. */
 export interface EvalLlmConfig {

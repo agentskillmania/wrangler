@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { createWebFetchTool } from '../../../../src/tools/builtin/web-fetch.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
-import { NodeHostEnv } from '../../../../src/host-env/index.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 
 describe('web_fetch', () => {
   let deps: HostToolDeps;

@@ -21,4 +21,5 @@ export type {
 } from './types.js';
 
 export { RuntimeCapabilityError } from './types.js';
-export { NodeHostEnv, defaultNodeHostEnv } from './node-host-env.js';
+// 注意：不 re-export NodeHostEnv/defaultNodeHostEnv——它们是 Node 实现，
+// 由组合根从 ./node-host-env.js 子路径 import（避免浏览器打包拖入 node: 依赖）。

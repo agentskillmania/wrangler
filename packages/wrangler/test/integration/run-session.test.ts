@@ -12,7 +12,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { createSessionSupport } from '../../src/session/support.js';
-import { defaultNodeHostEnv } from '../../src/host-env/index.js';
+import { defaultNodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 import {
   AgentRunner,
   createAgentState,

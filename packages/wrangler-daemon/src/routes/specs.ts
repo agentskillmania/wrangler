@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 
-import { SpecStore, defaultNodeHostEnv } from '@agentskillmania/wrangler';
+import { SpecStore } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import type { SpecStatus } from '@agentskillmania/wrangler';
 import type { FastifyInstance } from 'fastify';
 

@@ -5,7 +5,8 @@
  * Bridges colts AskHuman tool -> SSE -> frontend for human-in-the-loop interaction.
  */
 
-import { createAgentState, addUserMessage, updateState, FilesystemSkillProvider } from '@agentskillmania/colts';
+import { createAgentState, addUserMessage, updateState, FilesystemSkillProvider, setDefaultSkillFsOps } from '@agentskillmania/colts';
+import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
 import type {
   AgentState,
   RunStreamEvent,
@@ -19,13 +20,18 @@ import {
   SessionStore,
   createLLMClient,
   resolveDefaultModel,
-  NodeHostEnv,
 } from '@agentskillmania/wrangler';
+import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import type { SubAgentConfig, LimitsConfig, SandboxConfig, HostEnv } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
 import type { RunnerFeatureFlags } from './session-diagnostics.js';
+
+// Register the Node SkillFsOps implementation at module load so any
+// FilesystemSkillProvider constructed here (or elsewhere in the daemon)
+// resolves node:fs via the global registration point. Idempotent.
+setDefaultSkillFsOps(nodeFsOps);
 
 /**
  * Bridge between AskHumanHandler closure and AgentSession instance.
@@ -224,7 +230,8 @@ export class AgentSession {
     const mergedSandbox = mergeSandboxConfig(config.sandbox, options.sandbox);
 
     // Create skill provider: injected provider takes priority; otherwise
-    // build from dirs (Node only — FilesystemSkillProvider uses node:fs).
+    // build from dirs using the globally registered SkillFsOps (nodeFsOps
+    // registered above — daemon.ts also registers it at startup).
     const skillProvider = options.skills?.provider
       ?? (options.skills?.dirs?.length ? new FilesystemSkillProvider(options.skills.dirs) : undefined);
 

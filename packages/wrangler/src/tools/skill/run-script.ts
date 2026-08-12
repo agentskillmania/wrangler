@@ -44,9 +44,9 @@ export function createRunScriptTool(
       args: z.array(z.string()).optional().describe('Arguments to pass to the script'),
     }),
     execute: async ({ skill_name, script_path, command, args }): Promise<string> => {
-      const manifest = skillProvider.getManifest(skill_name);
+      const manifest = await skillProvider.getManifest(skill_name);
       if (!manifest) {
-        const available = skillProvider.listSkills().map((s) => s.name);
+        const available = (await skillProvider.listSkills()).map((s) => s.name);
         return `Skill '${skill_name}' not found. Available: ${available.join(', ')}`;
       }
       const scriptAbs = join(manifest.source, script_path);

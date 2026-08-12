@@ -38,7 +38,7 @@ const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 const nodeRequire = typeof require === 'function' ? require : createRequire(import.meta.url);
 
-// ─── 私有：shell 检测（从 workspace-deps.ts 搬来，第 3-c 批移除原文件重复）───
+// ─── shell 检测（从 workspace-deps.ts 搬来，第 3-c 批移除原文件重复）───
 
 function which(command: string): string | undefined {
   const finder = process.platform === 'win32' ? 'where' : 'which';
@@ -83,7 +83,12 @@ function detectWindowsShells(): ShellInfo[] {
   return shells;
 }
 
-function detectShell(): ShellInfo {
+/**
+ * Detect the best available shell for the current platform (Node-only
+ * convenience; moved from workspace-deps.ts). Browser code should use
+ * `runtime.env.detectShell()` instead.
+ */
+export function detectShell(): ShellInfo {
   if (process.platform !== 'win32') {
     const envShell = process.env.SHELL;
     if (envShell) return { path: envShell, name: nodePath.basename(envShell) };
@@ -356,3 +361,21 @@ export class NodeHostEnv implements HostEnv {
 
 /** 默认 NodeHostEnv 单例（给 Loader 等未显式传 runtime 的场景兜底用） */
 export const defaultNodeHostEnv = new NodeHostEnv();
+
+/**
+ * Detect binary files (Node-only convenience, moved from workspace-deps).
+ * Browser code should use `runtime.fs.isBinary` instead.
+ */
+export async function isBinaryFile(filePath: string, runtime?: HostEnv): Promise<boolean> {
+  if (runtime) return runtime.fs.isBinary(filePath);
+  // TODO(binary-detection): `isbinaryfile`'s NUL-presence rule is a
+  // deliberate, documented divergence from the Rust side (binaryornot-rs
+  // decision-tree classifier). Plan: lift this side UP to the classifier
+  // (WASM wrapper), not drag Rust down — see the Rust workspace_deps.rs
+  // doc comment for the full rationale.
+  try {
+    return await detectBinary(filePath);
+  } catch {
+    return false;
+  }
+}

@@ -25,11 +25,6 @@ export type {
   PlanFileNameParams,
   ParsedPlanFileName,
 } from './naming.js';
-
-// Skill content
-export { WRITE_SPEC_CONTENT } from './skills/write-spec.js';
-export { REVIEW_SPEC_CONTENT } from './skills/review-spec.js';
-export { WRITE_PLAN_CONTENT } from './skills/write-plan.js';
-export { REVIEW_PLAN_CONTENT } from './skills/review-plan.js';
-export { EXECUTE_PLAN_CONTENT } from './skills/execute-plan.js';
-export { CONCEIVE_CONTENT } from './skills/conceive.js';
+// 注意：SKILL.md 内容常量（WRITE_SPEC_CONTENT 等）不在此 re-export——
+// 它们的模块顶层 readFileSync 是 Node-only，浏览器打包会拖入。
+// 需要的人从 ./skills/*.js 子路径 import。

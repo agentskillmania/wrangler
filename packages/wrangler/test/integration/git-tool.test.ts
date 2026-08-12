@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createGitTool } from '../../src/tools/builtin/git.js';
 import { HostToolDeps } from '../../src/tools/builtin/workspace-deps.js';
-import { NodeHostEnv } from '../../src/host-env/index.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 
 describe('Integration: git tool (real git)', () => {
   let workspace: string;

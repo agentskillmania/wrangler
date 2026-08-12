@@ -29,24 +29,24 @@ function makeOpts(overrides?: Partial<BuildMessagesOptions>): BuildMessagesOptio
 }
 
 describe('MarkdownMessageAssembler', () => {
-  it('returns null system doc when no system parts exist', () => {
+  it('returns null system doc when no system parts exist', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState();
     const opts = makeOpts();
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
 
     // No system doc → no messages
     expect(messages).toHaveLength(0);
   });
 
-  it('produces YAML frontmatter at position 0 with no prefix', () => {
+  it('produces YAML frontmatter at position 0 with no prefix', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     const opts = makeOpts({
       systemPrompt: '---\ntime: now\ntz: UTC\n---',
     });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
     const firstUser = messages.find((m) => m.role === 'user');
     const content = typeof firstUser!.content === 'string' ? firstUser!.content : '';
 
@@ -55,7 +55,7 @@ describe('MarkdownMessageAssembler', () => {
     expect(content).not.toContain('[System Instructions]');
   });
 
-  it('wraps instructions in ## Instructions with heading shift', () => {
+  it('wraps instructions in ## Instructions with heading shift', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({
       instructions: '# My Agent\n\n## Section\n\nDo things.',
@@ -64,7 +64,7 @@ describe('MarkdownMessageAssembler', () => {
       systemPrompt: '---\ntime: now\n---',
     });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
     const content = typeof messages[0].content === 'string' ? messages[0].content : '';
 
     expect(content).toContain('## Instructions');
@@ -74,20 +74,20 @@ describe('MarkdownMessageAssembler', () => {
     expect(content).toContain('#### Section');
   });
 
-  it('does not produce ## Instructions when no instructions given', () => {
+  it('does not produce ## Instructions when no instructions given', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState();
     const opts = makeOpts({
       systemPrompt: '---\ntime: now\n---',
     });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
     const content = typeof messages[0].content === 'string' ? messages[0].content : '';
 
     expect(content).not.toContain('## Instructions');
   });
 
-  it('produces ## Available Skills when skill provider has skills', () => {
+  it('produces ## Available Skills when skill provider has skills', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     const opts = makeOpts({
@@ -100,7 +100,7 @@ describe('MarkdownMessageAssembler', () => {
       } as any,
     });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
     const content = typeof messages[0].content === 'string' ? messages[0].content : '';
 
     expect(content).toContain('## Available Skills');
@@ -109,18 +109,18 @@ describe('MarkdownMessageAssembler', () => {
     expect(content).toContain('load_skill');
   });
 
-  it('does not produce ## Available Skills when no skill provider', () => {
+  it('does not produce ## Available Skills when no skill provider', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
     const content = typeof messages[0].content === 'string' ? messages[0].content : '';
 
     expect(content).not.toContain('## Available Skills');
   });
 
-  it('produces ## Sub-Agents when sub-agents configured', () => {
+  it('produces ## Sub-Agents when sub-agents configured', async () => {
     const subAgentMap = new Map();
     subAgentMap.set('coder', {
       name: 'coder',
@@ -132,7 +132,7 @@ describe('MarkdownMessageAssembler', () => {
       systemPrompt: '---\ntime: now\n---',
     });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
     const content = typeof messages[0].content === 'string' ? messages[0].content : '';
 
     expect(content).toContain('## Sub-Agents');
@@ -140,7 +140,7 @@ describe('MarkdownMessageAssembler', () => {
     expect(content).toContain('delegate');
   });
 
-  it('produces ## Thinking when enablePromptThinking is true', () => {
+  it('produces ## Thinking when enablePromptThinking is true', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     const opts = makeOpts({
@@ -148,14 +148,14 @@ describe('MarkdownMessageAssembler', () => {
       enablePromptThinking: true,
     });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
     const content = typeof messages[0].content === 'string' ? messages[0].content : '';
 
     expect(content).toContain('## Thinking');
     expect(content).toContain('<think>');
   });
 
-  it('does not produce ## Thinking when enablePromptThinking is false', () => {
+  it('does not produce ## Thinking when enablePromptThinking is false', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     const opts = makeOpts({
@@ -163,18 +163,18 @@ describe('MarkdownMessageAssembler', () => {
       enablePromptThinking: false,
     });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
     const content = typeof messages[0].content === 'string' ? messages[0].content : '';
 
     expect(content).not.toContain('## Thinking');
   });
 
-  it('adds fake assistant acknowledgment after system doc', () => {
+  it('adds fake assistant acknowledgment after system doc', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
 
     expect(messages[0].role).toBe('user');
     expect(messages[1].role).toBe('assistant');
@@ -188,7 +188,7 @@ describe('MarkdownMessageAssembler', () => {
     );
   });
 
-  it('includes conversation history after system doc', () => {
+  it('includes conversation history after system doc', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     state.context.messages = [
@@ -201,7 +201,7 @@ describe('MarkdownMessageAssembler', () => {
     ] as any;
     const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
 
     // System doc (user) + ack (assistant) + user msg + assistant msg
     expect(messages).toHaveLength(4);
@@ -210,7 +210,7 @@ describe('MarkdownMessageAssembler', () => {
     expect(messages[3].role).toBe('assistant');
   });
 
-  it('handles tool messages in conversation history', () => {
+  it('handles tool messages in conversation history', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     state.context.messages = [
@@ -224,14 +224,14 @@ describe('MarkdownMessageAssembler', () => {
     ] as any;
     const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
 
     const toolMsg = messages.find((m) => m.role === 'toolResult');
     expect(toolMsg!.toolCallId).toBe('tc-1');
     expect(toolMsg!.isError).toBe(false);
   });
 
-  it('marks tool result as error when content starts with Error:', () => {
+  it('marks tool result as error when content starts with Error:', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     state.context.messages = [
@@ -245,14 +245,14 @@ describe('MarkdownMessageAssembler', () => {
     ] as any;
     const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
 
     const toolMsg = messages.find((m) => m.role === 'toolResult' && m.toolCallId === 'tc-2');
     expect(toolMsg).toBeDefined();
     expect(toolMsg!.isError).toBe(true);
   });
 
-  it('creates an assistant message when input has toolCalls', () => {
+  it('creates an assistant message when input has toolCalls', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     state.context.messages = [
@@ -265,7 +265,7 @@ describe('MarkdownMessageAssembler', () => {
     ] as any;
     const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
 
     const assistantMsgs = messages.filter((m) => m.role === 'assistant');
     expect(assistantMsgs).toHaveLength(2);
@@ -273,7 +273,7 @@ describe('MarkdownMessageAssembler', () => {
     expect(Array.isArray(assistantMsg.content)).toBe(true);
   });
 
-  it('includes tool call details in assistant message content', () => {
+  it('includes tool call details in assistant message content', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     state.context.messages = [
@@ -286,7 +286,7 @@ describe('MarkdownMessageAssembler', () => {
     ] as any;
     const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
     const assistantMsg = messages.filter((m) => m.role === 'assistant')[1];
 
     expect(assistantMsg.content).toEqual(
@@ -301,7 +301,7 @@ describe('MarkdownMessageAssembler', () => {
     });
   });
 
-  it('sets stopReason to toolUse for assistant messages with toolCalls', () => {
+  it('sets stopReason to toolUse for assistant messages with toolCalls', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     state.context.messages = [
@@ -314,13 +314,13 @@ describe('MarkdownMessageAssembler', () => {
     ] as any;
     const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
     const assistantMsg = messages.filter((m) => m.role === 'assistant')[1];
 
     expect(assistantMsg.stopReason).toBe('toolUse');
   });
 
-  it('handles assistant messages without toolCalls', () => {
+  it('handles assistant messages without toolCalls', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     state.context.messages = [
@@ -332,7 +332,7 @@ describe('MarkdownMessageAssembler', () => {
     ] as any;
     const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
 
     const assistantMsgs = messages.filter((m) => m.role === 'assistant');
     expect(assistantMsgs).toHaveLength(2);
@@ -344,7 +344,7 @@ describe('MarkdownMessageAssembler', () => {
     expect(assistantMsg.stopReason).toBe('stop');
   });
 
-  it('respects compression boundary', () => {
+  it('respects compression boundary', async () => {
     const assembler = new MarkdownMessageAssembler();
     const state = makeState({ instructions: 'Be helpful.' });
     state.context.messages = [
@@ -357,7 +357,7 @@ describe('MarkdownMessageAssembler', () => {
     };
     const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
 
     // Should include compression summary
     const summaryMsg = messages.find(
@@ -378,7 +378,7 @@ describe('MarkdownMessageAssembler', () => {
     expect(oldMsg).toBeUndefined();
   });
 
-  it('section order in static prefix is: Instructions → Skills → Sub-Agents → Thinking', () => {
+  it('section order in static prefix is: Instructions → Skills → Sub-Agents → Thinking', async () => {
     const subAgentMap = new Map();
     subAgentMap.set('agent1', { name: 'agent1', description: 'An agent' });
     const assembler = new MarkdownMessageAssembler(subAgentMap);
@@ -391,7 +391,7 @@ describe('MarkdownMessageAssembler', () => {
       enablePromptThinking: true,
     });
 
-    const messages = assembler.build(state, opts);
+    const messages = await assembler.build(state, opts);
     const content = typeof messages[0].content === 'string' ? messages[0].content : '';
 
     const instructionsIdx = content.indexOf('## Instructions');
@@ -406,7 +406,7 @@ describe('MarkdownMessageAssembler', () => {
   });
 
   describe('Thought message handling', () => {
-    it('should include same-turn thought in output messages', () => {
+    it('should include same-turn thought in output messages', async () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
       state.context.messages = [
@@ -421,7 +421,7 @@ describe('MarkdownMessageAssembler', () => {
       ] as any;
       const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-      const messages = assembler.build(state, opts);
+      const messages = await assembler.build(state, opts);
 
       // Same-turn thought (after last user) should appear as assistant message
       const hasThought = messages.some(
@@ -442,7 +442,7 @@ describe('MarkdownMessageAssembler', () => {
       expect(hasReply).toBe(true);
     });
 
-    it('should skip cross-turn thought messages', () => {
+    it('should skip cross-turn thought messages', async () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
       state.context.messages = [
@@ -457,7 +457,7 @@ describe('MarkdownMessageAssembler', () => {
       ] as any;
       const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-      const messages = assembler.build(state, opts);
+      const messages = await assembler.build(state, opts);
 
       // Cross-turn thought (before last user) should NOT appear
       const hasOldThought = messages.some(
@@ -471,7 +471,7 @@ describe('MarkdownMessageAssembler', () => {
       expect(hasOldThought).toBe(false);
     });
 
-    it('should include multiple same-turn thoughts', () => {
+    it('should include multiple same-turn thoughts', async () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
       state.context.messages = [
@@ -495,7 +495,7 @@ describe('MarkdownMessageAssembler', () => {
       ] as any;
       const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-      const messages = assembler.build(state, opts);
+      const messages = await assembler.build(state, opts);
 
       const hasThought1 = messages.some(
         (m) =>
@@ -513,7 +513,7 @@ describe('MarkdownMessageAssembler', () => {
       expect(hasThought2).toBe(true);
     });
 
-    it('should handle mixed same-turn and cross-turn thoughts', () => {
+    it('should handle mixed same-turn and cross-turn thoughts', async () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
       state.context.messages = [
@@ -534,7 +534,7 @@ describe('MarkdownMessageAssembler', () => {
       ] as any;
       const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-      const messages = assembler.build(state, opts);
+      const messages = await assembler.build(state, opts);
 
       const hasOldThought = messages.some(
         (m) =>
@@ -553,7 +553,7 @@ describe('MarkdownMessageAssembler', () => {
       expect(hasNewThought).toBe(true);
     });
 
-    it('should include same-turn thought even when it is the last message', () => {
+    it('should include same-turn thought even when it is the last message', async () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
       state.context.messages = [
@@ -567,7 +567,7 @@ describe('MarkdownMessageAssembler', () => {
       ] as any;
       const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-      const messages = assembler.build(state, opts);
+      const messages = await assembler.build(state, opts);
 
       const hasThought = messages.some(
         (m) =>
@@ -578,7 +578,7 @@ describe('MarkdownMessageAssembler', () => {
       expect(hasThought).toBe(true);
     });
 
-    it('should preserve regular assistant messages when no thoughts exist', () => {
+    it('should preserve regular assistant messages when no thoughts exist', async () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
       state.context.messages = [
@@ -589,7 +589,7 @@ describe('MarkdownMessageAssembler', () => {
       ] as any;
       const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-      const messages = assembler.build(state, opts);
+      const messages = await assembler.build(state, opts);
 
       // System ack + 2 conversation assistant messages
       const assistantMsgs = messages.filter((m) => m.role === 'assistant');
@@ -598,7 +598,7 @@ describe('MarkdownMessageAssembler', () => {
   });
 
   describe('Dynamic content extraction to system-reminder', () => {
-    it('should NOT include ## Current Task List in static system doc', () => {
+    it('should NOT include ## Current Task List in static system doc', async () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
       (state.context as any).todoList = {
@@ -612,7 +612,7 @@ describe('MarkdownMessageAssembler', () => {
       ] as any;
       const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-      const messages = assembler.build(state, opts);
+      const messages = await assembler.build(state, opts);
       const systemMsg = messages[0];
       const content = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
 
@@ -621,7 +621,7 @@ describe('MarkdownMessageAssembler', () => {
       expect(content).not.toContain('Task A');
     });
 
-    it('should inject todolist in system-reminder of last user message', () => {
+    it('should inject todolist in system-reminder of last user message', async () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
       (state.context as any).todoList = {
@@ -642,7 +642,7 @@ describe('MarkdownMessageAssembler', () => {
       ] as any;
       const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-      const messages = assembler.build(state, opts);
+      const messages = await assembler.build(state, opts);
       const lastUser = [...messages].reverse().find((m) => m.role === 'user');
       const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
 
@@ -653,7 +653,7 @@ describe('MarkdownMessageAssembler', () => {
       expect(content).toContain('</system-reminder>');
     });
 
-    it('should NOT inject active skill in system-reminder (instructions persist in history)', () => {
+    it('should NOT inject active skill in system-reminder (instructions persist in history)', async () => {
       const assembler = new MarkdownMessageAssembler();
       const state = makeState({ instructions: 'Be helpful.' });
       (state.context as any).skillState = {
@@ -665,7 +665,7 @@ describe('MarkdownMessageAssembler', () => {
       ] as any;
       const opts = makeOpts({ systemPrompt: '---\ntime: now\n---' });
 
-      const messages = assembler.build(state, opts);
+      const messages = await assembler.build(state, opts);
       const lastUser = [...messages].reverse().find((m) => m.role === 'user');
       const content = typeof lastUser?.content === 'string' ? lastUser.content : '';
 

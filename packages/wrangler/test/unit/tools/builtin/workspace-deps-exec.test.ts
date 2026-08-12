@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
-import { NodeHostEnv } from '../../../../src/host-env/index.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 
 describe('HostToolDeps command execution contract (real ripgrep)', () => {
   let workspace: string;

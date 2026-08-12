@@ -20,7 +20,7 @@ export function createSkillsHandler(skillProvider: ISkillProvider): CommandHandl
     name: 'skills',
     description: 'List available skills',
     async handle() {
-      const skills = skillProvider.listSkills();
+      const skills = await skillProvider.listSkills();
       if (skills.length === 0) {
         return { handled: true, response: 'No skills available.' };
       }

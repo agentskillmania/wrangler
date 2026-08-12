@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-import { SessionStore, readMeta, defaultNodeHostEnv } from '@agentskillmania/wrangler';
+import { SessionStore, readMeta } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import type { SessionMeta, HostEnv } from '@agentskillmania/wrangler';
 
 import type { AgentSession } from './agent-session.js';

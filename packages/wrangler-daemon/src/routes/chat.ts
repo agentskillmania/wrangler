@@ -5,9 +5,9 @@ import {
   SessionNotFoundError,
   SessionStore,
   crewToRunnerOptions,
-  defaultNodeHostEnv,
   readMeta,
 } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import type { SessionMeta } from '@agentskillmania/wrangler';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance, FastifyReply } from 'fastify';

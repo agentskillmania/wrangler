@@ -4,6 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
+import { setDefaultSkillFsOps } from '@agentskillmania/colts';
+import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
+
 import { CONFIG_PATH, AGENTS_DIR, SKILLS_DIR, SESSIONS_DIR, CREWS_DIR } from './constants.js';
 import { ConfigManager } from './core/config-manager.js';
 import { ResourceManager } from './core/resource-manager.js';
@@ -28,6 +31,11 @@ import { specRoutes } from './routes/specs.js';
 import type { DaemonOptions } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Register the Node SkillFsOps implementation once at daemon startup so any
+// FilesystemSkillProvider (sessions, routes/skills.ts) resolves node:fs
+// without colts importing node: modules itself. Idempotent.
+setDefaultSkillFsOps(nodeFsOps);
 
 /**
  * Top-level daemon class coordinating all subsystems.

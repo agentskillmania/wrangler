@@ -6,12 +6,11 @@ import { tmpdir } from 'node:os';
 import {
   resolvePath,
   truncateOutput,
-  isBinaryFile,
   HostToolDeps,
-  detectShell,
 } from '../../../../src/tools/builtin/workspace-deps.js';
 import type { ShellInfo } from '../../../../src/tools/builtin/workspace-deps.js';
-import { NodeHostEnv } from '../../../../src/host-env/index.js';
+import { detectShell, isBinaryFile } from '../../../../src/host-env/node-host-env.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 
 describe('workspace-deps', () => {
   let workspace: string;

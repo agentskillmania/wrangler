@@ -21,8 +21,9 @@ vi.mock('node:fs', async (importOriginal) => {
   };
 });
 
-import { detectShell, HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
-import { NodeHostEnv } from '../../../../src/host-env/index.js';
+import { detectShell } from '../../../../src/host-env/node-host-env.js';
+import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 import { execSync } from 'node:child_process';
 import { statSync } from 'node:fs';
 

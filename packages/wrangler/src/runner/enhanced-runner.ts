@@ -480,7 +480,7 @@ export class EnhancedRunner {
 
     // Build skill metadata from the injected provider (if any).
     const skillMeta: SkillMetadata[] = skillProvider
-      ? skillProvider.listSkills().map((s) => ({ name: s.name, description: s.description, source: s.source }))
+      ? (await skillProvider.listSkills()).map((s) => ({ name: s.name, description: s.description, source: s.source }))
       : [];
 
     // Build tool registry and optionally wrap with confirmation

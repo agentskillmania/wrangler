@@ -45,16 +45,12 @@ export type { ParsedAgent } from './agent/index.js';
 export { createBuiltinTools } from './tools/builtin/index.js';
 export type { BuiltinToolsOptions } from './tools/builtin/index.js';
 export type { SearchProvider, SearchResult } from './tools/builtin/index.js';
-export { resolvePath, truncateOutput, isBinaryFile } from './tools/builtin/index.js';
+export { resolvePath, truncateOutput } from './tools/builtin/index.js';
 export type { ToolDeps, ExecResult } from './tools/builtin/index.js';
 export { HostToolDeps } from './tools/builtin/index.js';
 export { createPythonTool } from './tools/builtin/python.js';
 export { createGitTool } from './tools/builtin/git.js';
 export type { Tool } from '@agentskillmania/colts';
-export { loadMCPTools } from './tools/mcp/index.js';
-export type { MCPLoaderOptions } from './tools/mcp/index.js';
-export { discoverGlobalConfigPath } from './tools/mcp/index.js';
-export { createMCPTool, jsonSchemaToZod } from './tools/mcp/index.js';
 
 // A2UI support
 export { createA2UITools, A2UIMiddleware, a2uiRespond } from './tools/a2ui/index.js';
@@ -104,9 +100,6 @@ export type {
   SpecDocument,
   PlanDocument,
 } from './spec-plan/index.js';
-export { WRITE_SPEC_CONTENT, REVIEW_SPEC_CONTENT } from './spec-plan/index.js';
-export { WRITE_PLAN_CONTENT, REVIEW_PLAN_CONTENT } from './spec-plan/index.js';
-export { EXECUTE_PLAN_CONTENT, CONCEIVE_CONTENT } from './spec-plan/index.js';
 
 // Crew (Layer 8) — config loader only
 export { CrewLoader, crewToRunnerOptions } from './crew/index.js';
@@ -117,6 +110,8 @@ export { AgentLoader } from './loader/index.js';
 export type { AgentLoadResult } from './loader/index.js';
 
 // HostEnv (宿主环境抽象层 — 引擎核心通过它访问 OS 资源)
+// 注意：只导出接口和类型。NodeHostEnv 等具体实现从子路径 import
+// （@agentskillmania/wrangler/host-env/node-host-env），由组合根负责创建。
 export type {
   HostEnv,
   HostEnvFs,
@@ -130,4 +125,4 @@ export type {
   RuntimeStat,
   GrepResult,
 } from './host-env/index.js';
-export { NodeHostEnv, defaultNodeHostEnv, RuntimeCapabilityError } from './host-env/index.js';
+export { RuntimeCapabilityError } from './host-env/index.js';

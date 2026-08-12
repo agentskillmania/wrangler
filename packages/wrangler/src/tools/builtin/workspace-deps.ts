@@ -1,10 +1,4 @@
-import { Buffer } from 'node:buffer';
-import { execSync } from 'node:child_process';
-import { statSync } from 'node:fs';
-import { resolve, sep, join, basename, dirname } from 'node:path';
-
 import type { Sandbox } from '@agentskillmania/sandbox';
-import { isBinaryFile as detectBinary } from 'isbinaryfile';
 import { quote } from 'shell-quote';
 
 import type { HostEnv } from '../../host-env/index.js';
@@ -39,92 +33,31 @@ export interface ShellInfo {
 }
 
 /**
- * Find executable in PATH using platform-appropriate method.
- * On Unix uses `which`, on Windows uses `where`.
+ * 极简 POSIX 路径拼接 + 规范化（替代 path.resolve 的浏览器场景）。
+ * 以 '/' 开头的部分会重置累积结果（与 path.resolve 语义一致）。
  */
-function which(command: string): string | undefined {
-  const finder = process.platform === 'win32' ? 'where' : 'which';
-  try {
-    const result = execSync(`${finder} ${command}`, {
-      encoding: 'utf-8',
-      timeout: 3000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    const firstLine = result.split('\n')[0]?.trim();
-    return firstLine || undefined;
-  } catch {
-    return undefined;
+function simpleResolve(...parts: string[]): string {
+  let joined = '/';
+  for (const part of parts) {
+    if (!part) continue;
+    joined = part.startsWith('/') ? part : `${joined === '/' ? '' : joined}/${part}`;
   }
-}
-
-/**
- * Locate Git Bash on Windows by finding git.exe and deriving bash.exe path.
- * Git Bash's bash.exe may not be in PATH, but git.exe almost always is.
- */
-function findGitBash(): string | undefined {
-  if (process.platform !== 'win32') return undefined;
-
-  const envOverride = process.env.WRANGLER_GIT_BASH_PATH;
-  if (envOverride) return envOverride;
-
-  const gitPath = which('git');
-  if (!gitPath) return undefined;
-
-  // git.exe lives in Git/cmd/ or Git/bin/ — go up two levels to Git root, then into bin/
-  const bashPath = join(gitPath, '..', '..', 'bin', 'bash.exe');
-  try {
-    if (statSync(bashPath).isFile()) return bashPath;
-  } catch {
-    // Fall through
-  }
-
-  return undefined;
-}
-
-/**
- * Detect available shells on Windows in priority order.
- * Priority: pwsh → powershell → git bash → cmd
- */
-function detectWindowsShells(): ShellInfo[] {
-  const shells: ShellInfo[] = [];
-
-  const pwsh = which('pwsh');
-  if (pwsh) shells.push({ path: pwsh, name: 'pwsh' });
-
-  const powershell = which('powershell');
-  if (powershell) shells.push({ path: powershell, name: 'powershell' });
-
-  const gitBash = findGitBash();
-  if (gitBash) shells.push({ path: gitBash, name: 'bash' });
-
-  const comspec = process.env.COMSPEC || 'cmd.exe';
-  shells.push({ path: comspec, name: 'cmd' });
-
-  return shells;
-}
-
-/**
- * Detect the best available shell for the current platform.
- *
- * Unix: uses $SHELL env var, falls back to /bin/zsh (macOS) or /bin/bash or /bin/sh.
- * Windows: pwsh → powershell → git bash → cmd (via COMSPEC).
- */
-export function detectShell(): ShellInfo {
-  if (process.platform !== 'win32') {
-    const envShell = process.env.SHELL;
-    if (envShell) {
-      return { path: envShell, name: basename(envShell) };
+  const segments: string[] = [];
+  for (const seg of joined.split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') {
+      segments.pop();
+      continue;
     }
-    if (process.platform === 'darwin') {
-      return { path: '/bin/zsh', name: 'zsh' };
-    }
-    const bash = which('bash');
-    if (bash) return { path: bash, name: 'bash' };
-    return { path: '/bin/sh', name: 'sh' };
+    segments.push(seg);
   }
+  return '/' + segments.join('/');
+}
 
-  const windowsShells = detectWindowsShells();
-  return windowsShells[0] ?? { path: 'cmd.exe', name: 'cmd' };
+/** 极简 POSIX dirname（替代 path.dirname 的浏览器场景） */
+function simpleDirname(p: string): string {
+  const idx = p.lastIndexOf('/');
+  return idx <= 0 ? '/' : p.slice(0, idx);
 }
 
 /** Result of command execution */
@@ -337,8 +270,8 @@ export class HostToolDeps implements ToolDeps {
 
   async isBinaryFile(filePath: string): Promise<boolean> {
     // Guard the missing-file case: runtime.fs.isBinary maps read failures to
-    // `true`, but the historical contract (and the top-level isBinaryFile)
-    // treat an unreadable/missing file as "not binary" (false).
+    // `true`, but the historical contract (and the host-env isBinaryFile
+    // helper) treat an unreadable/missing file as "not binary" (false).
     const absolute = this.resolvePath(filePath);
     const stat = await this.runtime.fs.stat(absolute);
     if (!stat.exists) return false;
@@ -372,10 +305,10 @@ export class SandboxToolDeps implements ToolDeps {
   }
 
   resolvePath(filePath: string): string {
-    // Sandbox-internal paths are relative to `/`; node's resolve() already
-    // joins + lexically normalizes (`/a/../b` → `/b`). No traversal check
-    // here — the wasmtime capability layer is the real boundary.
-    return resolve('/', filePath);
+    // Sandbox-internal paths are relative to `/`; simpleResolve() joins +
+    // lexically normalizes (`/a/../b` → `/b`). No traversal check here —
+    // the wasmtime capability layer is the real boundary.
+    return simpleResolve('/', filePath);
   }
 
   async exec(command: string, _options?: { timeout?: number }): Promise<ExecResult> {
@@ -418,7 +351,7 @@ export class SandboxToolDeps implements ToolDeps {
   async writeFile(filePath: string, content: string): Promise<void> {
     const absolute = this.resolvePath(filePath);
     // Ensure parent directory exists via sandbox (mkdir -p fixed for WASI)
-    const dir = dirname(absolute);
+    const dir = simpleDirname(absolute);
     // SEC5: use execArray (no shell) for mkdir
     await this.execArray('mkdir', ['-p', dir]);
     // Write file by piping content through stdin to cat.
@@ -591,8 +524,8 @@ function globToRegex(pattern: string): RegExp {
 
 /** Resolve a file path and verify it stays within workspace boundary */
 export function resolvePath(deps: WorkspaceToolDeps, filePath: string): string {
-  const absolute = resolve(deps.workspacePath, filePath);
-  const prefix = deps.workspacePath + sep;
+  const absolute = simpleResolve(deps.workspacePath, filePath);
+  const prefix = deps.workspacePath.endsWith('/') ? deps.workspacePath : deps.workspacePath + '/';
   if (absolute !== deps.workspacePath && !absolute.startsWith(prefix)) {
     throw new Error(`Path traversal detected: ${filePath}`);
   }
@@ -609,7 +542,7 @@ export function truncateOutput(
   const marker = '\n...[truncated]';
   const byteLenFn = runtime
     ? (s: string) => runtime.process.byteLength(s)
-    : (s: string) => Buffer.byteLength(s, 'utf8');
+    : (s: string) => new TextEncoder().encode(s).length;
   const byteLen = byteLenFn(output);
   if (byteLen <= limit) return { content: output, truncated: false };
 
@@ -626,22 +559,4 @@ export function truncateOutput(
     }
   }
   return { content: output.slice(0, end) + marker, truncated: true };
-}
-
-/** Detect binary files using magic bytes and extension analysis */
-export async function isBinaryFile(filePath: string, runtime?: HostEnv): Promise<boolean> {
-  // When a HostEnv is provided, delegate to its binary detector (works in
-  // browsers too). Without one, fall back to the `isbinaryfile` package —
-  // a Node-only convenience for callers that haven't been migrated yet.
-  if (runtime) return runtime.fs.isBinary(filePath);
-  // TODO(binary-detection): `isbinaryfile`'s NUL-presence rule is a
-  // deliberate, documented divergence from the Rust side (binaryornot-rs
-  // decision-tree classifier). Plan: lift this side UP to the classifier
-  // (WASM wrapper), not drag Rust down — see the Rust workspace_deps.rs
-  // doc comment for the full rationale.
-  try {
-    return await detectBinary(filePath);
-  } catch {
-    return false;
-  }
 }

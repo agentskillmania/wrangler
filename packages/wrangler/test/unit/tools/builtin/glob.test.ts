@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createGlobTool } from '../../../../src/tools/builtin/glob.js';
 import { HostToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
-import { NodeHostEnv } from '../../../../src/host-env/index.js';
+import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 import { createMockToolDeps } from '../../helpers/create-mock-deps.js';
 
 describe('glob', () => {

@@ -11,7 +11,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createSessionSupport } from '../../src/session/support.js';
-import { defaultNodeHostEnv } from '../../src/host-env/index.js';
+import { defaultNodeHostEnv } from '../../../../src/host-env/node-host-env.js';
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { testConfig, itif } from './config.js';
 
