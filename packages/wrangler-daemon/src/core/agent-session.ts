@@ -1103,4 +1103,9 @@ export class AgentSession {
   get llmClient(): import('@agentskillmania/colts').ILLMProvider {
     return this._llmClient;
   }
+
+  /** 已注册的斜杠命令（/clear /compact 等）——给 UI 构建快捷命令 */
+  getCommandNames(): Array<{ name: string; description: string }> {
+    return this.runner.getCommandNames();
+  }
 }

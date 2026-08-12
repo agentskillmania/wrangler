@@ -129,16 +129,20 @@ export class EnhancedRunner {
   private readonly toolMetadataMap: Map<string, ToolMetadata>;
   /** Skill metadata list with source paths. */
   private readonly skillMetadataList: SkillMetadata[];
+  /** Registered slash command handlers (populated at create() when commands enabled). */
+  private commandRegistry: CommandRegistry | null = null;
 
   private constructor(
     runner: AgentRunner,
     config: ResolvedRunnerConfig,
     toolMetadataMap: Map<string, ToolMetadata>,
-    skillMetadataList: SkillMetadata[]
+    skillMetadataList: SkillMetadata[],
+    commandRegistry: CommandRegistry | null = null
   ) {
     this.innerRunner = runner;
     this.resolvedConfig = config;
     this.toolMetadataMap = toolMetadataMap;
+    this.commandRegistry = commandRegistry;
     this.skillMetadataList = skillMetadataList;
   }
 
@@ -168,6 +172,18 @@ export class EnhancedRunner {
   }
 
   /**
+   * 已注册的斜杠命令列表（如 /clear /compact）——UI 用它构建快捷命令。
+   * 返回注册顺序，commands 禁用时为空数组。
+   */
+  getCommandNames(): Array<{ name: string; description: string }> {
+    if (!this.commandRegistry) return [];
+    return this.commandRegistry.list().map((h) => ({
+      name: h.name,
+      description: h.description,
+    }));
+  }
+
+  /**
    * Create an EnhancedRunner with all tools and middleware pre-wired
    *
    * @param options - Configuration options
@@ -177,6 +193,8 @@ export class EnhancedRunner {
     const runtime = options.runtime;
     if (!runtime) throw new Error('EnhancedRunnerOptions.runtime is required');
     const workspacePath = options.workspacePath ?? runtime.env.cwd();
+    // 斜杠命令注册表（commands 启用时填充，构造时传入实例）
+    let registeredCommands: CommandRegistry | null = null;
     // Resolve skill dirs once and reuse across all consumers below (avoids
     // repeated array allocation + repeated runtime.resources.builtinSkillDirs()).
     const resolvedSkillDirs = collectSkillDirs(options, runtime);
@@ -434,8 +452,9 @@ export class EnhancedRunner {
       commandMiddleware = createCommandMiddleware(commandRegistry, {
         compressor: compressorInstance,
       });
+      // commandRegistry 存入实例字段在构造时完成（create 是 static，不能 this.xxx）
+      registeredCommands = commandRegistry;
     }
-
     // Reuse pre-resolved model metadata for diagnostics
     const contextWindow = modelMeta?.contextWindow;
 
@@ -565,7 +584,7 @@ export class EnhancedRunner {
       contextWindow,
     };
 
-    return new EnhancedRunner(runner, resolvedConfig, toolMeta, skillMeta);
+    return new EnhancedRunner(runner, resolvedConfig, toolMeta, skillMeta, registeredCommands);
   }
 
   /**
