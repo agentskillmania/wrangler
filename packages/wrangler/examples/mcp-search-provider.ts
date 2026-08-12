@@ -8,9 +8,10 @@
 import { writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadMCPTools } from '@agentskillmania/wrangler';
+import { loadMCPTools } from '../src/tools/mcp/index.js';
 import type { SearchProvider, SearchResult } from '@agentskillmania/wrangler';
-import type { Tool, ZodTypeAny } from '@agentskillmania/colts';
+import type { Tool } from '@agentskillmania/colts';
+import type { z } from 'zod';
 
 export interface MCPSearchProviderOptions {
   /** API key for the MCP server (e.g. Zhipu API key) */
@@ -36,9 +37,9 @@ async function writeTempConfig(serverName: string, serverUrl: string): Promise<s
 }
 
 function findSearchTool(
-  tools: Tool<ZodTypeAny>[],
+  tools: Tool<z.ZodTypeAny>[],
   serverName: string
-): Tool<ZodTypeAny> | undefined {
+): Tool<z.ZodTypeAny> | undefined {
   // Prefer tools from the target server, fallback to any tool with "search" in name
   return (
     tools.find(

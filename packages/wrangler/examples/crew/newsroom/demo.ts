@@ -1,56 +1,26 @@
 /**
- * Demo: Newsroom (Crew multi-agent)
+ * Demo: 编辑部新闻室（Crew 多智能体）
  *
- * Editor-in-chief receives a pitch, reporters use web_search (backed by Zhipu MCP)
- * to research real data, editor synthesizes into a feature article.
+ * 主编派记者们用 web_search 搜索真实数据，分头调研后合成特稿。
  *
- * Required env vars:
- *   OPENAI_API_KEY  — LLM access
- *   ZHIPU_API_KEY   — Zhipu MCP web search (optional; falls back to no search)
+ * 现行 API：CrewLoader 加载 CREW.md + agents/*.md → crewToRunnerOptions 生成
+ * EnhancedRunner 选项（主智能体 + delegate 子智能体 + 技能目录），
+ * 事件经 runner.on() 订阅（子智能体事件由 delegate 工具转发）。
  *
  * Run: cd packages/wrangler && pnpm demo:newsroom
  */
 
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Crew, CrewLoader } from '@agentskillmania/wrangler';
-import type { CrewOutputEvent } from '@agentskillmania/wrangler';
+import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { getDemoConfig } from '../../demo-config.js';
 import { createMCPSearchProvider } from '../../mcp-search-provider.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function formatNewsroomEvent(event: CrewOutputEvent): string {
-  switch (event.type) {
-    case 'agent_created': {
-      const roles: Record<string, string> = {
-        primary: '主编',
-        worker: '记者',
-      };
-      return `  >> ${roles[event.role] ?? event.role} 加入: ${event.definitionName} (${event.agentId})`;
-    }
-    case 'task_started':
-      return `  >> 采访任务下达: [${event.taskId}] ${event.workerType} — "${event.description}"`;
-    case 'tool_invoked': {
-      const argsStr = JSON.stringify(event.args);
-      const short = argsStr.length > 60 ? argsStr.slice(0, 60) + '...' : argsStr;
-      return `  >> ${event.agentId} 调用工具: ${event.toolName}(${short})`;
-    }
-    case 'tool_completed': {
-      const short = event.result.length > 80 ? event.result.slice(0, 80) + '...' : event.result;
-      return `  >> ${event.agentId} ← ${event.toolName} (${event.duration}ms): ${short}`;
-    }
-    case 'task_completed':
-      return `  >> 报道完成: [${event.taskId}]`;
-    case 'task_failed':
-      return `  >> 截稿未完成: [${event.taskId}] — ${event.error}`;
-    case 'user_response':
-      return '';
-    case 'error':
-      return `  >> 编辑部警报: ${event.error.message}`;
-    default:
-      return `  >> ${(event as { type: string }).type}`;
-  }
+function ts(): string {
+  return new Date().toISOString().slice(11, 19);
 }
 
 async function main() {
@@ -88,31 +58,31 @@ async function main() {
   console.log(`搜索:         ${searchProvider ? '智谱 MCP (真实)' : '(无)'}`);
   console.log(`模型:         ${model}\n`);
 
-  const crew = new Crew(config, {
-    llmClient: llmProvider,
-    defaultModel: model,
-    workspaceDeps: { workspacePath: process.cwd() },
-    searchProvider,
-    mcpConfigPaths: [],
+  const runner = await EnhancedRunner.create({
+    ...crewToRunnerOptions(config),
+    llm: { client: llmProvider, model },
+    workspacePath: process.cwd(),
+    ...(searchProvider ? { search: { provider: searchProvider } } : {}),
+    tools: { mcpConfigPaths: [] },
   });
 
-  const eventTypes: CrewOutputEvent['type'][] = [
-    'agent_created',
-    'task_started',
-    'task_completed',
-    'task_failed',
-    'tool_invoked',
-    'tool_completed',
-    'error',
-    'user_response',
-  ];
-
-  for (const eventType of eventTypes) {
-    crew.on(eventType, (event: CrewOutputEvent) => {
-      const line = formatNewsroomEvent(event);
-      if (line) console.log(line);
-    });
-  }
+  // 编辑部事件流（AgentRunner EventEmitter；delegate 工具转发子智能体事件）
+  runner.on('tool:start', (data) => {
+    const { action } = data as { action: { tool: string; arguments: Record<string, unknown> } };
+    const argsStr = JSON.stringify(action.arguments);
+    const short = argsStr.length > 60 ? argsStr.slice(0, 60) + '...' : argsStr;
+    console.log(`[${ts()}] 记者调用工具: ${action.tool}(${short})`);
+  });
+  runner.on('tool:end', (data) => {
+    const evt = data as { result: unknown };
+    const resultStr = JSON.stringify(evt.result);
+    const short = resultStr.length > 80 ? resultStr.slice(0, 80) + '...' : resultStr;
+    console.log(`[${ts()}] 工具完成: ${short}`);
+  });
+  runner.on('step:start', (data) => {
+    const { step } = data as { step: number };
+    console.log(`[${ts()}] 步骤 ${step} 开始`);
+  });
 
   const pitch =
     '亚洲植物肉市场的崛起：文化接受度、市场动态，以及谁在赢得亚洲人的味蕾。请记者们用 web_search 搜索真实的新闻报道、市场数据和社交媒体讨论。';
@@ -123,30 +93,23 @@ async function main() {
 
   console.log('编辑部开会中...\n');
 
-  crew.pushInput({ type: 'user_message', content: pitch });
+  let state = createAgentState({ name: config.meta.primaryAgent, instructions: '', tools: [] });
+  state = addUserMessage(state, pitch);
 
-  const article = await new Promise<string>((resolve) => {
-    // Take the last non-empty user_response
-    let latest = '';
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    crew.on('user_response', (event) => {
-      const content = event.content?.trim() ?? '';
-      if (content) latest = content;
-      // Debounce: resolve 3s after the last response
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => resolve(latest), 3000);
-    });
-  });
+  const { result } = await runner.run(state);
 
   console.log('\n═══ 发表特稿 ═══');
-  if (article) {
-    console.log(article);
+  if (result.type === 'success') {
+    console.log(result.answer);
+  } else if (result.type === 'stopped') {
+    console.log(result.data ?? '(主编未返回文字回复，特稿可能已写入文件)');
+  } else if (result.type === 'error') {
+    console.log(`截稿失败: ${result.error.message}`);
   } else {
-    console.log('(主编未返回文字回复，特稿可能已写入文件)');
+    console.log(`运行结束: ${result.type}`);
   }
+  console.log(`\n步骤数: ${result.totalSteps}`);
 
-  // Stop the crew and clean up
-  crew.pushInput({ type: 'stop' });
   await mcpCleanup();
 }
 

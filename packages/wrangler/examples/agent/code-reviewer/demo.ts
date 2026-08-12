@@ -37,11 +37,10 @@ async function main() {
   console.log(`  ✓ 工作目录: ${workspacePath}`);
 
   const runner = await EnhancedRunner.create({
-    llmClient: llmProvider,
-    model,
+    llm: { client: llmProvider, model },
     workspacePath,
-    skillDirs: loaded.skillDirs,
-    thinkingEnabled: loaded.thinking?.enabled,
+    skills: { dirs: loaded.skillDirs },
+    thinking: { enabled: loaded.thinking?.enabled },
   });
 
   console.log('  ✓ Runner 就绪\n');
@@ -67,35 +66,34 @@ async function main() {
 
   let stepNum = 0;
 
-  for await (const event of runner.runStream(state, { maxSteps: 100 })) {
-    switch (event.type) {
-      case 'step:start':
-        stepNum++;
-        console.log(`\n  ── ReAct 步骤 #${stepNum} ──`);
-        break;
-      case 'token':
-        process.stdout.write(event.token);
-        break;
-      case 'thinking':
-        process.stdout.write(`\x1b[90m${event.content}\x1b[0m`);
-        break;
-      case 'tool:start': {
-        const args = JSON.stringify(event.action.arguments);
-        const short = args.length > 100 ? args.slice(0, 100) + '...' : args;
-        console.log(`\n  🔧 调用工具: ${event.action.tool}(${short})`);
-        break;
-      }
-      case 'tool:end': {
-        const result = String(event.result);
-        const short = result.length > 200 ? result.slice(0, 200) + '...' : result;
-        console.log(`  📋 工具返回: ${short}\n`);
-        break;
-      }
-      case 'llm:request':
-        console.log('  🤖 正在调用 LLM...');
-        break;
-    }
-  }
+  // 事件订阅（AgentRunner EventEmitter）——run() 阻塞执行期间实时输出
+  runner.on('step:start', () => {
+    stepNum++;
+    console.log(`\n  ── ReAct 步骤 #${stepNum} ──`);
+  });
+  runner.on('token', (data) => {
+    process.stdout.write((data as { token: string }).token);
+  });
+  runner.on('thinking', (data) => {
+    process.stdout.write(`\x1b[90m${(data as { content: string }).content}\x1b[0m`);
+  });
+  runner.on('tool:start', (data) => {
+    const { action } = data as { action: { tool: string; arguments: Record<string, unknown> } };
+    const args = JSON.stringify(action.arguments);
+    const short = args.length > 100 ? args.slice(0, 100) + '...' : args;
+    console.log(`\n  🔧 调用工具: ${action.tool}(${short})`);
+  });
+  runner.on('tool:end', (data) => {
+    const { result } = data as { result: unknown };
+    const resultStr = String(result);
+    const short = resultStr.length > 200 ? resultStr.slice(0, 200) + '...' : resultStr;
+    console.log(`  📋 工具返回: ${short}\n`);
+  });
+  runner.on('llm:request', () => {
+    console.log('  🤖 正在调用 LLM...');
+  });
+
+  const { result } = await runner.run(state, { maxSteps: 100 });
 
   console.log('\n' + '─'.repeat(50));
   console.log(`\n═══ 运行结束 ═══`);
