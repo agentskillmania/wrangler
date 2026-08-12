@@ -225,8 +225,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       commands: body.config?.commands ?? rc?.commands,
       sandbox: body.config?.sandbox,
       a2ui: body.config?.a2ui ?? rc?.a2ui,
-      search: body.config?.search ?? (config.search?.defaultProvider ? { provider: config.search.defaultProvider } : undefined),
-      compression: body.config?.compression ?? rc?.compression,
+      search: body.config?.search ?? (config.search?.defaultProvider ? { provider: config.search.defaultProvider as 'sogou' | 'bing' } : undefined),
+      compression: (body.config?.compression ?? rc?.compression) as boolean | undefined,
       limits: body.config?.limits ?? rc?.limits,
     };
 
@@ -417,8 +417,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       specPlan: body.config?.specPlan ?? rc?.specPlan,
       commands: body.config?.commands ?? rc?.commands,
       a2ui: body.config?.a2ui ?? rc?.a2ui,
-      search: body.config?.search ?? (config.search?.defaultProvider ? { provider: config.search.defaultProvider } : undefined),
-      compression: body.config?.compression ?? rc?.compression,
+      search: body.config?.search ?? (config.search?.defaultProvider ? { provider: config.search.defaultProvider as 'sogou' | 'bing' } : undefined),
+      compression: (body.config?.compression ?? rc?.compression) as boolean | undefined,
       limits: body.config?.limits ?? rc?.limits,
     };
 
@@ -484,7 +484,7 @@ async function streamAgentSession(
   reply.raw.on('close', onDisconnect);
 
   if (opts.emitSessionStart) {
-    const config = agentSession.runner.getConfig();
+    const config = agentSession.getRunnerConfig();
     const startData = {
       sessionId: opts.sessionId,
       model: config.model,

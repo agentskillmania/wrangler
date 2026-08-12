@@ -2,7 +2,11 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyServerOptions,
+} from 'fastify';
 
 import { setDefaultSkillFsOps } from '@agentskillmania/colts';
 import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
@@ -56,7 +60,23 @@ export class Daemon {
 
     // Pre-bound listener: hand the existing server to fastify instead of
     // creating a new one (mirrors Rust's Daemon::with_listener).
-    this.fastify = Fastify({ server: options.listener ?? undefined, logger: false });
+    // 非 http2 的 Fastify 工厂没有 `server` 选项（那是 http2 变体的）——
+    // 用 serverFactory 把 fastify 的请求处理器挂到已有 http.Server 的
+    // 'request' 事件上。显式 FastifyServerOptions 注解固定 RawServer 泛型
+    // （条件展开会导致 TS 推断失败、fallback 到 http2 重载）。
+    const fastifyOptions: FastifyServerOptions = {
+      logger: false,
+      ...(options.listener
+        ? {
+            serverFactory: (handler) => {
+              const listener = options.listener!;
+              listener.on('request', handler);
+              return listener;
+            },
+          }
+        : {}),
+    };
+    this.fastify = Fastify(fastifyOptions);
     this.configManager = new ConfigManager(CONFIG_PATH);
     this.resourceManager = new ResourceManager(AGENTS_DIR, SKILLS_DIR, CREWS_DIR);
     this.sessionManager = new SessionManager(SESSIONS_DIR);

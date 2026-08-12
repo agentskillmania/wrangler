@@ -22,7 +22,7 @@ import {
   resolveDefaultModel,
 } from '@agentskillmania/wrangler';
 import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
-import type { SubAgentConfig, LimitsConfig, SandboxConfig, HostEnv } from '@agentskillmania/wrangler';
+import type { SubAgentConfig, LimitsConfig, SandboxConfig, HostEnv, ResolvedRunnerConfig } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
@@ -387,6 +387,11 @@ export class AgentSession {
    */
   getState(): AgentState {
     return this.state;
+  }
+
+  /** 解析后的 runner 配置（诊断/启动信息用，避免暴露整个 runner） */
+  getRunnerConfig(): ResolvedRunnerConfig {
+    return this.runner.getConfig();
   }
 
   // NOTE: saveState() was removed — persistence is now solely handled by
