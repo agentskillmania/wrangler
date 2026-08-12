@@ -14,7 +14,7 @@ import type {
   RunnerEventMap,
 } from '@agentskillmania/colts';
 import type { AskHumanHandler, HumanResponse } from '@agentskillmania/colts';
-import type { LLMClient } from '@agentskillmania/llm-client';
+
 import {
   EnhancedRunner,
   SessionStore,
@@ -94,6 +94,11 @@ export interface AgentSessionOptions {
   sessionId?: string;
   /** HostEnv — injected into EnhancedRunner. Browser extensions pass BrowserHostEnv; omit for Node. */
   runtime?: HostEnv;
+  /**
+   * LLM provider injection — browser extensions pass FetchLlmProvider.
+   * Omit for Node (uses createLLMClient with pi-ai).
+   */
+  llmClient?: import('@agentskillmania/colts').ILLMProvider;
   workspacePath: string;
   agentName: string;
   agentInstructions?: string;
@@ -160,7 +165,8 @@ export class AgentSession {
 
   private runner: EnhancedRunner;
   private state: AgentState;
-  private _llmClient!: LLMClient;
+  /** LLM provider — 默认 LLMClient（pi-ai），浏览器注入 FetchLlmProvider */
+  private _llmClient!: import('@agentskillmania/colts').ILLMProvider;
   private abortController: AbortController | null = null;
   private bridge: AskHumanBridge;
   private sessionStore: SessionStore | undefined;
@@ -220,7 +226,8 @@ export class AgentSession {
     const bridge = AgentSession._createBridge();
     const defaultModel = resolveDefaultModel(config.llm.providers);
     const llmModel = options.model ?? defaultModel;
-    const llmClient = createLLMClient(config.llm.providers);
+    // 注入的 llmClient（浏览器 FetchLlmProvider）优先，否则用 pi-ai 的 createLLMClient
+    const llmClient = options.llmClient ?? createLLMClient(config.llm.providers);
 
     const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
 
@@ -1092,8 +1099,8 @@ export class AgentSession {
     }
   }
 
-  /** Get the LLMClient instance (for model metadata queries) */
-  get llmClient(): LLMClient {
+  /** Get the LLM provider instance (for model metadata queries) */
+  get llmClient(): import('@agentskillmania/colts').ILLMProvider {
     return this._llmClient;
   }
 }
