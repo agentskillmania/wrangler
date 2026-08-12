@@ -42,6 +42,7 @@ import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
 import { createSessionSupport } from '../session/support.js';
 import type { HostEnv } from '../host-env/index.js';
+import { NodeHostEnv } from '../host-env/node-host-env.js';
 import { PlanStore } from '../spec-plan/plan-store.js';
 import { SpecStore } from '../spec-plan/spec-store.js';
 import { createDelegateTool } from '../subagent/delegate-tool.js';
@@ -190,8 +191,9 @@ export class EnhancedRunner {
    * @returns Configured EnhancedRunner instance
    */
   static async create(options: EnhancedRunnerOptions): Promise<EnhancedRunner> {
-    const runtime = options.runtime;
-    if (!runtime) throw new Error('EnhancedRunnerOptions.runtime is required');
+    // runtime 可选：默认 NodeHostEnv（daemon / CLI 零改动，types.ts 契约）；
+    // 浏览器扩展等受限宿主显式注入 BrowserHostEnv
+    const runtime = options.runtime ?? new NodeHostEnv();
     const workspacePath = options.workspacePath ?? runtime.env.cwd();
     // 斜杠命令注册表（commands 启用时填充，构造时传入实例）
     let registeredCommands: CommandRegistry | null = null;
@@ -296,6 +298,9 @@ export class EnhancedRunner {
     // Build skill-resource tools (read_skill_resource + run_skill_script) when
     // skill directories are configured. These complement load_skill by giving
     // the agent access to reference docs and bundled scripts.
+    // 技能 provider：只认注入（浏览器扩展传 OPFS 适配、daemon 由 agent-session
+    // 从 dirs 构造后注入）——引擎 core 不构造 FilesystemSkillProvider，
+    // 保持零 node: 依赖，宿主环境决定技能后端
     const skillProvider = options.skills?.provider;
     const skillTools: Tool<ZodTypeAny>[] = [];
     if (skillProvider) {
@@ -526,7 +531,7 @@ export class EnhancedRunner {
         ...(todolistEnabled ? [todolistSupport.middleware] : []),
         ...a2uiMiddleware,
       ],
-      systemPrompt: buildTimeContext(),
+      systemPrompt: [buildTimeContext(), options.systemPrompt].filter(Boolean).join('\n\n'),
       skillProvider: skillProvider ?? undefined,
       thinkingEnabled: options.thinking?.enabled,
       enablePromptThinking: options.thinking?.promptLevel,

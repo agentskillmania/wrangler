@@ -21,6 +21,7 @@ export type { SessionNamingDeps } from './middleware/session-naming-middleware.j
 export { EnhancedRunner, buildTimeContext } from './runner/index.js';
 export type {
   EnhancedRunnerOptions,
+  ResolvedRunnerConfig,
   LimitsConfig,
   BuiltinToolFilter,
   SandboxConfig,

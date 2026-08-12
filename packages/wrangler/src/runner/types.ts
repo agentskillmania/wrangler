@@ -179,6 +179,12 @@ export interface EnhancedRunnerOptions {
   workspacePath?: string;
 
   /**
+   * 系统提示词（Crew 用：crewToRunnerOptions 产出的 crew memory + 主智能体
+   * 指令 + 子智能体目录）。与内建的 buildTimeContext() 时间头合并。
+   */
+  systemPrompt?: string;
+
+  /**
    * 宿主环境运行时（新增）—— 引擎核心通过它访问一切 OS 资源。
    * 默认 NodeHostEnv（daemon / CLI 零改动）。
    * 浏览器扩展装配时传 BrowserHostEnv。

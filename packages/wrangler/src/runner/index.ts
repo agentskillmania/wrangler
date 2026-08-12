@@ -3,6 +3,7 @@ export { buildTimeContext } from './system-prompt.js';
 export { SessionNotFoundError } from '../session/errors.js';
 export type {
   EnhancedRunnerOptions,
+  ResolvedRunnerConfig,
   ToolType,
   ToolMetadata,
   SkillMetadata,
