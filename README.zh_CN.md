@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@agentskillmania/wrangler.svg)](https://www.npmjs.com/package/@agentskillmania/wrangler)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Wrangler** 是一个基于 pnpm 的 TypeScript  monorepo，提供智能体配置、多智能体团队、技能管理和开发工具 —— 是 [colts](https://github.com/agentskillmania/colts) ReAct 框架与可用多智能体系统之间的抽象层。
+**Wrangler** 是一个基于 pnpm 的 TypeScript monorepo —— 位于 [colts](https://github.com/agentskillmania/colts) ReAct 框架与可用智能体系统之间的抽象层。提供智能体/团队配置加载、`EnhancedRunner` 入口、技能管理和开发工具。
 
 ## 包
 
@@ -40,6 +40,69 @@ llm:
         - modelId: gpt-4o
 ```
 
+## 使用
+
+### 从 `AGENT.md` 运行智能体
+
+创建一个含 `AGENT.md` 的智能体目录（YAML frontmatter 定义 name/instructions，可选 `skills/` 和 `mcp.json`），然后：
+
+```typescript
+import { AgentLoader, EnhancedRunner } from '@agentskillmania/wrangler';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+
+// 1. 加载智能体定义
+const agent = await AgentLoader.loadFrom('./my-agent');
+
+// 2. 创建 runner（llmClient 可以是任意 ILLMProvider，如 createLLMClient 或自定义）
+const runner = await EnhancedRunner.create({
+  llm: { client: llmClient, model: 'gpt-4o' },
+  workspacePath: process.cwd(),
+  skills: { dirs: agent.skillDirs },
+  tools: { mcpConfigPaths: agent.mcpPaths },
+});
+
+// 3. 运行 —— 事件经 runner.on(...) 实时流式输出，run() 阻塞返回最终结果
+runner.on('tool:start', ({ action }) => console.log('tool:', action.tool));
+runner.on('token', ({ token }) => process.stdout.write(token));
+
+let state = createAgentState({ name: agent.name, instructions: agent.instructions, tools: [] });
+state = addUserMessage(state, '请审查这个项目');
+const { result } = await runner.run(state);
+```
+
+### 从 `CREW.md` 运行团队
+
+团队（crew）是配置层，不是独立运行时：`CrewLoader` 解析 `CREW.md` + `agents/*.md`，`crewToRunnerOptions()` 把它们转换成 `EnhancedRunner` 选项。主智能体作为普通智能体运行，其他智能体成为子代理，通过 `delegate` 工具调用（子代理继承父智能体的工具和技能）。
+
+```typescript
+import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+
+const crew = await new CrewLoader('./my-crew').load();
+
+const runner = await EnhancedRunner.create({
+  ...crewToRunnerOptions(crew),
+  llm: { client: llmClient, model: 'gpt-4o' },
+  workspacePath: process.cwd(),
+});
+
+let state = createAgentState({ name: crew.meta.primaryAgent, instructions: '', tools: [] });
+state = addUserMessage(state, '调研这个选题并写一篇报道');
+const { result } = await runner.run(state);
+```
+
+### `EnhancedRunner.create` 关键选项
+
+| 选项 | 含义 |
+|--------|---------|
+| `llm.client` / `llm.quickInit.providers` | LLM provider 注入，或从 provider 列表快速初始化 |
+| `systemPrompt` | 附加系统提示词（与内建时间头合并） |
+| `skills.dirs` / `skills.provider` | 要扫描的技能目录；或注入的 `ISkillProvider`（如浏览器里基于 OPFS 的实现） |
+| `tools.deps` / `tools.builtinFilter` / `tools.mcpConfigPaths` | 工具依赖（宿主 OS 访问）、内置工具白名单、MCP 配置 |
+| `runtime` | 宿主环境（默认 `NodeHostEnv`；浏览器注入基于 OPFS 的 HostEnv） |
+| `sandbox`、`thinking`、`session`、`commands`、`specPlan`、`todolist`、`a2ui` | 功能分组 |
+| `subAgents` | 子代理配置（启用 `delegate` 工具） |
+
 ## 使用 Devtool 开发
 
 ```bash
@@ -57,7 +120,7 @@ npx wrangler-devtool eval evals/baseline.yaml
 npx wrangler-devtool eval evals/baseline.yaml --runs 5 --reporter json
 ```
 
-完整 CLI 参考见 [`wrangler-devtool` 文档](./packages/wrangler-devtool/)。
+完整 CLI 参考见 [`wrangler-devtool` 文档](./packages/wrangler-devtool/README.md)。
 
 ## 开发
 
@@ -86,7 +149,7 @@ Wrangler 构建在 colts 框架之上：
 
 - **colts** 提供 ReAct 智能体运行器、执行引擎、子代理委派和事件原语
 - **llm-client** 提供统一的大模型访问和并发控制
-- **wrangler** 增加智能体加载（从 `AGENT.md`）、团队定义（从 `CREW.md`）、技能组合和 `EnhancedRunner`。团队不再是运行时编排器 —— `CrewLoader.load()` 解析团队目录，`crewToRunnerOptions()` 将其转换为 `EnhancedRunner.create({ subAgents })` 的选项。`CREW.md` 正文注入主智能体的 system prompt，非主智能体成为可通过 colts `delegate` 工具调用的子代理。
+- **wrangler** 增加智能体加载（从 `AGENT.md`）、团队定义（从 `CREW.md`）、技能组合和 `EnhancedRunner`。团队是配置层而非运行时编排器 —— `CrewLoader.load()` 解析团队目录，`crewToRunnerOptions()` 将其转换为 `EnhancedRunner.create({ subAgents })` 的选项。`CREW.md` 正文注入主智能体的 system prompt，非主智能体成为可通过 colts `delegate` 工具调用的子代理。
 - **wrangler-devtool** 提供构建、测试、评估智能体的开发工具
 - **wrangler-daemon** 提供上层应用使用的 HTTP API 服务器
 
