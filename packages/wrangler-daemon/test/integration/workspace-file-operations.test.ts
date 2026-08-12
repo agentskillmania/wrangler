@@ -3,7 +3,7 @@ import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { SessionStore } from '@agentskillmania/wrangler';
+import { SessionStore, defaultNodeHostEnv } from '@agentskillmania/wrangler';
 import { SessionManager } from '../../src/core/session-manager.js';
 import { fileRoutes } from '../../src/routes/files.js';
 
@@ -55,7 +55,7 @@ describe('US-C5: Workspace File Operations', () => {
     const sessionsDir = join(tempDir, 'sessions');
     const sessionManager = new SessionManager(sessionsDir);
     sessionId = 'us-c5-session';
-    const store = new SessionStore(sessionsDir, workspacePath);
+    const store = new SessionStore(sessionsDir, workspacePath, defaultNodeHostEnv);
     await store.createWithId(sessionId, 'test-agent');
     sessionManager.registerSession(sessionId, workspacePath);
 

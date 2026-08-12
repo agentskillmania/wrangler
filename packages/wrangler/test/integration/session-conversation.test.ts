@@ -11,6 +11,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createSessionSupport } from '../../src/session/support.js';
+import { defaultNodeHostEnv } from '../../src/host-env/index.js';
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { testConfig, itif } from './config.js';
 
@@ -56,7 +57,7 @@ describe('US2: SessionStore conversation model', () => {
     // snapshot) is now the sole conversation persistence mechanism.
     // The integration test below (saveState/loadState) covers this contract.
     it('saves and loads AgentState via state.json', async () => {
-      const session = createSessionSupport({
+      const session = createSessionSupport({ runtime: defaultNodeHostEnv,
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });
@@ -73,7 +74,7 @@ describe('US2: SessionStore conversation model', () => {
     });
 
     it('returns null for non-existent session on loadState', async () => {
-      const session = createSessionSupport({
+      const session = createSessionSupport({ runtime: defaultNodeHostEnv,
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });
@@ -86,7 +87,7 @@ describe('US2: SessionStore conversation model', () => {
   itif(testConfig.enabled)(
     'session-middleware saves AgentState to state.json on agent run',
     async () => {
-      const session = createSessionSupport({
+      const session = createSessionSupport({ runtime: defaultNodeHostEnv,
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });

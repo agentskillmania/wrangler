@@ -174,11 +174,11 @@ describe('Daemon', () => {
   });
 
   it('discovers an existing session from disk during startup', async () => {
-    const { SessionStore } = await import('@agentskillmania/wrangler');
+    const { SessionStore, defaultNodeHostEnv } = await import('@agentskillmania/wrangler');
     const workspacePath = join(tempDir, 'workspace');
     await mkdir(workspacePath, { recursive: true });
 
-    const store = new SessionStore(join(tempDir, 'sessions'), workspacePath);
+    const store = new SessionStore(join(tempDir, 'sessions'), workspacePath, defaultNodeHostEnv);
     await store.createWithId('persisted-session', 'test-agent');
 
     daemon = new Daemon({ port: 0, host: '127.0.0.1' });

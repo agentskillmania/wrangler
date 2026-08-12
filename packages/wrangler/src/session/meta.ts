@@ -28,7 +28,10 @@ export async function writeMeta(
  * @param runtime - 宿主环境（提供 fs/path）
  * @returns SessionMeta 或 null（文件不存在时）
  */
-export async function readMeta(sessionDir: string, runtime: HostEnv): Promise<SessionMeta | null> {
+export async function readMeta(
+  sessionDir: string,
+  runtime: HostEnv,
+): Promise<SessionMeta | null> {
   try {
     const content = await runtime.fs.readFile(runtime.path.join(sessionDir, 'meta.yaml'));
     return yaml.load(content) as SessionMeta;

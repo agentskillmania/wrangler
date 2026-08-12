@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ConfigManager } from '../../../src/core/config-manager.js';
 import { ResourceManager } from '../../../src/core/resource-manager.js';
-import { SessionNotFoundError, writeMeta } from '@agentskillmania/wrangler';
+import { SessionNotFoundError, writeMeta, defaultNodeHostEnv } from '@agentskillmania/wrangler';
 import { SessionManager } from '../../../src/core/session-manager.js';
 import { chatRoutes } from '../../../src/routes/chat.js';
 
@@ -32,6 +32,27 @@ const mockSession = {
   stop: vi.fn(),
   respondHumanInput: vi.fn(),
   emitCockpitEvent: vi.fn(),
+  // The chat route reads `agentSession.runner.getConfig()` to build the
+  // `session-start` SSE payload (chat.ts streamAgentSession). Without this the
+  // route throws synchronously after hijacking the reply, leaving the SSE
+  // connection open and the test to deadlock on `await fetch(...)`.
+  runner: {
+    getConfig: () => ({
+      model: 'test-model',
+      contextWindow: 128000,
+      thinkingEnabled: false,
+      enablePromptThinking: false,
+      sandbox: false,
+      compressorEnabled: false,
+      enableSession: false,
+      enableTodolist: false,
+      enableSpecPlan: false,
+      enableCommands: false,
+      a2ui: { enabled: false },
+      skillDirs: [],
+      mcpConfigPaths: [],
+    }),
+  },
 };
 
 // ─── SSE parsing helper ───
@@ -113,7 +134,14 @@ describe('Chat API', () => {
   });
 
   afterEach(async () => {
-    await fastify.close();
+    // Bound the close so an SSE response whose body a test forgot to drain
+    // (or an aborted client the server hasn't reaped) can't deadlock teardown.
+    // Tests SHOULD drain their SSE bodies; this guard just keeps a miss from
+    // hanging the whole suite for the 30s default close timeout.
+    await Promise.race([
+      fastify.close(),
+      new Promise((r) => setTimeout(r, 1500)),
+    ]);
     await rm(tempDir, { recursive: true, force: true });
   });
 
@@ -653,14 +681,18 @@ describe('Chat API', () => {
       const explicitDir = join(tempDir, 'notebook-sessions', 'my-session');
       const { mkdir } = await import('node:fs/promises');
       await mkdir(explicitDir, { recursive: true });
-      await writeMeta(explicitDir, {
-        id: 'my-session',
-        workspacePath: join(tempDir, 'workspace'),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        agentName: 'test-agent',
-        runnerConfig: { model: 'test-model' },
-      });
+      await writeMeta(
+        explicitDir,
+        {
+          id: 'my-session',
+          workspacePath: join(tempDir, 'workspace'),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          agentName: 'test-agent',
+          runnerConfig: { model: 'test-model' },
+        },
+        defaultNodeHostEnv,
+      );
 
       const res = await fetch(`${getUrl()}/api/chat/some-key`, {
         method: 'POST',

@@ -623,7 +623,7 @@ export class AgentSession {
         'todo:list',
         'compressing',
         'compressed',
-        'waiting-human',
+        'session-cleared',
         'complete',
         'error',
         'abort',
@@ -1019,8 +1019,11 @@ export class AgentSession {
           data: { summary: event.summary, removedCount: event.removedCount },
         };
 
-      case 'waiting-human':
-        return { event: 'waiting-human', data: { request: event.request } };
+      case 'session-cleared':
+        // `/clear` reset the conversation on the backend. The colts runner emits
+        // this when messages go from non-empty to empty; tells the client to drop
+        // its local view (mirrors Rust `agent_session.rs` RunnerEvent::SessionCleared).
+        return { event: 'session-cleared', data: {} };
 
       case 'complete': {
         // RunResult carries tokens, totalSteps, duration, and (for success) the answer.

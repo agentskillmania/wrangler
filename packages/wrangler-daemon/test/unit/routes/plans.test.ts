@@ -3,7 +3,7 @@ import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { PlanStore } from '@agentskillmania/wrangler';
+import { PlanStore, defaultNodeHostEnv } from '@agentskillmania/wrangler';
 import { planRoutes } from '../../../src/routes/plans.js';
 
 let specPlanDir: string;
@@ -25,7 +25,7 @@ describe('Plan API Routes', () => {
     specPlanDir = join(tempDir, 'spec-plan');
     await mkdir(specPlanDir, { recursive: true });
     workspacePath = join(tempDir, 'workspace');
-    planStore = new PlanStore(join(specPlanDir, 'plans'));
+    planStore = new PlanStore(join(specPlanDir, 'plans'), defaultNodeHostEnv);
 
     fastify = Fastify();
     await fastify.register(planRoutes);

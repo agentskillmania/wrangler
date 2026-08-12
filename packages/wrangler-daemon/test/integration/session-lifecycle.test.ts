@@ -17,7 +17,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { SessionStore } from '@agentskillmania/wrangler';
+import { SessionStore, defaultNodeHostEnv } from '@agentskillmania/wrangler';
 import { SessionManager } from '../../src/core/session-manager.js';
 import { ResourceManager } from '../../src/core/resource-manager.js';
 import { sessionRoutes } from '../../src/routes/sessions.js';
@@ -64,7 +64,7 @@ describe('Integration: Session Lifecycle', () => {
     sessionId: string,
     agentName: string
   ): Promise<void> {
-    const store = new SessionStore(sessionsDir, workspacePath);
+    const store = new SessionStore(sessionsDir, workspacePath, defaultNodeHostEnv);
     await store.createWithId(sessionId, agentName);
     getManager().registerSession(sessionId, workspacePath);
   }

@@ -2,6 +2,7 @@ import {
   SessionNotFoundError,
   SessionStore,
   crewToRunnerOptions,
+  defaultNodeHostEnv,
   readMeta,
 } from '@agentskillmania/wrangler';
 import type { SessionMeta } from '@agentskillmania/wrangler';
@@ -258,13 +259,13 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     let store: SessionStore;
     let sessionDir: string;
     if (body.sessionDir) {
-      const meta = await readMeta(body.sessionDir);
+      const meta = await readMeta(body.sessionDir, defaultNodeHostEnv);
       if (!meta) {
         reply.code(404).send({ error: 'Session not found' });
         return;
       }
       info = meta;
-      store = SessionStore.fromDir(body.sessionDir);
+      store = SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv);
       sessionDir = body.sessionDir;
     } else {
       const meta = await sessionManager().getInfo(sessionId);

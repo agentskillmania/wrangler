@@ -1,5 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 
+import { FilesystemSkillProvider } from '@agentskillmania/colts';
+import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
+
 import type { DecoratedFastifyInstance } from '../types.js';
 
 /**
@@ -69,5 +72,23 @@ export async function skillRoutes(fastify: FastifyInstance): Promise<void> {
     const { id } = request.params as { id: string };
     await manager().deleteSkill(id);
     return { ok: true };
+  });
+
+  /**
+   * GET /api/skills/available
+   *
+   * Returns runtime-available skills (builtin + user-supplied dirs).
+   * Mirrors the Rust daemon's GET /api/skills/available.
+   * Query param: `?dirs=dir1,dir2` — comma-separated skill dirs to scan
+   * (defaults to just the builtin skills dir).
+   */
+  fastify.get('/api/skills/available', async (request) => {
+    const query = request.query as { dirs?: string };
+    const dirs = [
+      BUILTIN_SKILLS_DIR,
+      ...(query.dirs?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),
+    ];
+    const provider = new FilesystemSkillProvider(dirs);
+    return { skills: provider.listSkills() };
   });
 }

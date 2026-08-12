@@ -1,13 +1,15 @@
 import { join } from 'node:path';
 
-import { PlanStore } from '@agentskillmania/wrangler';
+import { PlanStore, defaultNodeHostEnv } from '@agentskillmania/wrangler';
 import type { PlanStatus } from '@agentskillmania/wrangler';
 import type { FastifyInstance } from 'fastify';
 
 import { SPEC_PLAN_DIR } from '../constants.js';
 
 function getPlanStore(_workspacePath: string): PlanStore {
-  return new PlanStore(join(SPEC_PLAN_DIR, 'plans'));
+  // daemon is Node-only — inject the Node HostEnv explicitly (the library
+  // store requires it and never defaults, so it stays browser-portable).
+  return new PlanStore(join(SPEC_PLAN_DIR, 'plans'), defaultNodeHostEnv);
 }
 
 export async function planRoutes(fastify: FastifyInstance): Promise<void> {

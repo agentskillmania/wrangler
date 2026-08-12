@@ -368,16 +368,12 @@ describe('AgentSession', () => {
       });
     });
 
-    it('maps waiting-human event', () => {
+    it('maps session-cleared event (/clear reset)', () => {
       const result = AgentSession.mapEvent({
-        type: 'waiting-human',
-        request: { questions: ['q1?'] },
+        type: 'session-cleared',
         timestamp: 0,
       } as any);
-      expect(result).toEqual({
-        event: 'waiting-human',
-        data: { request: { questions: ['q1?'] } },
-      });
+      expect(result).toEqual({ event: 'session-cleared', data: {} });
     });
 
     it('maps tools:start (plural) to array of events', () => {

@@ -40,15 +40,15 @@ export class Daemon {
   private configManager: ConfigManager;
   private resourceManager: ResourceManager;
   private sessionManager: SessionManager;
-  private readonly options: Required<DaemonOptions>;
+  /** Raw CLI options (port/host). Resolved against config at startup. */
+  private readonly cliOptions: DaemonOptions;
 
   constructor(options: DaemonOptions = {}) {
-    this.options = {
-      port: options.port ?? 3100,
-      host: options.host ?? 'localhost',
-    };
+    this.cliOptions = options;
 
-    this.fastify = Fastify({ logger: false });
+    // Pre-bound listener: hand the existing server to fastify instead of
+    // creating a new one (mirrors Rust's Daemon::with_listener).
+    this.fastify = Fastify({ server: options.listener ?? undefined, logger: false });
     this.configManager = new ConfigManager(CONFIG_PATH);
     this.resourceManager = new ResourceManager(AGENTS_DIR, SKILLS_DIR, CREWS_DIR);
     this.sessionManager = new SessionManager(SESSIONS_DIR);
@@ -152,8 +152,20 @@ export class Daemon {
     this.fastify.decorate('resourceManager', this.resourceManager);
     this.fastify.decorate('sessionManager', this.sessionManager);
 
-    // 4. Listen
-    await this.fastify.listen({ port: this.options.port, host: this.options.host });
+    // 4. Listen — resolve port/host with CLI > config.yaml > default priority
+    // (mirrors the Rust daemon's cli.rs flag→config→default chain). The
+    // constructor only stores raw CLI options; config is loaded above, so the
+    // effective bind address is decided here after both are available.
+    // If a pre-bound listener was provided (with_listener pattern), the server
+    // is already listening — just finish route registration via ready().
+    if (this.cliOptions.listener) {
+      await this.fastify.ready();
+    } else {
+      const config = this.configManager.get();
+      const port = this.cliOptions.port ?? config.server.port;
+      const host = this.cliOptions.host ?? config.server.host;
+      await this.fastify.listen({ port, host });
+    }
   }
 
   /** Gracefully stop server and clean up */

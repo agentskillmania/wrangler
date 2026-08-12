@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-import { SessionStore, readMeta } from '@agentskillmania/wrangler';
-import type { SessionMeta } from '@agentskillmania/wrangler';
+import { SessionStore, readMeta, defaultNodeHostEnv } from '@agentskillmania/wrangler';
+import type { SessionMeta, HostEnv } from '@agentskillmania/wrangler';
 
 import type { AgentSession } from './agent-session.js';
 
@@ -24,9 +24,11 @@ export class SessionManager {
   private readonly runtimeStatus = new Map<string, string>();
   private activeSessions = new Map<string, AgentSession>();
   private readonly _baseDir: string;
+  private readonly runtime: HostEnv;
 
-  constructor(baseDir: string) {
+  constructor(baseDir: string, runtime: HostEnv = defaultNodeHostEnv) {
     this._baseDir = resolve(baseDir);
+    this.runtime = runtime;
   }
 
   /** Create base directory and discover existing sessions */
@@ -51,7 +53,7 @@ export class SessionManager {
         const sessionDirs = await readdir(hashPath, { withFileTypes: true });
         for (const sd of sessionDirs) {
           if (!sd.isDirectory()) continue;
-          const meta = await readMeta(join(hashPath, sd.name));
+          const meta = await readMeta(join(hashPath, sd.name), this.runtime);
           if (meta) {
             this.sessionWorkspaces.set(sd.name, meta.workspacePath);
             this.getOrCreateStore(meta.workspacePath);
@@ -68,7 +70,7 @@ export class SessionManager {
     const absolute = resolve(workspacePath);
     let store = this.sessionStores.get(absolute);
     if (!store) {
-      store = new SessionStore(this._baseDir, absolute);
+      store = new SessionStore(this._baseDir, absolute, this.runtime);
       this.sessionStores.set(absolute, store);
     }
     return store;

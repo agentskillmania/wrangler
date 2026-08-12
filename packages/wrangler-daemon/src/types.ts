@@ -39,6 +39,11 @@ export const DEFAULT_CONFIG: DaemonConfig = {
 export interface DaemonOptions {
   port?: number;
   host?: string;
+  /** Pre-bound listener for in-process embedding (mirrors Rust's
+   * `Daemon::with_listener`). When provided, the daemon serves on this
+   * already-listening server instead of self-binding, eliminating the
+   * TOCTOU window between port-probe and bind. */
+  listener?: import('http').Server;
 }
 
 /** Agent resource metadata returned by list API */

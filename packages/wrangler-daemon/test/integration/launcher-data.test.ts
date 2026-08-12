@@ -12,7 +12,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { SessionStore } from '@agentskillmania/wrangler';
+import { SessionStore, defaultNodeHostEnv } from '@agentskillmania/wrangler';
 import { ResourceManager } from '../../src/core/resource-manager.js';
 import { SessionManager } from '../../src/core/session-manager.js';
 import { launcherRoutes } from '../../src/routes/launcher.js';
@@ -127,8 +127,8 @@ describe('US-C9: Launcher Data', () => {
     const ws1 = join(tempDir, 'workspace-a');
     const ws2 = join(tempDir, 'workspace-b');
 
-    const store1 = new SessionStore(sessionsDir, ws1);
-    const store2 = new SessionStore(sessionsDir, ws2);
+    const store1 = new SessionStore(sessionsDir, ws1, defaultNodeHostEnv);
+    const store2 = new SessionStore(sessionsDir, ws2, defaultNodeHostEnv);
     await store1.createWithId('session-alpha', 'agent-a');
     await store2.createWithId('session-beta', 'agent-b');
 
@@ -176,7 +176,7 @@ describe('US-C9: Launcher Data', () => {
     });
 
     const ws = join(tempDir, 'ws-combined');
-    const store = new SessionStore(sessionsDir, ws);
+    const store = new SessionStore(sessionsDir, ws, defaultNodeHostEnv);
     await store.createWithId('combined-session', 'combined-agent');
     sessionManager.registerSession('combined-session', ws);
 

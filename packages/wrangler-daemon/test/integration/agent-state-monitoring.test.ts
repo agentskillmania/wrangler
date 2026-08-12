@@ -12,7 +12,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { SessionStore } from '@agentskillmania/wrangler';
+import { SessionStore, defaultNodeHostEnv } from '@agentskillmania/wrangler';
 import { SessionManager } from '../../src/core/session-manager.js';
 import { agentStateRoutes } from '../../src/routes/agent-state.js';
 
@@ -51,7 +51,7 @@ describe('US-C10: Agent State Monitoring', () => {
     model?: string
   ): Promise<void> {
     const manager = (fastify as any).sessionManager as SessionManager;
-    const store = new SessionStore(sessionsDir, workspacePath);
+    const store = new SessionStore(sessionsDir, workspacePath, defaultNodeHostEnv);
     await store.createWithId(sessionId, agentName);
     // createWithId doesn't accept model — persist it via updateMeta so the
     // degraded SSE path can surface it in session.overview.model.

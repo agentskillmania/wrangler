@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { SessionStore } from '@agentskillmania/wrangler';
+import { SessionStore, defaultNodeHostEnv } from '@agentskillmania/wrangler';
 import { createAgentState, addUserMessage, addAssistantMessage } from '@agentskillmania/colts';
 import { SessionManager } from '../../src/core/session-manager.js';
 import { ResourceManager } from '../../src/core/resource-manager.js';
@@ -71,7 +71,7 @@ describe('US-C4: Agent Chat Interaction', () => {
    */
   async function createTestSession(wsPath: string, id: string, agentName: string): Promise<void> {
     const manager = (fastify as any).sessionManager as SessionManager;
-    const store = new SessionStore(sessionsDir, wsPath);
+    const store = new SessionStore(sessionsDir, wsPath, defaultNodeHostEnv);
     await store.createWithId(id, agentName);
     manager.registerSession(id, wsPath);
   }
