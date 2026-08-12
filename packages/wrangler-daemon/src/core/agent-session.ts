@@ -5,7 +5,7 @@
  * Bridges colts AskHuman tool -> SSE -> frontend for human-in-the-loop interaction.
  */
 
-import { createAgentState, addUserMessage, updateState } from '@agentskillmania/colts';
+import { createAgentState, addUserMessage, updateState, FilesystemSkillProvider } from '@agentskillmania/colts';
 import type {
   AgentState,
   RunStreamEvent,
@@ -19,6 +19,7 @@ import {
   SessionStore,
   createLLMClient,
   resolveDefaultModel,
+  NodeHostEnv,
 } from '@agentskillmania/wrangler';
 import type { SubAgentConfig, LimitsConfig, SandboxConfig, HostEnv } from '@agentskillmania/wrangler';
 
@@ -98,10 +99,16 @@ export interface AgentSessionOptions {
   /** Agent definition file path. */
   agentConfigPath?: string;
   // Structured EnhancedRunner option groups (see EnhancedRunnerOptions)
-  skills?: { dirs?: string[] };
+  skills?: {
+    dirs?: string[];
+    /** External skill provider — BundledSkillProvider for extensions. */
+    provider?: import('@agentskillmania/colts').ISkillProvider;
+  };
   tools?: {
     mcpConfigPaths?: string[];
     builtinFilter?: Record<string, boolean>;
+    /** External ToolDeps injection — BrowserToolDeps for extensions. */
+    deps?: import('@agentskillmania/wrangler').ToolDeps;
   };
   session?: { enabled?: boolean };
   todolist?: { enabled?: boolean };
@@ -216,8 +223,13 @@ export class AgentSession {
     // (timeout/allowNetwork/policies) is passed through — not just `enabled`.
     const mergedSandbox = mergeSandboxConfig(config.sandbox, options.sandbox);
 
+    // Create skill provider: injected provider takes priority; otherwise
+    // build from dirs (Node only — FilesystemSkillProvider uses node:fs).
+    const skillProvider = options.skills?.provider
+      ?? (options.skills?.dirs?.length ? new FilesystemSkillProvider(options.skills.dirs) : undefined);
+
     const runner = await EnhancedRunner.create({
-      runtime: options.runtime,
+      runtime: options.runtime ?? new NodeHostEnv(),
       llm: { client: llmClient, model: llmModel },
       workspacePath: options.workspacePath,
       sandbox: mergedSandbox,
@@ -240,7 +252,7 @@ export class AgentSession {
       specPlan: { enabled: options.specPlan?.enabled ?? true },
       commands: { enabled: options.commands?.enabled ?? true },
       a2ui: options.a2ui,
-      skills: options.skills,
+      skills: { ...options.skills, provider: skillProvider },
       search: options.search,
       // API boolean: undefined = default enabled; false = disabled.
       compression: options.compression === false ? false : undefined,

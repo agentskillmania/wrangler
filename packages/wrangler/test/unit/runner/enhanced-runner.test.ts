@@ -122,6 +122,7 @@ describe('EnhancedRunner', () => {
 
   function makeOptions(overrides?: Partial<EnhancedRunnerOptions>): EnhancedRunnerOptions {
     const base: EnhancedRunnerOptions = {
+      runtime: new NodeHostEnv(),
       workspacePath: '/test/workspace',
       llm: { client: mockLLMClient, model: 'gpt-4' },
       tools: { extra: mockExtraTools, askHumanHandler: vi.fn() },
@@ -241,15 +242,13 @@ describe('EnhancedRunner', () => {
     expect(callArgs.systemPrompt).not.toMatch(/You are/);
   });
 
-  it('should create() passes skillDirs to AgentRunner (with built-in skills appended)', async () => {
-    await EnhancedRunner.create(makeOptions({ skills: { dirs: ['/skills/dir1', '/skills/dir2'] } }));
+  it('should create() passes skillProvider to AgentRunner when injected', async () => {
+    const mockProvider = { listSkills: () => [], getManifest: () => null, loadInstructions: async () => '', loadResource: async () => '', refresh: async () => {} };
+    await EnhancedRunner.create(makeOptions({ skills: { provider: mockProvider as any } }));
 
     const calls = await getAgentRunnerCalls();
-    const skillDirs = calls[calls.length - 1][0].skillDirs;
-    // User-provided dirs come first, followed by built-in spec-plan skills
-    expect(skillDirs.slice(0, 2)).toEqual(['/skills/dir1', '/skills/dir2']);
-    expect(skillDirs.length).toBeGreaterThanOrEqual(3);
-    expect(skillDirs[2]).toContain('spec-plan');
+    const opts = calls[calls.length - 1][0];
+    expect(opts.skillProvider).toBeDefined();
   });
 
   it('should create() passes thinkingEnabled to AgentRunner', async () => {
@@ -1000,13 +999,17 @@ describe('EnhancedRunner', () => {
     });
 
     it('returns skills with name, description, and source', async () => {
-      // Mock FilesystemSkillProvider to return predictable skills
-      const { FilesystemSkillProvider } = await import('@agentskillmania/colts');
-      vi.spyOn(FilesystemSkillProvider.prototype, 'listSkills').mockReturnValue([
-        { name: 'spec-plan', description: 'Plan specifications', source: '/skills/spec-plan' },
-        { name: 'a2ui-gen', description: 'A2UI generation', source: '/skills/a2ui-gen' },
-      ] as any);
-      const runner = await EnhancedRunner.create(makeOptions({ skills: { dirs: ['/test/skills'] } }));
+      const mockProvider = {
+        listSkills: () => [
+          { name: 'spec-plan', description: 'Plan specifications', source: '/skills/spec-plan' },
+          { name: 'a2ui-gen', description: 'A2UI generation', source: '/skills/a2ui-gen' },
+        ],
+        getManifest: () => null,
+        loadInstructions: async () => '',
+        loadResource: async () => '',
+        refresh: async () => {},
+      };
+      const runner = await EnhancedRunner.create(makeOptions({ skills: { provider: mockProvider as any } }));
       const skills = runner.getSkillInfo();
       expect(skills.length).toBeGreaterThanOrEqual(2);
       const specPlan = skills.find((s) => s.name === 'spec-plan');
@@ -1175,6 +1178,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { runner, state } = await EnhancedRunner.resume(dir, {
+        runtime: new NodeHostEnv(),
         llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
       });
 
@@ -1193,6 +1197,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { runner, state } = await EnhancedRunner.resume(dir, {
+        runtime: new NodeHostEnv(),
         llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
       });
 
@@ -1213,6 +1218,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { state } = await EnhancedRunner.resume(dir, {
+        runtime: new NodeHostEnv(),
         llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
       });
 
@@ -1230,6 +1236,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       const { runner } = await EnhancedRunner.resume(dir, {
+        runtime: new NodeHostEnv(),
         llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
         model: 'claude-3',
       });
@@ -1246,7 +1253,7 @@ describe('EnhancedRunner', () => {
       await store.saveState(sessionId, agentState);
 
       const dir = store.getSessionDir(sessionId);
-      await expect(EnhancedRunner.resume(dir, {})).rejects.toThrow(
+      await expect(EnhancedRunner.resume(dir, { runtime: new NodeHostEnv() })).rejects.toThrow(
         'Must specify either llm.client or llm.quickInit'
       );
     });
@@ -1255,6 +1262,7 @@ describe('EnhancedRunner', () => {
       const badDir = join(testBaseDir, 'nonexistent');
       await expect(
         EnhancedRunner.resume(badDir, {
+          runtime: new NodeHostEnv(),
           llm: {
             providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
           },
@@ -1278,6 +1286,7 @@ describe('EnhancedRunner', () => {
       const dir = store.getSessionDir(sessionId);
       await expect(
         EnhancedRunner.resume(dir, {
+          runtime: new NodeHostEnv(),
           llm: {
             providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
           },
@@ -1295,6 +1304,7 @@ describe('EnhancedRunner', () => {
       const dir = store.getSessionDir(sessionId);
       await expect(
         EnhancedRunner.resume(dir, {
+          runtime: new NodeHostEnv(),
           llm: {
             providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
           },
@@ -1322,6 +1332,7 @@ describe('EnhancedRunner', () => {
       ];
 
       const { runner } = await EnhancedRunner.resume(dir, {
+        runtime: new NodeHostEnv(),
         llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
         subAgents,
       });
@@ -1345,6 +1356,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       await EnhancedRunner.resume(dir, {
+        runtime: new NodeHostEnv(),
         llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
       });
 

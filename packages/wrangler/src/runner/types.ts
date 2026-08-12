@@ -6,6 +6,7 @@ import type {
   CompressionConfig,
   IContextCompressor,
   LLMQuickInit,
+  ISkillProvider,
 } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
 
@@ -78,6 +79,12 @@ export interface LLMConfig {
 export interface SkillsConfig {
   /** Skill directories to scan for SKILL.md files */
   dirs?: string[];
+  /**
+   * External skill provider injection — overrides FilesystemSkillProvider.
+   * Browser extensions pass BundledSkillProvider; omit for Node (dirs-based).
+   * When set, dirs are ignored and no FilesystemSkillProvider is loaded.
+   */
+  provider?: ISkillProvider;
 }
 
 export interface ToolsConfig {

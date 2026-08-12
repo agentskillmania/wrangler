@@ -1,11 +1,11 @@
-import type { FilesystemSkillProvider } from '@agentskillmania/colts';
+import type { ISkillProvider } from '@agentskillmania/colts';
 
 import type { CommandHandler } from '../types.js';
 
 /**
  * Creates a command handler that lists all available skills from the skill provider.
  *
- * @param skillProvider - The FilesystemSkillProvider instance to query for skills
+ * @param skillProvider - The skill provider instance to query for skills
  * @returns A CommandHandler that lists available skills
  *
  * @example
@@ -15,7 +15,7 @@ import type { CommandHandler } from '../types.js';
  * console.log(result.response); // "Available skills:\n1. code-review — ..."
  * ```
  */
-export function createSkillsHandler(skillProvider: FilesystemSkillProvider): CommandHandler {
+export function createSkillsHandler(skillProvider: ISkillProvider): CommandHandler {
   return {
     name: 'skills',
     description: 'List available skills',

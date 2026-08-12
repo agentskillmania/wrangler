@@ -1,6 +1,5 @@
 import {
   AgentRunner,
-  FilesystemSkillProvider,
   DefaultContextCompressor,
   ToolRegistry,
   ConfirmableRegistry,
@@ -42,7 +41,6 @@ import { createLLMClient, resolveDefaultModel } from '../llm/client.js';
 import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
 import { createSessionSupport } from '../session/support.js';
-import { NodeHostEnv } from '../host-env/node-host-env.js';
 import type { HostEnv } from '../host-env/index.js';
 import { PlanStore } from '../spec-plan/plan-store.js';
 import { SpecStore } from '../spec-plan/spec-store.js';
@@ -176,8 +174,8 @@ export class EnhancedRunner {
    * @returns Configured EnhancedRunner instance
    */
   static async create(options: EnhancedRunnerOptions): Promise<EnhancedRunner> {
-    // 宿主环境运行时（默认 NodeHostEnv，daemon 零改动；浏览器传 BrowserHostEnv）
-    const runtime: HostEnv = options.runtime ?? new NodeHostEnv();
+    const runtime = options.runtime;
+    if (!runtime) throw new Error('EnhancedRunnerOptions.runtime is required');
     const workspacePath = options.workspacePath ?? runtime.env.cwd();
     // Resolve skill dirs once and reuse across all consumers below (avoids
     // repeated array allocation + repeated runtime.resources.builtinSkillDirs()).
@@ -280,18 +278,17 @@ export class EnhancedRunner {
     // Build skill-resource tools (read_skill_resource + run_skill_script) when
     // skill directories are configured. These complement load_skill by giving
     // the agent access to reference docs and bundled scripts.
-    const resolvedSkillDirsForTools = resolvedSkillDirs;
+    const skillProvider = options.skills?.provider;
     const skillTools: Tool<ZodTypeAny>[] = [];
-    if (resolvedSkillDirsForTools.length > 0) {
-      const skillProviderForTools = new FilesystemSkillProvider(resolvedSkillDirsForTools);
+    if (skillProvider) {
       const maxOutputSize = options.limits?.maxToolOutput ?? DEFAULT_MAX_TOOL_OUTPUT;
       const toolTimeout = options.limits?.toolTimeout ?? 600_000;
       const depsForSkills: ToolDeps = options.tools?.deps
         ?? (sandboxInstance
           ? new SandboxToolDeps(sandboxInstance, maxOutputSize, toolTimeout)
           : new HostToolDeps(runtime, workspacePath, maxOutputSize, undefined, toolTimeout));
-      skillTools.push(createReadResourceTool(skillProviderForTools));
-      skillTools.push(createRunScriptTool(depsForSkills, skillProviderForTools));
+      skillTools.push(createReadResourceTool(skillProvider));
+      skillTools.push(createRunScriptTool(depsForSkills, skillProvider));
     }
 
     const allTools: Tool<ZodTypeAny>[] = [
@@ -396,8 +393,7 @@ export class EnhancedRunner {
             skillDirs.push(genuiSkillsDir);
           }
         }
-        if (skillDirs.length > 0) {
-          const skillProvider = new FilesystemSkillProvider(skillDirs);
+        if (skillProvider) {
           commandRegistry.register(createSkillsHandler(skillProvider));
           commandRegistry.register(createSkillHandler(skillProvider));
         }
@@ -482,15 +478,10 @@ export class EnhancedRunner {
         })
       : { middlewares: [{ name: 'session' }] };
 
-    // Build skill metadata from the resolved skill provider (if any).
-    // The AgentRunner's FilesystemSkillProvider is constructed inside AgentRunner
-    // from skillDirs, so we list skills from our own provider to capture source.
-    const skillMeta: SkillMetadata[] =
-      resolvedSkillDirs.length > 0
-        ? new FilesystemSkillProvider(resolvedSkillDirs)
-            .listSkills()
-            .map((s) => ({ name: s.name, description: s.description, source: s.source }))
-        : [];
+    // Build skill metadata from the injected provider (if any).
+    const skillMeta: SkillMetadata[] = skillProvider
+      ? skillProvider.listSkills().map((s) => ({ name: s.name, description: s.description, source: s.source }))
+      : [];
 
     // Build tool registry and optionally wrap with confirmation
     let finalToolRegistry: IToolRegistry | undefined;
@@ -517,7 +508,7 @@ export class EnhancedRunner {
         ...a2uiMiddleware,
       ],
       systemPrompt: buildTimeContext(),
-      skillDirs: resolvedSkillDirs,
+      skillProvider: skillProvider ?? undefined,
       thinkingEnabled: options.thinking?.enabled,
       enablePromptThinking: options.thinking?.promptLevel,
       temperature: options.llm?.temperature,
@@ -588,7 +579,8 @@ export class EnhancedRunner {
     sessionDir: string,
     options: ResumeOptions
   ): Promise<{ runner: EnhancedRunner; state: AgentState }> {
-    const runtime: HostEnv = options.runtime ?? new NodeHostEnv();
+    const runtime = options.runtime;
+    if (!runtime) throw new Error('ResumeOptions.runtime is required');
     const store = SessionStore.fromDir(sessionDir, runtime);
 
     const meta = await store.getMeta();
@@ -606,6 +598,7 @@ export class EnhancedRunner {
 
     const rc = meta.runnerConfig;
     const runner = await EnhancedRunner.create({
+      runtime,
       llm: {
         client: resolveLLMClient(options),
         model: options.model ?? rc.model,

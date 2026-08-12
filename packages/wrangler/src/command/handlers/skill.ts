@@ -1,4 +1,4 @@
-import type { FilesystemSkillProvider } from '@agentskillmania/colts';
+import type { ISkillProvider } from '@agentskillmania/colts';
 import { addAssistantMessage, addToolMessage, loadSkill } from '@agentskillmania/colts';
 
 import type { CommandHandler } from '../types.js';
@@ -27,7 +27,7 @@ import type { CommandHandler } from '../types.js';
  * const result2 = await handler.handle({ command: { name: 'skill', target: 'code-review', body: 'Review this code' }, ... });
  * ```
  */
-export function createSkillHandler(skillProvider: FilesystemSkillProvider): CommandHandler {
+export function createSkillHandler(skillProvider: ISkillProvider): CommandHandler {
   return {
     name: 'skill',
     description: 'Load a skill by name',
