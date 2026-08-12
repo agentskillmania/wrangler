@@ -33,7 +33,8 @@ describe('Spec/Plan Tool-Driven Integration', () => {
       async () => {
         const runner = await EnhancedRunner.create({
           llm: {
-            providers: [
+            quickInit: {
+              providers: [
               {
                 name: testConfig.provider,
                 apiKey: testConfig.apiKey,
@@ -41,13 +42,14 @@ describe('Spec/Plan Tool-Driven Integration', () => {
                 models: [{ modelId: testConfig.testModel }],
               },
             ],
+            },
           },
           model: testConfig.testModel,
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          enableSpecPlan: true,
-          builtinTools: { fileRead: true, fileWrite: false, fileEdit: false },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
+          specPlan: { enabled: true },
+          builtinFilter: { fileRead: true, fileWrite: false, fileEdit: false },
         });
 
         const instructions = `
@@ -97,7 +99,8 @@ You have access to spec-plan tools. Your task:
       async () => {
         const runner = await EnhancedRunner.create({
           llm: {
-            providers: [
+            quickInit: {
+              providers: [
               {
                 name: testConfig.provider,
                 apiKey: testConfig.apiKey,
@@ -105,13 +108,14 @@ You have access to spec-plan tools. Your task:
                 models: [{ modelId: testConfig.testModel }],
               },
             ],
+            },
           },
           model: testConfig.testModel,
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          enableSpecPlan: true,
-          builtinTools: { fileRead: true, fileWrite: false, fileEdit: false },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
+          specPlan: { enabled: true },
+          builtinFilter: { fileRead: true, fileWrite: false, fileEdit: false },
         });
 
         const instructions = `
@@ -177,7 +181,8 @@ Report what you did and confirm each step succeeded.
       async () => {
         const runner = await EnhancedRunner.create({
           llm: {
-            providers: [
+            quickInit: {
+              providers: [
               {
                 name: testConfig.provider,
                 apiKey: testConfig.apiKey,
@@ -185,13 +190,14 @@ Report what you did and confirm each step succeeded.
                 models: [{ modelId: testConfig.testModel }],
               },
             ],
+            },
           },
           model: testConfig.testModel,
-          enableSession: false,
-          enableTodolist: false,
-          enableCommands: false,
-          enableSpecPlan: false,
-          builtinTools: { fileRead: true, fileWrite: false, fileEdit: false },
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
+          specPlan: { enabled: false },
+          builtinFilter: { fileRead: true, fileWrite: false, fileEdit: false },
         });
 
         const toolInfo = runner.getToolInfo();

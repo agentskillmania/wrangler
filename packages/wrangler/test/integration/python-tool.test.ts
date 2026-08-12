@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
 import { createPythonTool } from '../../src/tools/builtin/python.js';
 import { HostToolDeps } from '../../src/tools/builtin/workspace-deps.js';
-import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
+import { NodeHostEnv } from '../../src/host-env/node-host-env.js';
 
 const PYTHON_AVAILABLE = (() => {
   try {

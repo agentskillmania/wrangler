@@ -11,7 +11,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EnhancedRunner } from '../../src/runner/index.js';
-import { createAgentState, addUserMessage } from '@agentskillmania/colts';
+import { createAgentState, addUserMessage, FilesystemSkillProvider } from '@agentskillmania/colts';
+import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
 import type { AgentState } from '@agentskillmania/colts';
 import { createLLMClient } from '../../src/llm/client.js';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -68,8 +69,7 @@ describe('Command System Integration Tests', () => {
     'should execute /clear command and stop with success message',
     async () => {
       const runner = await EnhancedRunner.create({
-        llmClient: makeLLMClient() as any,
-        model: testConfig.testModel,
+        llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         mcpConfigPaths: [],
       });
@@ -101,10 +101,13 @@ describe('Command System Integration Tests', () => {
       tempDirs.push(skillDir);
 
       const runner = await EnhancedRunner.create({
-        llmClient: makeLLMClient() as any,
-        model: testConfig.testModel,
+        llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
-        skillDirs: [skillDir],
+        skills: {
+          dirs: [skillDir],
+          // 宿主职责：Node 测试环境显式注入 provider（引擎 core 不构造技能后端）
+          provider: new FilesystemSkillProvider([skillDir], nodeFsOps),
+        },
         mcpConfigPaths: [],
       });
 
@@ -133,10 +136,13 @@ describe('Command System Integration Tests', () => {
       tempDirs.push(skillDir);
 
       const runner = await EnhancedRunner.create({
-        llmClient: makeLLMClient() as any,
-        model: testConfig.testModel,
+        llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
-        skillDirs: [skillDir],
+        skills: {
+          dirs: [skillDir],
+          // 宿主职责：Node 测试环境显式注入 provider（引擎 core 不构造技能后端）
+          provider: new FilesystemSkillProvider([skillDir], nodeFsOps),
+        },
         mcpConfigPaths: [],
       });
 
@@ -173,8 +179,7 @@ describe('Command System Integration Tests', () => {
       };
 
       const runner = await EnhancedRunner.create({
-        llmClient: makeLLMClient() as any,
-        model: testConfig.testModel,
+        llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         mcpConfigPaths: [],
         compression: mockCompressor,
@@ -223,8 +228,7 @@ describe('Command System Integration Tests', () => {
     'should treat unknown command as normal message and continue to LLM',
     async () => {
       const runner = await EnhancedRunner.create({
-        llmClient: makeLLMClient() as any,
-        model: testConfig.testModel,
+        llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         mcpConfigPaths: [],
       });
@@ -265,8 +269,7 @@ describe('Command System Integration Tests', () => {
       };
 
       const runner = await EnhancedRunner.create({
-        llmClient: makeLLMClient() as any,
-        model: testConfig.testModel,
+        llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         commands: { enabled: true, extra: [customClearHandler] },
         mcpConfigPaths: [],
@@ -297,10 +300,13 @@ describe('Command System Integration Tests', () => {
       tempDirs.push(skillDir);
 
       const runner = await EnhancedRunner.create({
-        llmClient: makeLLMClient() as any,
-        model: testConfig.testModel,
+        llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
-        skillDirs: [skillDir],
+        skills: {
+          dirs: [skillDir],
+          // 宿主职责：Node 测试环境显式注入 provider（引擎 core 不构造技能后端）
+          provider: new FilesystemSkillProvider([skillDir], nodeFsOps),
+        },
         mcpConfigPaths: [],
       });
 
@@ -326,8 +332,7 @@ describe('Command System Integration Tests', () => {
     'should pass normal message to LLM without command processing',
     async () => {
       const runner = await EnhancedRunner.create({
-        llmClient: makeLLMClient() as any,
-        model: testConfig.testModel,
+        llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         mcpConfigPaths: [],
       });

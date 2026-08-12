@@ -29,8 +29,7 @@ function makeLLMClient() {
 
 async function createRunner() {
   return EnhancedRunner.create({
-    llmClient: makeLLMClient() as any,
-    model: testConfig.testModel,
+    llm: { client: makeLLMClient() as any, model: testConfig.testModel },
     workspacePath: '/tmp/test-workspace',
     mcpConfigPaths: [],
   });

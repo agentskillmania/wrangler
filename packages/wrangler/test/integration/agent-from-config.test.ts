@@ -157,11 +157,10 @@ You are a helpful assistant. Answer in one short sentence.`
       });
 
       const runner = await EnhancedRunner.create({
-        llmClient,
-        model: testConfig.testModel,
+        llm: { client: llmClient, model: testConfig.testModel },
         workspacePath: testBaseDir,
         mcpConfigPaths: [],
-        skillDirs: loaded.skillDirs,
+        skills: { dirs: loaded.skillDirs },
       });
 
       let state = createAgentState({
