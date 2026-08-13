@@ -1,0 +1,2 @@
+# mustache 模板（{{ var }} 双大括号会被 prettier 破坏）
+src/templates/

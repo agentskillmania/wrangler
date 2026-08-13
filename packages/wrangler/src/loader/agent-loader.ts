@@ -1,7 +1,6 @@
 import { parseAgentMd } from '../agent/agent-parser.js';
 import type { ParsedAgent } from '../agent/agent-parser.js';
 import type { HostEnv } from '../host-env/index.js';
-import { NodeHostEnv } from '../host-env/node-host-env.js';
 import type { SessionSource } from '../types.js';
 
 export interface AgentLoadResult extends ParsedAgent {
@@ -11,8 +10,8 @@ export interface AgentLoadResult extends ParsedAgent {
 }
 
 export class AgentLoader {
-  static async loadFrom(dir: string, runtime?: HostEnv): Promise<AgentLoadResult> {
-    const rt = runtime ?? new NodeHostEnv();
+  static async loadFrom(dir: string, runtime: HostEnv): Promise<AgentLoadResult> {
+    const rt = runtime;
     const absDir = rt.path.resolve(dir);
 
     let content: string;

@@ -18,11 +18,14 @@ export function SessionSelector(props) {
 
   // Fetch sessions on mount
   useEffect(function () {
-    api.get('/api/sessions').then(function (list) {
-      setSessions(Array.isArray(list) ? list : []);
-    }).catch(function () {
-      setSessions([]);
-    });
+    api
+      .get('/api/sessions')
+      .then(function (list) {
+        setSessions(Array.isArray(list) ? list : []);
+      })
+      .catch(function () {
+        setSessions([]);
+      });
   }, []);
 
   // Group sessions by workspacePath
@@ -45,28 +48,20 @@ export function SessionSelector(props) {
       }}
     >
       <option value="">${placeholder}</option>
-      ${groupKeys.map(
-        function (gk) {
-          return html`
-            <optgroup key=${gk} label=${gk}>
-              ${groups[gk].map(
-                function (sess) {
-                  // Crew sessions carry crewId on runnerConfig; surface it so
-                  // the picker distinguishes 'crew/foo — id' from 'agent — id'.
-                  var crewId = sess.runnerConfig && sess.runnerConfig.crewId;
-                  var prefix = crewId ? 'crew/' + crewId : (sess.agentName || 'unknown');
-                  var label = prefix + ' — ' + (sess.id || '-');
-                  return html`
-                    <option key=${sess.id} value=${sess.id}>
-                      ${label}
-                    </option>
-                  `;
-                }
-              )}
-            </optgroup>
-          `;
-        }
-      )}
+      ${groupKeys.map(function (gk) {
+        return html`
+          <optgroup key=${gk} label=${gk}>
+            ${groups[gk].map(function (sess) {
+              // Crew sessions carry crewId on runnerConfig; surface it so
+              // the picker distinguishes 'crew/foo — id' from 'agent — id'.
+              var crewId = sess.runnerConfig && sess.runnerConfig.crewId;
+              var prefix = crewId ? 'crew/' + crewId : sess.agentName || 'unknown';
+              var label = prefix + ' — ' + (sess.id || '-');
+              return html` <option key=${sess.id} value=${sess.id}>${label}</option> `;
+            })}
+          </optgroup>
+        `;
+      })}
     </select>
   `;
 }

@@ -23,24 +23,30 @@ export function FilesPage() {
 
   function loadTree() {
     if (!sessionId.trim()) return;
-    api.get('/api/files/' + sessionId + '/tree').then(function (data) {
-      setTree(Array.isArray(data) ? data : data ? [data] : []);
-    }).catch(function () {
-      setTree([]);
-    });
+    api
+      .get('/api/files/' + sessionId + '/tree')
+      .then(function (data) {
+        setTree(Array.isArray(data) ? data : data ? [data] : []);
+      })
+      .catch(function () {
+        setTree([]);
+      });
   }
 
   function openFile(path) {
     setSelectedPath(path);
-    api.get('/api/files/' + sessionId + '/content?path=' + encodeURIComponent(path)).then(function (res) {
-      if (typeof res === 'object' && res.content) {
-        setFileContent(res.content);
-      } else {
-        setFileContent(typeof res === 'string' ? res : JSON.stringify(res, null, 2));
-      }
-    }).catch(function (e) {
-      setFileContent('Error loading file: ' + e.message);
-    });
+    api
+      .get('/api/files/' + sessionId + '/content?path=' + encodeURIComponent(path))
+      .then(function (res) {
+        if (typeof res === 'object' && res.content) {
+          setFileContent(res.content);
+        } else {
+          setFileContent(typeof res === 'string' ? res : JSON.stringify(res, null, 2));
+        }
+      })
+      .catch(function (e) {
+        setFileContent('Error loading file: ' + e.message);
+      });
   }
 
   function saveFile() {
@@ -72,7 +78,9 @@ export function FilesPage() {
     <div class="page">
       <div class="page-header">
         <div class="page-title">Workspace Files</div>
-        <div class="page-desc">Browse and edit files in the agent's workspace. Requires a session ID.</div>
+        <div class="page-desc">
+          Browse and edit files in the agent's workspace. Requires a session ID.
+        </div>
       </div>
 
       <div class="page-toolbar">
@@ -91,11 +99,7 @@ export function FilesPage() {
       <div style="display:flex;gap:16px">
         <div style="min-width:240px;max-width:300px">
           <div class="detail-label" style="margin-bottom:8px">File Tree</div>
-          <${FileTree}
-            nodes=${tree}
-            selectedPath=${selectedPath}
-            onSelect=${openFile}
-          />
+          <${FileTree} nodes=${tree} selectedPath=${selectedPath} onSelect=${openFile} />
         </div>
         <div style="flex:1">
           <div class="detail-label" style="margin-bottom:8px">

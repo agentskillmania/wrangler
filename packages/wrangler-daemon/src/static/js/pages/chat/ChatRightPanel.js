@@ -60,84 +60,79 @@ export function ChatRightPanel(props) {
 
             <div class="right-content">
               ${rightTab === 'events' &&
-                html`
-                  <div ref=${evtLogRef} class="right-scrollable">
-                    ${cockpitEvents.length === 0 &&
-                      html`<div class="right-empty">No events yet.</div>`
-                    }
-                    ${cockpitEvents.map(function (ev) {
-                      return html`<${EventCard}
-                        key=${ev.id}
-                        tag=${ev.tag}
-                        text=${ev.text}
-                        id=${ev.id}
-                        data=${ev.data}
-                        isSelected=${selectedEventId === ev.id}
-                        onSelect=${setSelectedEventId}
-                      />`;
-                    })}
-                  </div>
-                `}
-
+              html`
+                <div ref=${evtLogRef} class="right-scrollable">
+                  ${cockpitEvents.length === 0 &&
+                  html`<div class="right-empty">No events yet.</div>`}
+                  ${cockpitEvents.map(function (ev) {
+                    return html`<${EventCard}
+                      key=${ev.id}
+                      tag=${ev.tag}
+                      text=${ev.text}
+                      id=${ev.id}
+                      data=${ev.data}
+                      isSelected=${selectedEventId === ev.id}
+                      onSelect=${setSelectedEventId}
+                    />`;
+                  })}
+                </div>
+              `}
               ${rightTab === 'state' &&
-                html`
-                  <div class="right-scrollable">
-                    ${diagnosticsData !== null
-                      ? html`<${StatePanel} diagnostics=${diagnosticsData} />`
-                      : html`<div class="right-empty">Waiting for agent state...</div>`
-                    }
-                  </div>
-                `}
-
+              html`
+                <div class="right-scrollable">
+                  ${diagnosticsData !== null
+                    ? html`<${StatePanel} diagnostics=${diagnosticsData} />`
+                    : html`<div class="right-empty">Waiting for agent state...</div>`}
+                </div>
+              `}
               ${rightTab === 'files' &&
-                html`
-                  <div class="file-editor-layout">
-                    <div class="file-tree" style="overflow-y:auto">
-                      <${FileTree}
-                        nodes=${rightFileTree}
-                        selectedPath=${rightFilePath}
-                        onSelect=${openRightFile}
+              html`
+                <div class="file-editor-layout">
+                  <div class="file-tree" style="overflow-y:auto">
+                    <${FileTree}
+                      nodes=${rightFileTree}
+                      selectedPath=${rightFilePath}
+                      onSelect=${openRightFile}
+                    />
+                  </div>
+                  <div class="editor-area">
+                    <div class="detail-label">${rightFilePath || 'Select a file'}</div>
+                    <div class="editor-wrap">
+                      <${CodeMirrorWrapper}
+                        value=${rightFileContent}
+                        onChange=${setRightFileContent}
+                        mode=${rightFilePath && rightFilePath.endsWith('.js')
+                          ? 'javascript'
+                          : 'markdown'}
                       />
                     </div>
-                    <div class="editor-area">
-                      <div class="detail-label">${rightFilePath || 'Select a file'}</div>
-                      <div class="editor-wrap">
-                        <${CodeMirrorWrapper}
-                          value=${rightFileContent}
-                          onChange=${setRightFileContent}
-                          mode=${rightFilePath && rightFilePath.endsWith('.js') ? 'javascript' : 'markdown'}
-                        />
-                      </div>
-                      <div class="editor-toolbar">
-                        <button
-                          class="btn btn-primary btn-sm"
-                          disabled=${!rightFilePath}
-                          onClick=${saveRightFile}
-                        >
-                          Save
-                        </button>
-                        ${rightSaveStatus &&
-                          html`<span
-                            style=${'font-size:11px;color:' +
-                              (rightSaveStatus.startsWith('Error')
-                                ? 'var(--error)'
-                                : rightSaveStatus === 'saving...'
-                                  ? 'var(--warning)'
-                                  : 'var(--success)')}
-                          >
-                            ${rightSaveStatus}
-                          </span>`
-                        }
-                      </div>
+                    <div class="editor-toolbar">
+                      <button
+                        class="btn btn-primary btn-sm"
+                        disabled=${!rightFilePath}
+                        onClick=${saveRightFile}
+                      >
+                        Save
+                      </button>
+                      ${rightSaveStatus &&
+                      html`<span
+                        style=${'font-size:11px;color:' +
+                        (rightSaveStatus.startsWith('Error')
+                          ? 'var(--error)'
+                          : rightSaveStatus === 'saving...'
+                            ? 'var(--warning)'
+                            : 'var(--success)')}
+                      >
+                        ${rightSaveStatus}
+                      </span>`}
                     </div>
                   </div>
-                `}
+                </div>
+              `}
             </div>
           `
         : html`
-            <div
-              style="color:var(--text-muted);font-size:12px;text-align:center;padding:40px 16px"
-            >
+            <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:40px 16px">
               Start a chat session to see cockpit events, agent state, and workspace files.
             </div>
           `}

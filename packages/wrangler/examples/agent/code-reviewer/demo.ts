@@ -11,6 +11,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { AgentLoader, EnhancedRunner } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { getDemoConfig } from '../../demo-config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -22,7 +23,7 @@ async function main() {
 
   // ── Step 1: Load agent definition from AGENT.md ──
   console.log('【步骤 1】加载智能体定义...');
-  const loaded = await AgentLoader.loadFrom(join(__dirname, 'agent'));
+  const loaded = await AgentLoader.loadFrom(join(__dirname, 'agent'), defaultNodeHostEnv);
   console.log(`  ✓ 已加载: ${loaded.name}`);
   console.log(`  ✓ 描述: ${loaded.description}\n`);
 

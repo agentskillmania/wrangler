@@ -14,6 +14,7 @@
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { getDemoConfig } from '../../demo-config.js';
 
@@ -29,7 +30,7 @@ async function main() {
   console.log('═══════════════════════════════════════════════════════\n');
 
   const crewDir = join(__dirname, 'crew');
-  const loader = new CrewLoader(crewDir);
+  const loader = new CrewLoader(crewDir, defaultNodeHostEnv);
   const config = await loader.load();
   const { provider: llmProvider, model } = getDemoConfig();
 
@@ -47,6 +48,7 @@ async function main() {
   const runner = await EnhancedRunner.create({
     ...crewToRunnerOptions(config),
     llm: { client: llmProvider, model },
+    runtime: defaultNodeHostEnv,
     workspacePath: process.cwd(),
     tools: { mcpConfigPaths: [] },
   });

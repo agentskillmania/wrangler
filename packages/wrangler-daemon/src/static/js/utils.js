@@ -5,13 +5,7 @@
  */
 
 import { h, render } from '../vendor/preact.module.js';
-import {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useMemo,
-} from '../vendor/hooks.module.js';
+import { useState, useEffect, useRef, useCallback, useMemo } from '../vendor/hooks.module.js';
 import htm from '../vendor/htm.module.js';
 
 /** HTM bound to Preact's h() */

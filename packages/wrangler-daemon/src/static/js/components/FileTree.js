@@ -43,11 +43,9 @@ export function FileTree(props) {
             ${isExpanded ? '▾' : '▸'} ${node.name}/
           </div>
           <div class=${'ft-children' + (isExpanded ? '' : ' collapsed')}>
-            ${(node.children || []).map(
-              function (child) {
-                return renderNode(child, (depth || 0) + 1);
-              }
-            )}
+            ${(node.children || []).map(function (child) {
+              return renderNode(child, (depth || 0) + 1);
+            })}
           </div>
         </div>
       `;
@@ -71,11 +69,9 @@ export function FileTree(props) {
   if (Array.isArray(nodes)) {
     return html`
       <div class="file-tree">
-        ${nodes.map(
-          function (n) {
-            return renderNode(n, 0);
-          }
-        )}
+        ${nodes.map(function (n) {
+          return renderNode(n, 0);
+        })}
       </div>
     `;
   }

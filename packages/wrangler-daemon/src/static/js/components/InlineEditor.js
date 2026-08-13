@@ -29,11 +29,14 @@ export function InlineEditor(props) {
   useEffect(
     function () {
       if (!resourceId) return;
-      api.get(apiBase + '/files').then(function (data) {
-        setTree(Array.isArray(data) ? data : data ? [data] : []);
-      }).catch(function () {
-        setTree([]);
-      });
+      api
+        .get(apiBase + '/files')
+        .then(function (data) {
+          setTree(Array.isArray(data) ? data : data ? [data] : []);
+        })
+        .catch(function () {
+          setTree([]);
+        });
     },
     [resourceId]
   );
@@ -41,33 +44,41 @@ export function InlineEditor(props) {
   function openFile(path) {
     setFilePath(path);
     setSaveStatus('');
-    api.get(apiBase + '/file?path=' + encodeURIComponent(path)).then(function (res) {
-      if (typeof res === 'object' && res.content) {
-        setFileContent(res.content);
-      } else {
-        setFileContent(typeof res === 'string' ? res : JSON.stringify(res, null, 2));
-      }
-    }).catch(function () {
-      setFileContent('Error loading file.');
-    });
+    api
+      .get(apiBase + '/file?path=' + encodeURIComponent(path))
+      .then(function (res) {
+        if (typeof res === 'object' && res.content) {
+          setFileContent(res.content);
+        } else {
+          setFileContent(typeof res === 'string' ? res : JSON.stringify(res, null, 2));
+        }
+      })
+      .catch(function () {
+        setFileContent('Error loading file.');
+      });
   }
 
   function saveFile() {
     if (!filePath) return;
     setSaveStatus('saving...');
-    api.put(apiBase + '/file', {
-      path: filePath,
-      content: fileContent,
-    }).then(function (res) {
-      if (res && res.error) {
-        setSaveStatus('Error: ' + res.error);
-      } else {
-        setSaveStatus('Saved');
-        setTimeout(function () { setSaveStatus(''); }, 2000);
-      }
-    }).catch(function (e) {
-      setSaveStatus('Error: ' + (e.message || 'Save failed'));
-    });
+    api
+      .put(apiBase + '/file', {
+        path: filePath,
+        content: fileContent,
+      })
+      .then(function (res) {
+        if (res && res.error) {
+          setSaveStatus('Error: ' + res.error);
+        } else {
+          setSaveStatus('Saved');
+          setTimeout(function () {
+            setSaveStatus('');
+          }, 2000);
+        }
+      })
+      .catch(function (e) {
+        setSaveStatus('Error: ' + (e.message || 'Save failed'));
+      });
   }
 
   function createFile() {
@@ -99,15 +110,13 @@ export function InlineEditor(props) {
       <div class="detail-label">Files</div>
       <div class="editor-toolbar">
         <button class="btn btn-secondary btn-sm" onClick=${createFile}>+ New File</button>
-        <button class="btn btn-danger btn-sm" disabled=${!filePath} onClick=${deleteFile}>Delete</button>
+        <button class="btn btn-danger btn-sm" disabled=${!filePath} onClick=${deleteFile}>
+          Delete
+        </button>
       </div>
       <div class="file-editor-layout">
         <div class="file-tree">
-          <${FileTree}
-            nodes=${tree}
-            selectedPath=${filePath}
-            onSelect=${openFile}
-          />
+          <${FileTree} nodes=${tree} selectedPath=${filePath} onSelect=${openFile} />
         </div>
         <div class="editor-area">
           <div class="detail-label">${filePath || 'Select a file'}</div>
@@ -117,15 +126,19 @@ export function InlineEditor(props) {
             mode=${filePath && filePath.endsWith('.js') ? 'javascript' : 'markdown'}
           />
           <div style="display:flex;align-items:center;gap:8px">
-            <button
-              class="btn btn-primary btn-sm"
-              disabled=${!filePath}
-              onClick=${saveFile}
-            >
+            <button class="btn btn-primary btn-sm" disabled=${!filePath} onClick=${saveFile}>
               Save
             </button>
-            ${saveStatus && html`
-              <span style=${'font-size:11px;color:' + (saveStatus.startsWith('Error') ? 'var(--error)' : saveStatus === 'saving...' ? 'var(--warning)' : 'var(--success)')}>
+            ${saveStatus &&
+            html`
+              <span
+                style=${'font-size:11px;color:' +
+                (saveStatus.startsWith('Error')
+                  ? 'var(--error)'
+                  : saveStatus === 'saving...'
+                    ? 'var(--warning)'
+                    : 'var(--success)')}
+              >
                 ${saveStatus}
               </span>
             `}

@@ -37,42 +37,68 @@ export function ConfigPage() {
   function applyPatch() {
     try {
       var parsed = JSON.parse(patchJson);
-      api.patch('/api/config', parsed).then(function (res) {
-        setConfig(res);
-        setMessage('Config updated successfully.');
-        setPatchJson('');
-      }).catch(function (e) {
-        setMessage('Error: ' + e.message);
-      });
+      api
+        .patch('/api/config', parsed)
+        .then(function (res) {
+          setConfig(res);
+          setMessage('Config updated successfully.');
+          setPatchJson('');
+        })
+        .catch(function (e) {
+          setMessage('Error: ' + e.message);
+        });
     } catch (e) {
       setMessage('Invalid JSON: ' + e.message);
     }
   }
 
   function loadFile() {
-    if (!filePath.trim()) { setFileMessage('Path is required'); return; }
+    if (!filePath.trim()) {
+      setFileMessage('Path is required');
+      return;
+    }
     setFileMessage('loading...');
-    api.get('/api/config/raw?path=' + encodeURIComponent(filePath.trim())).then(function (res) {
-      if (res && res.error) { setFileMessage('Error: ' + res.error); }
-      else {
-        setFileContent(typeof res.content === 'string' ? res.content : JSON.stringify(res.content, null, 2));
-        setFileMessage('Loaded');
-        setTimeout(function () { setFileMessage(''); }, 2000);
-      }
-    }).catch(function (e) {
-      setFileMessage('Error: ' + (e.message || 'Load failed'));
-    });
+    api
+      .get('/api/config/raw?path=' + encodeURIComponent(filePath.trim()))
+      .then(function (res) {
+        if (res && res.error) {
+          setFileMessage('Error: ' + res.error);
+        } else {
+          setFileContent(
+            typeof res.content === 'string' ? res.content : JSON.stringify(res.content, null, 2)
+          );
+          setFileMessage('Loaded');
+          setTimeout(function () {
+            setFileMessage('');
+          }, 2000);
+        }
+      })
+      .catch(function (e) {
+        setFileMessage('Error: ' + (e.message || 'Load failed'));
+      });
   }
 
   function saveFile() {
-    if (!filePath.trim()) { setFileMessage('Path is required'); return; }
+    if (!filePath.trim()) {
+      setFileMessage('Path is required');
+      return;
+    }
     setFileMessage('saving...');
-    api.put('/api/config/raw', { path: filePath.trim(), content: fileContent }).then(function (res) {
-      if (res && res.error) { setFileMessage('Error: ' + res.error); }
-      else { setFileMessage('Saved'); setTimeout(function () { setFileMessage(''); }, 2000); }
-    }).catch(function (e) {
-      setFileMessage('Error: ' + (e.message || 'Save failed'));
-    });
+    api
+      .put('/api/config/raw', { path: filePath.trim(), content: fileContent })
+      .then(function (res) {
+        if (res && res.error) {
+          setFileMessage('Error: ' + res.error);
+        } else {
+          setFileMessage('Saved');
+          setTimeout(function () {
+            setFileMessage('');
+          }, 2000);
+        }
+      })
+      .catch(function (e) {
+        setFileMessage('Error: ' + (e.message || 'Save failed'));
+      });
   }
 
   return html`
@@ -89,8 +115,9 @@ export function ConfigPage() {
         </div>
         ${config !== null
           ? html`<${JsonTree} data=${config} open=${2} />`
-          : html`<div style="color:var(--text-muted)">Click "Load Config" to view current configuration.</div>`
-        }
+          : html`<div style="color:var(--text-muted)">
+              Click "Load Config" to view current configuration.
+            </div>`}
       </div>
 
       <div class="panel">
@@ -109,8 +136,13 @@ export function ConfigPage() {
           />
         </div>
         <button class="btn btn-primary btn-sm" onClick=${applyPatch}>Apply</button>
-        ${message && html`
-          <div style="margin-top:8px;font-size:12px;color=${message.startsWith('Error') ? 'var(--error)' : 'var(--success)'}">
+        ${message &&
+        html`
+          <div
+            style="margin-top:8px;font-size:12px;color=${message.startsWith('Error')
+              ? 'var(--error)'
+              : 'var(--success)'}"
+          >
             ${message}
           </div>
         `}
@@ -146,8 +178,16 @@ export function ConfigPage() {
         <div style="display:flex;align-items:center;gap:8px">
           <button class="btn btn-secondary btn-sm" onClick=${loadFile}>Load</button>
           <button class="btn btn-primary btn-sm" onClick=${saveFile}>Save</button>
-          ${fileMessage && html`
-            <span style=${'font-size:11px;color:' + (fileMessage.startsWith('Error') ? 'var(--error)' : fileMessage === 'loading...' || fileMessage === 'saving...' ? 'var(--warning)' : 'var(--success)')}>
+          ${fileMessage &&
+          html`
+            <span
+              style=${'font-size:11px;color:' +
+              (fileMessage.startsWith('Error')
+                ? 'var(--error)'
+                : fileMessage === 'loading...' || fileMessage === 'saving...'
+                  ? 'var(--warning)'
+                  : 'var(--success)')}
+            >
               ${fileMessage}
             </span>
           `}

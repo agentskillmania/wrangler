@@ -15,7 +15,19 @@ import { PlansPage } from './pages/PlansPage.js';
 import { ConfigPage } from './pages/ConfigPage.js';
 
 // ── Hash Router Utility ──
-var VALID_PAGES = ['chat', 'crew-chat', 'agents', 'skills', 'crews', 'sessions', 'state', 'files', 'specs', 'plans', 'config'];
+var VALID_PAGES = [
+  'chat',
+  'crew-chat',
+  'agents',
+  'skills',
+  'crews',
+  'sessions',
+  'state',
+  'files',
+  'specs',
+  'plans',
+  'config',
+];
 
 function readHashPage() {
   var h = window.location.hash.replace('#', '');
@@ -77,9 +89,7 @@ function App() {
   return html`
     <div class="app-layout">
       <${Sidebar} currentPage=${currentPage} onNavigate=${handleNavigate} />
-      <div class="main-content">
-        ${renderPage()}
-      </div>
+      <div class="main-content">${renderPage()}</div>
     </div>
   `;
 }

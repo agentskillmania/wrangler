@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { CrewLoader, crewToRunnerOptions } from '../../../src/crew/crew-loader.js';
+import { defaultNodeHostEnv } from '../../../src/host-env/node-host-env.js';
 
 const FIXTURE_DIR = join(__dirname, '../../fixtures/crew');
 
 describe('CrewLoader', () => {
   it('loads crew meta from fixture directory', async () => {
-    const loader = new CrewLoader(FIXTURE_DIR);
+    const loader = new CrewLoader(FIXTURE_DIR, defaultNodeHostEnv);
     const config = await loader.load();
 
     expect(config.meta).toEqual({
@@ -18,14 +19,14 @@ describe('CrewLoader', () => {
   });
 
   it('loads crew memory from fixture directory', async () => {
-    const loader = new CrewLoader(FIXTURE_DIR);
+    const loader = new CrewLoader(FIXTURE_DIR, defaultNodeHostEnv);
     const config = await loader.load();
 
     expect(config.memory).toContain('shared context');
   });
 
   it('loads agent definitions from fixture directory', async () => {
-    const loader = new CrewLoader(FIXTURE_DIR);
+    const loader = new CrewLoader(FIXTURE_DIR, defaultNodeHostEnv);
     const config = await loader.load();
 
     expect(Object.keys(config.agentDefs)).toEqual(['primary', 'searcher']);
@@ -41,14 +42,14 @@ describe('CrewLoader', () => {
   });
 
   it('loads empty skillDirs when skills directory is absent', async () => {
-    const loader = new CrewLoader(FIXTURE_DIR);
+    const loader = new CrewLoader(FIXTURE_DIR, defaultNodeHostEnv);
     const config = await loader.load();
 
     expect(config.skillDirs).toEqual([]);
   });
 
   it('uses meta.name as agentDefs key', async () => {
-    const loader = new CrewLoader(FIXTURE_DIR);
+    const loader = new CrewLoader(FIXTURE_DIR, defaultNodeHostEnv);
     const config = await loader.load();
 
     expect(config.agentDefs.primary.name).toBe('primary');
@@ -56,7 +57,7 @@ describe('CrewLoader', () => {
   });
 
   it('throws when directory does not exist', async () => {
-    const loader = new CrewLoader('/nonexistent/path');
+    const loader = new CrewLoader('/nonexistent/path', defaultNodeHostEnv);
     await expect(loader.load()).rejects.toThrow('Crew directory not found');
   });
 
@@ -64,7 +65,7 @@ describe('CrewLoader', () => {
     const tmpDir = join(__dirname, '../../fixtures/crew-no-md');
     try {
       await mkdir(tmpDir, { recursive: true });
-      const loader = new CrewLoader(tmpDir);
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       await expect(loader.load()).rejects.toThrow('CREW.md not found');
     } finally {
       await rm(tmpDir, { recursive: true });
@@ -76,7 +77,7 @@ describe('CrewLoader', () => {
     try {
       await mkdir(tmpDir, { recursive: true });
       await writeFile(join(tmpDir, 'CREW.md'), 'Just plain text without frontmatter');
-      const loader = new CrewLoader(tmpDir);
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       await expect(loader.load()).rejects.toThrow('YAML frontmatter');
     } finally {
       await rm(tmpDir, { recursive: true });
@@ -91,7 +92,7 @@ describe('CrewLoader', () => {
         join(tmpDir, 'CREW.md'),
         '---\ndescription: test\nprimary-agent: primary\n---\nMemory'
       );
-      const loader = new CrewLoader(tmpDir);
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       await expect(loader.load()).rejects.toThrow('missing "name"');
     } finally {
       await rm(tmpDir, { recursive: true });
@@ -106,7 +107,7 @@ describe('CrewLoader', () => {
         join(tmpDir, 'CREW.md'),
         '---\nname: test-crew\ndescription: test\n---\nMemory'
       );
-      const loader = new CrewLoader(tmpDir);
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       await expect(loader.load()).rejects.toThrow('missing "primary-agent"');
     } finally {
       await rm(tmpDir, { recursive: true });
@@ -121,7 +122,7 @@ describe('CrewLoader', () => {
         join(tmpDir, 'CREW.md'),
         '---\nname: test-crew\nprimary-agent: primary\n---\nMemory'
       );
-      const loader = new CrewLoader(tmpDir);
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       const config = await loader.load();
       expect(config.agentDefs).toEqual({});
     } finally {
@@ -138,7 +139,7 @@ describe('CrewLoader', () => {
         join(tmpDir, 'CREW.md'),
         '---\nname: test-crew\nprimary-agent: primary\n---\nMemory'
       );
-      const loader = new CrewLoader(tmpDir);
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       const config = await loader.load();
       expect(config.skillDirs).toEqual([]);
     } finally {
@@ -153,7 +154,7 @@ describe('CrewLoader', () => {
     try {
       await mkdir(tmpDir, { recursive: true });
       await writeFile(join(tmpDir, 'CREW.md'), '---\nname: [broken: yaml: {{\n---\nMemory');
-      const loader = new CrewLoader(tmpDir);
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       await expect(loader.load()).rejects.toThrow();
     } finally {
       await rm(tmpDir, { recursive: true });
@@ -169,7 +170,7 @@ describe('CrewLoader', () => {
         join(tmpDir, 'CREW.md'),
         '---\nname: test-crew\nprimary-agent: primary\n---\nMemory'
       );
-      const loader = new CrewLoader(tmpDir);
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       const config = await loader.load();
       expect(config.skillDirs).toEqual([]);
     } finally {
@@ -189,7 +190,7 @@ describe('CrewLoader', () => {
         join(tmpDir, 'CREW.md'),
         '---\nname: test-crew\nprimary-agent: primary\n---\nMemory'
       );
-      const loader = new CrewLoader(tmpDir);
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       const config = await loader.load();
       // Current implementation adds all entries (files and dirs) — verify the behavior
       expect(config.skillDirs).toHaveLength(1);
@@ -211,7 +212,7 @@ describe('CrewLoader', () => {
         join(tmpDir, 'CREW.md'),
         '---\nname: test-crew\nprimary-agent: primary\n---\nMemory'
       );
-      const loader = new CrewLoader(tmpDir);
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       const config = await loader.load();
       // parseAgentMd should gracefully handle missing frontmatter
       expect(config.agentDefs).toHaveProperty('plain');

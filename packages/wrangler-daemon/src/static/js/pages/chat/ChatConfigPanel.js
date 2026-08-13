@@ -70,15 +70,9 @@ export function ChatConfigPanel(props) {
           }}
         >
           <option value="">Choose an agent...</option>
-          ${agents.map(
-            function (a) {
-              return html`
-                <option key=${a.id} value=${a.id}>
-                  ${a.name || a.id}
-                </option>
-              `;
-            }
-          )}
+          ${agents.map(function (a) {
+            return html` <option key=${a.id} value=${a.id}>${a.name || a.id}</option> `;
+          })}
         </select>
       </div>
 
@@ -95,23 +89,19 @@ export function ChatConfigPanel(props) {
       </div>
 
       ${!sessionId &&
-        html`
-          <div class="field">
-            <label>Resume Session (optional)</label>
-            <${SessionSelector}
-              value=${resumeSessionId}
-              onChange=${function (v) {
-                setResumeSessionId(v);
-              }}
-              placeholder="Leave empty for new session..."
-            />
-          </div>
-        `
-      }
-
-      ${sessionId &&
-        html`<div class="config-lock-banner">🔒 Session active — config locked</div>`
-      }
+      html`
+        <div class="field">
+          <label>Resume Session (optional)</label>
+          <${SessionSelector}
+            value=${resumeSessionId}
+            onChange=${function (v) {
+              setResumeSessionId(v);
+            }}
+            placeholder="Leave empty for new session..."
+          />
+        </div>
+      `}
+      ${sessionId && html`<div class="config-lock-banner">🔒 Session active — config locked</div>`}
       <div
         class="config-toggle"
         onClick=${function () {
@@ -122,161 +112,160 @@ export function ChatConfigPanel(props) {
         <span>${configOpen ? '▾' : '▸'}</span>
       </div>
       ${configOpen &&
-        html`
-          <div class="config-grid">
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgSandbox}
-                onChange=${function (e) {
-                  setCfgSandbox(e.target.checked);
-                }}
-              />
-              sandbox
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgSession}
-                onChange=${function (e) {
-                  setCfgSession(e.target.checked);
-                }}
-              />
-              session
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgTodolist}
-                onChange=${function (e) {
-                  setCfgTodolist(e.target.checked);
-                }}
-              />
-              todolist
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgCommands}
-                onChange=${function (e) {
-                  setCfgCommands(e.target.checked);
-                }}
-              />
-              commands
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgBShell}
-                onChange=${function (e) {
-                  setCfgBShell(e.target.checked);
-                }}
-              />
-              shell
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgBWebSearch}
-                onChange=${function (e) {
-                  setCfgBWebSearch(e.target.checked);
-                }}
-              />
-              webSearch
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgBWebFetch}
-                onChange=${function (e) {
-                  setCfgBWebFetch(e.target.checked);
-                }}
-              />
-              webFetch
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgBPython}
-                onChange=${function (e) {
-                  setCfgBPython(e.target.checked);
-                }}
-              />
-              python
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgBGit}
-                onChange=${function (e) {
-                  setCfgBGit(e.target.checked);
-                }}
-              />
-              git
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgA2ui}
-                onChange=${function (e) {
-                  setCfgA2ui(e.target.checked);
-                }}
-              />
-              a2ui
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgBFileRead}
-                onChange=${function (e) {
-                  setCfgBFileRead(e.target.checked);
-                }}
-              />
-              fileRead
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgBFileWrite}
-                onChange=${function (e) {
-                  setCfgBFileWrite(e.target.checked);
-                }}
-              />
-              fileWrite
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgBFileEdit}
-                onChange=${function (e) {
-                  setCfgBFileEdit(e.target.checked);
-                }}
-              />
-              fileEdit
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgBGlob}
-                onChange=${function (e) {
-                  setCfgBGlob(e.target.checked);
-                }}
-              />
-              glob
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked=${cfgBGrep}
-                onChange=${function (e) {
-                  setCfgBGrep(e.target.checked);
-                }}
-              />
-              grep
-            </label>
-          </div>
-        `
-      }
+      html`
+        <div class="config-grid">
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgSandbox}
+              onChange=${function (e) {
+                setCfgSandbox(e.target.checked);
+              }}
+            />
+            sandbox
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgSession}
+              onChange=${function (e) {
+                setCfgSession(e.target.checked);
+              }}
+            />
+            session
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgTodolist}
+              onChange=${function (e) {
+                setCfgTodolist(e.target.checked);
+              }}
+            />
+            todolist
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgCommands}
+              onChange=${function (e) {
+                setCfgCommands(e.target.checked);
+              }}
+            />
+            commands
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgBShell}
+              onChange=${function (e) {
+                setCfgBShell(e.target.checked);
+              }}
+            />
+            shell
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgBWebSearch}
+              onChange=${function (e) {
+                setCfgBWebSearch(e.target.checked);
+              }}
+            />
+            webSearch
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgBWebFetch}
+              onChange=${function (e) {
+                setCfgBWebFetch(e.target.checked);
+              }}
+            />
+            webFetch
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgBPython}
+              onChange=${function (e) {
+                setCfgBPython(e.target.checked);
+              }}
+            />
+            python
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgBGit}
+              onChange=${function (e) {
+                setCfgBGit(e.target.checked);
+              }}
+            />
+            git
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgA2ui}
+              onChange=${function (e) {
+                setCfgA2ui(e.target.checked);
+              }}
+            />
+            a2ui
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgBFileRead}
+              onChange=${function (e) {
+                setCfgBFileRead(e.target.checked);
+              }}
+            />
+            fileRead
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgBFileWrite}
+              onChange=${function (e) {
+                setCfgBFileWrite(e.target.checked);
+              }}
+            />
+            fileWrite
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgBFileEdit}
+              onChange=${function (e) {
+                setCfgBFileEdit(e.target.checked);
+              }}
+            />
+            fileEdit
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgBGlob}
+              onChange=${function (e) {
+                setCfgBGlob(e.target.checked);
+              }}
+            />
+            glob
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked=${cfgBGrep}
+              onChange=${function (e) {
+                setCfgBGrep(e.target.checked);
+              }}
+            />
+            grep
+          </label>
+        </div>
+      `}
 
       <div
         class="config-toggle"
@@ -289,74 +278,67 @@ export function ChatConfigPanel(props) {
         <span>${advOpen ? '▾' : '▸'}</span>
       </div>
       ${advOpen &&
-        html`
-          <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
-            <label style="font-size:12px;color:#94a3b8">
-              skillDirs (comma-separated)
-              <input
-                type="text"
-                value=${cfgSkillDirs}
-                placeholder="e.g. ./skills, ./custom-skills"
-                onChange=${function (e) {
-                  setCfgSkillDirs(e.target.value);
-                }}
-                style="width:100%;margin-top:2px;padding:4px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:12px"
-              />
-            </label>
-            <label style="font-size:12px;color:#94a3b8">
-              mcpConfigPaths (comma-separated)
-              <input
-                type="text"
-                value=${cfgMcpPaths}
-                placeholder="e.g. ./mcp.json"
-                onChange=${function (e) {
-                  setCfgMcpPaths(e.target.value);
-                }}
-                style="width:100%;margin-top:2px;padding:4px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:12px"
-              />
-            </label>
-          </div>
-        `
-      }
-
+      html`
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+          <label style="font-size:12px;color:#94a3b8">
+            skillDirs (comma-separated)
+            <input
+              type="text"
+              value=${cfgSkillDirs}
+              placeholder="e.g. ./skills, ./custom-skills"
+              onChange=${function (e) {
+                setCfgSkillDirs(e.target.value);
+              }}
+              style="width:100%;margin-top:2px;padding:4px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:12px"
+            />
+          </label>
+          <label style="font-size:12px;color:#94a3b8">
+            mcpConfigPaths (comma-separated)
+            <input
+              type="text"
+              value=${cfgMcpPaths}
+              placeholder="e.g. ./mcp.json"
+              onChange=${function (e) {
+                setCfgMcpPaths(e.target.value);
+              }}
+              style="width:100%;margin-top:2px;padding:4px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:12px"
+            />
+          </label>
+        </div>
+      `}
       ${sessionId &&
-        html`
-          <div style="border-top:1px solid var(--border);padding-top:8px">
-            <div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-bottom:4px">
-              Respond to AskHuman
-            </div>
-            <div class="field" style="margin-bottom:4px">
-              <input
-                class="input input-mono"
-                style="font-size:11px"
-                placeholder="request-id"
-                value=${askRequestId}
-                onInput=${function (e) {
-                  setAskRequestId(e.target.value);
-                }}
-              />
-            </div>
-            <div class="field" style="margin-bottom:4px">
-              <input
-                class="input"
-                style="font-size:11px"
-                placeholder="Your response"
-                value=${askResponse}
-                onInput=${function (e) {
-                  setAskResponse(e.target.value);
-                }}
-              />
-            </div>
-            <button
-              class="btn btn-secondary btn-sm"
-              style="width:100%"
-              onClick=${sendAskResponse}
-            >
-              Send Response
-            </button>
+      html`
+        <div style="border-top:1px solid var(--border);padding-top:8px">
+          <div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-bottom:4px">
+            Respond to AskHuman
           </div>
-        `
-      }
+          <div class="field" style="margin-bottom:4px">
+            <input
+              class="input input-mono"
+              style="font-size:11px"
+              placeholder="request-id"
+              value=${askRequestId}
+              onInput=${function (e) {
+                setAskRequestId(e.target.value);
+              }}
+            />
+          </div>
+          <div class="field" style="margin-bottom:4px">
+            <input
+              class="input"
+              style="font-size:11px"
+              placeholder="Your response"
+              value=${askResponse}
+              onInput=${function (e) {
+                setAskResponse(e.target.value);
+              }}
+            />
+          </div>
+          <button class="btn btn-secondary btn-sm" style="width:100%" onClick=${sendAskResponse}>
+            Send Response
+          </button>
+        </div>
+      `}
     </div>
   `;
 }

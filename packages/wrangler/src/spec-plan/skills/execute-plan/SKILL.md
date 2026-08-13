@@ -39,6 +39,7 @@ description: plan 批准后触发。创建 todolist，逐任务执行并验证�
 ## 阶段三：逐任务执行
 
 对每个 todo item：
+
 1. `todolist update` → `in_progress`
 2. 理解任务内容
 3. 按步骤执行，能自己找的资源自己找
@@ -46,6 +47,7 @@ description: plan 批准后触发。创建 todolist，逐任务执行并验证�
 5. 全部通过 → `todolist update` → `completed`
 
 **异常处理**（停下来 ask_human）：
+
 - 阻塞：步骤无法继续
 - 偏离：plan 与实际不符
 - 风险：未预料的问题

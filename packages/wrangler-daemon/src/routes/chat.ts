@@ -229,6 +229,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         : undefined);
 
     const sessionOptions: AgentSessionOptions = {
+      runtime: defaultNodeHostEnv,
       llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
       workspacePath,
       agentName: agentDetail.name,
@@ -442,6 +443,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         : undefined);
 
     const sessionOptions: AgentSessionOptions = {
+      runtime: defaultNodeHostEnv,
       llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
       workspacePath,
       agentName: runnerOpts.primaryAgent,

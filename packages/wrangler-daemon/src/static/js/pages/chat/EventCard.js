@@ -31,7 +31,8 @@ export function eventToTag(ev) {
   if (ev === 'thinking') return 'think';
   if (ev === 'tool-start') return 'tool-call';
   if (ev === 'tool-end') return 'tool-result';
-  if (ev === 'skill-loading' || ev === 'skill-loaded' || ev === 'skill-start' || ev === 'skill-end') return 'skill';
+  if (ev === 'skill-loading' || ev === 'skill-loaded' || ev === 'skill-start' || ev === 'skill-end')
+    return 'skill';
   if (ev === 'step-start' || ev === 'step-end') return 'step';
   if (ev === 'phase-change') return 'phase';
   if (ev === 'llm-request' || ev === 'llm-response') return 'llm';
@@ -67,9 +68,11 @@ export function formatEventData(ev, p) {
     return (p.callId || 'tool') + ' -> result:\n' + resultStr;
   }
   if (ev === 'skill-loading') return 'Loading skill: ' + p.name;
-  if (ev === 'skill-loaded') return 'Skill loaded: ' + p.name + (p.tokenCount ? ' (' + p.tokenCount + ' tokens)' : '');
+  if (ev === 'skill-loaded')
+    return 'Skill loaded: ' + p.name + (p.tokenCount ? ' (' + p.tokenCount + ' tokens)' : '');
   if (ev === 'skill-start') return 'Skill: ' + p.name + (p.task ? '\n' + p.task : '');
-  if (ev === 'skill-end') return 'Skill done: ' + p.name + (p.result ? '\n' + String(p.result) : '');
+  if (ev === 'skill-end')
+    return 'Skill done: ' + p.name + (p.result ? '\n' + String(p.result) : '');
   if (ev === 'step-start') return 'Step ' + (p.step != null ? p.step : '?');
   if (ev === 'step-end') return 'Step ' + (p.step != null ? p.step : '?') + ' complete';
   if (ev === 'phase-change') {
@@ -79,11 +82,14 @@ export function formatEventData(ev, p) {
   }
   if (ev === 'llm-request') {
     var msgCount = Array.isArray(p.messages) ? p.messages.length : 0;
-    return 'Sending ' + msgCount + ' messages to LLM' + (p.skill ? ' (skill: ' + p.skill + ')' : '');
+    return (
+      'Sending ' + msgCount + ' messages to LLM' + (p.skill ? ' (skill: ' + p.skill + ')' : '')
+    );
   }
   if (ev === 'llm-response') return 'LLM response received';
   if (ev === 'subagent-start') return 'Sub-agent: ' + p.name + (p.task ? '\n' + p.task : '');
-  if (ev === 'subagent-end') return 'Sub-agent done: ' + p.name + (p.result ? '\n' + String(p.result) : '');
+  if (ev === 'subagent-end')
+    return 'Sub-agent done: ' + p.name + (p.result ? '\n' + String(p.result) : '');
   if (ev === 'subagent-token') return p.delta || '';
   if (ev === 'subagent-thinking') return p.content || '';
   if (ev === 'subagent-tool-start') {
@@ -98,9 +104,11 @@ export function formatEventData(ev, p) {
     return '[' + saEndName + '] ' + (p.callId || 'tool') + ' -> result:\n' + saResultStr;
   }
   if (ev === 'compressing') return 'Compressing context...';
-  if (ev === 'compressed') return 'Context compressed: ' + (p.summary || '') + ' (' + (p.removedCount || 0) + ' removed)';
+  if (ev === 'compressed')
+    return 'Context compressed: ' + (p.summary || '') + ' (' + (p.removedCount || 0) + ' removed)';
   if (ev === 'session-cleared') return 'Session cleared (/clear)';
-  if (ev === 'todo-list') return 'Todo list: ' + (Array.isArray(p.items) ? p.items.length : 0) + ' items';
+  if (ev === 'todo-list')
+    return 'Todo list: ' + (Array.isArray(p.items) ? p.items.length : 0) + ' items';
   if (ev === 'abort') return 'Aborted at step ' + (p.step != null ? p.step : '?');
   if (ev === 'human-input') {
     var questions = Array.isArray(p.questions) ? p.questions.join('; ') : String(p.questions || '');
@@ -110,9 +118,12 @@ export function formatEventData(ev, p) {
   if (ev.startsWith('devtool:')) {
     if (ev === 'devtool:token') return p.delta || '';
     if (ev === 'devtool:thinking') return p.content || '';
-    if (ev === 'devtool:tool-start') return 'Devtool tool: ' + (p.name || '') + '\n' + JSON.stringify(p.args || {}, null, 2);
-    if (ev === 'devtool:tool-end') return 'Devtool tool done: ' + (p.callId || '') + ' -> ' + String(p.result || '');
-    if (ev === 'devtool:round-start') return 'Round ' + ((p.round || 0) + 1) + ' / ' + (p.maxRounds || '?');
+    if (ev === 'devtool:tool-start')
+      return 'Devtool tool: ' + (p.name || '') + '\n' + JSON.stringify(p.args || {}, null, 2);
+    if (ev === 'devtool:tool-end')
+      return 'Devtool tool done: ' + (p.callId || '') + ' -> ' + String(p.result || '');
+    if (ev === 'devtool:round-start')
+      return 'Round ' + ((p.round || 0) + 1) + ' / ' + (p.maxRounds || '?');
     if (ev === 'devtool:generation-done') return 'Generation complete';
     if (ev === 'devtool:review-start') return 'Review starting...';
     if (ev === 'devtool:review-done') return 'Review done: ' + (p.passed ? 'PASSED' : 'FAILED');
@@ -197,25 +208,28 @@ export function EventCard(props) {
     <div class=${'ev-card ev-card-' + tag + (isSelected ? ' ev-card-selected' : '')}>
       <div class="ev-card-header" onClick=${onHeaderClick}>
         <span class="ev-card-tag" style=${tagStyle(tag)}>${tagLabel(tag)}</span>
-        <span class=${'ev-card-body' + (isLong && !isExpanded ? ' ev-card-truncated' : '')}>${displayText}</span>
+        <span class=${'ev-card-body' + (isLong && !isExpanded ? ' ev-card-truncated' : '')}
+          >${displayText}</span
+        >
         ${isLong &&
         html`
           <button
             class="ev-card-toggle"
-            onClick=${function (e) { e.stopPropagation(); toggleCard(id); }}
+            onClick=${function (e) {
+              e.stopPropagation();
+              toggleCard(id);
+            }}
           >
             ${isExpanded ? 'Collapse' : 'Show all (' + text.length + ' chars)'}
           </button>
         `}
-        <button
-          class="ev-card-detail-btn"
-          onClick=${onDetailToggle}
-        >
+        <button class="ev-card-detail-btn" onClick=${onDetailToggle}>
           ${isSelected ? 'Hide detail' : 'Detail'}
         </button>
       </div>
       ${isExpanded && isLong && html`<div class="ev-card-full">${text}</div>`}
-      ${isSelected && html`
+      ${isSelected &&
+      html`
         <div class="ev-card-detail">
           <div class="ev-card-detail-label">Event Data</div>
           <${JsonTree} data=${data} open=${2} />

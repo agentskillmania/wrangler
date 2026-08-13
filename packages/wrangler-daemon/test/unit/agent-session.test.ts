@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { AgentSession } from '../../src/core/agent-session.js';
 import type { AgentSessionOptions } from '../../src/core/agent-session.js';
 import type { SSEEvent } from '../../src/types.js';
@@ -663,6 +664,7 @@ describe('AgentSession', () => {
       const options: AgentSessionOptions = {
         workspacePath: '/tmp/test',
         agentName: 'test',
+        runtime: defaultNodeHostEnv,
         builtinTools: { shell: false, fileRead: true },
         enableSession: false,
         enableTodolist: false,
@@ -708,6 +710,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -772,6 +775,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -817,6 +821,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -843,6 +848,7 @@ describe('AgentSession', () => {
     const baseOptions: AgentSessionOptions = {
       workspacePath: '/tmp/test-workspace',
       agentName: 'test-agent',
+      runtime: defaultNodeHostEnv,
       llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
     };
 
@@ -1001,6 +1007,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           limits: { maxInputLength: 100 },
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
@@ -1046,6 +1053,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           limits: { maxInputLength: 100 },
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
@@ -1082,6 +1090,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1130,6 +1139,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1186,6 +1196,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1230,6 +1241,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1254,6 +1266,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1282,6 +1295,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1313,6 +1327,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1381,6 +1396,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1410,6 +1426,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1440,6 +1457,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1496,6 +1514,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1551,6 +1570,7 @@ describe('AgentSession', () => {
         {
           workspacePath: '/tmp/test',
           agentName: 'test',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1606,6 +1626,7 @@ describe('AgentSession', () => {
             sessionId: 'missing',
             workspacePath: '/tmp/workspace',
             agentName: 'test',
+            runtime: defaultNodeHostEnv,
             llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
           },
           testConfig

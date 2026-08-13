@@ -35,24 +35,30 @@ description: 将需求转化为结构化 spec 文档。审查通过后才保存�
 # {名称}
 
 ## Goal
+
 {一句话核心目标}
 
 ## Background
+
 {为什么做，解决什么问题}
 
 ## Scenarios
 
 ### P1 - {场景名称}
+
 - FR-001: {需求描述}
 - FR-002: {需求描述}
 
 ### P2 - {场景名称}
+
 - FR-101: {需求描述}
 
 ## Constraints
+
 - {约束条件}
 
 ## Success Criteria
+
 - [ ] SC-001: {可独立验证的标准}
 - [ ] SC-002: {可独立验证的标准}
 ```
@@ -63,6 +69,7 @@ description: 将需求转化为结构化 spec 文档。审查通过后才保存�
 ## 阶段三：review→fix 循环（最多 3 轮）
 
 review-spec 会审查你的 spec：
+
 - 审查通过 → 进入阶段四
 - 审查不通过 → review-spec 给出具体问题（问题 + 位置 + 建议），切回 write-spec 后你根据建议修改，输出修改后的 spec 到对话，再次 `load_skill review-spec`
 - **重试预算 3 轮**：第 3 轮仍不通过 → 用 `ask_human` 列出所有未解决问题、各方观点、你的推荐，请用户裁决
@@ -72,6 +79,7 @@ review-spec 会审查你的 spec：
 ## 阶段四：保存 + 批准
 
 review 通过后：
+
 1. 调用 `save_spec(name, body)` 将最终 spec 落盘为 draft
 2. 用 `ask_human` 展示简要摘要，询问"审查通过。是否批准？"
 3. 用户批准 → `update_spec_status(name, version, 'approved')`

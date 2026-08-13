@@ -38,22 +38,20 @@ export function DetailDrawer(props) {
         ${tabs.length > 0 &&
         html`
           <div class="drawer-tabs">
-            ${tabs.map(
-              function (tab) {
-                return html`
-                  <button
-                    key=${tab.key}
-                    class=${'drawer-tab' + (currentTab === tab.key ? ' active' : '')}
-                    onClick=${function () {
-                      setCurrentTab(tab.key);
-                      if (onTabChange) onTabChange(tab.key);
-                    }}
-                  >
-                    ${tab.label}
-                  </button>
-                `;
-              }
-            )}
+            ${tabs.map(function (tab) {
+              return html`
+                <button
+                  key=${tab.key}
+                  class=${'drawer-tab' + (currentTab === tab.key ? ' active' : '')}
+                  onClick=${function () {
+                    setCurrentTab(tab.key);
+                    if (onTabChange) onTabChange(tab.key);
+                  }}
+                >
+                  ${tab.label}
+                </button>
+              `;
+            })}
           </div>
         `}
         <div class="drawer-body">${children}</div>

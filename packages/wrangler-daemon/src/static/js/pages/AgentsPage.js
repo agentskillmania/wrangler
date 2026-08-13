@@ -30,11 +30,14 @@ export function AgentsPage() {
     setError = _sErr[1];
 
   function loadAgents() {
-    api.get('/api/agents').then(function (list) {
-      setAgents(Array.isArray(list) ? list : []);
-    }).catch(function () {
-      setAgents([]);
-    });
+    api
+      .get('/api/agents')
+      .then(function (list) {
+        setAgents(Array.isArray(list) ? list : []);
+      })
+      .catch(function () {
+        setAgents([]);
+      });
   }
 
   useEffect(loadAgents, []);
@@ -68,19 +71,23 @@ export function AgentsPage() {
   }
 
   var columns = [
-    { key: 'name', label: 'Name', render: function (item) {
-      return html`
-        <span
-          class="name-link"
-          onClick=${function (e) {
-            e.stopPropagation();
-            handleSelect(item);
-          }}
-        >
-          ${item.name || item.id}
-        </span>
-      `;
-    }},
+    {
+      key: 'name',
+      label: 'Name',
+      render: function (item) {
+        return html`
+          <span
+            class="name-link"
+            onClick=${function (e) {
+              e.stopPropagation();
+              handleSelect(item);
+            }}
+          >
+            ${item.name || item.id}
+          </span>
+        `;
+      },
+    },
     { key: 'path', label: 'Path', mono: true },
   ];
 
@@ -88,7 +95,9 @@ export function AgentsPage() {
     <div class="page">
       <div class="page-header">
         <div class="page-title">Agents</div>
-        <div class="page-desc">Manage agent definitions. Each agent is a directory with an AGENT.md file.</div>
+        <div class="page-desc">
+          Manage agent definitions. Each agent is a directory with an AGENT.md file.
+        </div>
       </div>
 
       ${showCreate &&
@@ -106,7 +115,8 @@ export function AgentsPage() {
                 setError('');
               }}
             />
-            ${error && html`<div style="color:var(--error);font-size:11px;margin-top:4px">${error}</div>`}
+            ${error &&
+            html`<div style="color:var(--error);font-size:11px;margin-top:4px">${error}</div>`}
           </div>
           <div class="field" style="margin-bottom:12px">
             <label>Instructions</label>
@@ -122,7 +132,13 @@ export function AgentsPage() {
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-primary btn-sm" onClick=${handleCreate}>Create</button>
-            <button class="btn btn-secondary btn-sm" onClick=${function () { setShowCreate(false); setError(''); }}>
+            <button
+              class="btn btn-secondary btn-sm"
+              onClick=${function () {
+                setShowCreate(false);
+                setError('');
+              }}
+            >
               Cancel
             </button>
           </div>
@@ -134,15 +150,20 @@ export function AgentsPage() {
         items=${agents}
         selectedId=${selected && selected.id}
         onSelect=${handleSelect}
-        onCreate=${function () { setShowCreate(true); }}
+        onCreate=${function () {
+          setShowCreate(true);
+        }}
         onCreateLabel="New Agent"
         emptyMessage="No agents found. Click '+ New Agent' to create one."
         actions=${function (item) {
           return html`
-            <button class="btn btn-danger btn-sm" onClick=${function (e) {
-              e.stopPropagation();
-              handleDelete(item.id);
-            }}>
+            <button
+              class="btn btn-danger btn-sm"
+              onClick=${function (e) {
+                e.stopPropagation();
+                handleDelete(item.id);
+              }}
+            >
               Delete
             </button>
           `;
@@ -161,10 +182,7 @@ export function AgentsPage() {
           </div>
           <div class="detail-label">JSON</div>
           <${JsonTree} data=${selected} open=${1} />
-          <${InlineFileEditor}
-            resourceType="agents"
-            resourceId=${selected.id}
-          />
+          <${InlineFileEditor} resourceType="agents" resourceId=${selected.id} />
         </div>
       `}
     </div>

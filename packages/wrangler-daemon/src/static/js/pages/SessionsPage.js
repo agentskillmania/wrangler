@@ -29,11 +29,14 @@ export function SessionsPage() {
   function loadSessions() {
     var url = '/api/sessions';
     if (workspaceFilter) url += '?workspacePath=' + encodeURIComponent(workspaceFilter);
-    api.get(url).then(function (list) {
-      setSessions(Array.isArray(list) ? list : []);
-    }).catch(function () {
-      setSessions([]);
-    });
+    api
+      .get(url)
+      .then(function (list) {
+        setSessions(Array.isArray(list) ? list : []);
+      })
+      .catch(function () {
+        setSessions([]);
+      });
   }
 
   useEffect(loadSessions, []);
@@ -58,41 +61,51 @@ export function SessionsPage() {
 
   function handleSelect(session) {
     lastSelectedId.current = session.id;
-    api.get('/api/sessions/' + session.id).then(function (detail) {
-      if (lastSelectedId.current !== session.id) return;
-      setSelected(detail);
-    }).catch(function () {
-      // Ignore detail fetch errors
-    });
+    api
+      .get('/api/sessions/' + session.id)
+      .then(function (detail) {
+        if (lastSelectedId.current !== session.id) return;
+        setSelected(detail);
+      })
+      .catch(function () {
+        // Ignore detail fetch errors
+      });
     // Load messages in parallel
     setMessagesLoading(true);
     setSessionMessages([]);
-    api.get('/api/chat/' + session.id + '/messages').then(function (res) {
-      if (lastSelectedId.current !== session.id) return;
-      setSessionMessages(res && res.messages ? res.messages : []);
-      setMessagesLoading(false);
-    }).catch(function () {
-      if (lastSelectedId.current !== session.id) return;
-      setSessionMessages([]);
-      setMessagesLoading(false);
-    });
+    api
+      .get('/api/chat/' + session.id + '/messages')
+      .then(function (res) {
+        if (lastSelectedId.current !== session.id) return;
+        setSessionMessages(res && res.messages ? res.messages : []);
+        setMessagesLoading(false);
+      })
+      .catch(function () {
+        if (lastSelectedId.current !== session.id) return;
+        setSessionMessages([]);
+        setMessagesLoading(false);
+      });
   }
 
   var columns = [
-    { key: 'id', label: 'Session ID', render: function (item) {
-      return html`
-        <span
-          class="name-link"
-          style="font-family:var(--font-mono)"
-          onClick=${function (e) {
-            e.stopPropagation();
-            handleSelect(item);
-          }}
-        >
-          ${item.id || '-'}
-        </span>
-      `;
-    }},
+    {
+      key: 'id',
+      label: 'Session ID',
+      render: function (item) {
+        return html`
+          <span
+            class="name-link"
+            style="font-family:var(--font-mono)"
+            onClick=${function (e) {
+              e.stopPropagation();
+              handleSelect(item);
+            }}
+          >
+            ${item.id || '-'}
+          </span>
+        `;
+      },
+    },
     { key: 'agentName', label: 'Agent' },
     { key: 'workspacePath', label: 'Workspace', mono: true },
   ];
@@ -128,16 +141,22 @@ export function SessionsPage() {
         actions=${function (item) {
           return html`
             <div style="display:flex;gap:4px">
-              <button class="btn btn-secondary btn-sm" onClick=${function (e) {
-                e.stopPropagation();
-                handleFork(item.id);
-              }}>
+              <button
+                class="btn btn-secondary btn-sm"
+                onClick=${function (e) {
+                  e.stopPropagation();
+                  handleFork(item.id);
+                }}
+              >
                 Fork
               </button>
-              <button class="btn btn-danger btn-sm" onClick=${function (e) {
-                e.stopPropagation();
-                handleDelete(item.id);
-              }}>
+              <button
+                class="btn btn-danger btn-sm"
+                onClick=${function (e) {
+                  e.stopPropagation();
+                  handleDelete(item.id);
+                }}
+              >
                 Delete
               </button>
             </div>
@@ -148,26 +167,48 @@ export function SessionsPage() {
       <${DetailDrawer}
         open=${selected !== null}
         title=${selected ? selected.id : ''}
-        onClose=${function () { setSelected(null); }}
+        onClose=${function () {
+          setSelected(null);
+        }}
       >
-        ${selected && html`
-          <div style="padding:8px 12px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border)">
-            <div style="margin-bottom:4px"><strong>Agent:</strong> ${esc(selected.agentName || '-')} · <strong>Model:</strong> ${esc(selected.runnerConfig?.model || '-')}</div>
-            <div style="margin-bottom:4px"><strong>Workspace:</strong> ${esc(selected.workspacePath || '-')}</div>
-            <div><strong>Created:</strong> ${selected.createdAt ? new Date(selected.createdAt).toLocaleString() : '-'} · <strong>Updated:</strong> ${selected.updatedAt ? new Date(selected.updatedAt).toLocaleString() : '-'}</div>
-          </div>
-          <div style="padding:12px">
-            <div style="font-size:13px;font-weight:600;margin-bottom:8px">
-              Messages (${sessionMessages.length})
+        ${
+          selected &&
+          html`
+            <div
+              style="padding:8px 12px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border)"
+            >
+              <div style="margin-bottom:4px">
+                <strong>Agent:</strong> ${esc(selected.agentName || '-')} ·
+                <strong>Model:</strong> ${esc(selected.runnerConfig?.model || '-')}
+              </div>
+              <div style="margin-bottom:4px">
+                <strong>Workspace:</strong> ${esc(selected.workspacePath || '-')}
+              </div>
+              <div>
+                <strong>Created:</strong> ${selected.createdAt
+                  ? new Date(selected.createdAt).toLocaleString()
+                  : '-'}
+                · <strong>Updated:</strong> ${selected.updatedAt
+                  ? new Date(selected.updatedAt).toLocaleString()
+                  : '-'}
+              </div>
             </div>
-            ${messagesLoading
-              ? html`<div style="color:var(--text-muted);padding:16px;text-align:center">Loading messages...</div>`
-              : sessionMessages.length === 0
-                ? html`<div style="color:var(--text-muted);padding:16px;text-align:center">No messages in this session.</div>`
-                : html`<${MessageList} entries=${sessionMessages} maxLen=${500} />`
-            }
-          </div>
-        `}
+            <div style="padding:12px">
+              <div style="font-size:13px;font-weight:600;margin-bottom:8px">
+                Messages (${sessionMessages.length})
+              </div>
+              ${messagesLoading
+                ? html`<div style="color:var(--text-muted);padding:16px;text-align:center">
+                    Loading messages...
+                  </div>`
+                : sessionMessages.length === 0
+                  ? html`<div style="color:var(--text-muted);padding:16px;text-align:center">
+                      No messages in this session.
+                    </div>`
+                  : html`<${MessageList} entries=${sessionMessages} maxLen=${500} />`}
+            </div>
+          `
+        }
       </${DetailDrawer}>
     </div>
   `;

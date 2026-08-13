@@ -9,10 +9,10 @@ export function Sidebar(props) {
   var currentPage = props.currentPage;
   var onNavigate = props.onNavigate;
   var _sGr = useState({
-    resources: true,
-    conversation: true,
-    devtools: true,
-  }),
+      resources: true,
+      conversation: true,
+      devtools: true,
+    }),
     groups = _sGr[0],
     setGroups = _sGr[1];
 
@@ -57,35 +57,36 @@ export function Sidebar(props) {
   return html`
     <nav class="sidebar">
       <div class="sidebar-logo">wrangler<span>-daemon</span></div>
-      ${navItems.map(
-        function (group) {
-          return html`
-            <div class="sidebar-group" key=${group.key}>
-              <div class="sidebar-group-title" onClick=${function () { toggleGroup(group.key); }}>
-                ${group.label}
-                <span class=${'toggle-icon' + (groups[group.key] ? '' : ' collapsed')}>
-                  ▾
-                </span>
-              </div>
-              <div class=${'sidebar-group-items' + (groups[group.key] ? '' : ' collapsed')}>
-                ${group.items.map(
-                  function (item) {
-                    return html`
-                      <button
-                        key=${item.id}
-                        class=${'sidebar-item' + (currentPage === item.id ? ' active' : '')}
-                        onClick=${function () { onNavigate(item.id); }}
-                      >
-                        ${item.label}
-                      </button>
-                    `;
-                  }
-                )}
-              </div>
+      ${navItems.map(function (group) {
+        return html`
+          <div class="sidebar-group" key=${group.key}>
+            <div
+              class="sidebar-group-title"
+              onClick=${function () {
+                toggleGroup(group.key);
+              }}
+            >
+              ${group.label}
+              <span class=${'toggle-icon' + (groups[group.key] ? '' : ' collapsed')}> ▾ </span>
             </div>
-          `;
-        }
-      )}
+            <div class=${'sidebar-group-items' + (groups[group.key] ? '' : ' collapsed')}>
+              ${group.items.map(function (item) {
+                return html`
+                  <button
+                    key=${item.id}
+                    class=${'sidebar-item' + (currentPage === item.id ? ' active' : '')}
+                    onClick=${function () {
+                      onNavigate(item.id);
+                    }}
+                  >
+                    ${item.label}
+                  </button>
+                `;
+              })}
+            </div>
+          </div>
+        `;
+      })}
     </nav>
   `;
 }

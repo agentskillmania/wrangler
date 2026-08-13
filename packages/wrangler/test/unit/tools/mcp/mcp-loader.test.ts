@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { loadMCPTools, _resetCache } from '../../../../src/tools/mcp/mcp-loader.js';
 
 // vi.mock is hoisted before imports. Using var (not const/let) avoids TDZ.
-var mockFns = {
+const mockFns = {
   shouldCreateRuntimeFail: false,
   loadServerDefinitions: function (opts: { configPath?: string }) {
     const fs = require('node:fs');

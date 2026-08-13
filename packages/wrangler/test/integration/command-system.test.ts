@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { defaultNodeHostEnv } from '../../src/host-env/node-host-env.js';
 import { EnhancedRunner } from '../../src/runner/index.js';
 import { createAgentState, addUserMessage, FilesystemSkillProvider } from '@agentskillmania/colts';
 import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
@@ -69,6 +70,7 @@ describe('Command System Integration Tests', () => {
     'should execute /clear command and stop with success message',
     async () => {
       const runner = await EnhancedRunner.create({
+        runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         mcpConfigPaths: [],
@@ -101,6 +103,7 @@ describe('Command System Integration Tests', () => {
       tempDirs.push(skillDir);
 
       const runner = await EnhancedRunner.create({
+        runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         skills: {
@@ -136,6 +139,7 @@ describe('Command System Integration Tests', () => {
       tempDirs.push(skillDir);
 
       const runner = await EnhancedRunner.create({
+        runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         skills: {
@@ -179,6 +183,7 @@ describe('Command System Integration Tests', () => {
       };
 
       const runner = await EnhancedRunner.create({
+        runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         mcpConfigPaths: [],
@@ -228,6 +233,7 @@ describe('Command System Integration Tests', () => {
     'should treat unknown command as normal message and continue to LLM',
     async () => {
       const runner = await EnhancedRunner.create({
+        runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         mcpConfigPaths: [],
@@ -269,6 +275,7 @@ describe('Command System Integration Tests', () => {
       };
 
       const runner = await EnhancedRunner.create({
+        runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         commands: { enabled: true, extra: [customClearHandler] },
@@ -300,6 +307,7 @@ describe('Command System Integration Tests', () => {
       tempDirs.push(skillDir);
 
       const runner = await EnhancedRunner.create({
+        runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         skills: {
@@ -332,6 +340,7 @@ describe('Command System Integration Tests', () => {
     'should pass normal message to LLM without command processing',
     async () => {
       const runner = await EnhancedRunner.create({
+        runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
         mcpConfigPaths: [],

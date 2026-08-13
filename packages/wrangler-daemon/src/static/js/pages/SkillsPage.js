@@ -30,11 +30,14 @@ export function SkillsPage() {
     setError = _sErr[1];
 
   function loadSkills() {
-    api.get('/api/skills').then(function (list) {
-      setSkills(Array.isArray(list) ? list : []);
-    }).catch(function () {
-      setSkills([]);
-    });
+    api
+      .get('/api/skills')
+      .then(function (list) {
+        setSkills(Array.isArray(list) ? list : []);
+      })
+      .catch(function () {
+        setSkills([]);
+      });
   }
 
   useEffect(loadSkills, []);
@@ -68,19 +71,23 @@ export function SkillsPage() {
   }
 
   var columns = [
-    { key: 'name', label: 'Name', render: function (item) {
-      return html`
-        <span
-          class="name-link"
-          onClick=${function (e) {
-            e.stopPropagation();
-            handleSelect(item);
-          }}
-        >
-          ${item.name || item.id}
-        </span>
-      `;
-    }},
+    {
+      key: 'name',
+      label: 'Name',
+      render: function (item) {
+        return html`
+          <span
+            class="name-link"
+            onClick=${function (e) {
+              e.stopPropagation();
+              handleSelect(item);
+            }}
+          >
+            ${item.name || item.id}
+          </span>
+        `;
+      },
+    },
     { key: 'path', label: 'Path', mono: true },
   ];
 
@@ -88,7 +95,9 @@ export function SkillsPage() {
     <div class="page">
       <div class="page-header">
         <div class="page-title">Skills</div>
-        <div class="page-desc">Manage skill definitions. Each skill is a directory with a SKILL.md file.</div>
+        <div class="page-desc">
+          Manage skill definitions. Each skill is a directory with a SKILL.md file.
+        </div>
       </div>
 
       ${showCreate &&
@@ -107,7 +116,8 @@ export function SkillsPage() {
                   setError('');
                 }}
               />
-              ${error && html`<div style="color:var(--error);font-size:11px;margin-top:4px">${error}</div>`}
+              ${error &&
+              html`<div style="color:var(--error);font-size:11px;margin-top:4px">${error}</div>`}
             </div>
             <div class="field">
               <label>Description</label>
@@ -123,7 +133,13 @@ export function SkillsPage() {
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-primary btn-sm" onClick=${handleCreate}>Create</button>
-            <button class="btn btn-secondary btn-sm" onClick=${function () { setShowCreate(false); setError(''); }}>
+            <button
+              class="btn btn-secondary btn-sm"
+              onClick=${function () {
+                setShowCreate(false);
+                setError('');
+              }}
+            >
               Cancel
             </button>
           </div>
@@ -135,15 +151,20 @@ export function SkillsPage() {
         items=${skills}
         selectedId=${selected && selected.id}
         onSelect=${handleSelect}
-        onCreate=${function () { setShowCreate(true); }}
+        onCreate=${function () {
+          setShowCreate(true);
+        }}
         onCreateLabel="New Skill"
         emptyMessage="No skills found. Click '+ New Skill' to create one."
         actions=${function (item) {
           return html`
-            <button class="btn btn-danger btn-sm" onClick=${function (e) {
-              e.stopPropagation();
-              handleDelete(item.id);
-            }}>
+            <button
+              class="btn btn-danger btn-sm"
+              onClick=${function (e) {
+                e.stopPropagation();
+                handleDelete(item.id);
+              }}
+            >
               Delete
             </button>
           `;
@@ -158,10 +179,7 @@ export function SkillsPage() {
           </div>
           <div class="detail-label">Details</div>
           <${JsonTree} data=${selected} open=${1} />
-          <${InlineFileEditor}
-            resourceType="skills"
-            resourceId=${selected.id}
-          />
+          <${InlineFileEditor} resourceType="skills" resourceId=${selected.id} />
         </div>
       `}
     </div>

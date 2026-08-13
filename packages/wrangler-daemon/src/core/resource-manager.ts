@@ -5,6 +5,7 @@ import type { CrewConfig } from '@agentskillmania/wrangler';
 import { AgentLoader } from '@agentskillmania/wrangler';
 import { CrewLoader } from '@agentskillmania/wrangler';
 import { parseAgentMd } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import yaml from 'js-yaml';
 
 import type {
@@ -86,7 +87,7 @@ export class ResourceManager {
     this.validateName(id);
     const agentDir = join(this.agentsDir, id);
     try {
-      const result = await AgentLoader.loadFrom(agentDir);
+      const result = await AgentLoader.loadFrom(agentDir, defaultNodeHostEnv);
       return {
         id,
         name: result.name,
@@ -330,7 +331,7 @@ export class ResourceManager {
   async loadCrewConfig(id: string): Promise<CrewConfig> {
     this.validateName(id);
     const crewDir = join(this.crewsDir, id);
-    const loader = new CrewLoader(crewDir);
+    const loader = new CrewLoader(crewDir, defaultNodeHostEnv);
     return loader.load();
   }
 

@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
+import { defaultNodeHostEnv } from '../../src/host-env/node-host-env.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { EnhancedRunner } from '../../src/runner/enhanced-runner.js';
 import { testConfig, itif } from './config.js';
@@ -33,6 +34,7 @@ describe('Spec/Plan Tool-Driven Integration', () => {
       'should create a spec via save_spec tool and read it back via read_spec',
       async () => {
         const runner = await EnhancedRunner.create({
+          runtime: defaultNodeHostEnv,
           llm: {
             quickInit: {
               providers: [
@@ -100,6 +102,7 @@ You have access to spec-plan tools. Your task:
       'should execute save spec → update status → save plan workflow',
       async () => {
         const runner = await EnhancedRunner.create({
+          runtime: defaultNodeHostEnv,
           llm: {
             quickInit: {
               providers: [
@@ -183,6 +186,7 @@ Report what you did and confirm each step succeeded.
       'should not expose spec-plan tools when enableSpecPlan is false',
       async () => {
         const runner = await EnhancedRunner.create({
+          runtime: defaultNodeHostEnv,
           llm: {
             quickInit: {
               providers: [

@@ -75,7 +75,6 @@ export function AgentStatePage() {
           Watching ${sessionId.substring(0, 12)}...
         </div>
       `}
-
       ${stateData !== null &&
       html`
         <div class="panel">

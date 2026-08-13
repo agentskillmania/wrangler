@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { defaultNodeHostEnv } from '../../src/host-env/node-host-env.js';
 import { EnhancedRunner } from '../../src/runner/index.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { createLLMClient } from '../../src/llm/client.js';
@@ -29,6 +30,7 @@ function makeLLMClient() {
 
 async function createRunner() {
   return EnhancedRunner.create({
+    runtime: defaultNodeHostEnv,
     llm: { client: makeLLMClient() as any, model: testConfig.testModel },
     workspacePath: '/tmp/test-workspace',
     mcpConfigPaths: [],

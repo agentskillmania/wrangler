@@ -4,7 +4,6 @@ import type { CrewConfig } from './types.js';
 import { parseAgentMd } from '../agent/agent-parser.js';
 import type { ParsedAgent } from '../agent/agent-parser.js';
 import type { HostEnv } from '../host-env/index.js';
-import { NodeHostEnv } from '../host-env/node-host-env.js';
 import type { SubAgentConfig } from '../subagent/types.js';
 
 interface CrewMeta {
@@ -24,7 +23,7 @@ interface CrewMeta {
 export class CrewLoader {
   constructor(
     private crewDir: string,
-    private runtime: HostEnv = new NodeHostEnv()
+    private runtime: HostEnv
   ) {}
 
   async load(): Promise<CrewConfig> {

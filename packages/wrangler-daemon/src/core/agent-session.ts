@@ -26,7 +26,6 @@ import type {
   HostEnv,
   ResolvedRunnerConfig,
 } from '@agentskillmania/wrangler';
-import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import { mergeSandboxConfig } from './sandbox-config.js';
@@ -252,7 +251,13 @@ export class AgentSession {
       (options.skills?.dirs?.length ? new FilesystemSkillProvider(options.skills.dirs) : undefined);
 
     const runner = await EnhancedRunner.create({
-      runtime: options.runtime ?? new NodeHostEnv(),
+      runtime:
+        options.runtime ??
+        (() => {
+          throw new Error(
+            'AgentSessionOptions.runtime is required — Node host: new NodeHostEnv() from @agentskillmania/wrangler/host-env/node-host-env; browser: BrowserHostEnv'
+          );
+        })(),
       llm: { client: llmClient, model: llmModel },
       workspacePath: options.workspacePath,
       sandbox: mergedSandbox,

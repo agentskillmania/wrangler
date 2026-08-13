@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { defaultNodeHostEnv } from '../../src/host-env/node-host-env.js';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -157,6 +158,7 @@ You are a helpful assistant. Answer in one short sentence.`
       });
 
       const runner = await EnhancedRunner.create({
+        runtime: defaultNodeHostEnv,
         llm: { client: llmClient, model: testConfig.testModel },
         workspacePath: testBaseDir,
         mcpConfigPaths: [],

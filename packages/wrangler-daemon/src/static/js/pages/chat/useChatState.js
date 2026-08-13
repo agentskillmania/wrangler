@@ -200,21 +200,26 @@ export function useChatState() {
         return;
       }
       var cancelled = false;
-      api.get('/api/chat/' + resumeSessionId + '/messages').then(function (res) {
-        if (cancelled) return;
-        if (res && res.messages && res.messages.length > 0) {
-          var historyLines = res.messages.map(function (entry) {
-            return sessionEntryToChatLine(entry);
-          });
-          setChatLines(historyLines);
-          setTimeout(function () {
-            if (messagesEndRef.current) messagesEndRef.current.scrollIntoView();
-          }, 50);
-        }
-      }).catch(function () {
-        // Silently fail — empty chat is acceptable
-      });
-      return function () { cancelled = true; };
+      api
+        .get('/api/chat/' + resumeSessionId + '/messages')
+        .then(function (res) {
+          if (cancelled) return;
+          if (res && res.messages && res.messages.length > 0) {
+            var historyLines = res.messages.map(function (entry) {
+              return sessionEntryToChatLine(entry);
+            });
+            setChatLines(historyLines);
+            setTimeout(function () {
+              if (messagesEndRef.current) messagesEndRef.current.scrollIntoView();
+            }, 50);
+          }
+        })
+        .catch(function () {
+          // Silently fail — empty chat is acceptable
+        });
+      return function () {
+        cancelled = true;
+      };
     },
     [resumeSessionId]
   );
@@ -304,9 +309,7 @@ export function useChatState() {
     setChatLines(function (prev) {
       if (ACCUMULATE_TAGS[tag] && prev.length > 0 && prev[prev.length - 1].tag === tag) {
         var last = prev[prev.length - 1];
-        return prev
-          .slice(0, -1)
-          .concat([{ tag: tag, text: last.text + text, id: last.id }]);
+        return prev.slice(0, -1).concat([{ tag: tag, text: last.text + text, id: last.id }]);
       }
       return prev.concat([{ tag: tag, text: text, id: Date.now() + Math.random() }]);
     });
@@ -374,11 +377,21 @@ export function useChatState() {
     };
     if (cfgSkillDirs.trim()) {
       config.skills = {
-        dirs: cfgSkillDirs.split(',').map(function (s) { return s.trim(); }).filter(Boolean),
+        dirs: cfgSkillDirs
+          .split(',')
+          .map(function (s) {
+            return s.trim();
+          })
+          .filter(Boolean),
       };
     }
     if (cfgMcpPaths.trim()) {
-      config.tools.mcpConfigPaths = cfgMcpPaths.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      config.tools.mcpConfigPaths = cfgMcpPaths
+        .split(',')
+        .map(function (s) {
+          return s.trim();
+        })
+        .filter(Boolean);
     }
     return config;
   }

@@ -38,7 +38,6 @@ import { createSkillHandler } from '../command/handlers/skill.js';
 import { createSkillsHandler } from '../command/handlers/skills.js';
 import { CommandRegistry } from '../command/registry.js';
 import type { HostEnv } from '../host-env/index.js';
-import { NodeHostEnv } from '../host-env/node-host-env.js';
 import { resolveDefaultModel } from '../llm/resolve-model.js';
 import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
@@ -189,9 +188,14 @@ export class EnhancedRunner {
    * @returns Configured EnhancedRunner instance
    */
   static async create(options: EnhancedRunnerOptions): Promise<EnhancedRunner> {
-    // runtime 可选：默认 NodeHostEnv（daemon / CLI 零改动，types.ts 契约）；
-    // 浏览器扩展等受限宿主显式注入 BrowserHostEnv
-    const runtime = options.runtime ?? new NodeHostEnv();
+    // runtime 必传：宿主注入（Node 用 NodeHostEnv、浏览器用 BrowserHostEnv）
+    // ——引擎 core 不 import NodeHostEnv（保持零 node: 依赖）
+    if (!options.runtime) {
+      throw new Error(
+        'EnhancedRunnerOptions.runtime is required — Node host: new NodeHostEnv() from @agentskillmania/wrangler/host-env/node-host-env'
+      );
+    }
+    const runtime = options.runtime;
     const workspacePath = options.workspacePath ?? runtime.env.cwd();
     // 斜杠命令注册表（commands 启用时填充，构造时传入实例）
     let registeredCommands: CommandRegistry | null = null;

@@ -13,6 +13,7 @@ import {
   crewToRunnerOptions,
   type CrewRunnerOptions,
 } from '@agentskillmania/wrangler';
+import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 
 import type { EvalSuite } from '../types.js';
 import { BaseAdapter } from './base-adapter.js';
@@ -24,7 +25,7 @@ export class CrewAdapter extends BaseAdapter {
   /** Lazy-load + convert crew config on first access. */
   private async ensureLoaded(suite: EvalSuite): Promise<CrewRunnerOptions> {
     if (this.crewRunnerOpts) return this.crewRunnerOpts;
-    const crewConfig = await new CrewLoader(suite.target.path).load();
+    const crewConfig = await new CrewLoader(suite.target.path, new NodeHostEnv()).load();
     this.crewRunnerOpts = crewToRunnerOptions(crewConfig);
     return this.crewRunnerOpts;
   }

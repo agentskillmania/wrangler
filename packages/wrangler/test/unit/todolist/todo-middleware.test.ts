@@ -82,7 +82,7 @@ describe('todo-middleware', () => {
     it('applies update from toolResult', async () => {
       const mw = createTodolistMiddleware();
       const state = makeState();
-      let list = addTodo(createEmptyTodoList(), 'Original task');
+      const list = addTodo(createEmptyTodoList(), 'Original task');
       (state.context as any).todoList = list;
 
       const result = await mw.afterStep!({
@@ -207,7 +207,7 @@ describe('todo-middleware', () => {
     it('skips update action with no fields', async () => {
       const mw = createTodolistMiddleware();
       const state = makeState();
-      let list = addTodo(createEmptyTodoList(), 'Original task');
+      const list = addTodo(createEmptyTodoList(), 'Original task');
       (state.context as any).todoList = list;
 
       const result = await mw.afterStep!({
@@ -255,7 +255,7 @@ describe('todo-middleware', () => {
     it('skips unknown action type', async () => {
       const mw = createTodolistMiddleware();
       const state = makeState();
-      let list = addTodo(createEmptyTodoList(), 'Task 1');
+      const list = addTodo(createEmptyTodoList(), 'Task 1');
       (state.context as any).todoList = list;
 
       const result = await mw.afterStep!({
@@ -279,7 +279,7 @@ describe('todo-middleware', () => {
     it('ignores non-todo toolResult', async () => {
       const mw = createTodolistMiddleware();
       const state = makeState();
-      let list = addTodo(createEmptyTodoList(), 'Task 1');
+      const list = addTodo(createEmptyTodoList(), 'Task 1');
       (state.context as any).todoList = list;
 
       const result = await mw.afterStep!({
@@ -352,7 +352,7 @@ describe('todo-middleware', () => {
     it('does not modify existing todoList', async () => {
       const mw = createTodolistMiddleware();
       const state = makeState();
-      let list = addTodo(createEmptyTodoList(), 'Task 1');
+      const list = addTodo(createEmptyTodoList(), 'Task 1');
       (state.context as any).todoList = list;
 
       const result = await mw.beforeStep!({
