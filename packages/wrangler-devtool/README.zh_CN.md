@@ -80,12 +80,12 @@ wrangler-devtool eval evals/baseline.yaml --reporter json
 
 **选项：**
 
-| 参数 | 说明 |
-|---|---|
-| `--runs N` | 覆盖 `sampling.runs` |
-| `--output DIR` | 输出目录（默认：`.eval/runs/<runId>`） |
-| `--reporter console\|json` | 输出格式（默认：`console`） |
-| `--keep-traces` | 运行后保留临时工作区 |
+| 参数                       | 说明                                   |
+| -------------------------- | -------------------------------------- |
+| `--runs N`                 | 覆盖 `sampling.runs`                   |
+| `--output DIR`             | 输出目录（默认：`.eval/runs/<runId>`） |
+| `--reporter console\|json` | 输出格式（默认：`console`）            |
+| `--keep-traces`            | 运行后保留临时工作区                   |
 
 ## 评估框架
 
@@ -96,13 +96,13 @@ name: code-reviewer-eval
 description: 评估 code-reviewer agent
 
 target:
-  type: agent              # agent | skill
-  path: ./                 # agent 定义目录（skill 类型时为 skill 父目录）
-  skill: null              # type=skill 时指定要加载的 skill 名
+  type: agent # agent | skill
+  path: ./ # agent 定义目录（skill 类型时为 skill 父目录）
+  skill: null # type=skill 时指定要加载的 skill 名
 
 sampling:
-  runs: 3                  # 每个用例跑 3 次
-  passThreshold: 0.67      # 需 2/3 通过才算 pass
+  runs: 3 # 每个用例跑 3 次
+  passThreshold: 0.67 # 需 2/3 通过才算 pass
   # temperature: 0         # 取消注释以使用确定性单次模式
   # maxSteps: 20           # 每次运行的最大步数
 
@@ -112,14 +112,14 @@ cases:
     input:
       message: 审查这段代码的安全问题
     context:
-      files:               # fixture 文件，拷贝到临时工作区
+      files: # fixture 文件，拷贝到临时工作区
         - source: fixtures/vulnerable.py
           target: src/main.py
       env:
         MODE: strict
     evaluators:
       - type: output_contains
-        value: "SQL injection"
+        value: 'SQL injection'
         caseInsensitive: true
       - type: tool_called
         tool: file_read
@@ -138,22 +138,22 @@ cases:
 
 **确定性评估器：**
 
-| 类型 | 说明 |
-|---|---|
-| `output_contains` / `output_not_contains` | 检查输出文本（支持 `caseInsensitive`） |
-| `output_equals` | 严格相等 |
-| `output_matches` | 正则匹配（支持 `flags`） |
-| `tool_called` / `tool_not_called` | 是否调用了指定工具 |
-| `tool_called_with` | 工具调用参数匹配（子集匹配） |
-| `tool_call_count` | 工具调用次数在 `min`/`max` 范围内 |
-| `file_exists` / `file_not_exists` | 工作区中文件是否存在（支持 `contentContains`） |
-| `exit_code` | 运行结果类型（`success`、`error`、`max_steps` 等） |
-| `step_count` | 步数在 `min`/`max` 范围内 |
+| 类型                                      | 说明                                               |
+| ----------------------------------------- | -------------------------------------------------- |
+| `output_contains` / `output_not_contains` | 检查输出文本（支持 `caseInsensitive`）             |
+| `output_equals`                           | 严格相等                                           |
+| `output_matches`                          | 正则匹配（支持 `flags`）                           |
+| `tool_called` / `tool_not_called`         | 是否调用了指定工具                                 |
+| `tool_called_with`                        | 工具调用参数匹配（子集匹配）                       |
+| `tool_call_count`                         | 工具调用次数在 `min`/`max` 范围内                  |
+| `file_exists` / `file_not_exists`         | 工作区中文件是否存在（支持 `contentContains`）     |
+| `exit_code`                               | 运行结果类型（`success`、`error`、`max_steps` 等） |
+| `step_count`                              | 步数在 `min`/`max` 范围内                          |
 
 **LLM-as-Judge：**
 
-| 类型 | 说明 |
-|---|---|
+| 类型        | 说明                                                                                                                                 |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `llm-judge` | LLM 根据完整轨迹（输出 + 工具调用）按 `criteria` 和 `rubric` 评分。支持 `reference` 黄金答案。固定使用 `temperature: 0` 保证确定性。 |
 
 ### 输出结构
@@ -173,13 +173,13 @@ trace 文件为 JSONL 格式——每行一个 JSON 事件（`meta`、`input`、
 
 devtool 内置五个 skill，上层智能体可通过 `load_skill` 加载：
 
-| Skill | 用途 |
-|---|---|
-| `agent-architect` | 设计和编写 agent 定义 |
-| `skill-designer` | 设计和编写 skill 定义 |
-| `crew-composer` | 编排多智能体 crew 定义 |
+| Skill                 | 用途                           |
+| --------------------- | ------------------------------ |
+| `agent-architect`     | 设计和编写 agent 定义          |
+| `skill-designer`      | 设计和编写 skill 定义          |
+| `crew-composer`       | 编排多智能体 crew 定义         |
 | `definition-reviewer` | 评审 agent/skill/crew 定义质量 |
-| `session-curator` | 管理和整理对话会话 |
+| `session-curator`     | 管理和整理对话会话             |
 
 上层应用导入 `BUILTIN_SKILLS_DIR` 并添加到 `skills.dirs`：
 
@@ -187,6 +187,7 @@ devtool 内置五个 skill，上层智能体可通过 `load_skill` 加载：
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 
 const runner = await EnhancedRunner.create({
+  runtime: new NodeHostEnv(), // 必传
   skills: { dirs: [BUILTIN_SKILLS_DIR] },
   // ...
 });
@@ -210,11 +211,11 @@ llm:
       apiKey: sk-your-key
       baseUrl: https://api.example.com/v1
       models:
-        - modelId: glm-5.1    # 被评估的 agent 使用
-        - modelId: glm-5.2    # 供 judge 使用
+        - modelId: glm-5.1 # 被评估的 agent 使用
+        - modelId: glm-5.2 # 供 judge 使用
 
 judge:
-  model: glm-5.2              # 用更强的模型做评判
+  model: glm-5.2 # 用更强的模型做评判
 ```
 
 ## 编程接口

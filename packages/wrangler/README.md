@@ -12,19 +12,19 @@ Core library for agent configuration and multi-agent crews — the abstraction l
 - **Agent loading** — parse `AGENT.md` files to define agent identity, instructions, and skill directories
 - **Session management** — session store, transcript formatting, and conversation metadata
 - **Builtin tools** — calculate, ask_human, file read/write/edit, grep, glob, shell, web-fetch, web-search with workspace sandboxing
-- **MCP integration** — load tools from MCP servers via `loadMCPTools`
+- **MCP integration** — host injects a loader from the `./tools/mcp` subpath (not bundled in the engine core)
 - **Spec/Plan system** — structured specification and plan documents for complex workflows
 - **Todolist support** — shared todo state for agents
 
 ## Architecture Layers
 
-| Layer | Module | Description |
-|-------|--------|-------------|
-| 2 | `runner/`, `tools/` | EnhancedRunner, builtin & MCP tools |
-| 3 | `todolist/` | Shared todolist state |
-| 4 | `spec-plan/`, `loader/` | Spec/Plan documents, AgentLoader |
-| 5 | `agent/` | AGENT.md parsing |
-| 8 | `crew/` | Crew config loader (`CrewLoader` → `crewToRunnerOptions`) |
+| Layer | Module                  | Description                                               |
+| ----- | ----------------------- | --------------------------------------------------------- |
+| 2     | `runner/`, `tools/`     | EnhancedRunner, builtin & MCP tools                       |
+| 3     | `todolist/`             | Shared todolist state                                     |
+| 4     | `spec-plan/`, `loader/` | Spec/Plan documents, AgentLoader                          |
+| 5     | `agent/`                | AGENT.md parsing                                          |
+| 8     | `crew/`                 | Crew config loader (`CrewLoader` → `crewToRunnerOptions`) |
 
 ## Installation
 
@@ -35,29 +35,34 @@ pnpm add @agentskillmania/wrangler
 ## Quick Example
 
 ```typescript
-import { EnhancedRunner, AgentLoader } from '@agentskillmania/wrangler';
+import { EnhancedRunner } from '@agentskillmania/wrangler';
+import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { LLMClient } from '@agentskillmania/llm-client';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 
-const llmClient = new LLMClient();
-llmClient.registerProvider({ name: 'openai', maxConcurrency: 5 });
-llmClient.registerApiKey({
-  key: process.env.OPENAI_API_KEY!,
-  provider: 'openai',
-  models: [{ modelId: 'gpt-4o', maxConcurrency: 5 }],
+const llmClient = LLMClient.quickInit({
+  providers: [
+    {
+      name: 'openai',
+      apiKey: process.env.OPENAI_API_KEY!,
+      models: [{ modelId: 'gpt-4o', maxConcurrency: 5 }],
+    },
+  ],
 });
 
 const runner = await EnhancedRunner.create({
+  runtime: new NodeHostEnv(), // required — engine core has no Node imports
   workspacePath: '/path/to/project',
   llm: { client: llmClient, model: 'gpt-4o' },
   thinking: { enabled: true },
-  sandbox: { enabled: true },
+  sandbox: { enabled: false },
 });
 
-const state = runner.createState();
+let state = createAgentState({ name: 'agent', instructions: '...', tools: [] });
+state = addUserMessage(state, '你好');
 
 // Consume execution via the EventEmitter (single observability channel)
 runner.on('token', (e) => process.stdout.write(e.token));
-runner.on('subagent:token', (e) => process.stdout.write(e.token)); // live sub-agent output
 
 const { result } = await runner.run(state);
 console.log('Done:', result.type);
@@ -71,10 +76,11 @@ A crew is a directory of configuration, not a runtime orchestrator. `CrewLoader.
 import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
 import { createAgentState } from '@agentskillmania/colts';
 
-const crew = await new CrewLoader('./my-crew').load();
+const crew = await new CrewLoader('./my-crew', new NodeHostEnv()).load();
 const opts = crewToRunnerOptions(crew);
 
 const runner = await EnhancedRunner.create({
+  runtime: new NodeHostEnv(), // required
   llm: { client: llmClient, model: opts.model ?? 'gpt-4o' },
   // crew's composed prompt (memory + primary instructions + sub-agent
   // catalog) rides through agentInstructions → AgentState.config.instructions
@@ -98,6 +104,7 @@ const state = createAgentState({
 
 ```typescript
 const { runner, state } = await EnhancedRunner.resume(sessionDir, {
+  runtime: new NodeHostEnv(), // required
   llm: { client: llmClient },
   subAgents: opts.subAgents, // rebuilt from CrewLoader + crewToRunnerOptions
 });
@@ -108,22 +115,33 @@ const { runner, state } = await EnhancedRunner.resume(sessionDir, {
 `EnhancedRunner.create()` accepts structured config groups:
 
 ```typescript
+import { createWebTools } from '@agentskillmania/wrangler/tools/web';   // Node-only (jsdom)
+import { loadMCPTools } from '@agentskillmania/wrangler/tools/mcp';     // Node-only (MCP)
+import { Sandbox } from '@agentskillmania/sandbox';
+
 await EnhancedRunner.create({
+  runtime: new NodeHostEnv(),           // required
   workspacePath: '/project',
 
   llm: {
-    client: llmClient,           // or quickInit: { providers } + quickInitFactory (host-injected creator, e.g. LLMClient.quickInit wrapper)
+    client: llmClient,           // or quickInit: { providers } + quickInitFactory (host-injected creator, e.g. (p) => LLMClient.quickInit({ providers: p }))
     model: 'gpt-4o',
     temperature: 0.7,
     requestTimeout: 120_000,
   },
   skills: { dirs: ['/skills'] },
   tools: {
-    builtinFilter: { shell: true, python: false }, // whitelist
+    builtinFilter: { shell: true, python: false }, // whitelist over the 10 core tools
+    // Node-only tools are host-assembled and injected — not bundled in the main entry:
+    injectFactory: (deps) => createWebTools({ deps, provider: 'sogou' }),
     mcpConfigPaths: ['./mcp.json'],
+    mcpLoader: (paths) => loadMCPTools({ configPaths: paths }),
     askHumanHandler: myHandler,
   },
-  sandbox: { enabled: true },
+  sandbox: {
+    enabled: true,
+    instance: new Sandbox({ sandboxDir: '/project' }), // host-constructed
+  },
   thinking: { enabled: true, promptLevel: false },
   session: { enabled: true, baseDir: '/sessions' },
   todolist: { enabled: true },

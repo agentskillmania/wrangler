@@ -12,20 +12,20 @@
 - **Crew 即配置** — 加载团队目录（`CREW.md` + 各 Agent 的 `AGENT.md`），转换为 `EnhancedRunner.create({ subAgents })` 选项。主 Agent 成为主 Runner，其余 Agent 成为可通过 colts `delegate` 工具调用的子代理。`CREW.md` 正文注入主 Agent 的 system prompt。
 - **Agent 加载** — 解析 `AGENT.md` 文件定义 Agent 身份、指令和 Skill 目录
 - **Session 管理** — Session 存储、对话格式化和元数据管理
-- **内置工具** — 文件读写编辑、grep、glob、shell、web-fetch、web-search，带 workspace 沙箱
-- **MCP 集成** — 通过 `loadMCPTools` 从 MCP 服务器加载工具
+- **内置工具** — 平台无关 core 工具（文件读写编辑、grep、glob、shell 等 10 个）；web 工具经 `./tools/web` 子路径由宿主注入
+- **MCP 集成** — 宿主从 `./tools/mcp` 子路径注入加载器（引擎 core 不捆绑 MCP 加载）
 - **Spec/Plan 系统** — 面向复杂工作流的结构化规格和计划文档
 - **Todolist 支持** — Agent 共享的 Todo 状态
 
 ## 架构层级
 
-| 层级 | 模块 | 描述 |
-|------|------|------|
-| 2 | `runner/`、`tools/` | EnhancedRunner、内置工具与 MCP 工具 |
-| 3 | `todolist/` | 共享 Todolist 状态 |
-| 4 | `spec-plan/`、`loader/` | Spec/Plan 文档、AgentLoader |
-| 5 | `agent/` | AGENT.md 解析 |
-| 8 | `crew/` | 团队配置加载器（`CrewLoader` → `crewToRunnerOptions`） |
+| 层级 | 模块                    | 描述                                                   |
+| ---- | ----------------------- | ------------------------------------------------------ |
+| 2    | `runner/`、`tools/`     | EnhancedRunner、内置工具与 MCP 工具                    |
+| 3    | `todolist/`             | 共享 Todolist 状态                                     |
+| 4    | `spec-plan/`、`loader/` | Spec/Plan 文档、AgentLoader                            |
+| 5    | `agent/`                | AGENT.md 解析                                          |
+| 8    | `crew/`                 | 团队配置加载器（`CrewLoader` → `crewToRunnerOptions`） |
 
 ## 安装
 
@@ -36,29 +36,34 @@ pnpm add @agentskillmania/wrangler
 ## 快速示例
 
 ```typescript
-import { EnhancedRunner, AgentLoader, createBuiltinTools } from '@agentskillmania/wrangler';
+import { EnhancedRunner } from '@agentskillmania/wrangler';
+import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { LLMClient } from '@agentskillmania/llm-client';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 
-const llmClient = new LLMClient();
-llmClient.registerProvider({ name: 'openai', maxConcurrency: 5 });
-llmClient.registerApiKey({
-  key: process.env.OPENAI_API_KEY!,
-  provider: 'openai',
-  models: [{ modelId: 'gpt-4o', maxConcurrency: 5 }],
+const llmClient = LLMClient.quickInit({
+  providers: [
+    {
+      name: 'openai',
+      apiKey: process.env.OPENAI_API_KEY!,
+      models: [{ modelId: 'gpt-4o', maxConcurrency: 5 }],
+    },
+  ],
 });
 
 const runner = await EnhancedRunner.create({
+  runtime: new NodeHostEnv(), // 必传——引擎 core 零 Node 依赖
   workspacePath: '/path/to/project',
   llm: { client: llmClient, model: 'gpt-4o' },
   thinking: { enabled: true },
-  sandbox: { enabled: true },
+  sandbox: { enabled: false },
 });
 
-const state = runner.createState();
+let state = createAgentState({ name: 'agent', instructions: '...', tools: [] });
+state = addUserMessage(state, '你好');
 
 // 通过 EventEmitter 消费执行过程（唯一观测通道）
 runner.on('token', (e) => process.stdout.write(e.token));
-runner.on('subagent:token', (e) => process.stdout.write(e.token)); // 子代理实时输出
 
 const { result } = await runner.run(state);
 console.log('完成:', result.type);
@@ -72,10 +77,11 @@ console.log('完成:', result.type);
 import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
 import { createAgentState } from '@agentskillmania/colts';
 
-const crew = await new CrewLoader('./my-crew').load();
+const crew = await new CrewLoader('./my-crew', new NodeHostEnv()).load();
 const opts = crewToRunnerOptions(crew);
 
 const runner = await EnhancedRunner.create({
+  runtime: new NodeHostEnv(), // 必传
   llm: { client: llmClient, model: opts.model ?? 'gpt-4o' },
   // 团队的合成 prompt（memory + 主 Agent 指令 + 子代理目录）通过
   // agentInstructions → AgentState.config.instructions 传递
@@ -98,6 +104,7 @@ const state = createAgentState({
 
 ```typescript
 const { runner, state } = await EnhancedRunner.resume(sessionDir, {
+  runtime: new NodeHostEnv(), // 必传
   llm: { client: llmClient },
   subAgents: opts.subAgents, // 由 CrewLoader + crewToRunnerOptions 重建
 });
@@ -108,22 +115,33 @@ const { runner, state } = await EnhancedRunner.resume(sessionDir, {
 `EnhancedRunner.create()` 接受结构化的配置组：
 
 ```typescript
+import { createWebTools } from '@agentskillmania/wrangler/tools/web';   // Node 专属（jsdom）
+import { loadMCPTools } from '@agentskillmania/wrangler/tools/mcp';     // Node 专属（MCP）
+import { Sandbox } from '@agentskillmania/sandbox';
+
 await EnhancedRunner.create({
+  runtime: new NodeHostEnv(),           // 必传
   workspacePath: '/project',
 
   llm: {
-    client: llmClient,           // 或 quickInit: { providers } + quickInitFactory（宿主注入创建器，如 LLMClient.quickInit 包装）
+    client: llmClient,           // 或 quickInit: { providers } + quickInitFactory（宿主注入创建器，如 (p) => LLMClient.quickInit({ providers: p })）
     model: 'gpt-4o',
     temperature: 0.7,
     requestTimeout: 120_000,
   },
   skills: { dirs: ['/skills'] },
   tools: {
-    builtinFilter: { shell: true, python: false }, // 白名单
+    builtinFilter: { shell: true, python: false }, // 对 10 个 core 工具的白名单
+    // Node 专属工具由宿主组装注入——主入口不捆绑：
+    injectFactory: (deps) => createWebTools({ deps, provider: 'sogou' }),
     mcpConfigPaths: ['./mcp.json'],
+    mcpLoader: (paths) => loadMCPTools({ configPaths: paths }),
     askHumanHandler: myHandler,
   },
-  sandbox: { enabled: true },
+  sandbox: {
+    enabled: true,
+    instance: new Sandbox({ sandboxDir: '/project' }), // 宿主构造
+  },
   thinking: { enabled: true, promptLevel: false },
   session: { enabled: true, baseDir: '/sessions' },
   todolist: { enabled: true },

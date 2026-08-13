@@ -7,11 +7,11 @@
 
 ## 包
 
-| 包 | 说明 |
-|---------|-------------|
-| [`@agentskillmania/wrangler`](./packages/wrangler/) | 核心库 —— 智能体与团队配置加载、`EnhancedRunner`、技能管理、工作空间组合和 MCP 工具集成 |
-| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | 开发工具包 —— 项目脚手架、评估框架、内置技能 |
-| [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/) | HTTP API 服务器 —— 通过 REST/SSE 暴露智能体会话、技能管理和 devtool 端点 |
+| 包                                                                  | 说明                                                                                    |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| [`@agentskillmania/wrangler`](./packages/wrangler/)                 | 核心库 —— 智能体与团队配置加载、`EnhancedRunner`、技能管理、工作空间组合和 MCP 工具集成 |
+| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | 开发工具包 —— 项目脚手架、评估框架、内置技能                                            |
+| [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/)   | HTTP API 服务器 —— 通过 REST/SSE 暴露智能体会话、技能管理和 devtool 端点                |
 
 ## 快速开始
 
@@ -35,7 +35,7 @@ llm:
   providers:
     - name: openai
       apiKey: sk-your-key
-      baseUrl: https://api.openai.com/v1  # 可选
+      baseUrl: https://api.openai.com/v1 # 可选
       models:
         - modelId: gpt-4o
 ```
@@ -48,13 +48,15 @@ llm:
 
 ```typescript
 import { AgentLoader, EnhancedRunner } from '@agentskillmania/wrangler';
+import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 
-// 1. 加载智能体定义
-const agent = await AgentLoader.loadFrom('./my-agent');
+// 1. 加载智能体定义（runtime 必传——引擎 core 零 Node 依赖）
+const agent = await AgentLoader.loadFrom('./my-agent', new NodeHostEnv());
 
-// 2. 创建 runner（llmClient 可以是任意 ILLMProvider，如 createLLMClient 或自定义）
+// 2. 创建 runner（llmClient 可以是任意 ILLMProvider，如 LLMClient.quickInit 或自定义）
 const runner = await EnhancedRunner.create({
+  runtime: new NodeHostEnv(), // 必传
   llm: { client: llmClient, model: 'gpt-4o' },
   workspacePath: process.cwd(),
   skills: { dirs: agent.skillDirs },
@@ -70,6 +72,8 @@ state = addUserMessage(state, '请审查这个项目');
 const { result } = await runner.run(state);
 ```
 
+> **Node 专属能力均由宿主注入**：web 工具（`web_fetch`/`web_search`，jsdom 爬虫）在 `@agentskillmania/wrangler/tools/web`；MCP 加载在 `@agentskillmania/wrangler/tools/mcp`；sandbox 实例由宿主构造。完整接法见 [包 README](./packages/wrangler/README.zh_CN.md)。
+
 ### 从 `CREW.md` 运行团队
 
 团队（crew）是配置层，不是独立运行时：`CrewLoader` 解析 `CREW.md` + `agents/*.md`，`crewToRunnerOptions()` 把它们转换成 `EnhancedRunner` 选项。主智能体作为普通智能体运行，其他智能体成为子代理，通过 `delegate` 工具调用（子代理继承父智能体的工具和技能）。
@@ -78,10 +82,11 @@ const { result } = await runner.run(state);
 import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 
-const crew = await new CrewLoader('./my-crew').load();
+const crew = await new CrewLoader('./my-crew', new NodeHostEnv()).load();
 
 const runner = await EnhancedRunner.create({
   ...crewToRunnerOptions(crew),
+  runtime: new NodeHostEnv(), // 必传
   llm: { client: llmClient, model: 'gpt-4o' },
   workspacePath: process.cwd(),
 });
@@ -93,15 +98,19 @@ const { result } = await runner.run(state);
 
 ### `EnhancedRunner.create` 关键选项
 
-| 选项 | 含义 |
-|--------|---------|
-| `llm.client` / `llm.quickInit.providers` | LLM provider 注入，或从 provider 列表快速初始化 |
-| `systemPrompt` | 附加系统提示词（与内建时间头合并） |
-| `skills.dirs` / `skills.provider` | 要扫描的技能目录；或注入的 `ISkillProvider`（如浏览器里基于 OPFS 的实现） |
-| `tools.deps` / `tools.builtinFilter` / `tools.mcpConfigPaths` | 工具依赖（宿主 OS 访问）、内置工具白名单、MCP 配置 |
-| `runtime` | 宿主环境（默认 `NodeHostEnv`；浏览器注入基于 OPFS 的 HostEnv） |
-| `sandbox`、`thinking`、`session`、`commands`、`specPlan`、`todolist`、`a2ui` | 功能分组 |
-| `subAgents` | 子代理配置（启用 `delegate` 工具） |
+| 选项                                                              | 含义                                                                                                        |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `runtime`                                                         | **必传**宿主环境——Node：`new NodeHostEnv()`（子路径）；浏览器：基于 OPFS 的 HostEnv。主入口零 Node 导入     |
+| `llm.client` / `llm.quickInit` + `quickInitFactory`               | LLM provider 注入，或快速初始化配置 + 宿主提供的创建器（如 `(p) => LLMClient.quickInit({ providers: p })`） |
+| `systemPrompt`                                                    | 附加系统提示词（与内建时间头合并）                                                                          |
+| `skills.dirs` / `skills.provider`                                 | 要扫描的技能目录；或注入的 `ISkillProvider`（如浏览器里基于 OPFS 的实现）                                   |
+| `tools.deps`                                                      | 工具依赖（宿主 OS 访问）——注入，无 Node 默认                                                                |
+| `tools.builtinFilter`                                             | 对平台无关 core 工具的白名单过滤                                                                            |
+| `tools.inject` / `tools.injectFactory`                            | 宿主注入工具——web 工具经 `createWebTools`（子路径）接在这里                                                 |
+| `tools.mcpConfigPaths` + `tools.mcpLoader`                        | MCP 配置路径 + 宿主注入的加载器（子路径 `tools/mcp`）                                                       |
+| `sandbox.enabled` + `sandbox.instance`                            | 启用 WASM 沙箱 + 注入宿主构造的实例                                                                         |
+| `thinking`、`session`、`commands`、`specPlan`、`todolist`、`a2ui` | 功能分组                                                                                                    |
+| `subAgents`                                                       | 子代理配置（启用 `delegate` 工具）                                                                          |
 
 ## 使用 Devtool 开发
 

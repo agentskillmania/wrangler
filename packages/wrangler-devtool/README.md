@@ -80,12 +80,12 @@ wrangler-devtool eval evals/baseline.yaml --reporter json
 
 **Options:**
 
-| Flag | Description |
-|---|---|
-| `--runs N` | Override `sampling.runs` |
-| `--output DIR` | Output directory (default: `.eval/runs/<runId>`) |
-| `--reporter console\|json` | Output format (default: `console`) |
-| `--keep-traces` | Keep temporary workspaces after run |
+| Flag                       | Description                                      |
+| -------------------------- | ------------------------------------------------ |
+| `--runs N`                 | Override `sampling.runs`                         |
+| `--output DIR`             | Output directory (default: `.eval/runs/<runId>`) |
+| `--reporter console\|json` | Output format (default: `console`)               |
+| `--keep-traces`            | Keep temporary workspaces after run              |
 
 ## Evaluation Framework
 
@@ -96,13 +96,13 @@ name: code-reviewer-eval
 description: Evaluate the code-reviewer agent
 
 target:
-  type: agent              # agent | skill
-  path: ./                 # agent definition dir (for skill: skill parent dir)
-  skill: null              # when type=skill, the skill name to load
+  type: agent # agent | skill
+  path: ./ # agent definition dir (for skill: skill parent dir)
+  skill: null # when type=skill, the skill name to load
 
 sampling:
-  runs: 3                  # run each case 3 times
-  passThreshold: 0.67      # 2/3 passes required
+  runs: 3 # run each case 3 times
+  passThreshold: 0.67 # 2/3 passes required
   # temperature: 0         # uncomment for deterministic single-run mode
   # maxSteps: 20           # max agent steps per run
 
@@ -112,14 +112,14 @@ cases:
     input:
       message: Review this code for security issues
     context:
-      files:               # fixture files copied into temp workspace
+      files: # fixture files copied into temp workspace
         - source: fixtures/vulnerable.py
           target: src/main.py
       env:
         MODE: strict
     evaluators:
       - type: output_contains
-        value: "SQL injection"
+        value: 'SQL injection'
         caseInsensitive: true
       - type: tool_called
         tool: file_read
@@ -138,22 +138,22 @@ cases:
 
 **Deterministic:**
 
-| Type | Description |
-|---|---|
-| `output_contains` / `output_not_contains` | Check answer text (with `caseInsensitive`) |
-| `output_equals` | Exact match |
-| `output_matches` | Regex match (with `flags`) |
-| `tool_called` / `tool_not_called` | Whether a specific tool was invoked |
-| `tool_called_with` | Tool called with matching arguments (subset) |
-| `tool_call_count` | Number of tool calls within `min`/`max` range |
-| `file_exists` / `file_not_exists` | File presence in workspace (with `contentContains`) |
-| `exit_code` | Run result type (`success`, `error`, `max_steps`, etc.) |
-| `step_count` | Steps within `min`/`max` range |
+| Type                                      | Description                                             |
+| ----------------------------------------- | ------------------------------------------------------- |
+| `output_contains` / `output_not_contains` | Check answer text (with `caseInsensitive`)              |
+| `output_equals`                           | Exact match                                             |
+| `output_matches`                          | Regex match (with `flags`)                              |
+| `tool_called` / `tool_not_called`         | Whether a specific tool was invoked                     |
+| `tool_called_with`                        | Tool called with matching arguments (subset)            |
+| `tool_call_count`                         | Number of tool calls within `min`/`max` range           |
+| `file_exists` / `file_not_exists`         | File presence in workspace (with `contentContains`)     |
+| `exit_code`                               | Run result type (`success`, `error`, `max_steps`, etc.) |
+| `step_count`                              | Steps within `min`/`max` range                          |
 
 **LLM-as-Judge:**
 
-| Type | Description |
-|---|---|
+| Type        | Description                                                                                                                                                    |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `llm-judge` | LLM evaluates the full trace (answer + tool calls) against `criteria` and `rubric`. Supports `reference` golden answer. Uses `temperature: 0` for determinism. |
 
 ### Output structure
@@ -173,13 +173,13 @@ Trace files are JSONL — one JSON event per line (`meta`, `input`, `tool_call`,
 
 Devtool ships five skills that upper-layer agents can load via `load_skill`:
 
-| Skill | Purpose |
-|---|---|
-| `agent-architect` | Design and write agent definitions |
-| `skill-designer` | Design and write skill definitions |
-| `crew-composer` | Compose multi-agent crew definitions |
+| Skill                 | Purpose                                         |
+| --------------------- | ----------------------------------------------- |
+| `agent-architect`     | Design and write agent definitions              |
+| `skill-designer`      | Design and write skill definitions              |
+| `crew-composer`       | Compose multi-agent crew definitions            |
 | `definition-reviewer` | Review agent/skill/crew definitions for quality |
-| `session-curator` | Manage and organize conversation sessions |
+| `session-curator`     | Manage and organize conversation sessions       |
 
 Upper-layer applications import `BUILTIN_SKILLS_DIR` and add it to `skills.dirs`:
 
@@ -187,6 +187,7 @@ Upper-layer applications import `BUILTIN_SKILLS_DIR` and add it to `skills.dirs`
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 
 const runner = await EnhancedRunner.create({
+  runtime: new NodeHostEnv(), // required
   skills: { dirs: [BUILTIN_SKILLS_DIR] },
   // ...
 });
@@ -210,11 +211,11 @@ llm:
       apiKey: sk-your-key
       baseUrl: https://api.example.com/v1
       models:
-        - modelId: glm-5.1    # agent being evaluated
-        - modelId: glm-5.2    # available for judge
+        - modelId: glm-5.1 # agent being evaluated
+        - modelId: glm-5.2 # available for judge
 
 judge:
-  model: glm-5.2              # use a stronger model for judging
+  model: glm-5.2 # use a stronger model for judging
 ```
 
 ## Programmatic API

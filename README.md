@@ -8,11 +8,11 @@
 
 ## Packages
 
-| Package | Description |
-|---------|-------------|
-| [`@agentskillmania/wrangler`](./packages/wrangler/) | Core library — agent & crew configuration loading, `EnhancedRunner`, skill management, workspace composition, and MCP tool integration |
-| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | Development toolkit — project scaffolding, evaluation framework, and built-in skills |
-| [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/) | HTTP API server — exposes agent sessions, skill management, and devtool endpoints via REST/SSE |
+| Package                                                             | Description                                                                                                                            |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@agentskillmania/wrangler`](./packages/wrangler/)                 | Core library — agent & crew configuration loading, `EnhancedRunner`, skill management, workspace composition, and MCP tool integration |
+| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | Development toolkit — project scaffolding, evaluation framework, and built-in skills                                                   |
+| [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/)   | HTTP API server — exposes agent sessions, skill management, and devtool endpoints via REST/SSE                                         |
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ llm:
   providers:
     - name: openai
       apiKey: sk-your-key
-      baseUrl: https://api.openai.com/v1  # optional
+      baseUrl: https://api.openai.com/v1 # optional
       models:
         - modelId: gpt-4o
 ```
@@ -49,13 +49,15 @@ Create an agent directory with an `AGENT.md` (YAML frontmatter for name/instruct
 
 ```typescript
 import { AgentLoader, EnhancedRunner } from '@agentskillmania/wrangler';
+import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 
-// 1. Load the agent definition
-const agent = await AgentLoader.loadFrom('./my-agent');
+// 1. Load the agent definition (runtime is required — engine core has no Node imports)
+const agent = await AgentLoader.loadFrom('./my-agent', new NodeHostEnv());
 
-// 2. Create the runner (llmClient: any ILLMProvider, e.g. createLLMClient or your own)
+// 2. Create the runner (llmClient: any ILLMProvider, e.g. LLMClient.quickInit or your own)
 const runner = await EnhancedRunner.create({
+  runtime: new NodeHostEnv(), // required
   llm: { client: llmClient, model: 'gpt-4o' },
   workspacePath: process.cwd(),
   skills: { dirs: agent.skillDirs },
@@ -71,6 +73,8 @@ state = addUserMessage(state, '请审查这个项目');
 const { result } = await runner.run(state);
 ```
 
+> **Node-only capabilities are host-injected**: web tools (`web_fetch`/`web_search`, jsdom-based) live in `@agentskillmania/wrangler/tools/web`; MCP loading lives in `@agentskillmania/wrangler/tools/mcp`; the sandbox instance is constructed by the host. See the [package README](./packages/wrangler/README.md) for the full wiring.
+
 ### Run a crew from `CREW.md`
 
 A crew is a configuration layer, not a separate runtime: `CrewLoader` parses `CREW.md` + `agents/*.md`, and `crewToRunnerOptions()` converts them into `EnhancedRunner` options. The primary agent runs as a normal agent; other agents become sub-agents invoked via the `delegate` tool (sub-agents inherit the parent's tools and skills).
@@ -79,10 +83,11 @@ A crew is a configuration layer, not a separate runtime: `CrewLoader` parses `CR
 import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 
-const crew = await new CrewLoader('./my-crew').load();
+const crew = await new CrewLoader('./my-crew', new NodeHostEnv()).load();
 
 const runner = await EnhancedRunner.create({
   ...crewToRunnerOptions(crew),
+  runtime: new NodeHostEnv(), // required
   llm: { client: llmClient, model: 'gpt-4o' },
   workspacePath: process.cwd(),
 });
@@ -94,15 +99,19 @@ const { result } = await runner.run(state);
 
 ### Key options of `EnhancedRunner.create`
 
-| Option | Meaning |
-|--------|---------|
-| `llm.client` / `llm.quickInit.providers` | LLM provider injection, or quick init from provider list |
-| `systemPrompt` | Extra system prompt (merged with the built-in time header) |
-| `skills.dirs` / `skills.provider` | Skill directories to scan; or an injected `ISkillProvider` (e.g. OPFS-backed in browsers) |
-| `tools.deps` / `tools.builtinFilter` / `tools.mcpConfigPaths` | Tool dependencies (host OS access), builtin tool whitelist, MCP configs |
-| `runtime` | Host environment (defaults to `NodeHostEnv`; browsers inject a HostEnv over OPFS) |
-| `sandbox`, `thinking`, `session`, `commands`, `specPlan`, `todolist`, `a2ui` | Feature groups |
-| `subAgents` | Sub-agent configs (enables the `delegate` tool) |
+| Option                                                            | Meaning                                                                                                                               |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `runtime`                                                         | **Required** host environment — Node: `new NodeHostEnv()` (subpath); browser: OPFS-backed HostEnv. The main entry has no Node imports |
+| `llm.client` / `llm.quickInit` + `quickInitFactory`               | LLM provider injection, or quick-init config with a host-provided creator (e.g. `(p) => LLMClient.quickInit({ providers: p })`)       |
+| `systemPrompt`                                                    | Extra system prompt (merged with the built-in time header)                                                                            |
+| `skills.dirs` / `skills.provider`                                 | Skill directories to scan; or an injected `ISkillProvider` (e.g. OPFS-backed in browsers)                                             |
+| `tools.deps`                                                      | Tool dependencies (host OS access) — injected, no Node default                                                                        |
+| `tools.builtinFilter`                                             | Whitelist filter over the platform-neutral core tools                                                                                 |
+| `tools.inject` / `tools.injectFactory`                            | Host-injected tools — web tools via `createWebTools` (subpath) attach here                                                            |
+| `tools.mcpConfigPaths` + `tools.mcpLoader`                        | MCP config paths, plus a host-injected loader (subpath `tools/mcp`)                                                                   |
+| `sandbox.enabled` + `sandbox.instance`                            | Enable the WASM sandbox and inject the host-constructed instance                                                                      |
+| `thinking`, `session`, `commands`, `specPlan`, `todolist`, `a2ui` | Feature groups                                                                                                                        |
+| `subAgents`                                                       | Sub-agent configs (enables the `delegate` tool)                                                                                       |
 
 ## Development with Devtool
 
