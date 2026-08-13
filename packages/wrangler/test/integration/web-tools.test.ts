@@ -13,6 +13,7 @@
  */
 
 import { describe, beforeAll, expect } from 'vitest';
+import { LLMClient } from '@agentskillmania/llm-client';
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { createWebFetchTool } from '../../src/tools/builtin/web-fetch.js';
 import { MarkdownMessageAssembler } from '../../src/runner/markdown-assembler.js';
@@ -41,7 +42,7 @@ describe('Web Tools E2E Integration Tests', () => {
 
     return new AgentRunner({
       model: testConfig.testModel,
-      llm: {
+      llmClient: LLMClient.quickInit({
         providers: [
           {
             name: testConfig.provider,
@@ -50,7 +51,7 @@ describe('Web Tools E2E Integration Tests', () => {
             models: [{ modelId: testConfig.testModel }],
           },
         ],
-      },
+      }),
       tools,
       middleware: [],
       messageAssembler: new MarkdownMessageAssembler(),

@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
+import { LLMClient } from '@agentskillmania/llm-client';
 import { SogouScrapeSearchProvider } from '../../src/tools/builtin/sogou-scrape-search.js';
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { createWebSearchTool } from '../../src/tools/builtin/web-search.js';
@@ -118,7 +119,7 @@ describe('web_search with SogouScrapeSearchProvider (LLM E2E)', () => {
 
     return new AgentRunner({
       model: testConfig.testModel,
-      llm: {
+      llmClient: LLMClient.quickInit({
         providers: [
           {
             name: testConfig.provider,
@@ -127,7 +128,7 @@ describe('web_search with SogouScrapeSearchProvider (LLM E2E)', () => {
             models: [{ modelId: testConfig.testModel }],
           },
         ],
-      },
+      }),
       tools,
       middleware: [],
       messageAssembler: new MarkdownMessageAssembler(),

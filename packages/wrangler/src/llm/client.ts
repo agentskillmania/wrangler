@@ -1,13 +1,12 @@
 /**
- * @fileoverview LLM client factory for wrangler
+ * @fileoverview LLM client factory for wrangler（Node 宿主用）。
  *
- * Builds an {@link LLMClient} from a list of providers in the colts
- * `LLMQuickInit` format. Each provider has exactly one API key and a list
- * of models.
+ * 装配逻辑在 llm-client 的 LLMClient.quickInit。此模块仅供 Node 宿主
+ * （daemon）import——wrangler core 不 import 它（引擎不捆绑内置 LLM）。
  */
 
-import type { LLMProviderEntry } from '@agentskillmania/colts';
-import { LLMClient } from '@agentskillmania/llm-client';
+import type { LLMProviderEntry, LLMClient } from '@agentskillmania/llm-client';
+import { LLMClient as LLMClientImpl } from '@agentskillmania/llm-client';
 
 /**
  * Create an LLMClient from a list of providers.
@@ -16,43 +15,5 @@ import { LLMClient } from '@agentskillmania/llm-client';
  * @returns Configured LLMClient
  */
 export function createLLMClient(providers: LLMProviderEntry[]): LLMClient {
-  const client = new LLMClient();
-
-  for (const provider of providers) {
-    const providerConcurrency = provider.maxConcurrency ?? 5;
-
-    client.registerProvider({
-      name: provider.name,
-      baseUrl: provider.baseUrl,
-      maxConcurrency: providerConcurrency,
-    });
-
-    client.registerApiKey({
-      key: provider.apiKey,
-      provider: provider.name,
-      maxConcurrency: providerConcurrency,
-      models: provider.models.map((model) => ({
-        modelId: model.modelId,
-        maxConcurrency: model.maxConcurrency ?? 3,
-        contextWindow: model.contextWindow,
-        maxTokens: model.maxTokens,
-        reasoning: model.reasoning,
-        input: model.input,
-      })),
-    });
-  }
-
-  return client;
-}
-
-/**
- * Resolve the default model identifier from a provider list.
- *
- * Uses the first model of the first provider.
- *
- * @param providers - Provider list
- * @returns Default model id
- */
-export function resolveDefaultModel(providers: LLMProviderEntry[]): string {
-  return providers[0]?.models[0]?.modelId;
+  return LLMClientImpl.quickInit({ providers });
 }

@@ -35,8 +35,9 @@ export type { DelegateToolDeps, SubAgentRunnerFactory } from './subagent/index.j
 export { createSubAgentRunner } from './runner/sub-agent-runner.js';
 export type { SubAgentRunnerOptions } from './runner/sub-agent-runner.js';
 
-// LLM client factory
-export { createLLMClient, resolveDefaultModel } from './llm/client.js';
+// LLM client factory（createLLMClient 仅供 Node 宿主；resolveDefaultModel 纯函数）
+export { createLLMClient } from './llm/client.js';
+export { resolveDefaultModel } from './llm/resolve-model.js';
 
 // Agent (Layer 5)
 export { parseAgentMd } from './agent/index.js';

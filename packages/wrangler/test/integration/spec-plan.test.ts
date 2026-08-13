@@ -14,6 +14,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { EnhancedRunner } from '../../src/runner/enhanced-runner.js';
 import { testConfig, itif } from './config.js';
+import { LLMClient } from '@agentskillmania/llm-client';
 
 describe('Spec/Plan Tool-Driven Integration', () => {
   beforeAll(() => {
@@ -43,6 +44,7 @@ describe('Spec/Plan Tool-Driven Integration', () => {
               },
             ],
             },
+            quickInitFactory: (providers) => LLMClient.quickInit({ providers }),
           },
           model: testConfig.testModel,
           session: { enabled: false },
@@ -109,6 +111,7 @@ You have access to spec-plan tools. Your task:
               },
             ],
             },
+            quickInitFactory: (providers) => LLMClient.quickInit({ providers }),
           },
           model: testConfig.testModel,
           session: { enabled: false },
@@ -191,6 +194,7 @@ Report what you did and confirm each step succeeded.
               },
             ],
             },
+            quickInitFactory: (providers) => LLMClient.quickInit({ providers }),
           },
           model: testConfig.testModel,
           session: { enabled: false },

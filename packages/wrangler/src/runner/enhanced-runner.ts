@@ -37,7 +37,7 @@ import { createCompactHandler } from '../command/handlers/compact.js';
 import { createSkillHandler } from '../command/handlers/skill.js';
 import { createSkillsHandler } from '../command/handlers/skills.js';
 import { CommandRegistry } from '../command/registry.js';
-import { createLLMClient, resolveDefaultModel } from '../llm/client.js';
+import { resolveDefaultModel } from '../llm/resolve-model.js';
 import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
 import { createSessionSupport } from '../session/support.js';
@@ -92,7 +92,15 @@ function resolveLLMClient(options: { llm?: LLMConfig }): ILLMProvider {
   }
   if (client) return client;
   if (quickInit?.providers && quickInit.providers.length > 0) {
-    return createLLMClient(quickInit.providers);
+    // 引擎不捆绑内置 LLM——quickInit 的创建器由宿主注入
+    // （Node 宿主传 LLMClient.quickInit，浏览器宿主不用 quickInit）
+    const factory = llmGroup?.quickInitFactory;
+    if (!factory) {
+      throw new Error(
+        'llm.quickInit requires llm.quickInitFactory (e.g. (providers) => LLMClient.quickInit({ providers })) — wrangler core does not bundle the built-in LLM client.'
+      );
+    }
+    return factory(quickInit.providers);
   }
   throw new Error('Must specify either llm.client or llm.quickInit.');
 }

@@ -13,6 +13,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { LLMClient } from '@agentskillmania/llm-client';
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -29,7 +30,7 @@ const itif = (condition: boolean) => (condition ? it : it.skip);
 function makeRunner(tools: ReturnType<typeof createBuiltinTools>) {
   return new AgentRunner({
     model: testModel,
-    llm: {
+    llmClient: LLMClient.quickInit({
       providers: [
         {
           name: provider,
@@ -38,7 +39,7 @@ function makeRunner(tools: ReturnType<typeof createBuiltinTools>) {
           models: [{ modelId: testModel }],
         },
       ],
-    },
+    }),
     tools,
   });
 }

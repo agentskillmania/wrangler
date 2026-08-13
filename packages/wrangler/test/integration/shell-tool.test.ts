@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { LLMClient } from '@agentskillmania/llm-client';
 import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { createShellTool } from '../../src/tools/builtin/shell.js';
 import { HostToolDeps } from '../../src/tools/builtin/workspace-deps.js';
@@ -49,7 +50,7 @@ describe('US1: LLM executes shell command and reports result', () => {
       const shellTool = createShellTool(deps);
       const runner = new AgentRunner({
         model: testConfig.testModel,
-        llm: {
+        llmClient: LLMClient.quickInit({
           providers: [
             {
               name: testConfig.provider,
@@ -58,7 +59,7 @@ describe('US1: LLM executes shell command and reports result', () => {
               models: [{ modelId: testConfig.testModel }],
             },
           ],
-        },
+        }),
         tools: [shellTool],
         middleware: [],
         messageAssembler: new MarkdownMessageAssembler(),
@@ -100,7 +101,7 @@ describe('US2: LLM uses shell tool for computation', () => {
       const shellTool = createShellTool(deps);
       const runner = new AgentRunner({
         model: testConfig.testModel,
-        llm: {
+        llmClient: LLMClient.quickInit({
           providers: [
             {
               name: testConfig.provider,
@@ -109,7 +110,7 @@ describe('US2: LLM uses shell tool for computation', () => {
               models: [{ modelId: testConfig.testModel }],
             },
           ],
-        },
+        }),
         tools: [shellTool],
         middleware: [],
         messageAssembler: new MarkdownMessageAssembler(),
@@ -153,7 +154,7 @@ describe('US3: LLM handles shell command failure gracefully', () => {
       const shellTool = createShellTool(deps);
       const runner = new AgentRunner({
         model: testConfig.testModel,
-        llm: {
+        llmClient: LLMClient.quickInit({
           providers: [
             {
               name: testConfig.provider,
@@ -162,7 +163,7 @@ describe('US3: LLM handles shell command failure gracefully', () => {
               models: [{ modelId: testConfig.testModel }],
             },
           ],
-        },
+        }),
         tools: [shellTool],
         middleware: [],
         messageAssembler: new MarkdownMessageAssembler(),

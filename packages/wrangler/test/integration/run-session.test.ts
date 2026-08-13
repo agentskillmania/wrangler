@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { LLMClient } from '@agentskillmania/llm-client';
 import { createSessionSupport } from '../../src/session/support.js';
 import { defaultNodeHostEnv } from '../../src/host-env/node-host-env.js';
 import {
@@ -27,7 +28,7 @@ import { testConfig, itif } from './config.js';
 function makeRunner(tools: ToolDefinition[], middleware: unknown[]) {
   return new AgentRunner({
     model: testConfig.testModel,
-    llm: {
+    llmClient: LLMClient.quickInit({
       providers: [
         {
           name: testConfig.provider,
@@ -36,7 +37,7 @@ function makeRunner(tools: ToolDefinition[], middleware: unknown[]) {
           models: [{ modelId: testConfig.testModel }],
         },
       ],
-    },
+    }),
     tools,
     middleware,
   });

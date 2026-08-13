@@ -68,6 +68,11 @@ export interface LLMConfig {
   client?: ILLMProvider;
   /** LLM quick initialization config (multi-provider, one apiKey per provider) */
   quickInit?: LLMQuickInit;
+  /**
+   * quickInit 的创建器注入（Node 宿主传 LLMClient.quickInit）——
+   * wrangler core 不捆绑内置 LLM，用 quickInit 时必须提供。
+   */
+  quickInitFactory?: (providers: LLMProviderEntry[]) => ILLMProvider;
   /** Model identifier */
   model?: string;
   /** Sampling temperature (passed through to LLM provider) */
