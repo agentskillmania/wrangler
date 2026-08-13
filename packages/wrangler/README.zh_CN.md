@@ -112,7 +112,7 @@ await EnhancedRunner.create({
   workspacePath: '/project',
 
   llm: {
-    client: llmClient,           // 或 quickInit 支持多 provider
+    client: llmClient,           // 或 quickInit: { providers } + quickInitFactory（宿主注入创建器，如 LLMClient.quickInit 包装）
     model: 'gpt-4o',
     temperature: 0.7,
     requestTimeout: 120_000,
