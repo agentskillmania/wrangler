@@ -1,10 +1,17 @@
 {
   "name": "@agentskillmania/wrangler-devtool",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Devtool library for Wrangler — development tooling and utilities.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "wrangler-devtool": "dist/cli/main.js"
   },
