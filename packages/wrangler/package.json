@@ -1,6 +1,6 @@
 {
   "name": "@agentskillmania/wrangler",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Core library for Wrangler — agent crew orchestration, skill management, and workspace composition.",
   "type": "module",
   "main": "dist/index.js",
