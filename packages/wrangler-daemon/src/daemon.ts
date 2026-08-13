@@ -2,14 +2,13 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { setDefaultSkillFsOps } from '@agentskillmania/colts';
+import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
 import Fastify, {
   type FastifyInstance,
   type FastifyReply,
   type FastifyServerOptions,
 } from 'fastify';
-
-import { setDefaultSkillFsOps } from '@agentskillmania/colts';
-import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
 
 import { CONFIG_PATH, AGENTS_DIR, SKILLS_DIR, SESSIONS_DIR, CREWS_DIR } from './constants.js';
 import { ConfigManager } from './core/config-manager.js';

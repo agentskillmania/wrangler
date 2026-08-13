@@ -58,7 +58,8 @@ describe('US2: SessionStore conversation model', () => {
     // snapshot) is now the sole conversation persistence mechanism.
     // The integration test below (saveState/loadState) covers this contract.
     it('saves and loads AgentState via state.json', async () => {
-      const session = createSessionSupport({ runtime: defaultNodeHostEnv,
+      const session = createSessionSupport({
+        runtime: defaultNodeHostEnv,
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });
@@ -75,7 +76,8 @@ describe('US2: SessionStore conversation model', () => {
     });
 
     it('returns null for non-existent session on loadState', async () => {
-      const session = createSessionSupport({ runtime: defaultNodeHostEnv,
+      const session = createSessionSupport({
+        runtime: defaultNodeHostEnv,
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });
@@ -88,7 +90,8 @@ describe('US2: SessionStore conversation model', () => {
   itif(testConfig.enabled)(
     'session-middleware saves AgentState to state.json on agent run',
     async () => {
-      const session = createSessionSupport({ runtime: defaultNodeHostEnv,
+      const session = createSessionSupport({
+        runtime: defaultNodeHostEnv,
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });

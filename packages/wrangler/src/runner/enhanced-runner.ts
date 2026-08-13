@@ -37,12 +37,12 @@ import { createCompactHandler } from '../command/handlers/compact.js';
 import { createSkillHandler } from '../command/handlers/skill.js';
 import { createSkillsHandler } from '../command/handlers/skills.js';
 import { CommandRegistry } from '../command/registry.js';
+import type { HostEnv } from '../host-env/index.js';
+import { NodeHostEnv } from '../host-env/node-host-env.js';
 import { resolveDefaultModel } from '../llm/resolve-model.js';
 import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
 import { createSessionSupport } from '../session/support.js';
-import type { HostEnv } from '../host-env/index.js';
-import { NodeHostEnv } from '../host-env/node-host-env.js';
 import { PlanStore } from '../spec-plan/plan-store.js';
 import { SpecStore } from '../spec-plan/spec-store.js';
 import { createDelegateTool } from '../subagent/delegate-tool.js';
@@ -314,8 +314,9 @@ export class EnhancedRunner {
     if (skillProvider) {
       const maxOutputSize = options.limits?.maxToolOutput ?? DEFAULT_MAX_TOOL_OUTPUT;
       const toolTimeout = options.limits?.toolTimeout ?? 600_000;
-      const depsForSkills: ToolDeps = options.tools?.deps
-        ?? (sandboxInstance
+      const depsForSkills: ToolDeps =
+        options.tools?.deps ??
+        (sandboxInstance
           ? new SandboxToolDeps(sandboxInstance, maxOutputSize, toolTimeout)
           : new HostToolDeps(runtime, workspacePath, maxOutputSize, undefined, toolTimeout));
       skillTools.push(createReadResourceTool(skillProvider));
@@ -512,7 +513,11 @@ export class EnhancedRunner {
 
     // Build skill metadata from the injected provider (if any).
     const skillMeta: SkillMetadata[] = skillProvider
-      ? (await skillProvider.listSkills()).map((s) => ({ name: s.name, description: s.description, source: s.source }))
+      ? (await skillProvider.listSkills()).map((s) => ({
+          name: s.name,
+          description: s.description,
+          source: s.source,
+        }))
       : [];
 
     // Build tool registry and optionally wrap with confirmation

@@ -69,8 +69,7 @@ export class SogouScrapeSearchProvider implements SearchProvider {
       const href = link.getAttribute('href') ?? '';
       // Snippet lives in p.star-wiki on most results; some blocks (e.g.
       // zhihu cards) use .fz-mid instead — keep the fallback.
-      const snippetEl =
-        item.querySelector('p.star-wiki') ?? item.querySelector('.fz-mid');
+      const snippetEl = item.querySelector('p.star-wiki') ?? item.querySelector('.fz-mid');
       const snippet = snippetEl?.textContent?.trim() ?? '';
 
       if (title && href) {

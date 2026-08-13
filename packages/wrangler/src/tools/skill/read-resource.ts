@@ -5,10 +5,10 @@
  * load_skill (which returns only the SKILL.md body) by giving the agent access
  * to reference documents, scripts, and any other bundled resources.
  */
-import { z } from 'zod';
 
 import type { ISkillProvider } from '@agentskillmania/colts';
 import type { Tool } from '@agentskillmania/colts';
+import { z } from 'zod';
 import type { ZodTypeAny } from 'zod';
 
 /**

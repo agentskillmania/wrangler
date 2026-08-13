@@ -1,7 +1,6 @@
-import type { FastifyInstance } from 'fastify';
-
 import { FilesystemSkillProvider } from '@agentskillmania/colts';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
+import type { FastifyInstance } from 'fastify';
 
 import type { DecoratedFastifyInstance } from '../types.js';
 
@@ -86,7 +85,10 @@ export async function skillRoutes(fastify: FastifyInstance): Promise<void> {
     const query = request.query as { dirs?: string };
     const dirs = [
       BUILTIN_SKILLS_DIR,
-      ...(query.dirs?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),
+      ...(query.dirs
+        ?.split(',')
+        .map((s) => s.trim())
+        .filter(Boolean) ?? []),
     ];
     const provider = new FilesystemSkillProvider(dirs);
     return { skills: await provider.listSkills() };

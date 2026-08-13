@@ -3,7 +3,6 @@ import { calculatorTool, createAskHumanTool } from '@agentskillmania/colts';
 import type { Sandbox } from '@agentskillmania/sandbox';
 import type { ZodTypeAny } from 'zod';
 
-import { SogouScrapeSearchProvider } from './sogou-scrape-search.js';
 import { createFileEditTool } from './file-edit.js';
 import { createFileReadTool } from './file-read.js';
 import { createFileWriteTool } from './file-write.js';
@@ -13,12 +12,13 @@ import { createGrepTool } from './grep.js';
 import { createListDirTool } from './list-dir.js';
 import { createPythonTool } from './python.js';
 import { createShellTool } from './shell.js';
+import { SogouScrapeSearchProvider } from './sogou-scrape-search.js';
 import { createWebFetchTool } from './web-fetch.js';
 import type { SearchProvider } from './web-search.js';
 import { createWebSearchTool } from './web-search.js';
-import { NodeHostEnv } from '../../host-env/node-host-env.js';
 import { HostToolDeps, SandboxToolDeps, DEFAULT_MAX_TOOL_OUTPUT } from './workspace-deps.js';
 import type { ToolDeps } from './workspace-deps.js';
+import { NodeHostEnv } from '../../host-env/node-host-env.js';
 
 export interface BuiltinToolsOptions {
   workspacePath: string;
@@ -43,10 +43,17 @@ export interface BuiltinToolsOptions {
 export function createBuiltinTools(options: BuiltinToolsOptions): Tool<ZodTypeAny>[] {
   const maxOutputSize = options.maxOutputSize ?? DEFAULT_MAX_TOOL_OUTPUT;
   const toolTimeout = options.toolTimeout ?? 600_000;
-  const deps: ToolDeps = options.deps
-    ?? (options.sandbox
+  const deps: ToolDeps =
+    options.deps ??
+    (options.sandbox
       ? new SandboxToolDeps(options.sandbox, maxOutputSize, toolTimeout)
-      : new HostToolDeps(new NodeHostEnv(), options.workspacePath, maxOutputSize, undefined, toolTimeout));
+      : new HostToolDeps(
+          new NodeHostEnv(),
+          options.workspacePath,
+          maxOutputSize,
+          undefined,
+          toolTimeout
+        ));
 
   // Default provider matches the enhanced runner + Rust (sogou).
   const searchProvider = options.searchProvider ?? new SogouScrapeSearchProvider();

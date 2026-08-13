@@ -3,9 +3,9 @@
 import type { AgentMiddleware, ILLMProvider } from '@agentskillmania/colts';
 
 import { SessionStore } from './session-store.js';
+import type { HostEnv } from '../host-env/index.js';
 import { createSessionMiddleware } from '../middleware/session-middleware.js';
 import { createSessionNamingMiddleware } from '../middleware/session-naming-middleware.js';
-import type { HostEnv } from '../host-env/index.js';
 import type { RunnerConfigSnapshot, SessionSource } from '../types.js';
 
 /**
@@ -44,7 +44,7 @@ export function createSessionSupport(options: {
     : new SessionStore(
         options.sessionBaseDir ?? runtime.path.join(runtime.env.appDataDir(), 'sessions'),
         options.workspacePath,
-        runtime,
+        runtime
       );
 
   const sessionMiddleware = createSessionMiddleware(store, {

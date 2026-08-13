@@ -10,10 +10,10 @@ import { exec, execFile, execSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { statSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import * as nodePath from 'node:path';
 import { promisify } from 'node:util';
-import { createRequire } from 'node:module';
 
 import fglob from 'fast-glob';
 import { isBinaryFile as detectBinary } from 'isbinaryfile';
@@ -167,7 +167,12 @@ class NodeHostEnvFs implements HostEnvFs {
     }
   }
 
-  async editFile(path: string, oldString: string, newString: string, replaceAll?: boolean): Promise<string> {
+  async editFile(
+    path: string,
+    oldString: string,
+    newString: string,
+    replaceAll?: boolean
+  ): Promise<string> {
     let content = await fs.readFile(path, 'utf-8');
     if (replaceAll) {
       content = content.split(oldString).join(newString);
@@ -186,7 +191,11 @@ class NodeHostEnvFs implements HostEnvFs {
     return fglob(pattern, { cwd: options?.cwd, onlyFiles: true });
   }
 
-  async grep(pattern: string, path: string, options?: { cwd?: string; include?: string }): Promise<string> {
+  async grep(
+    pattern: string,
+    path: string,
+    options?: { cwd?: string; include?: string }
+  ): Promise<string> {
     // 用 ripgrep（与原版 HostToolDeps.grep 完全一致的调用逻辑）
     const cwd = options?.cwd ?? path;
     const searchPath = nodePath.resolve(cwd, path);
@@ -319,7 +328,8 @@ class NodeHostEnvResources implements HostEnvResources {
     if (cached !== undefined) return cached;
     // 定位 wrangler 包内的 spec-plan/skills/{name}/SKILL.md
     const wranglerPkg = this.resolvePackagePath('@agentskillmania/wrangler');
-    if (!wranglerPkg) throw new Error(`Cannot resolve @agentskillmania/wrangler to load skill doc '${name}'`);
+    if (!wranglerPkg)
+      throw new Error(`Cannot resolve @agentskillmania/wrangler to load skill doc '${name}'`);
     const skillPath = nodePath.join(wranglerPkg, 'dist', 'spec-plan', 'skills', name, 'SKILL.md');
     const content = await fs.readFile(skillPath, 'utf-8');
     this.skillDocCache.set(name, content);

@@ -6,6 +6,7 @@ import type {
   CompressionConfig,
   IContextCompressor,
   LLMQuickInit,
+  LLMProviderEntry,
   ISkillProvider,
 } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';

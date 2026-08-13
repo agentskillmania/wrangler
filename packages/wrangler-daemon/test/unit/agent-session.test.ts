@@ -161,7 +161,6 @@ const testConfig = {
   server: { port: 3100, host: 'localhost' },
 } satisfies import('../../src/types.js').DaemonConfig;
 
-
 /** 注入 factory 使用的 mock LLM 客户端（daemon core 不再捆绑内置 LLM） */
 const mockLLMClient = { call: vi.fn(), stream: vi.fn(), getModelMeta: vi.fn() };
 describe('AgentSession', () => {
@@ -706,7 +705,11 @@ describe('AgentSession', () => {
       runnerEmit = mock.emit;
       mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
       session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
     });
@@ -766,7 +769,11 @@ describe('AgentSession', () => {
       mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       const testSession = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -807,7 +814,11 @@ describe('AgentSession', () => {
       mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       const testSession = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -987,7 +998,12 @@ describe('AgentSession', () => {
       mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       const session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', limits: { maxInputLength: 100 }, llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          limits: { maxInputLength: 100 },
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1027,7 +1043,12 @@ describe('AgentSession', () => {
       mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       const session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', limits: { maxInputLength: 100 }, llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          limits: { maxInputLength: 100 },
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1058,7 +1079,11 @@ describe('AgentSession', () => {
       mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       const session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1102,7 +1127,11 @@ describe('AgentSession', () => {
       mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1154,7 +1183,11 @@ describe('AgentSession', () => {
       mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1194,7 +1227,11 @@ describe('AgentSession', () => {
       mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
 
       session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1214,7 +1251,11 @@ describe('AgentSession', () => {
       mockRunnerWithEvents([['token', { token: 'hi' }], ['complete']]);
 
       const session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1238,7 +1279,11 @@ describe('AgentSession', () => {
       });
 
       const session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1265,7 +1310,11 @@ describe('AgentSession', () => {
       mockRunnerWithEvents([['complete']], finalState);
 
       const session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1329,7 +1378,11 @@ describe('AgentSession', () => {
       mockRunnerWithEvents([['complete']]);
 
       const session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1354,7 +1407,11 @@ describe('AgentSession', () => {
       mockRunnerWithEvents([['complete']]);
 
       const session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1380,7 +1437,11 @@ describe('AgentSession', () => {
       mockRunnerWithEvents([['token', { token: 'hi' }], ['complete']]);
 
       const session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1432,7 +1493,11 @@ describe('AgentSession', () => {
       );
 
       const session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 
@@ -1483,7 +1548,11 @@ describe('AgentSession', () => {
       });
 
       const session = await AgentSession.create(
-        { workspacePath: '/tmp/test', agentName: 'test', llmClientFactory: vi.fn().mockReturnValue(mockLLMClient) },
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
         testConfig
       );
 

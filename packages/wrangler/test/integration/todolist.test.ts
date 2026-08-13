@@ -155,7 +155,8 @@ describe('US3: Todo state persists across sessions', () => {
   itif(testConfig.enabled)(
     'should save and restore todo list across sessions',
     async () => {
-      const session = createSessionSupport({ runtime: defaultNodeHostEnv,
+      const session = createSessionSupport({
+        runtime: defaultNodeHostEnv,
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });

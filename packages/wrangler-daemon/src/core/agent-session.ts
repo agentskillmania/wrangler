@@ -5,7 +5,12 @@
  * Bridges colts AskHuman tool -> SSE -> frontend for human-in-the-loop interaction.
  */
 
-import { createAgentState, addUserMessage, updateState, FilesystemSkillProvider } from '@agentskillmania/colts';
+import {
+  createAgentState,
+  addUserMessage,
+  updateState,
+  FilesystemSkillProvider,
+} from '@agentskillmania/colts';
 import type {
   AgentState,
   RunStreamEvent,
@@ -13,14 +18,15 @@ import type {
   RunnerEventMap,
 } from '@agentskillmania/colts';
 import type { AskHumanHandler, HumanResponse } from '@agentskillmania/colts';
-
-import {
-  EnhancedRunner,
-  SessionStore,
-  resolveDefaultModel,
+import { EnhancedRunner, SessionStore, resolveDefaultModel } from '@agentskillmania/wrangler';
+import type {
+  SubAgentConfig,
+  LimitsConfig,
+  SandboxConfig,
+  HostEnv,
+  ResolvedRunnerConfig,
 } from '@agentskillmania/wrangler';
 import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
-import type { SubAgentConfig, LimitsConfig, SandboxConfig, HostEnv, ResolvedRunnerConfig } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
@@ -62,7 +68,9 @@ export interface AgentSessionResumeOptions {
   /** Sub-agent configs to rebuild crew delegation on resume */
   subAgents?: SubAgentConfig[];
   /** quickInit 创建器（Node 宿主传 LLMClient.quickInit）——daemon core 不捆绑内置 LLM */
-  llmClientFactory?: (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider;
+  llmClientFactory?: (
+    providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
+  ) => import('@agentskillmania/colts').ILLMProvider;
 }
 
 /**
@@ -99,7 +107,9 @@ export interface AgentSessionOptions {
    */
   llmClient?: import('@agentskillmania/colts').ILLMProvider;
   /** quickInit 创建器（Node 宿主传 LLMClient.quickInit）——daemon core 不捆绑内置 LLM */
-  llmClientFactory?: (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider;
+  llmClientFactory?: (
+    providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
+  ) => import('@agentskillmania/colts').ILLMProvider;
   workspacePath: string;
   agentName: string;
   agentInstructions?: string;
@@ -247,8 +257,9 @@ export class AgentSession {
     // Create skill provider: injected provider takes priority; otherwise
     // build from dirs using the globally registered SkillFsOps (nodeFsOps
     // registered above — daemon.ts also registers it at startup).
-    const skillProvider = options.skills?.provider
-      ?? (options.skills?.dirs?.length ? new FilesystemSkillProvider(options.skills.dirs) : undefined);
+    const skillProvider =
+      options.skills?.provider ??
+      (options.skills?.dirs?.length ? new FilesystemSkillProvider(options.skills.dirs) : undefined);
 
     const runner = await EnhancedRunner.create({
       runtime: options.runtime ?? new NodeHostEnv(),

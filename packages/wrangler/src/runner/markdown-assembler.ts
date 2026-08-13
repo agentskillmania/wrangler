@@ -14,11 +14,7 @@
  * - Same-turn thoughts (after last user message) included; cross-turn skipped
  */
 
-import type {
-  AgentState,
-  BuildMessagesOptions,
-  IMessageAssembler,
-} from '@agentskillmania/colts';
+import type { AgentState, BuildMessagesOptions, IMessageAssembler } from '@agentskillmania/colts';
 import type { Message as PiAIMessage, TextContent, ToolCall } from '@mariozechner/pi-ai';
 
 import { shiftHeadings } from './shift-headings.js';

@@ -1,7 +1,7 @@
 import { parseAgentMd } from '../agent/agent-parser.js';
 import type { ParsedAgent } from '../agent/agent-parser.js';
-import { NodeHostEnv } from '../host-env/node-host-env.js';
 import type { HostEnv } from '../host-env/index.js';
+import { NodeHostEnv } from '../host-env/node-host-env.js';
 import type { SessionSource } from '../types.js';
 
 export interface AgentLoadResult extends ParsedAgent {

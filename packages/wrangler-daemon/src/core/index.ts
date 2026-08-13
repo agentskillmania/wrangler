@@ -13,10 +13,7 @@
  */
 
 export { AgentSession, mergeSandboxConfig } from './agent-session.js';
-export type {
-  AgentSessionOptions,
-  AgentSessionResumeOptions,
-} from './agent-session.js';
+export type { AgentSessionOptions, AgentSessionResumeOptions } from './agent-session.js';
 
 export type { DaemonConfig, SSEEvent } from '../types.js';
 export { DEFAULT_CONFIG } from '../types.js';

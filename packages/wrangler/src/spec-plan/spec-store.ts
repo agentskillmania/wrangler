@@ -1,8 +1,8 @@
 import yaml from 'js-yaml';
 
-import type { HostEnv } from '../host-env/index.js';
 import { formatSpecFileName, parseSpecFileName } from './naming.js';
 import type { SpecDocument, SpecMeta, SpecStatus } from './types.js';
+import type { HostEnv } from '../host-env/index.js';
 
 /** Valid status transitions for spec documents */
 const VALID_TRANSITIONS: Record<SpecStatus, SpecStatus[]> = {
@@ -23,7 +23,7 @@ const VALID_TRANSITIONS: Record<SpecStatus, SpecStatus[]> = {
 export class SpecStore {
   constructor(
     private readonly baseDir: string,
-    private readonly runtime: HostEnv,
+    private readonly runtime: HostEnv
   ) {}
 
   private getWorkspaceDir(): string {

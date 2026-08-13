@@ -36,13 +36,13 @@ describe('Spec/Plan Tool-Driven Integration', () => {
           llm: {
             quickInit: {
               providers: [
-              {
-                name: testConfig.provider,
-                apiKey: testConfig.apiKey,
-                baseUrl: testConfig.baseUrl,
-                models: [{ modelId: testConfig.testModel }],
-              },
-            ],
+                {
+                  name: testConfig.provider,
+                  apiKey: testConfig.apiKey,
+                  baseUrl: testConfig.baseUrl,
+                  models: [{ modelId: testConfig.testModel }],
+                },
+              ],
             },
             quickInitFactory: (providers) => LLMClient.quickInit({ providers }),
           },
@@ -103,13 +103,13 @@ You have access to spec-plan tools. Your task:
           llm: {
             quickInit: {
               providers: [
-              {
-                name: testConfig.provider,
-                apiKey: testConfig.apiKey,
-                baseUrl: testConfig.baseUrl,
-                models: [{ modelId: testConfig.testModel }],
-              },
-            ],
+                {
+                  name: testConfig.provider,
+                  apiKey: testConfig.apiKey,
+                  baseUrl: testConfig.baseUrl,
+                  models: [{ modelId: testConfig.testModel }],
+                },
+              ],
             },
             quickInitFactory: (providers) => LLMClient.quickInit({ providers }),
           },
@@ -186,13 +186,13 @@ Report what you did and confirm each step succeeded.
           llm: {
             quickInit: {
               providers: [
-              {
-                name: testConfig.provider,
-                apiKey: testConfig.apiKey,
-                baseUrl: testConfig.baseUrl,
-                models: [{ modelId: testConfig.testModel }],
-              },
-            ],
+                {
+                  name: testConfig.provider,
+                  apiKey: testConfig.apiKey,
+                  baseUrl: testConfig.baseUrl,
+                  models: [{ modelId: testConfig.testModel }],
+                },
+              ],
             },
             quickInitFactory: (providers) => LLMClient.quickInit({ providers }),
           },

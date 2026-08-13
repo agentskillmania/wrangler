@@ -1,8 +1,8 @@
 import yaml from 'js-yaml';
 
-import type { HostEnv, DirEntry } from '../host-env/index.js';
 import { formatPlanFileName, parsePlanFileName } from './naming.js';
 import type { PlanDocument, PlanMeta, PlanStatus } from './types.js';
+import type { HostEnv, DirEntry } from '../host-env/index.js';
 
 /** Valid status transitions for plan documents */
 const VALID_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
@@ -24,7 +24,7 @@ const VALID_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
 export class PlanStore {
   constructor(
     private readonly baseDir: string,
-    private readonly runtime: HostEnv,
+    private readonly runtime: HostEnv
   ) {}
 
   private getWorkspaceDir(): string {
@@ -138,7 +138,7 @@ export class PlanStore {
     name: string,
     specVersion: number,
     version: number,
-    newStatus: PlanStatus,
+    newStatus: PlanStatus
   ): Promise<void> {
     const doc = await this.get(name, specVersion, version);
     if (!doc) throw new Error(`Plan not found: ${name} v${version} (spec v${specVersion})`);

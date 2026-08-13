@@ -64,7 +64,10 @@ describe('createSessionSupport', () => {
     const appDir = join(tmpdir(), `agentskillmania-app-${Date.now()}`);
     vi.stubEnv('AGENTSKILLMANIA_APP_DIR', appDir);
     try {
-      const session = createSessionSupport({ runtime: new NodeHostEnv(), workspacePath: '/test/workspace' });
+      const session = createSessionSupport({
+        runtime: new NodeHostEnv(),
+        workspacePath: '/test/workspace',
+      });
 
       await session.store.createWithId('default-location-session', 'test-model', 'test-agent');
 

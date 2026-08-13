@@ -60,7 +60,7 @@ export interface GrepResult {
 export class RuntimeCapabilityError extends Error {
   constructor(
     readonly capability: string,
-    message: string,
+    message: string
   ) {
     super(`Capability '${capability}' unavailable: ${message}`);
     this.name = 'RuntimeCapabilityError';
@@ -88,13 +88,22 @@ export interface HostEnvFs {
    * 编辑文件：替换 oldString 为 newString。
    * replaceAll=true 时替换全部匹配。返回编辑后的文件内容。
    */
-  editFile(path: string, oldString: string, newString: string, replaceAll?: boolean): Promise<string>;
+  editFile(
+    path: string,
+    oldString: string,
+    newString: string,
+    replaceAll?: boolean
+  ): Promise<string>;
 
   /** glob 模式匹配文件列表 */
   glob(pattern: string, options?: { cwd?: string }): Promise<string[]>;
 
   /** 正则搜索文件内容。Node 用 ripgrep，浏览器用纯 JS。返回 grep 格式的原始输出字符串 */
-  grep(pattern: string, path: string, options?: { cwd?: string; include?: string }): Promise<string>;
+  grep(
+    pattern: string,
+    path: string,
+    options?: { cwd?: string; include?: string }
+  ): Promise<string>;
 
   /** 二进制文件检测 */
   isBinary(path: string): Promise<boolean>;

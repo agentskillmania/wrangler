@@ -35,7 +35,7 @@ export class SessionStore {
   constructor(
     private readonly baseDir: string,
     private readonly workspacePath: string,
-    private readonly runtime: HostEnv,
+    private readonly runtime: HostEnv
   ) {
     const absolute = this.runtime.path.resolve(workspacePath);
     this.workspaceHash = this.runtime.crypto.hash(absolute);
@@ -110,7 +110,7 @@ export class SessionStore {
    *  Pass undefined for sessionId in dir-bound mode. */
   async createWithId(
     sessionId: string | undefined,
-    agentName: string,
+    agentName: string
   ): Promise<string | undefined> {
     const dir = this.getSessionDir(sessionId);
     await this.runtime.fs.mkdir(dir, { recursive: true });

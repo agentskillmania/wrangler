@@ -35,9 +35,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@agentskillmania/colts": "link:../../../colts/packages/colts",
-    "@agentskillmania/llm-client": "link:../../../colts/packages/llm-client",
-    "@agentskillmania/settings-yaml": "link:../../../colts/packages/settings-yaml",
+    "@agentskillmania/colts": "^0.4.0",
+    "@agentskillmania/llm-client": "^0.4.0",
+    "@agentskillmania/settings-yaml": "^0.4.0",
     "@agentskillmania/wrangler": "workspace:*",
     "@agentskillmania/wrangler-devtool": "workspace:*",
     "dotenv": "^16.4.0",

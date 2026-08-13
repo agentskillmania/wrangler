@@ -66,7 +66,8 @@ describe('US1: Create Runner and execute single-turn conversation', () => {
   itif(testConfig.enabled)(
     'should execute single-turn conversation and persist full session',
     async () => {
-      const session = createSessionSupport({ runtime: defaultNodeHostEnv,
+      const session = createSessionSupport({
+        runtime: defaultNodeHostEnv,
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });
@@ -109,7 +110,8 @@ describe('US1: Create Runner and execute single-turn conversation', () => {
   itif(testConfig.enabled)(
     'should handle calculator tool call and persist session state',
     async () => {
-      const session = createSessionSupport({ runtime: defaultNodeHostEnv,
+      const session = createSessionSupport({
+        runtime: defaultNodeHostEnv,
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });
@@ -158,7 +160,8 @@ describe('US2: Resume Session and continue conversation', () => {
         tools: [] as ToolDefinition[],
       };
 
-      const session = createSessionSupport({ runtime: defaultNodeHostEnv,
+      const session = createSessionSupport({
+        runtime: defaultNodeHostEnv,
         workspacePath: '/test/workspace',
         sessionBaseDir: testBaseDir,
       });
@@ -226,7 +229,8 @@ describe('US3: Session management operations', () => {
   });
 
   it('should list, get, and delete sessions', async () => {
-    const { store } = createSessionSupport({ runtime: defaultNodeHostEnv,
+    const { store } = createSessionSupport({
+      runtime: defaultNodeHostEnv,
       workspacePath: '/test/workspace',
       sessionBaseDir: testBaseDir,
     });
@@ -247,11 +251,13 @@ describe('US3: Session management operations', () => {
   });
 
   it('should isolate sessions by workspace', async () => {
-    const sessionA = createSessionSupport({ runtime: defaultNodeHostEnv,
+    const sessionA = createSessionSupport({
+      runtime: defaultNodeHostEnv,
       workspacePath: '/project-a',
       sessionBaseDir: testBaseDir,
     });
-    const sessionB = createSessionSupport({ runtime: defaultNodeHostEnv,
+    const sessionB = createSessionSupport({
+      runtime: defaultNodeHostEnv,
       workspacePath: '/project-b',
       sessionBaseDir: testBaseDir,
     });
@@ -269,7 +275,8 @@ describe('US3: Session management operations', () => {
   });
 
   it('should persist state and read entries after save', async () => {
-    const { store } = createSessionSupport({ runtime: defaultNodeHostEnv,
+    const { store } = createSessionSupport({
+      runtime: defaultNodeHostEnv,
       workspacePath: '/test/workspace',
       sessionBaseDir: testBaseDir,
     });

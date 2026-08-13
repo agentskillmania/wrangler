@@ -142,10 +142,7 @@ describe('Chat API', () => {
     // (or an aborted client the server hasn't reaped) can't deadlock teardown.
     // Tests SHOULD drain their SSE bodies; this guard just keeps a miss from
     // hanging the whole suite for the 30s default close timeout.
-    await Promise.race([
-      fastify.close(),
-      new Promise((r) => setTimeout(r, 1500)),
-    ]);
+    await Promise.race([fastify.close(), new Promise((r) => setTimeout(r, 1500))]);
     await rm(tempDir, { recursive: true, force: true });
   });
 
@@ -372,7 +369,10 @@ describe('Chat API', () => {
           thinkingEnabled: true,
           config: {
             skills: { dirs: ['./skills'] },
-            tools: { mcpConfigPaths: ['./mcp.json'], builtinFilter: { shell: false, fileRead: true } },
+            tools: {
+              mcpConfigPaths: ['./mcp.json'],
+              builtinFilter: { shell: false, fileRead: true },
+            },
             session: { enabled: false },
             todolist: { enabled: false },
             commands: { enabled: false },
@@ -388,7 +388,10 @@ describe('Chat API', () => {
       const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
       // Session-init: model comes from agent default, not per-request model
       expect(callArg.skills).toEqual({ dirs: ['./skills', expect.any(String)] });
-      expect(callArg.tools).toEqual({ mcpConfigPaths: ['./mcp.json'], builtinFilter: { shell: false, fileRead: true } });
+      expect(callArg.tools).toEqual({
+        mcpConfigPaths: ['./mcp.json'],
+        builtinFilter: { shell: false, fileRead: true },
+      });
       expect(callArg.session).toEqual({ enabled: false });
       expect(callArg.todolist).toEqual({ enabled: false });
       expect(callArg.commands).toEqual({ enabled: false });
@@ -695,7 +698,7 @@ describe('Chat API', () => {
           agentName: 'test-agent',
           runnerConfig: { model: 'test-model' },
         },
-        defaultNodeHostEnv,
+        defaultNodeHostEnv
       );
 
       const res = await fetch(`${getUrl()}/api/chat/some-key`, {

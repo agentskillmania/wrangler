@@ -1,15 +1,15 @@
-import { LLMClient } from '@agentskillmania/llm-client';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { LLMClient } from '@agentskillmania/llm-client';
 import {
   SessionNotFoundError,
   SessionStore,
   crewToRunnerOptions,
   readMeta,
 } from '@agentskillmania/wrangler';
-import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import type { SessionMeta } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
@@ -212,10 +212,13 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         ],
       },
       tools: {
-        mcpConfigPaths: body.config?.tools?.mcpConfigPaths ?? agentDetail.mcpPaths ?? rc?.mcpConfigPaths ?? [],
+        mcpConfigPaths:
+          body.config?.tools?.mcpConfigPaths ?? agentDetail.mcpPaths ?? rc?.mcpConfigPaths ?? [],
         builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
       },
-      sessionStore: body.sessionDir ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv) : undefined,
+      sessionStore: body.sessionDir
+        ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)
+        : undefined,
       sessionManager: sessionManager(),
       sessionBaseDir: sessionManager().baseDir,
       agentConfigPath: agentDetail.path,
@@ -227,7 +230,11 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       commands: body.config?.commands ?? rc?.commands,
       sandbox: body.config?.sandbox,
       a2ui: body.config?.a2ui ?? rc?.a2ui,
-      search: body.config?.search ?? (config.search?.defaultProvider ? { provider: config.search.defaultProvider as 'sogou' | 'bing' } : undefined),
+      search:
+        body.config?.search ??
+        (config.search?.defaultProvider
+          ? { provider: config.search.defaultProvider as 'sogou' | 'bing' }
+          : undefined),
       compression: (body.config?.compression ?? rc?.compression) as boolean | undefined,
       limits: body.config?.limits ?? rc?.limits,
     };
@@ -406,13 +413,18 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       model: body.model ?? runnerOpts.model,
       sandbox: body.config?.sandbox ?? true,
       skills: {
-        dirs: [...(body.config?.skills?.dirs ?? runnerOpts.skillDirs ?? rc?.skillDirs ?? []), BUILTIN_SKILLS_DIR],
+        dirs: [
+          ...(body.config?.skills?.dirs ?? runnerOpts.skillDirs ?? rc?.skillDirs ?? []),
+          BUILTIN_SKILLS_DIR,
+        ],
       },
       tools: {
         mcpConfigPaths: body.config?.tools?.mcpConfigPaths ?? rc?.mcpConfigPaths ?? [],
         builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
       },
-      sessionStore: body.sessionDir ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv) : undefined,
+      sessionStore: body.sessionDir
+        ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)
+        : undefined,
       sessionManager: sessionManager(),
       sessionBaseDir: sessionManager().baseDir,
       thinking: body.config?.thinking ?? rc?.thinking,
@@ -421,7 +433,11 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       specPlan: body.config?.specPlan ?? rc?.specPlan,
       commands: body.config?.commands ?? rc?.commands,
       a2ui: body.config?.a2ui ?? rc?.a2ui,
-      search: body.config?.search ?? (config.search?.defaultProvider ? { provider: config.search.defaultProvider as 'sogou' | 'bing' } : undefined),
+      search:
+        body.config?.search ??
+        (config.search?.defaultProvider
+          ? { provider: config.search.defaultProvider as 'sogou' | 'bing' }
+          : undefined),
       compression: (body.config?.compression ?? rc?.compression) as boolean | undefined,
       limits: body.config?.limits ?? rc?.limits,
     };

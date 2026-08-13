@@ -1,11 +1,11 @@
 import type { LLMQuickInit } from '@agentskillmania/colts';
+import type { SandboxConfig } from '@agentskillmania/wrangler';
 
 import type { ConfigManager } from './core/config-manager.js';
 import type { ResourceManager } from './core/resource-manager.js';
 import type { SessionManager } from './core/session-manager.js';
 
 /** Daemon configuration stored in config.yaml */
-import type { SandboxConfig } from '@agentskillmania/wrangler';
 
 /**
  * Daemon-level runner defaults (mirrors Rust `RunnerConfig`).

@@ -222,9 +222,7 @@ describe('EnhancedRunner', () => {
     // Upper layer injects its own provider — the library must not wrap or
     // replace it (mirrors the Rust SearchGroup.provider_instance path).
     const customProvider = { search: async () => [] };
-    await EnhancedRunner.create(
-      makeOptions({ search: { provider: customProvider as never } })
-    );
+    await EnhancedRunner.create(makeOptions({ search: { provider: customProvider as never } }));
 
     const calls = createBuiltinTools.mock.calls;
     expect(calls[calls.length - 1][0].searchProvider).toBe(customProvider);
@@ -243,7 +241,13 @@ describe('EnhancedRunner', () => {
   });
 
   it('should create() passes skillProvider to AgentRunner when injected', async () => {
-    const mockProvider = { listSkills: () => [], getManifest: () => null, loadInstructions: async () => '', loadResource: async () => '', refresh: async () => {} };
+    const mockProvider = {
+      listSkills: () => [],
+      getManifest: () => null,
+      loadInstructions: async () => '',
+      loadResource: async () => '',
+      refresh: async () => {},
+    };
     await EnhancedRunner.create(makeOptions({ skills: { provider: mockProvider as any } }));
 
     const calls = await getAgentRunnerCalls();
@@ -532,12 +536,16 @@ describe('EnhancedRunner', () => {
 
       // Even with an explicit session base dir the spec-plan stores stay at
       // {appDir}/spec-plan — the two concerns are fully decoupled.
-      await EnhancedRunner.create(
-        makeOptions({ session: { baseDir: join(appRoot, 'sessions') } })
-      );
+      await EnhancedRunner.create(makeOptions({ session: { baseDir: join(appRoot, 'sessions') } }));
 
-      expect(SpecStore).toHaveBeenCalledWith(join(appRoot, 'spec-plan', 'specs'), expect.any(NodeHostEnv));
-      expect(PlanStore).toHaveBeenCalledWith(join(appRoot, 'spec-plan', 'plans'), expect.any(NodeHostEnv));
+      expect(SpecStore).toHaveBeenCalledWith(
+        join(appRoot, 'spec-plan', 'specs'),
+        expect.any(NodeHostEnv)
+      );
+      expect(PlanStore).toHaveBeenCalledWith(
+        join(appRoot, 'spec-plan', 'plans'),
+        expect.any(NodeHostEnv)
+      );
     } finally {
       vi.unstubAllEnvs();
       await rm(appRoot, { recursive: true, force: true });
@@ -554,7 +562,9 @@ describe('EnhancedRunner', () => {
   });
 
   it('should have only todolist middleware when session and commands are disabled', async () => {
-    await EnhancedRunner.create(makeOptions({ session: { enabled: false }, commands: { enabled: false } }));
+    await EnhancedRunner.create(
+      makeOptions({ session: { enabled: false }, commands: { enabled: false } })
+    );
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
@@ -631,7 +641,11 @@ describe('EnhancedRunner', () => {
 
     it('should not include session/todolist middleware when both disabled', async () => {
       const runner = await EnhancedRunner.create(
-        makeOptions({ session: { enabled: false }, todolist: { enabled: false }, commands: { enabled: false } })
+        makeOptions({
+          session: { enabled: false },
+          todolist: { enabled: false },
+          commands: { enabled: false },
+        })
       );
       const config = runner.getConfig();
       expect(config.middlewareNames).toEqual([]);
@@ -1009,7 +1023,9 @@ describe('EnhancedRunner', () => {
         loadResource: async () => '',
         refresh: async () => {},
       };
-      const runner = await EnhancedRunner.create(makeOptions({ skills: { provider: mockProvider as any } }));
+      const runner = await EnhancedRunner.create(
+        makeOptions({ skills: { provider: mockProvider as any } })
+      );
       const skills = runner.getSkillInfo();
       expect(skills.length).toBeGreaterThanOrEqual(2);
       const specPlan = skills.find((s) => s.name === 'spec-plan');
@@ -1047,9 +1063,9 @@ describe('EnhancedRunner', () => {
     });
 
     it('create() without llmClient or llm throws', async () => {
-      await expect(EnhancedRunner.create(makeOptions({ llm: { client: undefined } }))).rejects.toThrow(
-        'Must specify either llm.client or llm.quickInit.'
-      );
+      await expect(
+        EnhancedRunner.create(makeOptions({ llm: { client: undefined } }))
+      ).rejects.toThrow('Must specify either llm.client or llm.quickInit.');
     });
 
     it('create() with both llm.client and llm.quickInit throws', async () => {
@@ -1180,8 +1196,12 @@ describe('EnhancedRunner', () => {
       const { runner, state } = await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
-          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
-          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+          quickInit: {
+            providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+          },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (
+            providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
+          ) => import('@agentskillmania/colts').ILLMProvider,
         },
       });
 
@@ -1202,8 +1222,12 @@ describe('EnhancedRunner', () => {
       const { runner, state } = await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
-          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
-          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+          quickInit: {
+            providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+          },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (
+            providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
+          ) => import('@agentskillmania/colts').ILLMProvider,
         },
       });
 
@@ -1226,8 +1250,12 @@ describe('EnhancedRunner', () => {
       const { state } = await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
-          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
-          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+          quickInit: {
+            providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+          },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (
+            providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
+          ) => import('@agentskillmania/colts').ILLMProvider,
         },
       });
 
@@ -1247,8 +1275,12 @@ describe('EnhancedRunner', () => {
       const { runner } = await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
-          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
-          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+          quickInit: {
+            providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+          },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (
+            providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
+          ) => import('@agentskillmania/colts').ILLMProvider,
         },
         model: 'claude-3',
       });
@@ -1346,8 +1378,12 @@ describe('EnhancedRunner', () => {
       const { runner } = await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
-          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
-          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+          quickInit: {
+            providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+          },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (
+            providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
+          ) => import('@agentskillmania/colts').ILLMProvider,
         },
         subAgents,
       });
@@ -1373,8 +1409,12 @@ describe('EnhancedRunner', () => {
       await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
-          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
-          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+          quickInit: {
+            providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
+          },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (
+            providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
+          ) => import('@agentskillmania/colts').ILLMProvider,
         },
       });
 

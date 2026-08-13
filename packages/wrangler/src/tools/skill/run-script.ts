@@ -10,10 +10,9 @@
  */
 import { join } from 'node:path';
 
-import { z } from 'zod';
-
 import type { ISkillProvider } from '@agentskillmania/colts';
 import type { Tool } from '@agentskillmania/colts';
+import { z } from 'zod';
 import type { ZodTypeAny } from 'zod';
 
 import type { ToolDeps } from '../builtin/workspace-deps.js';
@@ -27,7 +26,7 @@ import type { ToolDeps } from '../builtin/workspace-deps.js';
  */
 export function createRunScriptTool(
   deps: ToolDeps,
-  skillProvider: ISkillProvider,
+  skillProvider: ISkillProvider
 ): Tool<ZodTypeAny> {
   return {
     name: 'run_skill_script',
@@ -39,7 +38,7 @@ export function createRunScriptTool(
       command: z
         .string()
         .describe(
-          'Interpreter/engine to run the script: a command name resolved from PATH (e.g. "python3", "node") or a full executable path (e.g. "/usr/local/bin/python3.11")',
+          'Interpreter/engine to run the script: a command name resolved from PATH (e.g. "python3", "node") or a full executable path (e.g. "/usr/local/bin/python3.11")'
         ),
       args: z.array(z.string()).optional().describe('Arguments to pass to the script'),
     }),
