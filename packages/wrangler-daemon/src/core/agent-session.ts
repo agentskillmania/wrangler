@@ -5,8 +5,7 @@
  * Bridges colts AskHuman tool -> SSE -> frontend for human-in-the-loop interaction.
  */
 
-import { createAgentState, addUserMessage, updateState, FilesystemSkillProvider, setDefaultSkillFsOps } from '@agentskillmania/colts';
-import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
+import { createAgentState, addUserMessage, updateState, FilesystemSkillProvider } from '@agentskillmania/colts';
 import type {
   AgentState,
   RunStreamEvent,
@@ -30,7 +29,6 @@ import type { RunnerFeatureFlags } from './session-diagnostics.js';
 // Register the Node SkillFsOps implementation at module load so any
 // FilesystemSkillProvider constructed here (or elsewhere in the daemon)
 // resolves node:fs via the global registration point. Idempotent.
-setDefaultSkillFsOps(nodeFsOps);
 
 /**
  * Bridge between AskHumanHandler closure and AgentSession instance.
