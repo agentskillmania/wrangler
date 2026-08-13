@@ -29,6 +29,7 @@ import type {
 import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
+import { mergeSandboxConfig } from './sandbox-config.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
 import type { RunnerFeatureFlags } from './session-diagnostics.js';
 
@@ -71,29 +72,6 @@ export interface AgentSessionResumeOptions {
   llmClientFactory?: (
     providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
   ) => import('@agentskillmania/colts').ILLMProvider;
-}
-
-/**
- * Merge sandbox config sources field-by-field (lower → higher precedence):
- * daemon config.yaml `sandbox` defaults ← request-body `sandbox` (boolean
- * legacy form only overrides `enabled`). The sandbox package's own
- * config.yaml/env are NOT part of this chain — the wrangler layer drives the
- * sandbox purely via constructor params.
- */
-export function mergeSandboxConfig(
-  base: SandboxConfig | undefined,
-  override: SandboxConfig | boolean | undefined
-): SandboxConfig {
-  const fromOverride = typeof override === 'object' && override !== null ? override : {};
-  const enabled =
-    typeof override === 'boolean' ? override : (fromOverride.enabled ?? base?.enabled ?? true);
-  return {
-    enabled,
-    timeout: fromOverride.timeout ?? base?.timeout,
-    allowNetwork: fromOverride.allowNetwork ?? base?.allowNetwork,
-    commandPolicy: fromOverride.commandPolicy ?? base?.commandPolicy,
-    networkPolicy: fromOverride.networkPolicy ?? base?.networkPolicy,
-  };
 }
 
 /** Options for creating an AgentSession */
@@ -178,6 +156,8 @@ Please respond in the same language as the user's message.`;
  * tool/skill/session support. Streams SSE events to the frontend and
  * bridges AskHuman tool calls to interactive UI prompts.
  */
+export { mergeSandboxConfig } from './sandbox-config.js';
+
 export class AgentSession {
   readonly sessionId: string;
   readonly workspacePath: string;

@@ -742,8 +742,17 @@ describe('EnhancedRunner', () => {
     });
 
     it('returns sandbox=true when configured', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ sandbox: { enabled: true } }));
+      const mockSandbox = {} as unknown as import('@agentskillmania/sandbox').Sandbox;
+      const runner = await EnhancedRunner.create(
+        makeOptions({ sandbox: { enabled: true, instance: mockSandbox } })
+      );
       expect(runner.getConfig().sandbox).toBe(true);
+    });
+
+    it('throws when sandbox enabled without instance', async () => {
+      await expect(
+        EnhancedRunner.create(makeOptions({ sandbox: { enabled: true } }))
+      ).rejects.toThrow('requires sandbox.instance');
     });
 
     it('reports tool counts', async () => {

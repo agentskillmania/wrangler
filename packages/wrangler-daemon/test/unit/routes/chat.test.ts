@@ -397,7 +397,7 @@ describe('Chat API', () => {
       expect(callArg.session).toEqual({ enabled: false });
       expect(callArg.todolist).toEqual({ enabled: false });
       expect(callArg.commands).toEqual({ enabled: false });
-      expect(callArg.sandbox).toBe(false);
+      expect(callArg.sandbox).toEqual(expect.objectContaining({ enabled: false }));
       expect(callArg.a2ui).toEqual({ enabled: true });
 
       // Per-request: model and thinkingEnabled passed to handleMessage
@@ -437,7 +437,7 @@ describe('Chat API', () => {
         injectFactory: expect.any(Function),
         mcpLoader: expect.any(Function),
       });
-      expect(callArg.sandbox).toBe(false);
+      expect(callArg.sandbox).toEqual(expect.objectContaining({ enabled: false }));
 
       // Per-request params not provided, so handleMessage gets undefined
       const msgOpts = mockHandleMessage.mock.calls[0][1] as Record<string, unknown>;

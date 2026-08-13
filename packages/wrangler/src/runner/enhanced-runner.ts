@@ -15,7 +15,7 @@ import type {
   IToolRegistry,
 } from '@agentskillmania/colts';
 import type { Tool } from '@agentskillmania/colts';
-import { Sandbox } from '@agentskillmania/sandbox';
+import type { Sandbox } from '@agentskillmania/sandbox';
 import { produce } from 'immer';
 import type { ZodTypeAny } from 'zod';
 
@@ -202,14 +202,12 @@ export class EnhancedRunner {
 
     const sandboxEnabled = options.sandbox?.enabled;
 
-    let sandboxInstance: Sandbox | undefined;
-    if (sandboxEnabled) {
-      // Pass the full sandbox config through: execution parameters (timeout/
-      // allowNetwork/policies) come from the wrangler-level configuration,
-      // NOT from the sandbox package's own config.yaml/env (that file serves
-      // the standalone CLI/MCP only).
-      const { enabled: _enabled, ...sandboxParams } = options.sandbox ?? {};
-      sandboxInstance = new Sandbox({ sandboxDir: workspacePath, ...sandboxParams });
+    // Sandbox 实例由宿主注入（Node 宿主构造）——引擎 core 不捆绑 sandbox 运行时
+    const sandboxInstance: Sandbox | undefined = options.sandbox?.instance;
+    if (sandboxEnabled && !sandboxInstance) {
+      throw new Error(
+        'sandbox.enabled requires sandbox.instance (host constructs `new Sandbox({ sandboxDir, ...params })`) — wrangler core does not bundle the sandbox runtime'
+      );
     }
 
     // 统一的工具依赖（core 工具与技能工具共用）——宿主注入优先，

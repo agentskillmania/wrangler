@@ -2,13 +2,14 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { LLMClient } from '@agentskillmania/llm-client';
+import { Sandbox } from '@agentskillmania/sandbox';
+import type { SessionMeta } from '@agentskillmania/wrangler';
 import {
   SessionNotFoundError,
   SessionStore,
   crewToRunnerOptions,
   readMeta,
 } from '@agentskillmania/wrangler';
-import type { SessionMeta } from '@agentskillmania/wrangler';
 import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { loadMCPTools } from '@agentskillmania/wrangler/tools/mcp';
 import { createWebTools } from '@agentskillmania/wrangler/tools/web';
@@ -17,6 +18,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { AgentSession } from '../core/agent-session.js';
 import type { AgentSessionOptions, AgentSessionResumeOptions } from '../core/agent-session.js';
+import { mergeSandboxConfig } from '../core/sandbox-config.js';
 import type {
   DecoratedFastifyInstance,
   CreateAndChatRequest,
@@ -79,6 +81,25 @@ const COMMANDS = [
  *
  * Plus: stop, respond (AskHuman), commands, message history.
  */
+
+/**
+ * 合并 sandbox 配置（config.yaml ← 请求体）并构造实例（enabled 时）。
+ * Node 宿主职责——wrangler core 不捆绑 sandbox 运行时。
+ */
+function withSandboxInstance(
+  base: import('@agentskillmania/wrangler').SandboxConfig | undefined,
+  override: import('@agentskillmania/wrangler').SandboxConfig | boolean | undefined,
+  workspacePath: string
+): import('@agentskillmania/wrangler').SandboxConfig {
+  const merged = mergeSandboxConfig(base, override);
+  if (!merged.enabled) return merged;
+  const { enabled: _enabled, instance: _instance, ...params } = merged;
+  return {
+    enabled: true,
+    ...params,
+    instance: new Sandbox({ sandboxDir: workspacePath, ...params }),
+  };
+}
 export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
   const decorated = fastify as unknown as DecoratedFastifyInstance;
   const sessionManager = () => decorated.sessionManager;
@@ -241,7 +262,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       todolist: body.config?.todolist ?? rc?.todolist,
       specPlan: body.config?.specPlan ?? rc?.specPlan,
       commands: body.config?.commands ?? rc?.commands,
-      sandbox: body.config?.sandbox,
+      // Node 专属：合并 sandbox 配置并构造实例（引擎 core 不捆绑 sandbox 运行时）
+      sandbox: withSandboxInstance(config.sandbox, body.config?.sandbox, workspacePath),
       a2ui: body.config?.a2ui ?? rc?.a2ui,
       search: searchConfig,
       compression: (body.config?.compression ?? rc?.compression) as boolean | undefined,

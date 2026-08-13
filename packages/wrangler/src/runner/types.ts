@@ -141,6 +141,11 @@ export interface PolicyConfig {
 export interface SandboxConfig {
   /** Enable WASM sandbox (default: true) */
   enabled?: boolean;
+  /**
+   * Sandbox 实例注入（Node 宿主构造：`new Sandbox({ sandboxDir, ...params })`）
+   * ——引擎 core 不捆绑 sandbox 运行时；enabled 时必须提供。
+   */
+  instance?: import('@agentskillmania/sandbox').Sandbox;
   /** Execution timeout in ms (sandbox default: 600_000) */
   timeout?: number;
   /** Allow network access (default: false) */
