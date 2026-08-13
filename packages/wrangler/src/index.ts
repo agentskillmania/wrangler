@@ -43,10 +43,11 @@ export { resolveDefaultModel } from './llm/resolve-model.js';
 export { parseAgentMd } from './agent/index.js';
 export type { ParsedAgent } from './agent/index.js';
 
-// Tools (Layer 2)
-export { createBuiltinTools } from './tools/builtin/index.js';
-export type { BuiltinToolsOptions } from './tools/builtin/index.js';
-export type { SearchProvider, SearchResult } from './tools/builtin/index.js';
+// Tools (Layer 2) —— 主入口只含平台无关 core；web 工具走 ./tools/web 子路径
+export { createCoreTools } from './tools/builtin/index.js';
+export type { CoreToolsOptions } from './tools/builtin/index.js';
+// 搜索 provider 类型（type-only，web 工具的宿主注入参数）——运行时零依赖
+export type { SearchProvider, SearchResult } from './tools/web/index.js';
 export { resolvePath, truncateOutput } from './tools/builtin/index.js';
 export type { ToolDeps, ExecResult } from './tools/builtin/index.js';
 export { HostToolDeps } from './tools/builtin/index.js';

@@ -58,7 +58,7 @@ vi.mock('../../../src/tools/mcp/index.js', () => ({
 }));
 
 vi.mock('../../../src/tools/builtin/index.js', () => ({
-  createBuiltinTools: vi.fn().mockReturnValue([]),
+  createCoreTools: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('../../../src/session/support.js', () => ({
@@ -194,38 +194,19 @@ describe('EnhancedRunner', () => {
   });
 
   it('should create() includes extraTools in tool list', async () => {
-    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+    const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
 
     await EnhancedRunner.create(makeOptions());
 
-    const calls = createBuiltinTools.mock.calls;
-    expect(calls[calls.length - 1][0]).toEqual(
-      expect.objectContaining({
-        workspacePath: '/test/workspace',
-      })
-    );
-    // searchProvider is resolved from 'bing' string to BingScrapeSearchProvider instance
-    expect(calls[calls.length - 1][0].searchProvider).toBeInstanceOf(
-      (await import('../../../src/tools/builtin/bing-scrape-search.js')).BingScrapeSearchProvider
-    );
+    const calls = createCoreTools.mock.calls;
+    // createCoreTools 接收宿主注入的 ToolDeps（core 不构造 Node 实现）
+    expect(calls[calls.length - 1][0].deps).toBeDefined();
 
     const runnerCalls = await getAgentRunnerCalls();
     const runnerArgs = runnerCalls[runnerCalls.length - 1][0];
 
     // Check that extra tools are included
     expect(runnerArgs.tools).toContain(...mockExtraTools);
-  });
-
-  it('should create() pass an injected SearchProvider instance through (upper-layer extension)', async () => {
-    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-
-    // Upper layer injects its own provider — the library must not wrap or
-    // replace it (mirrors the Rust SearchGroup.provider_instance path).
-    const customProvider = { search: async () => [] };
-    await EnhancedRunner.create(makeOptions({ search: { provider: customProvider as never } }));
-
-    const calls = createBuiltinTools.mock.calls;
-    expect(calls[calls.length - 1][0].searchProvider).toBe(customProvider);
   });
 
   it('should create() sets systemPrompt to YAML frontmatter with Time: and Timezone:', async () => {
@@ -367,8 +348,8 @@ describe('EnhancedRunner', () => {
   // ── builtinTools toggle tests ──────────────────────────────────────
 
   it('should include all builtin tools when builtinTools is not provided', async () => {
-    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-    vi.mocked(createBuiltinTools).mockReturnValueOnce([
+    const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+    vi.mocked(createCoreTools).mockReturnValueOnce([
       { name: 'file_read' },
       { name: 'file_write' },
       { name: 'shell' },
@@ -383,8 +364,8 @@ describe('EnhancedRunner', () => {
   });
 
   it('should exclude all builtin tools when builtinTools is empty object', async () => {
-    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-    vi.mocked(createBuiltinTools).mockReturnValueOnce([
+    const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+    vi.mocked(createCoreTools).mockReturnValueOnce([
       { name: 'file_read' },
       { name: 'shell' },
       { name: 'web_search' },
@@ -401,8 +382,8 @@ describe('EnhancedRunner', () => {
   });
 
   it('should include only enabled tools when builtinTools has partial entries', async () => {
-    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-    vi.mocked(createBuiltinTools).mockReturnValueOnce([
+    const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+    vi.mocked(createCoreTools).mockReturnValueOnce([
       { name: 'file_read' },
       { name: 'file_write' },
       { name: 'shell' },
@@ -425,8 +406,8 @@ describe('EnhancedRunner', () => {
   });
 
   it('should treat builtinTools as whitelist: unlisted tools excluded, listed as false excluded', async () => {
-    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-    vi.mocked(createBuiltinTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
+    const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+    vi.mocked(createCoreTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
 
     // shell: false → excluded; file_read not listed → also excluded
     await EnhancedRunner.create(makeOptions({ tools: { builtinFilter: { shell: false } } }));
@@ -439,8 +420,8 @@ describe('EnhancedRunner', () => {
   });
 
   it('should include listed tool and exclude unlisted when builtinTools is whitelist', async () => {
-    const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-    vi.mocked(createBuiltinTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
+    const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+    vi.mocked(createCoreTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
 
     await EnhancedRunner.create(makeOptions({ tools: { builtinFilter: { fileRead: true } } }));
 
@@ -614,8 +595,8 @@ describe('EnhancedRunner', () => {
     });
 
     it('should report correct tool counts in config', async () => {
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      vi.mocked(createBuiltinTools).mockReturnValueOnce([
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createCoreTools).mockReturnValueOnce([
         { name: 'file_read' },
         { name: 'file_write' },
       ]);
@@ -633,10 +614,10 @@ describe('EnhancedRunner', () => {
       const runner = await EnhancedRunner.create(makeOptions({ workspacePath: undefined }));
       expect(runner).toBeInstanceOf(EnhancedRunner);
 
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      const calls = createBuiltinTools.mock.calls;
-      // workspacePath defaults to process.cwd() when undefined
-      expect(calls[calls.length - 1][0].workspacePath).toBe(process.cwd());
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+      const calls = createCoreTools.mock.calls;
+      // workspacePath 缺省时回落 cwd——createCoreTools 只收注入的 deps
+      expect(calls[calls.length - 1][0].deps).toBeDefined();
     });
 
     it('should not include session/todolist middleware when both disabled', async () => {
@@ -727,8 +708,8 @@ describe('EnhancedRunner', () => {
     });
 
     it('should exclude a builtin tool when its toggle is explicitly false', async () => {
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      vi.mocked(createBuiltinTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createCoreTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
 
       await EnhancedRunner.create(
         makeOptions({
@@ -841,8 +822,8 @@ describe('EnhancedRunner', () => {
 
   describe('getToolInfo()', () => {
     it('returns empty array when no tools loaded', async () => {
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createCoreTools).mockReturnValueOnce([]);
       const runner = await EnhancedRunner.create(
         makeOptions({
           tools: { extra: [] },
@@ -860,8 +841,8 @@ describe('EnhancedRunner', () => {
     });
 
     it('returns builtin tools with type=builtin and enabled=true by default', async () => {
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      vi.mocked(createBuiltinTools).mockReturnValueOnce([
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createCoreTools).mockReturnValueOnce([
         { name: 'file_read', description: 'Read files' },
         { name: 'file_write', description: 'Write files' },
       ]);
@@ -881,8 +862,8 @@ describe('EnhancedRunner', () => {
     });
 
     it('returns disabled builtin tools when filtered by toggle', async () => {
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      vi.mocked(createBuiltinTools).mockReturnValueOnce([
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createCoreTools).mockReturnValueOnce([
         { name: 'file_read', description: 'Read files' },
         { name: 'file_write', description: 'Write files' },
         { name: 'shell', description: 'Run shell commands' },
@@ -905,8 +886,8 @@ describe('EnhancedRunner', () => {
     });
 
     it('returns extra tools with type=extra and enabled=true', async () => {
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createCoreTools).mockReturnValueOnce([]);
       const extraTools = [
         { name: 'custom_tool', description: 'Custom tool', schema: {}, execute: vi.fn() },
       ];
@@ -931,8 +912,8 @@ describe('EnhancedRunner', () => {
     it('returns builtin tools (incl. ask_human) with type=builtin', async () => {
       // ask_human moved from session support to builtin tools. When provided
       // via createBuiltinTools, it is reported with type='builtin'.
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      vi.mocked(createBuiltinTools).mockReturnValueOnce([
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createCoreTools).mockReturnValueOnce([
         { name: 'ask_human', description: 'Ask human' },
       ]);
       const runner = await EnhancedRunner.create(
@@ -955,8 +936,8 @@ describe('EnhancedRunner', () => {
         tools: [{ name: 'todo_read', description: 'Read todos' }],
         middleware: { name: 'todolist' },
       });
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createCoreTools).mockReturnValueOnce([]);
       const runner = await EnhancedRunner.create(
         makeOptions({
           session: { enabled: false },
@@ -977,8 +958,8 @@ describe('EnhancedRunner', () => {
         { name: 'save_spec', description: 'Save a spec' },
         { name: 'read_spec', description: 'Read a spec' },
       ] as any);
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      vi.mocked(createBuiltinTools).mockReturnValueOnce([]);
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createCoreTools).mockReturnValueOnce([]);
       const runner = await EnhancedRunner.create(
         makeOptions({
           tools: { extra: [] },
@@ -1089,8 +1070,8 @@ describe('EnhancedRunner', () => {
     });
 
     it('create() ignores unknown builtinTools toggles', async () => {
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
-      vi.mocked(createBuiltinTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
+      vi.mocked(createCoreTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
 
       await EnhancedRunner.create(
         makeOptions({
@@ -1119,13 +1100,12 @@ describe('EnhancedRunner', () => {
     });
 
     it('passes limits.maxToolOutput and toolTimeout to createBuiltinTools', async () => {
-      const { createBuiltinTools } = await import('../../../src/tools/builtin/index.js');
+      const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
       await EnhancedRunner.create(
         makeOptions({ limits: { maxToolOutput: 50000, toolTimeout: 300000 } })
       );
-      const opts = createBuiltinTools.mock.calls.at(-1)?.[0];
+      const opts = createCoreTools.mock.calls.at(-1)?.[0];
       expect(opts.maxToolOutput).toBe(50000);
-      expect(opts.toolTimeout).toBe(300000);
     });
 
     it('migrates deprecated maxSteps flat field to limits', async () => {

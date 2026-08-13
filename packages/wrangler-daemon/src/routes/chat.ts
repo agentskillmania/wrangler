@@ -10,6 +10,7 @@ import {
 } from '@agentskillmania/wrangler';
 import type { SessionMeta } from '@agentskillmania/wrangler';
 import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
+import { createWebTools } from '@agentskillmania/wrangler/tools/web';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
@@ -198,6 +199,13 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const config = configManager().get();
     const rc = config.runner;
 
+    // 搜索配置解析（供 search 字段与 web 工具注入工厂共用）
+    const searchConfig =
+      body.config?.search ??
+      (config.search?.defaultProvider
+        ? { provider: config.search.defaultProvider as 'sogou' | 'bing' }
+        : undefined);
+
     const sessionOptions: AgentSessionOptions = {
       llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
       workspacePath,
@@ -215,6 +223,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         mcpConfigPaths:
           body.config?.tools?.mcpConfigPaths ?? agentDetail.mcpPaths ?? rc?.mcpConfigPaths ?? [],
         builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
+        // Node 专属 web 工具（jsdom 爬虫）——引擎 core 不含，由 daemon 组装注入
+        injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),
       },
       sessionStore: body.sessionDir
         ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)
@@ -230,11 +240,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       commands: body.config?.commands ?? rc?.commands,
       sandbox: body.config?.sandbox,
       a2ui: body.config?.a2ui ?? rc?.a2ui,
-      search:
-        body.config?.search ??
-        (config.search?.defaultProvider
-          ? { provider: config.search.defaultProvider as 'sogou' | 'bing' }
-          : undefined),
+      search: searchConfig,
       compression: (body.config?.compression ?? rc?.compression) as boolean | undefined,
       limits: body.config?.limits ?? rc?.limits,
     };
@@ -403,6 +409,13 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const config = configManager().get();
     const rc = config.runner;
 
+    // 搜索配置解析（供 search 字段与 web 工具注入工厂共用）
+    const searchConfig =
+      body.config?.search ??
+      (config.search?.defaultProvider
+        ? { provider: config.search.defaultProvider as 'sogou' | 'bing' }
+        : undefined);
+
     const sessionOptions: AgentSessionOptions = {
       llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
       workspacePath,
@@ -421,6 +434,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       tools: {
         mcpConfigPaths: body.config?.tools?.mcpConfigPaths ?? rc?.mcpConfigPaths ?? [],
         builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
+        // Node 专属 web 工具（jsdom 爬虫）——引擎 core 不含，由 daemon 组装注入
+        injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),
       },
       sessionStore: body.sessionDir
         ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)
@@ -433,11 +448,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       specPlan: body.config?.specPlan ?? rc?.specPlan,
       commands: body.config?.commands ?? rc?.commands,
       a2ui: body.config?.a2ui ?? rc?.a2ui,
-      search:
-        body.config?.search ??
-        (config.search?.defaultProvider
-          ? { provider: config.search.defaultProvider as 'sogou' | 'bing' }
-          : undefined),
+      search: searchConfig,
       compression: (body.config?.compression ?? rc?.compression) as boolean | undefined,
       limits: body.config?.limits ?? rc?.limits,
     };

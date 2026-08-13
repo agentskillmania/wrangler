@@ -391,6 +391,7 @@ describe('Chat API', () => {
       expect(callArg.tools).toEqual({
         mcpConfigPaths: ['./mcp.json'],
         builtinFilter: { shell: false, fileRead: true },
+        injectFactory: expect.any(Function),
       });
       expect(callArg.session).toEqual({ enabled: false });
       expect(callArg.todolist).toEqual({ enabled: false });
@@ -430,7 +431,7 @@ describe('Chat API', () => {
       // test agent has no explicit model/skills/mcpPaths, so defaults apply
       expect(callArg.model).toBeUndefined();
       expect(callArg.skills).toEqual({ dirs: [expect.any(String)] });
-      expect(callArg.tools).toEqual({ mcpConfigPaths: [] });
+      expect(callArg.tools).toEqual({ mcpConfigPaths: [], injectFactory: expect.any(Function) });
       expect(callArg.sandbox).toBe(false);
 
       // Per-request params not provided, so handleMessage gets undefined

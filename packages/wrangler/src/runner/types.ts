@@ -15,8 +15,8 @@ import type { CommandHandler } from '../command/types.js';
 import type { HostEnv } from '../host-env/index.js';
 import type { SubAgentRunnerFactory } from '../subagent/delegate-tool.js';
 import type { SubAgentConfig } from '../subagent/types.js';
-import type { SearchProvider } from '../tools/builtin/index.js';
 import type { ToolDeps } from '../tools/builtin/workspace-deps.js';
+import type { SearchProvider } from '../tools/web/index.js';
 import type { SessionSource } from '../types.js';
 
 // ---- Tool & Skill metadata for diagnostics ----
@@ -96,6 +96,18 @@ export interface SkillsConfig {
 export interface ToolsConfig {
   /** Builtin tool whitelist. Omit to load all; pass to filter. */
   builtinFilter?: BuiltinToolFilter;
+  /**
+   * 宿主注入的工具集（追加到 core 工具之后，不受 builtinFilter 过滤）——
+   * Node 的 web_fetch/web_search 等平台专属工具由此注入
+   * （组装见 @agentskillmania/wrangler/tools/web）。
+   */
+  inject?: Tool<ZodTypeAny>[];
+  /**
+   * 宿主注入的工具工厂——引擎把解析好的 ToolDeps 传入（sandbox 场景下为
+   * SandboxToolDeps，宿主无需关心）。Node 宿主用它组装 web 工具：
+   * `(deps) => createWebTools({ deps, provider })`。
+   */
+  injectFactory?: (deps: ToolDeps) => Tool<ZodTypeAny>[];
   /**
    * External ToolDeps injection — overrides the default HostToolDeps/SandboxToolDeps.
    * Browser extensions pass BrowserToolDeps here; omit for Node (daemon/CLI).

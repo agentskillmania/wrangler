@@ -48,10 +48,7 @@ import { SpecStore } from '../spec-plan/spec-store.js';
 import { createDelegateTool } from '../subagent/delegate-tool.js';
 import { createTodolistSupport } from '../todolist/support.js';
 import { createA2UITools, A2UIMiddleware } from '../tools/a2ui/index.js';
-import { BingScrapeSearchProvider } from '../tools/builtin/bing-scrape-search.js';
-import { createBuiltinTools } from '../tools/builtin/index.js';
-import type { SearchProvider } from '../tools/builtin/index.js';
-import { SogouScrapeSearchProvider } from '../tools/builtin/sogou-scrape-search.js';
+import { createCoreTools } from '../tools/builtin/index.js';
 import {
   DEFAULT_MAX_TOOL_OUTPUT,
   HostToolDeps,
@@ -62,12 +59,6 @@ import { loadMCPTools } from '../tools/mcp/index.js';
 import { createReadResourceTool } from '../tools/skill/read-resource.js';
 import { createRunScriptTool } from '../tools/skill/run-script.js';
 import { createSpecPlanTools } from '../tools/spec-plan/index.js';
-
-function resolveSearchProvider(provider?: SearchProvider | 'bing' | 'sogou'): SearchProvider {
-  if (!provider || provider === 'sogou') return new SogouScrapeSearchProvider();
-  if (provider === 'bing') return new BingScrapeSearchProvider();
-  return provider;
-}
 
 /**
  * Build the base skill directory list: user-provided skill dirs plus the
@@ -210,8 +201,6 @@ export class EnhancedRunner {
     const resolvedSkillDirs = collectSkillDirs(options, runtime);
     const llmClient = resolveLLMClient(options);
 
-    const searchProvider = resolveSearchProvider(options.search?.provider);
-
     const sandboxEnabled = options.sandbox?.enabled;
 
     let sandboxInstance: Sandbox | undefined;
@@ -224,14 +213,21 @@ export class EnhancedRunner {
       sandboxInstance = new Sandbox({ sandboxDir: workspacePath, ...sandboxParams });
     }
 
-    const builtinTools = createBuiltinTools({
-      workspacePath,
-      searchProvider,
-      sandbox: sandboxInstance,
-      deps: options.tools?.deps,
+    // 统一的工具依赖（core 工具与技能工具共用）——宿主注入优先，
+    // 否则按 sandbox 实例 / runtime 构造（平台无关，HostToolDeps 接受 HostEnv）
+    const maxOutputSize = options.limits?.maxToolOutput ?? DEFAULT_MAX_TOOL_OUTPUT;
+    const toolTimeout = options.limits?.toolTimeout ?? 600_000;
+    const resolvedDeps: ToolDeps =
+      options.tools?.deps ??
+      (sandboxInstance
+        ? new SandboxToolDeps(sandboxInstance, maxOutputSize, toolTimeout)
+        : new HostToolDeps(runtime, workspacePath, maxOutputSize, undefined, toolTimeout));
+
+    // 平台无关 core 工具（web_fetch/web_search 由宿主经 tools.inject 注入）
+    const builtinTools = createCoreTools({
+      deps: resolvedDeps,
       askHumanHandler: options.tools?.askHumanHandler,
       maxToolOutput: options.limits?.maxToolOutput,
-      toolTimeout: options.limits?.toolTimeout,
     });
 
     // Filter builtin tools based on toggle options.
@@ -312,19 +308,19 @@ export class EnhancedRunner {
     const skillProvider = options.skills?.provider;
     const skillTools: Tool<ZodTypeAny>[] = [];
     if (skillProvider) {
-      const maxOutputSize = options.limits?.maxToolOutput ?? DEFAULT_MAX_TOOL_OUTPUT;
-      const toolTimeout = options.limits?.toolTimeout ?? 600_000;
-      const depsForSkills: ToolDeps =
-        options.tools?.deps ??
-        (sandboxInstance
-          ? new SandboxToolDeps(sandboxInstance, maxOutputSize, toolTimeout)
-          : new HostToolDeps(runtime, workspacePath, maxOutputSize, undefined, toolTimeout));
       skillTools.push(createReadResourceTool(skillProvider));
-      skillTools.push(createRunScriptTool(depsForSkills, skillProvider));
+      skillTools.push(createRunScriptTool(resolvedDeps, skillProvider));
     }
+
+    // 宿主注入：静态数组 + 工厂（工厂收到解析好的 ToolDeps）
+    const injectedTools: Tool<ZodTypeAny>[] = [
+      ...(options.tools?.inject ?? []),
+      ...(options.tools?.injectFactory ? options.tools.injectFactory(resolvedDeps) : []),
+    ];
 
     const allTools: Tool<ZodTypeAny>[] = [
       ...filteredBuiltinTools,
+      ...injectedTools,
       ...specPlanTools,
       ...mcpTools,
       ...todolistSupport.tools,

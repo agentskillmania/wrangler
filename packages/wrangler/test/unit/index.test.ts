@@ -4,7 +4,7 @@ import {
   AgentLoader,
   CrewLoader,
   SessionStore,
-  createBuiltinTools,
+  createCoreTools,
   parseCommand,
   CommandRegistry,
   createCommandMiddleware,
@@ -33,8 +33,8 @@ describe('@agentskillmania/wrangler exports', () => {
     expect(SessionStore.name).toBe('SessionStore');
 
     // Tool creators are functions
-    expect(createBuiltinTools).toBeInstanceOf(Function);
-    expect(createBuiltinTools.name).toBe('createBuiltinTools');
+    expect(createCoreTools).toBeInstanceOf(Function);
+    expect(createCoreTools.name).toBe('createCoreTools');
 
     // Command system
     expect(parseCommand).toBeInstanceOf(Function);

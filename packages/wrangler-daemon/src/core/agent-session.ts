@@ -128,6 +128,12 @@ export interface AgentSessionOptions {
   };
   tools?: {
     mcpConfigPaths?: string[];
+    /** 宿主注入工具（透传 EnhancedRunner.tools.inject） */
+    inject?: import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[];
+    /** 宿主注入工具工厂（透传 EnhancedRunner.tools.injectFactory，引擎传解析后的 ToolDeps） */
+    injectFactory?: (
+      deps: import('@agentskillmania/wrangler').ToolDeps
+    ) => import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[];
     builtinFilter?: Record<string, boolean>;
     /** External ToolDeps injection — BrowserToolDeps for extensions. */
     deps?: import('@agentskillmania/wrangler').ToolDeps;
