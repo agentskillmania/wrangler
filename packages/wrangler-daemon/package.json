@@ -43,7 +43,8 @@
     "test:unit": "vitest run test/unit",
     "test:intg": "vitest run test/integration",
     "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest"
+    "test:watch": "vitest run --watch",
+    "prepublishOnly": "pnpm test:unit && pnpm build"
   },
   "dependencies": {
     "@agentskillmania/colts": "^0.4.0",
