@@ -4,7 +4,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { LLMClient } from '@agentskillmania/llm-client';
-import { createLLMClient, resolveDefaultModel } from '../../../src/llm/client.js';
+import { createLLMClient } from '../../../src/llm/client.js';
+import { resolveDefaultModel } from '../../../src/llm/resolve-model.js';
 import type { LLMProviderEntry } from '@agentskillmania/colts';
 
 describe('llm client factory', () => {

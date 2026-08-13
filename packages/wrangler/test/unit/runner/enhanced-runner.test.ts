@@ -1179,7 +1179,10 @@ describe('EnhancedRunner', () => {
       const dir = store.getSessionDir(sessionId);
       const { runner, state } = await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
-        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
+        llm: {
+          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+        },
       });
 
       expect(runner).toBeInstanceOf(EnhancedRunner);
@@ -1198,7 +1201,10 @@ describe('EnhancedRunner', () => {
       const dir = store.getSessionDir(sessionId);
       const { runner, state } = await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
-        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
+        llm: {
+          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+        },
       });
 
       const result = await runner.run(state);
@@ -1219,7 +1225,10 @@ describe('EnhancedRunner', () => {
       const dir = store.getSessionDir(sessionId);
       const { state } = await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
-        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
+        llm: {
+          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+        },
       });
 
       // runner.getToolInfo() returns mock tools (empty in this test env)
@@ -1237,7 +1246,10 @@ describe('EnhancedRunner', () => {
       const dir = store.getSessionDir(sessionId);
       const { runner } = await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
-        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
+        llm: {
+          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+        },
         model: 'claude-3',
       });
 
@@ -1333,7 +1345,10 @@ describe('EnhancedRunner', () => {
 
       const { runner } = await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
-        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
+        llm: {
+          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+        },
         subAgents,
       });
 
@@ -1357,7 +1372,10 @@ describe('EnhancedRunner', () => {
       const dir = store.getSessionDir(sessionId);
       await EnhancedRunner.resume(dir, {
         runtime: new NodeHostEnv(),
-        llm: { quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] } },
+        llm: {
+          quickInit: { providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }] },
+          quickInitFactory: ((providers) => mockLLMClient) as unknown as (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider,
+        },
       });
 
       const calls = await getAgentRunnerCalls();

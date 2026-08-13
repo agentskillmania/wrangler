@@ -11,7 +11,6 @@
   },
   "references": [
     { "path": "./packages/wrangler" },
-    { "path": "./packages/wrangler-cli" },
     { "path": "./packages/wrangler-devtool" }
   ],
   "files": []
