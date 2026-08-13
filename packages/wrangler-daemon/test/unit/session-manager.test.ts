@@ -114,7 +114,8 @@ describe('SessionManager', () => {
 
   it('init discovers existing sessions', async () => {
     // Use SessionStore to create a real session on disk
-    const { SessionStore, defaultNodeHostEnv } = await import('@agentskillmania/wrangler');
+    const { SessionStore } = await import('@agentskillmania/wrangler');
+    const { defaultNodeHostEnv } = await import('@agentskillmania/wrangler/host-env/node-host-env');
     const wsPath = join(tempDir, 'workspace');
 
     const store = new SessionStore(sessionsDir, wsPath, defaultNodeHostEnv);
@@ -176,7 +177,8 @@ describe('SessionManager', () => {
   });
 
   it('list with workspacePath filters to that workspace', async () => {
-    const { SessionStore, defaultNodeHostEnv } = await import('@agentskillmania/wrangler');
+    const { SessionStore } = await import('@agentskillmania/wrangler');
+    const { defaultNodeHostEnv } = await import('@agentskillmania/wrangler/host-env/node-host-env');
     const ws1 = join(tempDir, 'ws-filter-1');
     const ws2 = join(tempDir, 'ws-filter-2');
 

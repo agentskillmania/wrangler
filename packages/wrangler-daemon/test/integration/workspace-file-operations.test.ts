@@ -3,7 +3,8 @@ import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { SessionStore, defaultNodeHostEnv } from '@agentskillmania/wrangler';
+import { SessionStore } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { SessionManager } from '../../src/core/session-manager.js';
 import { fileRoutes } from '../../src/routes/files.js';
 

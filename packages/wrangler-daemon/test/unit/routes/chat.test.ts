@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ConfigManager } from '../../../src/core/config-manager.js';
 import { ResourceManager } from '../../../src/core/resource-manager.js';
-import { SessionNotFoundError, writeMeta, defaultNodeHostEnv } from '@agentskillmania/wrangler';
+import { SessionNotFoundError, writeMeta } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { SessionManager } from '../../../src/core/session-manager.js';
 import { chatRoutes } from '../../../src/routes/chat.js';
 
@@ -25,6 +26,22 @@ vi.mock('../../../src/core/agent-session.js', () => ({
 }));
 
 /** Shared mock session instance reused across SSE streaming tests. */
+const mockRunnerConfig = {
+  model: 'test-model',
+  contextWindow: 128000,
+  thinkingEnabled: false,
+  enablePromptThinking: false,
+  sandbox: false,
+  compressorEnabled: false,
+  enableSession: false,
+  enableTodolist: false,
+  enableSpecPlan: false,
+  enableCommands: false,
+  a2ui: { enabled: false },
+  skillDirs: [],
+  mcpConfigPaths: [],
+};
+
 const mockSession = {
   sessionId: 'mock-session-123',
   busy: false,
@@ -32,26 +49,13 @@ const mockSession = {
   stop: vi.fn(),
   respondHumanInput: vi.fn(),
   emitCockpitEvent: vi.fn(),
-  // The chat route reads `agentSession.runner.getConfig()` to build the
-  // `session-start` SSE payload (chat.ts streamAgentSession). Without this the
-  // route throws synchronously after hijacking the reply, leaving the SSE
-  // connection open and the test to deadlock on `await fetch(...)`.
+  // The chat route reads `agentSession.getRunnerConfig()` (new accessor) to
+  // build the `session-start` SSE payload (chat.ts streamAgentSession).
+  // Without this the route throws synchronously after hijacking the reply,
+  // leaving the SSE connection open and the test to deadlock on `await fetch(...)`.
+  getRunnerConfig: () => mockRunnerConfig,
   runner: {
-    getConfig: () => ({
-      model: 'test-model',
-      contextWindow: 128000,
-      thinkingEnabled: false,
-      enablePromptThinking: false,
-      sandbox: false,
-      compressorEnabled: false,
-      enableSession: false,
-      enableTodolist: false,
-      enableSpecPlan: false,
-      enableCommands: false,
-      a2ui: { enabled: false },
-      skillDirs: [],
-      mcpConfigPaths: [],
-    }),
+    getConfig: () => mockRunnerConfig,
   },
 };
 

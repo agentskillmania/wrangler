@@ -1,3 +1,4 @@
+import { LLMClient } from '@agentskillmania/llm-client';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -198,6 +199,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const rc = config.runner;
 
     const sessionOptions: AgentSessionOptions = {
+      llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
       workspacePath,
       agentName: agentDetail.name,
       agentInstructions: agentDetail.instructions,
@@ -322,6 +324,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
             sessionStore: store,
             sessionManager: sessionManager(),
             subAgents: resumeSubAgents,
+            llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
           },
           config
         );
@@ -394,6 +397,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const rc = config.runner;
 
     const sessionOptions: AgentSessionOptions = {
+      llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
       workspacePath,
       agentName: runnerOpts.primaryAgent,
       agentInstructions: runnerOpts.systemPrompt,

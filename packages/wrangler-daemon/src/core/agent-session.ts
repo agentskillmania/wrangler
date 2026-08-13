@@ -18,7 +18,6 @@ import type { AskHumanHandler, HumanResponse } from '@agentskillmania/colts';
 import {
   EnhancedRunner,
   SessionStore,
-  createLLMClient,
   resolveDefaultModel,
 } from '@agentskillmania/wrangler';
 import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
@@ -64,6 +63,8 @@ export interface AgentSessionResumeOptions {
   sessionManager?: { getStatus(id: string): string };
   /** Sub-agent configs to rebuild crew delegation on resume */
   subAgents?: SubAgentConfig[];
+  /** quickInit 创建器（Node 宿主传 LLMClient.quickInit）——daemon core 不捆绑内置 LLM */
+  llmClientFactory?: (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider;
 }
 
 /**
@@ -99,6 +100,8 @@ export interface AgentSessionOptions {
    * Omit for Node (uses createLLMClient with pi-ai).
    */
   llmClient?: import('@agentskillmania/colts').ILLMProvider;
+  /** quickInit 创建器（Node 宿主传 LLMClient.quickInit）——daemon core 不捆绑内置 LLM */
+  llmClientFactory?: (providers: import('@agentskillmania/llm-client').LLMProviderEntry[]) => import('@agentskillmania/colts').ILLMProvider;
   workspacePath: string;
   agentName: string;
   agentInstructions?: string;
@@ -226,8 +229,15 @@ export class AgentSession {
     const bridge = AgentSession._createBridge();
     const defaultModel = resolveDefaultModel(config.llm.providers);
     const llmModel = options.model ?? defaultModel;
-    // 注入的 llmClient（浏览器 FetchLlmProvider）优先，否则用 pi-ai 的 createLLMClient
-    const llmClient = options.llmClient ?? createLLMClient(config.llm.providers);
+    // 注入的 llmClient（浏览器 FetchLlmProvider）优先；否则要求宿主提供工厂
+    const llmClient =
+      options.llmClient ??
+      options.llmClientFactory?.(config.llm.providers) ??
+      (() => {
+        throw new Error(
+          'AgentSession requires llmClient or llmClientFactory (e.g. (providers) => LLMClient.quickInit({ providers }))'
+        );
+      })();
 
     const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
 
@@ -325,7 +335,12 @@ export class AgentSession {
   ): Promise<AgentSession> {
     const bridge = AgentSession._createBridge();
     const llmModel = resolveDefaultModel(config.llm.providers);
-    const llmClient = createLLMClient(config.llm.providers);
+    if (!options.llmClientFactory) {
+      throw new Error(
+        'AgentSession.resume requires llmClientFactory (e.g. (providers) => LLMClient.quickInit({ providers }))'
+      );
+    }
+    const llmClient = options.llmClientFactory(config.llm.providers);
     const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
 
     const { runner, state } = await EnhancedRunner.resume(sessionDir, {

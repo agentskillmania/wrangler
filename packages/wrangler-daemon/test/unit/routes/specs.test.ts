@@ -3,7 +3,8 @@ import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { SpecStore, defaultNodeHostEnv } from '@agentskillmania/wrangler';
+import { SpecStore } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { specRoutes } from '../../../src/routes/specs.js';
 
 let specPlanDir: string;

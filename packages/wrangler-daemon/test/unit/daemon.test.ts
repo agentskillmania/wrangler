@@ -174,7 +174,8 @@ describe('Daemon', () => {
   });
 
   it('discovers an existing session from disk during startup', async () => {
-    const { SessionStore, defaultNodeHostEnv } = await import('@agentskillmania/wrangler');
+    const { SessionStore } = await import('@agentskillmania/wrangler');
+    const { defaultNodeHostEnv } = await import('@agentskillmania/wrangler/host-env/node-host-env');
     const workspacePath = join(tempDir, 'workspace');
     await mkdir(workspacePath, { recursive: true });
 
