@@ -18,6 +18,10 @@
       "types": "./dist/tools/web/index.d.ts",
       "import": "./dist/tools/web/index.js"
     },
+    "./tools/mcp": {
+      "types": "./dist/tools/mcp/index.d.ts",
+      "import": "./dist/tools/mcp/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

@@ -115,6 +115,11 @@ export interface ToolsConfig {
   deps?: ToolDeps;
   /** MCP config file paths */
   mcpConfigPaths?: string[];
+  /**
+   * MCP 工具加载器（Node 宿主传 loadMCPTools 的包装；引擎 core 不捆绑
+   * MCP 加载）。有 mcpConfigPaths 时必须提供。
+   */
+  mcpLoader?: (paths: string[]) => Promise<Tool<ZodTypeAny>[]>;
   /** Extra custom tools */
   extra?: Tool<ZodTypeAny>[];
   /** AskHuman handler for human-in-the-loop */

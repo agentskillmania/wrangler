@@ -10,6 +10,7 @@ import {
 } from '@agentskillmania/wrangler';
 import type { SessionMeta } from '@agentskillmania/wrangler';
 import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
+import { loadMCPTools } from '@agentskillmania/wrangler/tools/mcp';
 import { createWebTools } from '@agentskillmania/wrangler/tools/web';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -225,6 +226,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
         // Node 专属 web 工具（jsdom 爬虫）——引擎 core 不含，由 daemon 组装注入
         injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),
+        // MCP 加载器（引擎 core 不捆绑 MCP 加载）
+        mcpLoader: (paths) => loadMCPTools({ configPaths: paths }),
       },
       sessionStore: body.sessionDir
         ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)
@@ -436,6 +439,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
         // Node 专属 web 工具（jsdom 爬虫）——引擎 core 不含，由 daemon 组装注入
         injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),
+        // MCP 加载器（引擎 core 不捆绑 MCP 加载）
+        mcpLoader: (paths) => loadMCPTools({ configPaths: paths }),
       },
       sessionStore: body.sessionDir
         ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)

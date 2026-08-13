@@ -173,24 +173,18 @@ describe('EnhancedRunner', () => {
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ model: 'glm-5.1' }));
   });
 
-  it('should create() pass mcpConfigPaths to loadMCPTools', async () => {
-    const { loadMCPTools } = await import('../../../src/tools/mcp/index.js');
-
-    await EnhancedRunner.create(makeOptions({ tools: { mcpConfigPaths: ['/custom/mcp.json'] } }));
-
-    expect(loadMCPTools).toHaveBeenCalledWith({
-      configPaths: ['/custom/mcp.json'],
-    });
+  it('should create() call injected mcpLoader with mcpConfigPaths', async () => {
+    const mcpLoader = vi.fn().mockResolvedValue([]);
+    await EnhancedRunner.create(
+      makeOptions({ tools: { mcpConfigPaths: ['/custom/mcp.json'], mcpLoader } })
+    );
+    expect(mcpLoader).toHaveBeenCalledWith(['/custom/mcp.json']);
   });
 
-  it('should create() default mcpConfigPaths to empty array', async () => {
-    const { loadMCPTools } = await import('../../../src/tools/mcp/index.js');
-
-    await EnhancedRunner.create(makeOptions());
-
-    expect(loadMCPTools).toHaveBeenCalledWith({
-      configPaths: [],
-    });
+  it('should create() throw when mcpConfigPaths given without mcpLoader', async () => {
+    await expect(
+      EnhancedRunner.create(makeOptions({ tools: { mcpConfigPaths: ['/custom/mcp.json'] } }))
+    ).rejects.toThrow('requires tools.mcpLoader');
   });
 
   it('should create() includes extraTools in tool list', async () => {

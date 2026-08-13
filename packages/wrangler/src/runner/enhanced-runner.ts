@@ -55,7 +55,6 @@ import {
   SandboxToolDeps,
 } from '../tools/builtin/workspace-deps.js';
 import type { ToolDeps } from '../tools/builtin/workspace-deps.js';
-import { loadMCPTools } from '../tools/mcp/index.js';
 import { createReadResourceTool } from '../tools/skill/read-resource.js';
 import { createRunScriptTool } from '../tools/skill/run-script.js';
 import { createSpecPlanTools } from '../tools/spec-plan/index.js';
@@ -260,8 +259,19 @@ export class EnhancedRunner {
         })
       : builtinTools;
 
+    // MCP 工具：加载器由宿主注入（Node 用 loadMCPTools 子路径）——
+    // 引擎 core 不捆绑 MCP 加载（拖入 @modelcontextprotocol 等 Node 依赖）
     const mcpConfigPaths = options.tools?.mcpConfigPaths ?? [];
-    const mcpTools = await loadMCPTools({ configPaths: mcpConfigPaths });
+    let mcpTools: Tool<ZodTypeAny>[] = [];
+    if (mcpConfigPaths.length > 0) {
+      const loader = options.tools?.mcpLoader;
+      if (!loader) {
+        throw new Error(
+          'tools.mcpConfigPaths requires tools.mcpLoader (Node host: (paths) => loadMCPTools({ configPaths: paths }) from @agentskillmania/wrangler/tools/mcp)'
+        );
+      }
+      mcpTools = await loader(mcpConfigPaths);
+    }
 
     const llmQuickInit = options.llm?.quickInit;
     const resolvedModel =

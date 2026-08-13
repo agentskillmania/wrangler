@@ -128,6 +128,10 @@ export interface AgentSessionOptions {
   };
   tools?: {
     mcpConfigPaths?: string[];
+    /** MCP 工具加载器（透传 EnhancedRunner.tools.mcpLoader） */
+    mcpLoader?: (
+      paths: string[]
+    ) => Promise<import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[]>;
     /** 宿主注入工具（透传 EnhancedRunner.tools.inject） */
     inject?: import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[];
     /** 宿主注入工具工厂（透传 EnhancedRunner.tools.injectFactory，引擎传解析后的 ToolDeps） */
