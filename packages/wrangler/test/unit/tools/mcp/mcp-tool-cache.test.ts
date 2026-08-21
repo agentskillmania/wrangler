@@ -62,12 +62,12 @@ describe('MCPToolCache', () => {
   });
 
   it('returns empty array for empty configPaths', async () => {
-    const tools = await cache.getTools([]);
+    const tools = await cache.getTools({ configPaths: [] });
     expect(tools).toEqual([]);
   });
 
   it('returns empty array for undefined configPaths', async () => {
-    const tools = await cache.getTools(undefined);
+    const tools = await cache.getTools({});
     expect(tools).toEqual([]);
   });
 
@@ -82,8 +82,8 @@ describe('MCPToolCache', () => {
       ]);
 
     const paths = ['/fake/config.json'];
-    const tools1 = await cache.getTools(paths);
-    const tools2 = await cache.getTools(paths);
+    const tools1 = await cache.getTools({ configPaths: paths });
+    const tools2 = await cache.getTools({ configPaths: paths });
 
     expect(tools1).toHaveLength(1);
     expect(tools2).toHaveLength(1);
@@ -110,8 +110,8 @@ describe('MCPToolCache', () => {
         },
       ]);
 
-    const toolsA = await cache.getTools(['/config-a.json']);
-    const toolsB = await cache.getTools(['/config-b.json']);
+    const toolsA = await cache.getTools({ configPaths: ['/config-a.json'] });
+    const toolsB = await cache.getTools({ configPaths: ['/config-b.json'] });
 
     expect(toolsA).toHaveLength(1);
     expect(toolsB).toHaveLength(1);
@@ -134,8 +134,8 @@ describe('MCPToolCache', () => {
         { name: 'tool', description: 'Test', inputSchema: { type: 'object', properties: {} } },
       ]);
 
-    const tools1 = await cache.getTools(['/a.json', '/b.json']);
-    const tools2 = await cache.getTools(['/b.json', '/a.json']);
+    const tools1 = await cache.getTools({ configPaths: ['/a.json', '/b.json'] });
+    const tools2 = await cache.getTools({ configPaths: ['/b.json', '/a.json'] });
 
     expect(tools1).not.toBe(tools2);
   });
@@ -151,8 +151,8 @@ describe('MCPToolCache', () => {
       ]);
     mockFns.listTools = () => Promise.resolve([]);
 
-    await cache.getTools(['/a.json']);
-    await cache.getTools(['/b.json']);
+    await cache.getTools({ configPaths: ['/a.json'] });
+    await cache.getTools({ configPaths: ['/b.json'] });
 
     expect(createRuntime).toHaveBeenCalledTimes(1);
   });
@@ -164,14 +164,14 @@ describe('MCPToolCache', () => {
         { name: 'srv', command: { kind: 'http', url: new URL('http://localhost') } },
       ]);
 
-    const tools = await cache.getTools(['/config.json']);
+    const tools = await cache.getTools({ configPaths: ['/config.json'] });
     expect(tools).toEqual([]);
   });
 
   it('returns empty array when loadServerDefinitions fails', async () => {
     mockFns.loadServerDefinitions = () => Promise.reject(new Error('bad config'));
 
-    const tools = await cache.getTools(['/bad.json']);
+    const tools = await cache.getTools({ configPaths: ['/bad.json'] });
     expect(tools).toEqual([]);
   });
 
@@ -182,7 +182,7 @@ describe('MCPToolCache', () => {
       ]);
     mockFns.listTools = () => Promise.reject(new Error('unavailable'));
 
-    const tools = await cache.getTools(['/config.json']);
+    const tools = await cache.getTools({ configPaths: ['/config.json'] });
     expect(tools).toEqual([]);
   });
 
@@ -197,10 +197,10 @@ describe('MCPToolCache', () => {
       ]);
 
     const paths = ['/config.json'];
-    await cache.getTools(paths);
+    await cache.getTools({ configPaths: paths });
     await cache.shutdown();
 
-    const tools = await cache.getTools(paths);
+    const tools = await cache.getTools({ configPaths: paths });
     expect(tools).toHaveLength(1);
   });
 
@@ -216,7 +216,7 @@ describe('MCPToolCache', () => {
     };
     mockFns.listTools = () => Promise.resolve([]);
 
-    await cache.getTools(['/config1.json']);
+    await cache.getTools({ configPaths: ['/config1.json'] });
     // srv1 should be registered now
     expect(mockFns.registeredServers.has('srv1')).toBe(true);
 
@@ -228,7 +228,7 @@ describe('MCPToolCache', () => {
       return Promise.resolve([]);
     };
 
-    await cache.getTools(['/config2.json']);
+    await cache.getTools({ configPaths: ['/config2.json'] });
     // srv2 must also be registered — BUG9: it was silently ignored before
     expect(mockFns.registeredServers.has('srv2')).toBe(true);
     // srv1 should still be there

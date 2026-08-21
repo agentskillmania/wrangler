@@ -42,37 +42,80 @@ async function safeLoadDefinitions(configPath: string): Promise<ServerDefinition
  * subsequent tool loads. Tool lists are cached by configPaths key.
  * No hot-reload — process restart required for config changes.
  */
+/** 内联 MCP 服务器定义(与配置文件内 mcpServers 条目同形;宿主全权注入)。 */
+export interface InlineServerDef {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  description?: string;
+}
+
+/** 内联定义 → mcporter ServerDefinition(stdio)。 */
+function inlineServerDefs(servers: Record<string, InlineServerDef>): ServerDefinition[] {
+  return Object.entries(servers).map(([name, s]) => ({
+    name,
+    command: { kind: 'stdio' as const, command: s.command, args: s.args ?? [], cwd: '' },
+    env: s.env,
+    ...(s.description ? { description: s.description } : {}),
+  }));
+}
+
+/** 稳定序列化(cache 键用:键排序后 JSON,免受对象键序影响)。 */
+function stableKey(value: unknown): string {
+  return JSON.stringify(value, (_k, v) => {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      return Object.keys(v as Record<string, unknown>)
+        .sort()
+        .reduce<Record<string, unknown>>((acc, k) => {
+          acc[k] = (v as Record<string, unknown>)[k];
+          return acc;
+        }, {});
+    }
+    return v;
+  });
+}
+
 export class MCPToolCache {
   private runtime: Runtime | null = null;
   private cache = new Map<string, CacheEntry>();
 
   /**
-   * Get MCP tools for the given config paths.
+   * Get MCP tools for config paths or inline server definitions.
    *
-   * Returns cached tools if this exact configPaths combination was loaded before.
-   * Otherwise loads fresh from config files via the shared Runtime.
+   * Replacement semantics: when `servers` is given, `configPaths` is
+   * bypassed entirely (an empty object is an explicit empty set) —
+   * mirrors the Rust daemon's `mcpServers` request contract.
+   *
+   * Returns cached tools if this exact combination was loaded before.
    */
-  async getTools(configPaths?: string[]): Promise<Tool<ZodTypeAny>[]> {
-    if (!configPaths || configPaths.length === 0) {
+  async getTools(opts: {
+    configPaths?: string[];
+    servers?: Record<string, InlineServerDef>;
+  }): Promise<Tool<ZodTypeAny>[]> {
+    const allDefs = opts.servers
+      ? inlineServerDefs(opts.servers)
+      : mergeServerDefinitions(
+          await Promise.all((opts.configPaths ?? []).map((p) => safeLoadDefinitions(p)))
+        );
+
+    if (allDefs.length === 0) {
       return [];
     }
 
-    const key = configPaths.join('\n');
+    const key = opts.servers
+      ? `inline:${stableKey(opts.servers)}`
+      : `paths:${opts.configPaths!.join('\n')}`;
     const cached = this.cache.get(key);
     if (cached) {
       return cached.tools;
     }
 
-    const tools = await this.loadTools(configPaths);
+    const tools = await this.loadTools(allDefs);
     this.cache.set(key, { tools });
     return tools;
   }
 
-  private async loadTools(configPaths: string[]): Promise<Tool<ZodTypeAny>[]> {
-    const allDefs = mergeServerDefinitions(
-      await Promise.all(configPaths.map((p) => safeLoadDefinitions(p)))
-    );
-
+  private async loadTools(allDefs: ServerDefinition[]): Promise<Tool<ZodTypeAny>[]> {
     if (allDefs.length === 0) {
       return [];
     }

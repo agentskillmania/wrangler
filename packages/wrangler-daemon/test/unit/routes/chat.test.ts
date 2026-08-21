@@ -407,6 +407,111 @@ describe('Chat API', () => {
       expect(msgOpts.thinkingEnabled).toBe(true);
     });
 
+    it('normalizes compression to boolean for both request shapes', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      // 统一对象形状 {enabled: false} → compression: false
+      let res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp/test-ws',
+          config: { compression: { enabled: false } },
+        }),
+      });
+      expect(res.status).toBe(200);
+      expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
+      let callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArg.compression).toBe(false);
+
+      mockAgentSessionCreate.mockClear();
+      // 旧式裸布尔 true → compression: true
+      res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp/test-ws',
+          config: { compression: true },
+        }),
+      });
+      expect(res.status).toBe(200);
+      expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
+      callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArg.compression).toBe(true);
+
+      mockAgentSessionCreate.mockClear();
+      // 空对象 {} = enabled 未给 → 回落 config.yaml(undefined)
+      res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp/test-ws',
+          config: { compression: {} },
+        }),
+      });
+      expect(res.status).toBe(200);
+      callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArg.compression).toBeUndefined();
+    });
+
+    it('inline mcpServers bypass mcpConfigPaths (replacement semantics)', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp/test-ws',
+          config: {
+            tools: {
+              mcpConfigPaths: ['/legacy/mcp.json'],
+              mcpServers: { ctx7: { command: 'npx', args: ['-y', 'x'] } },
+            },
+          },
+        }),
+      });
+      expect(res.status).toBe(200);
+      const callArg = mockAgentSessionCreate.mock.calls[0][0] as {
+        tools: { mcpConfigPaths?: string[]; mcpLoader?: (paths: string[]) => Promise<never[]> };
+      };
+      // 路径轴被旁路;加载器换到内联通道(不接受任何路径)
+      expect(callArg.tools.mcpConfigPaths).toEqual([]);
+      const inline = await callArg.tools.mcpLoader!(['/should/be/ignored']);
+      expect(inline).toEqual([]);
+    });
+
+    it('inline agent block replaces the agent file', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      // agent 文件不存在的名字 + 内联块 → 不 404,人设用内联值
+      const res = await fetch(`${getUrl()}/api/agents/no-such-agent-file/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp/test-ws',
+          agent: { instructions: '内联人设', name: 'custom-name' },
+        }),
+      });
+      expect(res.status).toBe(200);
+      const callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArg.agentInstructions).toBe('内联人设');
+      expect(callArg.agentName).toBe('custom-name');
+    });
+
     it('uses agent defaults when config fields omitted', async () => {
       mockAgentSessionCreate.mockResolvedValue(mockSession);
       mockHandleMessage.mockImplementation(async function* () {

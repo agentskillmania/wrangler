@@ -201,14 +201,33 @@ export interface SessionInitParams {
    * `{root}/sessions/{hash}/{id}` tree.
    */
   sessionDir?: string;
+  /**
+   * Inline agent definition (**replaces agents/*.md**): when given, `:name`
+   * is an addressing label only and the persona is not read from disk —
+   * the host owns the definition (embedded-daemon channel; mirrors the
+   * Rust daemon contract). `instructions` is required.
+   */
+  agent?: { name?: string; instructions: string };
   /** Structured runner config — mirrors `EnhancedRunnerOptions` groups
    * (field-level merged over the daemon config.yaml defaults; absent groups
    * fall back to runner defaults). */
   config?: {
     /** Skill directories to scan for SKILL.md files. */
     skills?: { dirs?: string[] };
-    /** MCP config paths + builtin tool whitelist. */
-    tools?: { mcpConfigPaths?: string[]; builtinFilter?: Record<string, boolean> };
+    /** MCP config paths + inline server definitions + builtin tool whitelist. */
+    tools?: {
+      mcpConfigPaths?: string[];
+      /**
+       * Inline MCP server definitions (replacement semantics: when given,
+       * mcpConfigPaths and its agent/config.runner fallbacks are bypassed —
+       * host-owned registry channel; mirrors the Rust daemon contract).
+       */
+      mcpServers?: Record<
+        string,
+        { command: string; args?: string[]; env?: Record<string, string> }
+      >;
+      builtinFilter?: Record<string, boolean>;
+    };
     /** Sandbox config: boolean (legacy) or full execution-parameter object. */
     sandbox?: boolean | SandboxConfig;
     /** Thinking/reasoning mode + prompt-level guidance. */
@@ -233,8 +252,11 @@ export interface SessionInitParams {
     };
     /** Web search provider. Defaults to 'sogou'. */
     search?: { provider?: 'sogou' | 'bing' };
-    /** Context compression. Omit = enabled; false = disabled. */
-    compression?: boolean;
+    /** Context compression. Unified `{enabled}` shape (matches the other
+     * feature groups and the SSE session-start payload); legacy bare boolean
+     * still accepted. Omit = config.yaml default. `strategy` is deployment
+     * level (config.yaml only), not exposed per-request. */
+    compression?: boolean | { enabled?: boolean };
   };
 }
 

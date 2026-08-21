@@ -21,10 +21,20 @@ import type { AgentSessionOptions, AgentSessionResumeOptions } from '../core/age
 import { mergeSandboxConfig } from '../core/sandbox-config.js';
 import type {
   DecoratedFastifyInstance,
+  AgentDetail,
   CreateAndChatRequest,
   ResumeChatRequest,
 } from '../types.js';
 import { writeSSE } from '../utils.js';
+
+/**
+ * 归一 `config.compression` 的请求形状:统一对象 `{enabled}` 与旧式裸布尔
+ * 都收(undefined = 请求未给,回落 config.yaml 默认)。与 Rust daemon 的
+ * CompressionValue(untagged 双形状)同语义;strategy 不在请求级暴露。
+ */
+function normalizeCompression(v: boolean | { enabled?: boolean } | undefined): boolean | undefined {
+  return typeof v === 'boolean' ? v : v?.enabled;
+}
 
 /** Predefined slash commands for the chat input */
 const COMMANDS = [
@@ -209,7 +219,19 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       return;
     }
 
-    const agentDetail = await resourceManager().getAgent(name);
+    // Inline agent block replaces the agent file (host-owned persona;
+    // agents/*.md is only the standalone-daemon assembly source).
+    const agentDetail: AgentDetail | null = body.agent
+      ? {
+          id: name,
+          name: body.agent.name ?? name,
+          instructions: body.agent.instructions,
+          path: '',
+          skillDirs: [],
+          mcpPaths: [],
+          skillCount: 0,
+        }
+      : await resourceManager().getAgent(name);
     if (!agentDetail) {
       reply.code(404).send({ error: 'Agent not found' });
       return;
@@ -243,13 +265,23 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         ],
       },
       tools: {
-        mcpConfigPaths:
-          body.config?.tools?.mcpConfigPaths ?? agentDetail.mcpPaths ?? rc?.mcpConfigPaths ?? [],
+        // 替换语义:内联 mcpServers 给了 → 路径轴(agent/config.runner 回退)整体旁路
+        mcpConfigPaths: body.config?.tools?.mcpServers
+          ? []
+          : (body.config?.tools?.mcpConfigPaths ??
+            agentDetail.mcpPaths ??
+            rc?.mcpConfigPaths ??
+            []),
         builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
         // Node 专属 web 工具（jsdom 爬虫）——引擎 core 不含，由 daemon 组装注入
         injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),
         // MCP 加载器（引擎 core 不捆绑 MCP 加载）
-        mcpLoader: (paths) => loadMCPTools({ configPaths: paths }),
+        mcpLoader: (paths) =>
+          loadMCPTools(
+            body.config?.tools?.mcpServers
+              ? { servers: body.config.tools.mcpServers }
+              : { configPaths: paths }
+          ),
       },
       sessionStore: body.sessionDir
         ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)
@@ -267,7 +299,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       sandbox: withSandboxInstance(config.sandbox, body.config?.sandbox, workspacePath),
       a2ui: body.config?.a2ui ?? rc?.a2ui,
       search: searchConfig,
-      compression: (body.config?.compression ?? rc?.compression) as boolean | undefined,
+      compression: normalizeCompression(body.config?.compression) ?? rc?.compression?.enabled,
       limits: body.config?.limits ?? rc?.limits,
     };
 
@@ -459,12 +491,20 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         ],
       },
       tools: {
-        mcpConfigPaths: body.config?.tools?.mcpConfigPaths ?? rc?.mcpConfigPaths ?? [],
+        // 替换语义:内联 mcpServers 给了 → 路径轴旁路(镜像 Rust 契约)
+        mcpConfigPaths: body.config?.tools?.mcpServers
+          ? []
+          : (body.config?.tools?.mcpConfigPaths ?? rc?.mcpConfigPaths ?? []),
         builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
         // Node 专属 web 工具（jsdom 爬虫）——引擎 core 不含，由 daemon 组装注入
         injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),
         // MCP 加载器（引擎 core 不捆绑 MCP 加载）
-        mcpLoader: (paths) => loadMCPTools({ configPaths: paths }),
+        mcpLoader: (paths) =>
+          loadMCPTools(
+            body.config?.tools?.mcpServers
+              ? { servers: body.config.tools.mcpServers }
+              : { configPaths: paths }
+          ),
       },
       sessionStore: body.sessionDir
         ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)
@@ -478,7 +518,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       commands: body.config?.commands ?? rc?.commands,
       a2ui: body.config?.a2ui ?? rc?.a2ui,
       search: searchConfig,
-      compression: (body.config?.compression ?? rc?.compression) as boolean | undefined,
+      compression: normalizeCompression(body.config?.compression) ?? rc?.compression?.enabled,
       limits: body.config?.limits ?? rc?.limits,
     };
 

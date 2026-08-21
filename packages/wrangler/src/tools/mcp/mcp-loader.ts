@@ -1,14 +1,17 @@
 import type { Tool } from '@agentskillmania/colts';
 import type { ZodTypeAny } from 'zod';
 
-import { MCPToolCache } from './mcp-tool-cache.js';
+import { MCPToolCache, type InlineServerDef } from './mcp-tool-cache.js';
 
 /**
  * Options for loading MCP tools.
  *
- * Accepts an ordered list of mcporter-standard config file paths.
- * Each is loaded via `loadServerDefinitions()`, then merged:
- * later paths override earlier ones on server name collision.
+ * Two supply channels (replacement semantics, mirroring the Rust engine):
+ * - `configPaths`: ordered list of mcporter-standard config file paths,
+ *   later paths override earlier ones on server name collision;
+ * - `servers`: inline server definitions from the host — when given,
+ *   `configPaths` is bypassed entirely (an empty object is an explicit
+ *   empty set).
  */
 export interface MCPLoaderOptions {
   /**
@@ -17,6 +20,8 @@ export interface MCPLoaderOptions {
    * Empty or undefined → returns no tools.
    */
   configPaths?: string[];
+  /** Inline server definitions (host-owned registry; bypasses configPaths). */
+  servers?: Record<string, InlineServerDef>;
 }
 
 /** Module-level cache singleton. Alive for the process lifetime. */
@@ -28,12 +33,12 @@ export async function _resetCache(): Promise<void> {
 }
 
 /**
- * Load MCP tools from one or more mcporter config files.
+ * Load MCP tools from config files or inline server definitions.
  *
  * Uses a global MCPToolCache singleton. First call for a given
- * configPaths combination loads from config files; subsequent calls
- * with the same paths return cached tools instantly.
+ * combination loads fresh; subsequent calls with the same combination
+ * return cached tools instantly.
  */
 export async function loadMCPTools(options?: MCPLoaderOptions): Promise<Tool<ZodTypeAny>[]> {
-  return globalCache.getTools(options?.configPaths);
+  return globalCache.getTools(options ?? {});
 }
