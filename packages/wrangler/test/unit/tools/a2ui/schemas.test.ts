@@ -68,6 +68,36 @@ describe('A2UI Schemas', () => {
       operations: [],
     });
     expect(result5.success).toBe(false);
+
+    // Valid: full-tree dialect — one op carrying the whole tree, any verb
+    const fullTreeOps = [
+      { op: 'replace', path: '/components', value: [{ id: 'root', component: 'Column' }] },
+      { op: 'insert', path: '/components', value: [{ id: 'root', component: 'Column' }] },
+      { op: 'set', path: '/', value: [{ id: 'root', component: 'Column' }] },
+    ];
+    for (const [i, operation] of fullTreeOps.entries()) {
+      const result = UpdateComponentsSchema.safeParse({
+        surfaceId: 'main',
+        operations: [operation],
+      });
+      expect(result.success, `full-tree op #${i} (${operation.op}) should pass`).toBe(true);
+    }
+
+    // Full-tree op passes regardless of node shape (genui or wrangler ComponentNode)
+    const resultMixed = UpdateComponentsSchema.safeParse({
+      surfaceId: 'main',
+      operations: [
+        {
+          op: 'replace',
+          path: '/components',
+          value: [
+            { id: 'root', component: 'Column', gap: 16 },
+            { id: 't', type: 'Text', properties: { text: 'hi' } },
+          ],
+        },
+      ],
+    });
+    expect(resultMixed.success).toBe(true);
   });
 
   it('should validate update_data_model args', async () => {

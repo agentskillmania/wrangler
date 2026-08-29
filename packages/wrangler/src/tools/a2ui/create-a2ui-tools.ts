@@ -30,7 +30,9 @@ export function createA2UITools(): Tool<z.ZodTypeAny>[] {
     {
       name: 'a2ui_update_components',
       description:
-        'Update component tree on a surface. Supports insert, update, delete, and replace operations.',
+        'Update the component tree on a surface. PREFERRED: send the FULL tree in one operation — ' +
+        '{ "op": "replace", "path": "/components", "value": [ ...all components, genui shape { id, component, ...flat props } ] }. ' +
+        'Also supports addressed insert/update/delete/replace operations on single components.',
       parameters: UpdateComponentsSchema,
       async execute(args: z.infer<typeof UpdateComponentsSchema>) {
         return `Components updated on surface "${args.surfaceId}" (${args.operations.length} operation${args.operations.length > 1 ? 's' : ''})`;

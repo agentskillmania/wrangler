@@ -18,6 +18,15 @@ export const ComponentNodeSchema = z.object({
 });
 
 export const ComponentOperationSchema = z.union([
+  // Full-tree dialect (what the a2ui-generation skill teaches and models
+  // overwhelmingly emit): ONE operation carrying the whole component array.
+  // The verb is not part of the semantics — replace/insert/set/update alike
+  // mean "replace everything" when addressed by path + value array.
+  z.object({
+    op: z.string(),
+    path: z.string(),
+    value: z.array(z.unknown()),
+  }),
   z.object({
     op: z.literal('insert'),
     parentId: z.string(),
