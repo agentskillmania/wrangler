@@ -46,7 +46,7 @@ export function generateTitlePrompt(userMessage: string, assistantSummary: strin
       : assistantSummary;
 
   return `Generate a concise title (5-8 words) for this conversation session.
-Use English. Do not use quotes. Do not end with punctuation.
+Use the same language as the conversation. Do not use quotes. Do not end with punctuation.
 
 User's first message: ${userMessage}
 Assistant's response summary: ${summary}
