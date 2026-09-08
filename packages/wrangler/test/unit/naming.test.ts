@@ -53,5 +53,11 @@ describe('Session Naming', () => {
       const summaryLine = lines.find((l) => l.includes('x'.repeat(50))) ?? '';
       expect(summaryLine.length).toBeLessThanOrEqual(600); // 500 + prefix text
     });
+
+    it('follows the conversation language instead of hardcoding English', () => {
+      const prompt = generateTitlePrompt('帮我修复登录 bug', '我找到了问题');
+      expect(prompt).not.toContain('Use English');
+      expect(prompt).toContain('Use the same language as the conversation');
+    });
   });
 });
