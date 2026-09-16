@@ -18,7 +18,10 @@ import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createBuiltinTools } from '../../src/tools/builtin/index.js';
+import { createCoreTools } from '../../src/tools/builtin/index.js';
+import { HostToolDeps } from '../../src/tools/builtin/workspace-deps.js';
+import { createWebFetchTool } from '../../src/tools/builtin/web-fetch.js';
+import { NodeHostEnv } from '../../src/host-env/node-host-env.js';
 
 const enabled = process.env.ENABLE_INTEGRATION_TESTS === 'true';
 const apiKey = process.env.OPENAI_API_KEY || '';
@@ -27,7 +30,7 @@ const baseUrl = process.env.OPENAI_BASE_URL;
 const testModel = process.env.MODEL || 'gpt-3.5-turbo';
 const itif = (condition: boolean) => (condition ? it : it.skip);
 
-function makeRunner(tools: ReturnType<typeof createBuiltinTools>) {
+function makeRunner(tools: ReturnType<typeof createCoreTools>) {
   return new AgentRunner({
     model: testModel,
     llmClient: LLMClient.quickInit({
@@ -64,7 +67,7 @@ describe('LLM tool calling: builtin tools', () => {
         'Hello from existing file\nLine 2\nLine 3\n'
       );
 
-      const tools = createBuiltinTools({ workspacePath: workspace });
+      const tools = createCoreTools({ deps: new HostToolDeps(new NodeHostEnv(), workspace) });
       const runner = makeRunner(tools);
 
       let state = createAgentState({
@@ -110,7 +113,7 @@ describe('LLM tool calling: builtin tools', () => {
         '{\n  "name": "my-app",\n  "version": "1.0.0"\n}'
       );
 
-      const tools = createBuiltinTools({ workspacePath: workspace });
+      const tools = createCoreTools({ deps: new HostToolDeps(new NodeHostEnv(), workspace) });
       const runner = makeRunner(tools);
 
       let state = createAgentState({
@@ -155,7 +158,7 @@ describe('LLM tool calling: builtin tools', () => {
       );
       await writeFile(join(workspace, 'package.json'), '{"name": "test-project"}');
 
-      const tools = createBuiltinTools({ workspacePath: workspace });
+      const tools = createCoreTools({ deps: new HostToolDeps(new NodeHostEnv(), workspace) });
       const runner = makeRunner(tools);
 
       let state = createAgentState({
@@ -185,7 +188,9 @@ describe('LLM tool calling: builtin tools', () => {
   itif(enabled)(
     'web_fetch: LLM fetches a URL and summarizes content',
     async () => {
-      const tools = createBuiltinTools({ workspacePath: workspace });
+      const tools = createCoreTools({
+        deps: new HostToolDeps(new NodeHostEnv(), workspace),
+      }).concat(createWebFetchTool(new HostToolDeps(new NodeHostEnv(), workspace)));
       const runner = makeRunner(tools);
 
       let state = createAgentState({
@@ -217,7 +222,7 @@ describe('LLM tool calling: builtin tools', () => {
     async () => {
       await writeFile(join(workspace, 'data.txt'), 'apple\nbanana\ncherry\ndate\nelderberry');
 
-      const tools = createBuiltinTools({ workspacePath: workspace });
+      const tools = createCoreTools({ deps: new HostToolDeps(new NodeHostEnv(), workspace) });
       const runner = makeRunner(tools);
 
       let state = createAgentState({

@@ -14,7 +14,9 @@ import { join, dirname } from 'node:path';
 
 import { addUserMessage, type AgentState } from '@agentskillmania/colts';
 import type { RunResult } from '@agentskillmania/colts';
+import { LLMClient } from '@agentskillmania/llm-client';
 import { EnhancedRunner } from '@agentskillmania/wrangler';
+import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 
 import type { EvalCase, EvalTrace, EvalSuite, ToolCallRecord } from '../types.js';
 import type { ExecutionAdapter, AdapterExecuteOptions } from './types.js';
@@ -105,17 +107,25 @@ export abstract class BaseAdapter implements ExecutionAdapter {
     const { loadEvalLlmConfig } = await import('../config.js');
     const llmConfig = await loadEvalLlmConfig(suite.target.path);
 
+    // llm 分组结构：quickInit 载荷 + 宿主注入的创建器（引擎 core 不捆绑内置 LLM）
+    const llm: Record<string, unknown> = {
+      quickInit: llmConfig.llm,
+      quickInitFactory: (providers: Parameters<typeof LLMClient.quickInit>[0]['providers']) =>
+        LLMClient.quickInit({ providers }),
+    };
+    if (suite.sampling.model) {
+      llm.model = suite.sampling.model;
+    }
+
     const opts: Record<string, unknown> = {
       workspacePath,
-      llm: llmConfig.llm,
+      runtime: new NodeHostEnv(),
+      llm,
       skills: { dirs: this.getSkillDirs(suite) },
       session: { enabled: false },
       todolist: { enabled: false },
       commands: { enabled: false },
     };
-    if (suite.sampling.model) {
-      opts.llm = { ...(opts.llm as object), model: suite.sampling.model };
-    }
     return EnhancedRunner.create(opts as Parameters<typeof EnhancedRunner.create>[0]);
   }
 

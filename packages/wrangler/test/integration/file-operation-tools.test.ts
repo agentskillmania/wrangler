@@ -21,7 +21,9 @@ import {
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createBuiltinTools } from '../../src/tools/builtin/index.js';
+import { createCoreTools } from '../../src/tools/builtin/index.js';
+import { HostToolDeps } from '../../src/tools/builtin/workspace-deps.js';
+import { NodeHostEnv } from '../../src/host-env/node-host-env.js';
 import { MarkdownMessageAssembler } from '../../src/runner/markdown-assembler.js';
 import { testConfig, itif } from './config.js';
 
@@ -87,7 +89,7 @@ describe('File Operation Tools E2E', () => {
       await writeFile(join(workspace, 'config.json'), configContent);
 
       // Create runner with file tools
-      const tools = createBuiltinTools({ workspacePath: workspace });
+      const tools = createCoreTools({ deps: new HostToolDeps(new NodeHostEnv(), workspace) });
       const runner = makeRunner(tools);
 
       // Ask LLM to read the file and tell us the version
@@ -141,7 +143,7 @@ describe('File Operation Tools E2E', () => {
   itif(testConfig.enabled)(
     'US2: LLM writes a file, then reads it back',
     async () => {
-      const tools = createBuiltinTools({ workspacePath: workspace });
+      const tools = createCoreTools({ deps: new HostToolDeps(new NodeHostEnv(), workspace) });
       const runner = makeRunner(tools);
 
       // Step 1: Ask LLM to create a file
@@ -226,7 +228,7 @@ describe('File Operation Tools E2E', () => {
       );
       await writeFile(join(workspace, 'config.json'), initialContent);
 
-      const tools = createBuiltinTools({ workspacePath: workspace });
+      const tools = createCoreTools({ deps: new HostToolDeps(new NodeHostEnv(), workspace) });
       const runner = makeRunner(tools);
 
       // Ask LLM to read the file and change the version
@@ -278,7 +280,7 @@ describe('File Operation Tools E2E', () => {
       await writeFile(join(workspace, 'config.js'), 'module.exports = {}');
       await writeFile(join(workspace, 'app.js'), 'module.exports = {}');
 
-      const tools = createBuiltinTools({ workspacePath: workspace });
+      const tools = createCoreTools({ deps: new HostToolDeps(new NodeHostEnv(), workspace) });
       const runner = makeRunner(tools);
 
       // Ask LLM to find TypeScript files
@@ -349,7 +351,7 @@ describe('File Operation Tools E2E', () => {
         '# User API\n\nUse getUser to fetch user data.'
       );
 
-      const tools = createBuiltinTools({ workspacePath: workspace });
+      const tools = createCoreTools({ deps: new HostToolDeps(new NodeHostEnv(), workspace) });
       const runner = makeRunner(tools);
 
       // Ask LLM to search for 'getUser'

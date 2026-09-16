@@ -5,6 +5,15 @@
  * Tests are gated by ENABLE_INTEGRATION_TESTS=true.
  */
 
+import { setDefaultSkillFsOps } from '@agentskillmania/colts';
+import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
+
+// Tests boot bare fastify apps (routes only, not the daemon CLI entry), so the
+// host-side SkillFsOps registration that daemon.ts does at startup must be
+// mirrored here — otherwise skill-dependent routes (crew chat, per-request
+// sessions) 500 with "Default SkillFsOps not registered".
+setDefaultSkillFsOps(nodeFsOps);
+
 export interface TestConfig {
   apiKey: string;
   baseUrl?: string;

@@ -100,7 +100,7 @@ model: gpt-4o
 You are a code reviewer.`
       );
 
-      const result = await AgentLoader.loadFrom(agentDir);
+      const result = await AgentLoader.loadFrom(agentDir, defaultNodeHostEnv);
       expect(result.name).toBe('code-reviewer');
       expect(result.description).toBe('Reviews code');
       expect(result.model).toBe('gpt-4o');
@@ -116,7 +116,7 @@ You are a code reviewer.`
       await writeFile(join(agentDir, 'AGENT.md'), `---\nname: search-agent\n---\nSearch things.`);
       await writeFile(join(agentDir, 'mcp.json'), '{}');
 
-      const result = await AgentLoader.loadFrom(agentDir);
+      const result = await AgentLoader.loadFrom(agentDir, defaultNodeHostEnv);
       expect(result.name).toBe('search-agent');
       expect(result.skillDirs).toHaveLength(1);
       expect(result.mcpPaths).toHaveLength(1);
@@ -126,7 +126,9 @@ You are a code reviewer.`
       const emptyDir = join(testBaseDir, 'empty');
       await mkdir(emptyDir, { recursive: true });
 
-      await expect(AgentLoader.loadFrom(emptyDir)).rejects.toThrow('AGENT.md not found');
+      await expect(AgentLoader.loadFrom(emptyDir, defaultNodeHostEnv)).rejects.toThrow(
+        'AGENT.md not found'
+      );
     });
   });
 
@@ -145,7 +147,7 @@ description: A simple helper
 You are a helpful assistant. Answer in one short sentence.`
       );
 
-      const loaded = await AgentLoader.loadFrom(agentDir);
+      const loaded = await AgentLoader.loadFrom(agentDir, defaultNodeHostEnv);
       expect(loaded.name).toBe('test-helper');
 
       const llmClient = new LLMClient({ baseUrl: testConfig.baseUrl });

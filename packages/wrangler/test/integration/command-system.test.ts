@@ -126,7 +126,8 @@ describe('Command System Integration Tests', () => {
       expect(result.type).toBe('success');
       expect(result.answer).toBeTruthy();
     },
-    120000
+    // 全套件连续跑真 LLM 时该用例实测可超 120s（单独跑约 57s）——超时上限放宽到 240s
+    240000
   );
 
   /**

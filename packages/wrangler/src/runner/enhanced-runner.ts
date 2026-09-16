@@ -661,8 +661,13 @@ export class EnhancedRunner {
       tools: {
         mcpConfigPaths: rc.mcpConfigPaths,
         builtinFilter: rc.builtinTools as Record<string, boolean> | undefined,
+        // HITL 桥接必须随会话恢复——否则恢复后的会话静默失去 ask_human 工具
+        askHumanHandler: options.askHumanHandler,
       },
-      sandbox: rc.sandbox !== undefined ? { enabled: rc.sandbox } : undefined,
+      // Host-injected sandbox wins; fall back to the snapshot (which carries
+      // only the enabled flag — an enabled snapshot without an instance is
+      // rejected by create(), so Node hosts should always pass one).
+      sandbox: options.sandbox ?? (rc.sandbox !== undefined ? { enabled: rc.sandbox } : undefined),
       session: { enabled: rc.enableSession, sessionDir },
       todolist: { enabled: rc.enableTodolist },
       specPlan: { enabled: rc.enableSpecPlan },

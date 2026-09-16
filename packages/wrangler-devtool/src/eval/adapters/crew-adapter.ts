@@ -7,6 +7,7 @@
  */
 
 import { createAgentState, type AgentState } from '@agentskillmania/colts';
+import { LLMClient } from '@agentskillmania/llm-client';
 import {
   EnhancedRunner,
   CrewLoader,
@@ -48,9 +49,17 @@ export class CrewAdapter extends BaseAdapter {
     const { loadEvalLlmConfig } = await import('../config.js');
     const llmConfig = await loadEvalLlmConfig(suite.target.path);
 
+    // llm 分组结构：quickInit 载荷 + 宿主注入的创建器（引擎 core 不捆绑内置 LLM）
+    const llm: Record<string, unknown> = {
+      quickInit: llmConfig.llm,
+      quickInitFactory: (providers: Parameters<typeof LLMClient.quickInit>[0]['providers']) =>
+        LLMClient.quickInit({ providers }),
+    };
+
     const runnerOpts: Record<string, unknown> = {
       workspacePath,
-      llm: llmConfig.llm,
+      runtime: new NodeHostEnv(),
+      llm,
       // Crew's skill dirs + the conventional <crewDir>/skills (already in
       // crewRunnerOpts) — pass directly.
       skills: { dirs: opts.skillDirs },

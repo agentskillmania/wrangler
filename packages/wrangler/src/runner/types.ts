@@ -299,7 +299,7 @@ export interface ResolvedRunnerConfig {
  * Options for EnhancedRunner.resume() — from session directory.
  */
 export interface ResumeOptions {
-  /** HostEnv（与 EnhancedRunnerOptions.runtime 一致，默认 NodeHostEnv） */
+  /** HostEnv（与 EnhancedRunnerOptions.runtime 一致，必传——core 不默认 Node 宿主） */
   runtime?: HostEnv;
   /** LLM config: provider injection (client) or quick-init (quickInit). */
   llm?: LLMConfig;
@@ -311,4 +311,11 @@ export interface ResumeOptions {
   askHumanHandler?: AskHumanHandler;
   /** Sub-agent configs to rebuild crew delegation on resume */
   subAgents?: SubAgentConfig[];
+  /**
+   * Host-provided sandbox config (instance constructed by the Node host).
+   * When omitted, the snapshot's rc.sandbox is restored as {enabled} — an
+   * enabled snapshot without an instance is rejected by create(), so Node
+   * hosts resuming sandboxed sessions should always pass one.
+   */
+  sandbox?: SandboxConfig;
 }

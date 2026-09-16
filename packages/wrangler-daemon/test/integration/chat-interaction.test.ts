@@ -188,11 +188,24 @@ describe('US-C4: Agent Chat Interaction', () => {
   // ──────────────────────────────────────────────────────────────────────
 
   describe('AC-3: Message history (GET /api/chat/:sessionId/messages)', () => {
-    it('returns error for unknown session', async () => {
+    it('returns empty messages for unknown session (standard tree is not an error)', async () => {
       const res = await fetch(`${getUrl()}/api/chat/nonexistent/messages`);
       expect(res.ok).toBe(true);
       const body = await res.json();
-      expect(body.error).toBe('Session not found');
+      // Mirrors Rust chat_messages: standard-tree miss is 200 + empty, NOT an
+      // error — the client cannot distinguish "no session yet" from "new".
+      expect(body.messages).toEqual([]);
+      expect(body.error).toBeUndefined();
+    });
+
+    it('returns 404 for explicit sessionDir whose state.json is missing', async () => {
+      const missingDir = join(tempDir, 'no-such-session-dir');
+      const res = await fetch(
+        `${getUrl()}/api/chat/whatever/messages?sessionDir=${encodeURIComponent(missingDir)}`
+      );
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('Session state not found');
     });
 
     it('returns empty messages array for new session', async () => {

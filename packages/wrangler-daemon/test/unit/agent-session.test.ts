@@ -1598,6 +1598,7 @@ describe('AgentSession', () => {
           sessionId: 'session-123',
           workspacePath: '/tmp/workspace',
           agentName: 'resumed-agent',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig
@@ -1650,6 +1651,7 @@ describe('AgentSession', () => {
           sessionId: 'crew-session',
           workspacePath: '/tmp/workspace',
           agentName: 'orchestrator',
+          runtime: defaultNodeHostEnv,
           subAgents,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
@@ -1671,6 +1673,7 @@ describe('AgentSession', () => {
           sessionId: 'plain-session',
           workspacePath: '/tmp/workspace',
           agentName: 'plain-agent',
+          runtime: defaultNodeHostEnv,
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
         },
         testConfig

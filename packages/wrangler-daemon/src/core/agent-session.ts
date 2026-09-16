@@ -65,8 +65,12 @@ export interface AgentSessionResumeOptions {
   agentConfigPath?: string;
   sessionStore?: SessionStore;
   sessionManager?: { getStatus(id: string): string };
+  /** HostEnv — injected into EnhancedRunner.resume. Node host: defaultNodeHostEnv. */
+  runtime?: HostEnv;
   /** Sub-agent configs to rebuild crew delegation on resume */
   subAgents?: SubAgentConfig[];
+  /** Sandbox config with host-constructed instance (Node 宿主职责，镜像 create 路径) */
+  sandbox?: import('@agentskillmania/wrangler').SandboxConfig;
   /** quickInit 创建器（Node 宿主传 LLMClient.quickInit）——daemon core 不捆绑内置 LLM */
   llmClientFactory?: (
     providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
@@ -344,13 +348,20 @@ export class AgentSession {
         'AgentSession.resume requires llmClientFactory (e.g. (providers) => LLMClient.quickInit({ providers }))'
       );
     }
+    if (!options.runtime) {
+      throw new Error(
+        'AgentSession.resume requires options.runtime — Node host: defaultNodeHostEnv from @agentskillmania/wrangler/host-env/node-host-env'
+      );
+    }
     const llmClient = options.llmClientFactory(config.llm.providers);
     const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
 
     const { runner, state } = await EnhancedRunner.resume(sessionDir, {
+      runtime: options.runtime,
       llm: { client: llmClient, model: llmModel },
       askHumanHandler,
       subAgents: options.subAgents,
+      sandbox: options.sandbox,
     });
 
     const session = new AgentSession(runner, state, bridge, {

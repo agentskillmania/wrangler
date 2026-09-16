@@ -91,7 +91,7 @@ You are a senior developer.`;
 
   it('throws when directory does not exist', async () => {
     const nonExistentDir = '/tmp/non-existent-dir-12345';
-    await expect(AgentLoader.loadFrom(nonExistentDir)).rejects.toThrow();
+    await expect(AgentLoader.loadFrom(nonExistentDir, defaultNodeHostEnv)).rejects.toThrow();
   });
 
   it('handles AGENT.md without frontmatter (name defaults to unknown)', async () => {

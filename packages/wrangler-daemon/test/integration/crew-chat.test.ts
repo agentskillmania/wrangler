@@ -64,7 +64,7 @@ describe('Integration: Crew chat', () => {
     const configPath = join(tempDir, 'config.yaml');
     await writeFile(
       configPath,
-      `llm:\n  providers:\n    - name: ${testConfig.provider}\n      apiKey: ${testConfig.apiKey}\n${testConfig.baseUrl ? `      baseUrl: '${testConfig.baseUrl}'\n` : ''}      models:\n        - modelId: ${testConfig.testModel}\n          contextWindow: 128000\n          maxTokens: 4096\n          reasoning: false\nserver:\n  port: 3100\n  host: localhost\n`
+      `llm:\n  providers:\n    - name: ${JSON.stringify(testConfig.provider)}\n      apiKey: ${JSON.stringify(testConfig.apiKey)}\n${testConfig.baseUrl ? `      baseUrl: ${JSON.stringify(testConfig.baseUrl)}\n` : ''}      models:\n        - modelId: ${JSON.stringify(testConfig.testModel)}\n          contextWindow: 128000\n          maxTokens: 4096\n          reasoning: false\nserver:\n  port: 3100\n  host: localhost\n`
     );
     const configManager = new ConfigManager(configPath);
     await configManager.init();
@@ -163,7 +163,10 @@ describe('Integration: Crew chat', () => {
           model: testConfig.testModel,
         }),
       });
-
+      if (res.status !== 200) {
+        // eslint-disable-next-line no-console
+        console.log('[crew-chat] non-200 body:', (await res.text()).slice(0, 500));
+      }
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toBe('text/event-stream');
 
@@ -255,10 +258,23 @@ describe('Integration: Crew chat', () => {
           model: testConfig.testModel,
         }),
       });
-
+      if (resumeRes.status !== 200) {
+        // eslint-disable-next-line no-console
+        console.log('[crew-resume] non-200 body:', (await resumeRes.text()).slice(0, 500));
+      }
       expect(resumeRes.status).toBe(200);
       const resumeRaw = await resumeRes.text();
       const resumeEvents = parseSSE(resumeRaw);
+      {
+        const types = resumeEvents.map((e) => e.event);
+        if (!types.includes('done')) {
+          // eslint-disable-next-line no-console
+          console.log(
+            '[crew-resume] stream without done. events:',
+            JSON.stringify(resumeEvents).slice(0, 600)
+          );
+        }
+      }
       const resumeEventTypes = resumeEvents.map((e) => e.event);
 
       expect(resumeEventTypes).toContain('done');

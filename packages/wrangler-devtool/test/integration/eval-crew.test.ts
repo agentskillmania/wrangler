@@ -76,6 +76,26 @@ describe('Integration: eval crew target', () => {
         ].join('\n')
       );
 
+      // 1b. Pin the LLM config to the .env-derived provider by writing an
+      // eval-config.yaml INSIDE the fixture dir. Without this, loadEvalLlmConfig
+      // prefers the machine-global config (~/.agentskillmania/skill-studio/
+      // config.yaml), whose providers may not carry TEST_MODEL's key — the test
+      // would then fail with "No API key available for model <MODEL>" depending
+      // on whatever the developer's global config happens to say.
+      const baseUrl = process.env.OPENAI_BASE_URL;
+      await writeFile(
+        join(crewDir, 'eval-config.yaml'),
+        [
+          'llm:',
+          '  providers:',
+          `    - name: ${JSON.stringify(process.env.PROVIDER ?? 'openai')}`,
+          `      apiKey: ${JSON.stringify(process.env.OPENAI_API_KEY)}`,
+          ...(baseUrl ? [`      baseUrl: ${JSON.stringify(baseUrl)}`] : []),
+          '      models:',
+          `        - modelId: ${JSON.stringify(TEST_MODEL)}`,
+        ].join('\n')
+      );
+
       // 2. Build the suite inline. Use a single run with passThreshold=1.
       const suite: EvalSuite = {
         name: 'crew-delegation',

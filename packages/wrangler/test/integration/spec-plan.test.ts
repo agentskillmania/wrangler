@@ -174,7 +174,8 @@ Report what you did and confirm each step succeeded.
         expect(responseText.toLowerCase()).toMatch(/profile|upload/);
         expect(responseText.toLowerCase()).toMatch(/approved|plan|spec/);
       },
-      180000
+      // 多步工具工作流实测 81s~180s+（全套装载下真 LLM 延迟方差大），上限放宽到 300s
+      300000
     );
   });
 

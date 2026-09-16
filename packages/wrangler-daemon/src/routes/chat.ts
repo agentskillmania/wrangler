@@ -102,7 +102,12 @@ function withSandboxInstance(
   workspacePath: string
 ): import('@agentskillmania/wrangler').SandboxConfig {
   const merged = mergeSandboxConfig(base, override);
-  if (!merged.enabled) return merged;
+  if (!merged.enabled) {
+    // 禁用分支同样剥离 instance：请求体携带的伪实例不能绕过禁用
+    // （instance 只能由本函数在 enabled 分支构造，不可来自 JSON）。
+    const { instance: _instance, ...disabled } = merged;
+    return disabled;
+  }
   const { enabled: _enabled, instance: _instance, ...params } = merged;
   return {
     enabled: true,
@@ -394,7 +399,15 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
             agentConfigPath: agentDetail?.path,
             sessionStore: store,
             sessionManager: sessionManager(),
+            runtime: defaultNodeHostEnv,
             subAgents: resumeSubAgents,
+            // Node 专属：与 create 路径同款合并 + 实例构造（引擎 core 不捆绑 sandbox）。
+            // override 取会话快照的 sandbox 开关（无快照值时默认 true，与 create 一致）
+            sandbox: withSandboxInstance(
+              config.sandbox,
+              info.runnerConfig?.sandbox ?? true,
+              info.workspacePath
+            ),
             llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
           },
           config
@@ -483,7 +496,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       subAgents: runnerOpts.subAgents,
       crewId: id,
       model: body.model ?? runnerOpts.model,
-      sandbox: body.config?.sandbox ?? true,
+      // Node 专属：合并 sandbox 配置并构造实例（引擎 core 不捆绑 sandbox 运行时）
+      sandbox: withSandboxInstance(config.sandbox, body.config?.sandbox ?? true, workspacePath),
       skills: {
         dirs: [
           ...(body.config?.skills?.dirs ?? runnerOpts.skillDirs ?? rc?.skillDirs ?? []),

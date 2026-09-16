@@ -31,11 +31,16 @@ export interface SessionNamingDeps {
 export function createSessionNamingMiddleware(deps: SessionNamingDeps): AgentMiddleware {
   const { store, llmClient, model: namingModel } = deps;
 
+  // Dir-bound stores don't accept a sessionId — pass undefined instead
+  // (mirrors session-middleware's resolveSid).
+  const resolveSid = (ctx: { state: { id?: string } }) =>
+    store.isDirBound ? undefined : ctx.state.id;
+
   return {
     name: 'session-naming',
 
     beforeRun: async (ctx) => {
-      const sessionId = ctx.state.id;
+      const sessionId = resolveSid(ctx);
 
       // Phase 1: Set initial title from first user message
       // Guard: only if session exists but has no title yet
@@ -51,7 +56,7 @@ export function createSessionNamingMiddleware(deps: SessionNamingDeps): AgentMid
     },
 
     afterStep: async (ctx) => {
-      const sessionId = ctx.state.id;
+      const sessionId = resolveSid(ctx);
       const { result } = ctx;
 
       // Phase 2: fire-and-forget LLM title upgrade on terminal step
