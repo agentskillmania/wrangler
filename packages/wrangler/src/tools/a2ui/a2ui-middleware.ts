@@ -38,6 +38,14 @@ export class A2UIMiddleware implements AgentMiddleware {
             args: { surfaceId },
             toolCallId: action.id,
           },
+          requests: [
+            {
+              type: 'tool-confirm',
+              toolName: 'a2ui_wait',
+              args: { surfaceId },
+              toolCallId: action.id,
+            },
+          ],
         },
         done: true,
       },

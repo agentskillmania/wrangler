@@ -63,14 +63,14 @@ importers:
   packages/wrangler:
     dependencies:
       '@agentskillmania/colts':
-        specifier: ^0.4.0
-        version: 0.4.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)
+        specifier: 0.5.0-alpha.1
+        version: 0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)
       '@agentskillmania/genui':
         specifier: ^0.1.1
         version: 0.1.1(@ant-design/icons@6.3.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@types/react@19.2.18)(antd@6.6.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(echarts@5.6.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@agentskillmania/llm-client':
-        specifier: ^0.4.0
-        version: 0.4.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)
+        specifier: 0.5.0-alpha.1
+        version: 0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)
       '@agentskillmania/sandbox':
         specifier: ^1.3.1
         version: 1.3.1
@@ -139,14 +139,14 @@ importers:
   packages/wrangler-daemon:
     dependencies:
       '@agentskillmania/colts':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: 0.5.0-alpha.1
+        version: 0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)
       '@agentskillmania/llm-client':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: 0.5.0-alpha.1
+        version: 0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@4.4.3)
       '@agentskillmania/settings-yaml':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: 0.5.0-alpha.1
+        version: 0.5.0-alpha.1
       '@agentskillmania/wrangler':
         specifier: workspace:*
         version: link:../wrangler
@@ -188,11 +188,11 @@ importers:
   packages/wrangler-devtool:
     dependencies:
       '@agentskillmania/colts':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: 0.5.0-alpha.1
+        version: 0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)
       '@agentskillmania/llm-client':
-        specifier: ^0.4.0
-        version: 0.4.0(zod@3.25.76)
+        specifier: 0.5.0-alpha.1
+        version: 0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)
       '@agentskillmania/wrangler':
         specifier: workspace:*
         version: link:../wrangler
@@ -224,8 +224,8 @@ importers:
 
 packages:
 
-  '@agentskillmania/colts@0.4.0':
-    resolution: {integrity: sha512-S98C2gvUTQK+/uO6+tOSCnLn+aLUdcJaxGwvQdKQ20WTfqroJ1W03KgYolZWtQxvCYjIrIGSpwigT9j/6o+0ww==}
+  '@agentskillmania/colts@0.5.0-alpha.1':
+    resolution: {integrity: sha512-SucghUaNVrgNU12oGKF8S2z2+90U3JGr72ECmgHgDFFpHQfhWZWuagsazzFOg7RaSZ2p7aCzLYJ07wBd0Tj18g==}
 
   '@agentskillmania/genui@0.1.1':
     resolution: {integrity: sha512-IHgho3aZAOY4+F8MXJr7c8j/yTNUA3lgvxhwvkdDbJO/+qMmoF4PDUf5ciFlUa62PknJ6LZh7b55VY2erCLEFw==}
@@ -236,8 +236,8 @@ packages:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
 
-  '@agentskillmania/llm-client@0.4.0':
-    resolution: {integrity: sha512-7xslzHaP+pSbZdrQWZe2g/XVQSVedFmP6zs/MP487MaqMJwVE9RZqwKIDGtzDr1SPdxc9TPJKpmrYRJRWqNU4Q==}
+  '@agentskillmania/llm-client@0.5.0-alpha.1':
+    resolution: {integrity: sha512-wUdEVlRcu/4wv7+f+k9OHKjQGVewwNyhKp28oOAxnl5iKEYA1CsDwl/nFGncHTI32x6HV31u0y42CRc+GD/wvQ==}
     engines: {node: '>=18.0.0'}
 
   '@agentskillmania/sandbox@1.3.1':
@@ -249,8 +249,8 @@ packages:
     resolution: {integrity: sha512-UzLH9j7DvEwgUWz43dWcTPphN8gMNNV1uxM4bX48uSWL2x/05ksdft1X59AgCgr9Yz1VCTWhkoh81s5WSnkxwg==}
     engines: {node: '>=18.0.0'}
 
-  '@agentskillmania/settings-yaml@0.4.0':
-    resolution: {integrity: sha512-V2Hr1veLiysL3aZONoWqKAgY4X004+p2RqKWB0thDvL18kKdS48PVccY5o76hE2oS3PWbCZvNgncEOK0/kv2wA==}
+  '@agentskillmania/settings-yaml@0.5.0-alpha.1':
+    resolution: {integrity: sha512-Xj3lSfWT44+75hIODipFb7Myl5J1iPG8zc1KL03iyM4bUJWS6GTxI2s5LHN/L+B9tRYn5lKhI5QVFhTL9DqAFA==}
     engines: {node: '>=18.0.0'}
 
   '@ampproject/remapping@2.3.0':
@@ -4467,9 +4467,9 @@ packages:
 
 snapshots:
 
-  '@agentskillmania/colts@0.4.0':
+  '@agentskillmania/colts@0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)':
     dependencies:
-      '@agentskillmania/llm-client': 0.4.0(zod@3.25.76)
+      '@agentskillmania/llm-client': 0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)
       eventemitter3: 5.0.4
       immer: 11.1.7
       js-tiktoken: 1.0.21
@@ -4483,9 +4483,9 @@ snapshots:
       - utf-8-validate
       - ws
 
-  '@agentskillmania/colts@0.4.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)':
+  '@agentskillmania/colts@0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)':
     dependencies:
-      '@agentskillmania/llm-client': 0.4.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)
+      '@agentskillmania/llm-client': 0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@3.25.76)
       eventemitter3: 5.0.4
       immer: 11.1.7
       js-tiktoken: 1.0.21
@@ -4515,21 +4515,7 @@ snapshots:
       - '@types/react'
       - supports-color
 
-  '@agentskillmania/llm-client@0.4.0':
-    dependencies:
-      '@mariozechner/pi-ai': 0.73.1
-      eventemitter3: 5.0.4
-      p-retry: 6.2.1
-      p-timeout: 6.1.4
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
-  '@agentskillmania/llm-client@0.4.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)':
+  '@agentskillmania/llm-client@0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)':
     dependencies:
       '@mariozechner/pi-ai': 0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)
       eventemitter3: 5.0.4
@@ -4543,9 +4529,23 @@ snapshots:
       - ws
       - zod
 
-  '@agentskillmania/llm-client@0.4.0(zod@3.25.76)':
+  '@agentskillmania/llm-client@0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@3.25.76)':
     dependencies:
-      '@mariozechner/pi-ai': 0.73.1(zod@3.25.76)
+      '@mariozechner/pi-ai': 0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@3.25.76)
+      eventemitter3: 5.0.4
+      p-retry: 6.2.1
+      p-timeout: 6.1.4
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+      - zod
+
+  '@agentskillmania/llm-client@0.5.0-alpha.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@4.4.3)':
+    dependencies:
+      '@mariozechner/pi-ai': 0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@4.4.3)
       eventemitter3: 5.0.4
       p-retry: 6.2.1
       p-timeout: 6.1.4
@@ -4569,7 +4569,7 @@ snapshots:
     dependencies:
       js-yaml: 4.1.1
 
-  '@agentskillmania/settings-yaml@0.4.0':
+  '@agentskillmania/settings-yaml@0.5.0-alpha.1':
     dependencies:
       js-yaml: 4.1.1
 
@@ -4629,6 +4629,12 @@ snapshots:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
       zod: 3.25.76
+
+  '@anthropic-ai/sdk@0.91.1(zod@4.4.3)':
+    dependencies:
+      json-schema-to-ts: 3.1.1
+    optionalDependencies:
+      zod: 4.4.3
 
   '@asamuzakjp/css-color@5.1.11':
     dependencies:
@@ -5150,6 +5156,19 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))':
+    dependencies:
+      google-auth-library: 10.6.2
+      p-retry: 4.6.2
+      protobufjs: 7.6.1
+      ws: 8.20.1
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.3)
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
   '@hono/node-server@1.19.14(hono@4.12.18)':
     dependencies:
       hono: 4.12.18
@@ -5193,27 +5212,6 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@mariozechner/pi-ai@0.73.1':
-    dependencies:
-      '@anthropic-ai/sdk': 0.91.1(zod@3.25.76)
-      '@aws-sdk/client-bedrock-runtime': 3.1057.0
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))
-      '@mistralai/mistralai': 2.2.5
-      chalk: 5.6.2
-      openai: 6.26.0(ws@8.20.1)(zod@3.25.76)
-      partial-json: 0.1.7
-      proxy-agent: 6.5.0
-      typebox: 1.1.39
-      undici: 7.25.0
-      zod-to-json-schema: 3.25.2(zod@4.4.3)
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
   '@mariozechner/pi-ai@0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@3.25.76)
@@ -5235,11 +5233,11 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-ai@0.73.1(zod@3.25.76)':
+  '@mariozechner/pi-ai@0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@3.25.76)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@3.25.76)
       '@aws-sdk/client-bedrock-runtime': 3.1057.0
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))
       '@mistralai/mistralai': 2.2.5
       chalk: 5.6.2
       openai: 6.26.0(ws@8.20.1)(zod@3.25.76)
@@ -5248,6 +5246,27 @@ snapshots:
       typebox: 1.1.39
       undici: 7.25.0
       zod-to-json-schema: 3.25.2(zod@3.25.76)
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+      - zod
+
+  '@mariozechner/pi-ai@0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@4.4.3)':
+    dependencies:
+      '@anthropic-ai/sdk': 0.91.1(zod@4.4.3)
+      '@aws-sdk/client-bedrock-runtime': 3.1057.0
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))
+      '@mistralai/mistralai': 2.2.5
+      chalk: 5.6.2
+      openai: 6.26.0(ws@8.20.1)(zod@4.4.3)
+      partial-json: 0.1.7
+      proxy-agent: 6.5.0
+      typebox: 1.1.39
+      undici: 7.25.0
+      zod-to-json-schema: 3.25.2(zod@4.4.3)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - bufferutil
@@ -8297,6 +8316,11 @@ snapshots:
     optionalDependencies:
       ws: 8.20.1
       zod: 3.25.76
+
+  openai@6.26.0(ws@8.20.1)(zod@4.4.3):
+    optionalDependencies:
+      ws: 8.20.1
+      zod: 4.4.3
 
   optionator@0.9.4:
     dependencies:
