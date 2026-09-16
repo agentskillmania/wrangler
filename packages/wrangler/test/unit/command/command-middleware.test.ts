@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { createCommandMiddleware } from '../../../src/command/command-middleware.js';
+import { createClearHandler } from '../../../src/command/handlers/clear.js';
 import { createCompactHandler } from '../../../src/command/handlers/compact.js';
 import { CommandRegistry } from '../../../src/command/registry.js';
 import type { CommandHandler } from '../../../src/command/types.js';
@@ -412,6 +413,94 @@ describe('CommandMiddleware', () => {
       });
 
       expect(result?.stop).toBe(true);
+    });
+
+    it('does not emit for a custom command returning updateState-derived state with compression preserved (zero delta)', async () => {
+      // The real load-bearing face of the `coveredMessages > 0` guard: custom
+      // handled commands that re-derive the context (updateState-style) keep
+      // the compression meta untouched — anchor equal, delta 0. Without the
+      // guard every such command would emit a spurious
+      // compressed{removedCount:0, coveredMessages:0}. General form of the
+      // no-op spec: zero progress must never emit. (R2P-104w 返修)
+      const handler: CommandHandler = {
+        name: 'note',
+        description: 'Touch state without compressing',
+        handle: async (ctx) => ({
+          handled: true,
+          state: { ...ctx.state, context: { ...ctx.state.context } },
+          response: 'noted',
+        }),
+      };
+      const registry = new CommandRegistry();
+      registry.register(handler);
+      const emit = vi.fn();
+      const middleware = createCommandMiddleware(registry, { emit });
+
+      const result = await middleware.beforeAdvance!({
+        state: makeState('/note', 5),
+        runnerOptions: mockRunnerOptions,
+        fromPhase: { type: 'idle' },
+        execState: { startTime: Date.now(), elapsedTokens: 0, stepCount: 0 },
+      });
+
+      expect(result?.stop).toBe(true);
+      expect(emit).not.toHaveBeenCalled();
+    });
+
+    it('does not emit for /clear — fresh state carries no compression meta', async () => {
+      // /clear returns a fresh state (no compression); the anchor diff must
+      // not be misread as progress. Pins the /clear path alongside the
+      // plain-command case. (R2P-104w 返修)
+      const registry = new CommandRegistry();
+      registry.register(createClearHandler());
+      const emit = vi.fn();
+      const middleware = createCommandMiddleware(registry, { emit });
+
+      const result = await middleware.beforeAdvance!({
+        state: makeState('/clear', 5),
+        runnerOptions: mockRunnerOptions,
+        fromPhase: { type: 'idle' },
+        execState: { startTime: Date.now(), elapsedTokens: 0, stepCount: 0 },
+      });
+
+      expect(result?.stop).toBe(true);
+      expect(emit).not.toHaveBeenCalled();
+    });
+
+    it('does not emit when the compression anchor regresses (saturating delta clamps to 0)', async () => {
+      // The real /compact handler early-exits on regression, so this drives
+      // the middleware's own diff: a handler returning a state whose anchor
+      // went 8 → 5 must not emit — Math.max(0, …) saturates the delta to 0
+      // and the guard stays false. (R2P-104w 返修)
+      const handler: CommandHandler = {
+        name: 'rewind',
+        description: 'Return a state with a regressed anchor',
+        handle: async (ctx) => ({
+          handled: true,
+          state: {
+            ...ctx.state,
+            context: {
+              ...ctx.state.context,
+              compression: { summary: 'rewound', anchor: 5 },
+            },
+          },
+          response: 'rewound',
+        }),
+      };
+      const registry = new CommandRegistry();
+      registry.register(handler);
+      const emit = vi.fn();
+      const middleware = createCommandMiddleware(registry, { emit });
+
+      const result = await middleware.beforeAdvance!({
+        state: makeState('/rewind', 8),
+        runnerOptions: mockRunnerOptions,
+        fromPhase: { type: 'idle' },
+        execState: { startTime: Date.now(), elapsedTokens: 0, stepCount: 0 },
+      });
+
+      expect(result?.stop).toBe(true);
+      expect(emit).not.toHaveBeenCalled();
     });
   });
 });
