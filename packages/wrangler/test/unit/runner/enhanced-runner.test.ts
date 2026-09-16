@@ -90,13 +90,6 @@ vi.mock('../../../src/tools/spec-plan/index.js', () => ({
   createSpecPlanTools: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock('../../../src/runner/system-prompt.js', () => ({
-  buildTimeContext: vi.fn().mockReturnValue(`---
-Time: Tuesday, 05/13/2026, 10:06
-Timezone: Asia/Shanghai
----`),
-}));
-
 describe('EnhancedRunner', () => {
   let testBaseDir: string;
   const mockLLMClient: ILLMProvider = {} as any;
@@ -203,16 +196,26 @@ describe('EnhancedRunner', () => {
     expect(runnerArgs.tools).toContain(...mockExtraTools);
   });
 
-  it('should create() sets systemPrompt to YAML frontmatter with Time: and Timezone:', async () => {
+  it('should create() pass systemPrompt through with NO header time context', async () => {
+    await EnhancedRunner.create(makeOptions({ systemPrompt: 'You are a crew agent.' }));
+
+    const calls = await getAgentRunnerCalls();
+    const callArgs = calls[calls.length - 1][0];
+
+    // 原样透传——不再与时间上下文 frontmatter 合并（头部分钟级时间戳是
+    // 前缀缓存断点,时间行由装配器尾部 reminder 现算,R2P-101w）
+    expect(callArgs.systemPrompt).toBe('You are a crew agent.');
+    expect(callArgs.systemPrompt).not.toContain('Time:');
+    expect(callArgs.systemPrompt).not.toContain('Timezone:');
+  });
+
+  it('should create() leave systemPrompt undefined when the caller gives none', async () => {
     await EnhancedRunner.create(makeOptions());
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
 
-    expect(callArgs.systemPrompt).toContain('Time:');
-    expect(callArgs.systemPrompt).toContain('Timezone:');
-    expect(callArgs.systemPrompt).toContain('---');
-    expect(callArgs.systemPrompt).not.toMatch(/You are/);
+    expect(callArgs.systemPrompt).toBeUndefined();
   });
 
   it('should create() passes skillProvider to AgentRunner when injected', async () => {

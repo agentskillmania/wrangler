@@ -5,19 +5,30 @@
  * with proper heading hierarchy. Replaces the flat-text output of
  * colts' DefaultMessageAssembler.
  *
- * KV-cache design:
- * - Static prefix: YAML frontmatter + instructions + skill catalog + sub-agents + thinking
- * - Dynamic content (todolist): injected as <system-reminder>
- *   into the last user message, keeping the static prefix stable for caching
+ * Prefix-cache design (R2P-101w, aligned with Rust 5120a3e/5e238bc/1f08b1f):
+ * - Static prefix: optional system prompt + instructions + skill catalog +
+ *   sub-agents + thinking — NO timestamp. A minute-level time line in the
+ *   header invalidated the provider prefix cache on every >1min request gap.
+ * - Dynamic content (time line + todolist) is computed fresh per build and
+ *   appended as a STANDALONE trailing user message wrapped in
+ *   `<system-reminder>`. It is the only non-replayed content per turn, so it
+ *   only costs its own few dozen tokens; suffixing it into the last persisted
+ *   user message was a breakpoint (that message is replayed verbatim next
+ *   turn).
+ * - Legacy `system-reminder` rows (persisted by the old daemon between Rust
+ *   5120a3e and 1f08b1f; no longer written) merge byte-stably into the
+ *   preceding user message's `<system-reminder>` tail so old-session prefixes
+ *   keep hitting the cache. Persisted originals are never mutated.
  * - Skill instructions persist in history via load_skill tool results, so they
- *   are NOT re-injected as a dynamic reminder
- * - Same-turn thoughts (after last user message) included; cross-turn skipped
+ *   are NOT re-injected as a dynamic reminder.
+ * - Same-turn thoughts (after last user message) included; cross-turn skipped.
  */
 
 import type { AgentState, BuildMessagesOptions, IMessageAssembler } from '@agentskillmania/colts';
 import type { Message as PiAIMessage, TextContent, ToolCall } from '@mariozechner/pi-ai';
 
 import { shiftHeadings } from './shift-headings.js';
+import { buildTimeLine } from './system-prompt.js';
 import type { SubAgentConfig } from '../subagent/types.js';
 
 /** Status-to-checkbox mapping for todolist display */
@@ -26,6 +37,21 @@ const STATUS_CHECK: Record<string, string> = {
   in_progress: '[~]',
   completed: '[x]',
 };
+
+/**
+ * Compare two strings by UTF-16 code unit (the `<` / `>` operator order) —
+ * deliberately NOT `localeCompare`.
+ *
+ * Same semantics as colts' internal `compareByCodeUnit` (not barrel-exported;
+ * duplicated here one-to-one). The sub-agent catalog feeds the provider prefix
+ * cache, and `localeCompare` collation is host/locale-dependent — two machines
+ * could enumerate the same set differently and invalidate the cache wholesale.
+ * Code-unit order is host-independent and matches Rust's byte ordering for the
+ * ASCII slugs used as agent names. (R2P-101w, aligned with Rust 5e238bc.)
+ */
+function compareByCodeUnit(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
 
 /**
  * MarkdownMessageAssembler -- structured markdown system prompt
@@ -159,41 +185,53 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
             timestamp: msg.timestamp ?? Date.now(),
           });
           break;
+
+        case 'system': {
+          if (msg.type === 'system-reminder') {
+            // 存量兼容(legacy):旧版 daemon 每轮落盘的时间上下文行,daemon 已
+            // 停写 —— 此分支仅服务已有落盘行的旧会话,按原样合并进前一条
+            // user 消息的 <system-reminder> 尾巴(位置与内容逐字节稳定,旧
+            // 前缀缓存照常命中)。落盘原文不动——合并只发生在请求构建物上。
+            const wrapped = '\n\n---\n<system-reminder>\n' + msg.content + '\n</system-reminder>';
+            const lastIdx = messages.length - 1;
+            const last = messages[lastIdx];
+            if (last && last.role === 'user') {
+              if (typeof last.content === 'string') {
+                messages[lastIdx] = { ...last, content: last.content + wrapped };
+              } else {
+                messages[lastIdx] = {
+                  ...last,
+                  content: [...last.content, { type: 'text' as const, text: wrapped }],
+                };
+              }
+            } else {
+              // 防御:reminder 行不在 user 消息之后(异常历史)——独立成一条
+              // user 消息,不并入无关消息。
+              messages.push({
+                role: 'user',
+                content: wrapped.replace(/^\n\n---\n/, ''),
+                timestamp: msg.timestamp ?? Date.now(),
+              });
+            }
+          }
+          // 普通 System 标记行(压缩/换模型)已折进系统文档,跳过。
+          break;
+        }
       }
     }
 
     // -- Dynamic context injection --
+    // 动态提醒(时间 + todo list)一律独立成尾部的 user 消息(恒有)。
+    // 曾经的实现把 reminder suffix 进最后一条 user 消息的正文 —— 那条消息
+    // 落盘是原文,下一轮请求时前缀就在它身上断掉。独立尾部消息只损耗提醒
+    // 块自身的几十 token(它是每轮唯一非回放内容),轮内的工具调用/结果段
+    // 全部保住。时间行位于此(缓存断点之后),分钟级变化同样无害。
     const reminder = this.buildDynamicReminder(state);
-    if (reminder && messages.length > 0) {
-      const lastIdx = messages.length - 1;
-      const last = messages[lastIdx];
-      if (last.role === 'user') {
-        if (typeof last.content === 'string') {
-          messages[lastIdx] = {
-            ...last,
-            content:
-              last.content + '\n\n---\n<system-reminder>\n' + reminder + '\n</system-reminder>',
-          };
-        } else {
-          messages[lastIdx] = {
-            ...last,
-            content: [
-              ...last.content,
-              {
-                type: 'text' as const,
-                text: '\n\n---\n<system-reminder>\n' + reminder + '\n</system-reminder>',
-              },
-            ],
-          };
-        }
-      } else {
-        messages.push({
-          role: 'user',
-          content: '<system-reminder>\n' + reminder + '\n</system-reminder>',
-          timestamp: now,
-        });
-      }
-    }
+    messages.push({
+      role: 'user',
+      content: '<system-reminder>\n' + reminder + '\n</system-reminder>',
+      timestamp: now,
+    });
 
     return messages;
   }
@@ -239,7 +277,8 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
   ): Promise<string | null> {
     const sections: string[] = [];
 
-    // Start with system prompt (YAML frontmatter from buildTimeContext)
+    // Start with the system prompt (runner-provided static prefix — the header
+    // carries NO time context; time lives in the tail dynamic reminder)
     if (opts.systemPrompt) {
       sections.push(opts.systemPrompt);
     }
@@ -263,8 +302,12 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
     }
 
     // Sub-Agents section
+    // 枚举序是前缀缓存的结构属性:Map 迭代序跟随插入序,两次构建/两个进程
+    // 可能不同。按 name 的 UTF-16 code unit 排序(跨构建跨实例确定性,
+    // 对齐 Rust 5e238bc 的目录排序)。
     if (this.subAgentConfigs && this.subAgentConfigs.size > 0) {
       const subAgentLines = Array.from(this.subAgentConfigs.values())
+        .sort((a, b) => compareByCodeUnit(a.name, b.name))
         .map((sa) => `- ${sa.name}: ${sa.description}`)
         .join('\n');
       sections.push(
@@ -284,27 +327,44 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
   }
 
   /**
-   * Build <system-reminder> content from dynamic state
+   * Build `<system-reminder>` content from dynamic state: the current time is
+   * always the first line, the todolist follows as a `## Task List` section.
    *
-   * @returns Formatted reminder text, or null if no dynamic content exists
+   * The time line is carried unconditionally (time awareness does not depend
+   * on the todolist feature being enabled); with todo disabled
+   * (`todoList` undefined on the context) only the time line is returned.
+   * When the list exists but is empty, a one-line usage nudge is injected —
+   * an empty list would otherwise leave the model unaware the task system
+   * exists ("never calls it → list stays empty" deadlock); the real list
+   * renders again after the first successful write.
+   *
+   * The active skill is intentionally NOT injected here. Skill instructions
+   * persist in conversation history as load_skill tool results, so a dynamic
+   * reminder would only duplicate them and waste tokens.
+   *
+   * (Byte-aligned with Rust `build_dynamic_reminder`.)
    */
-  private buildDynamicReminder(state: AgentState): string | null {
-    const parts: string[] = [];
+  private buildDynamicReminder(state: AgentState): string {
+    const sections: string[] = [`Time: ${buildTimeLine()}`];
 
     const todoList = (state.context as unknown as Record<string, unknown>).todoList as
       | { items: Array<{ id: number; subject: string; status: string }> }
       | undefined;
-    if (todoList?.items?.length) {
-      const lines = todoList.items.map(
-        (i) => `- ${STATUS_CHECK[i.status] ?? '[ ]'} ${i.id}. ${i.subject}`
-      );
-      parts.push('## Task List\n' + lines.join('\n'));
+    if (todoList) {
+      if (!todoList.items || todoList.items.length === 0) {
+        // 与 Rust 冰破行同构;工具名按 TS 侧实际注册名(rust 侧是
+        // todolist_write)——指向不存在的工具名会让引导失效。
+        sections.push(
+          '## Task List\n(no tasks yet — for multi-step work, create tasks with the todolist tool)'
+        );
+      } else {
+        const lines = todoList.items.map(
+          (i) => `- ${STATUS_CHECK[i.status] ?? '[ ]'} ${i.id}. ${i.subject}`
+        );
+        sections.push('## Task List\n' + lines.join('\n'));
+      }
     }
 
-    // Active skill is intentionally NOT injected here. Skill instructions now
-    // persist in conversation history as load_skill tool results, so a dynamic
-    // reminder would only duplicate them and waste tokens.
-
-    return parts.length > 0 ? parts.join('\n\n') : null;
+    return sections.join('\n\n');
   }
 }

@@ -208,7 +208,8 @@ export interface EnhancedRunnerOptions {
 
   /**
    * 系统提示词（Crew 用：crewToRunnerOptions 产出的 crew memory + 主智能体
-   * 指令 + 子智能体目录）。与内建的 buildTimeContext() 时间头合并。
+   * 指令 + 子智能体目录）。原样透传进系统文档头部——时间上下文不在此
+   * （由装配器在尾部动态 reminder 现算，R2P-101w）。
    */
   systemPrompt?: string;
 

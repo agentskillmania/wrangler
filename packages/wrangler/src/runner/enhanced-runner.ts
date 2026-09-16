@@ -20,7 +20,6 @@ import { produce } from 'immer';
 import type { ZodTypeAny } from 'zod';
 
 import { MarkdownMessageAssembler } from './markdown-assembler.js';
-import { buildTimeContext } from './system-prompt.js';
 import type {
   EnhancedRunnerOptions,
   ResolvedRunnerConfig,
@@ -552,7 +551,10 @@ export class EnhancedRunner {
         ...(todolistEnabled ? [todolistSupport.middleware] : []),
         ...a2uiMiddleware,
       ],
-      systemPrompt: [buildTimeContext(), options.systemPrompt].filter(Boolean).join('\n\n'),
+      // 头部不带时间上下文——分钟级时间戳在头部会按分钟作废整个 provider
+      // 前缀缓存;时间行由装配器在尾部动态 reminder 里现算(R2P-101w,
+      // 对齐 Rust 5120a3e)。这里只透传使用方的静态 systemPrompt。
+      systemPrompt: options.systemPrompt,
       skillProvider: skillProvider ?? undefined,
       thinkingEnabled: options.thinking?.enabled,
       enablePromptThinking: options.thinking?.promptLevel,

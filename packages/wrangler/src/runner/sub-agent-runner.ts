@@ -2,9 +2,9 @@
  * @fileoverview SubAgentRunner factory
  *
  * Builds a trimmed AgentRunner for sub-agents. Sub-agents get the wrangler
- * goodness (buildTimeContext, MarkdownMessageAssembler, todolist, inherited
- * tools/skills) but NOT the things that would be dangerous or redundant in a
- * delegation context:
+ * goodness (MarkdownMessageAssembler with the tail time/todo reminder,
+ * todolist, inherited tools/skills) but NOT the things that would be dangerous
+ * or redundant in a delegation context:
  *
  *   ❌ session middleware   (no persistence — sub-agent conversations are ephemeral)
  *   ❌ delegate tool        (prevents recursion)
@@ -15,7 +15,7 @@
  *   ❌ crewId               (sub-agents are not crew members)
  *
  * Capability matrix vs EnhancedRunner:
- *   buildTimeContext          ✅
+ *   tail time/todo reminder    ✅ (via MarkdownMessageAssembler)
  *   MarkdownMessageAssembler  ✅
  *   tool inheritance          ✅ (from parent runner, minus delegate/load_skill)
  *   skill inheritance         ✅ (from parent runner's skill provider)
@@ -28,7 +28,6 @@ import type { ILLMProvider, ISkillProvider, Tool } from '@agentskillmania/colts'
 import type { ZodTypeAny } from 'zod';
 
 import { MarkdownMessageAssembler } from './markdown-assembler.js';
-import { buildTimeContext } from './system-prompt.js';
 import { createTodolistSupport } from '../todolist/support.js';
 
 /** Options for creating a sub-agent runner */
@@ -81,7 +80,8 @@ export function createSubAgentRunner(options: SubAgentRunnerOptions): AgentRunne
     tools,
     skillProvider: options.skillProvider,
     middleware: [todolistSupport.middleware],
-    systemPrompt: buildTimeContext(),
+    // 头部不带时间上下文——时间行由装配器在尾部动态 reminder 里现算
+    // (R2P-101w,对齐 Rust 5120a3e),头部时间戳会按分钟作废前缀缓存。
     messageAssembler: new MarkdownMessageAssembler(),
     thinkingEnabled: options.thinkingEnabled,
     temperature: options.temperature,

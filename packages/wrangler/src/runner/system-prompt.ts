@@ -1,33 +1,41 @@
 /**
- * Runtime context for system prompts.
+ * Time context (single-line text of current date/time + timezone).
  *
- * Produces a YAML frontmatter block that the message assembler
- * prepends to agent instructions, yielding a well-structured
- * markdown system prompt.
+ * Consumer: the message assembler computes it fresh on every request build as
+ * the FIRST line of the dynamic tail reminder (buildDynamicReminder) — it sits
+ * after the prefix-cache breakpoint, so minute-level changes only cost the
+ * reminder block itself, never the cacheable prefix.
+ *
+ * Historically it was prefixed to the system prompt header as YAML frontmatter
+ * (invalidating the provider prefix cache wholesale on every >1min request
+ * gap); that injection point is gone (R2P-101w, aligned with Rust 5120a3e /
+ * 1f08b1f, where the header time context was removed and `build_time_line`
+ * feeds the tail reminder only).
  */
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /**
- * Build YAML frontmatter containing current date/time and timezone.
+ * Build a single line containing the current date/time and timezone offset.
  *
- * Returns a `---`-delimited block designed to be the first element
- * in the assembler's systemParts array.  When joined with `\n\n`
- * to the agent instructions, the LLM receives standard
- * markdown-with-frontmatter:
- *
+ * Format (byte-aligned with Rust `build_time_line`):
  * ```
- * ---
- * Time: Tuesday, May 13, 2026, 10:06 AM
- * Timezone: Asia/Shanghai
- * ---
- *
- * (agent instructions in markdown)
+ * Wednesday, 13/05/2026, 10:06 (+08:00)
  * ```
+ *
+ * The timezone is the numeric UTC offset (never the IANA name): the offset is
+ * what the Rust reference emits and it keeps this line host-stable in shape.
+ *
+ * @param now - Injection point for tests; defaults to the current time.
  */
-export function buildTimeContext(): string {
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const now = new Date();
-  const timestamp = `${WEEKDAYS[now.getDay()]}, ${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}/${now.getFullYear()}, ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  return `---\nTime: ${timestamp}\nTimezone: ${tz}\n---`;
+export function buildTimeLine(now: Date = new Date()): string {
+  const offsetMinutes = -now.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absOffset = Math.abs(offsetMinutes);
+  const tz = `${sign}${String(Math.trunc(absOffset / 60)).padStart(2, '0')}:${String(absOffset % 60).padStart(2, '0')}`;
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hour = String(now.getHours()).padStart(2, '0');
+  const minute = String(now.getMinutes()).padStart(2, '0');
+  return `${WEEKDAYS[now.getDay()]}, ${month}/${day}/${now.getFullYear()}, ${hour}:${minute} (${tz})`;
 }

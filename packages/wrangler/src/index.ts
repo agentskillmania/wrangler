@@ -18,7 +18,7 @@ export { createSessionMiddleware } from './middleware/session-middleware.js';
 export type { SessionNamingDeps } from './middleware/session-naming-middleware.js';
 
 // Runner (Layer 2)
-export { EnhancedRunner, buildTimeContext } from './runner/index.js';
+export { EnhancedRunner, buildTimeLine } from './runner/index.js';
 export type {
   EnhancedRunnerOptions,
   ResolvedRunnerConfig,

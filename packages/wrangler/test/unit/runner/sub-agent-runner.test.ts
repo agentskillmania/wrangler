@@ -2,7 +2,8 @@
  * @fileoverview SubAgentRunner unit tests
  *
  * Verifies that createSubAgentRunner produces a correctly configured AgentRunner:
- * - systemPrompt is buildTimeContext (YAML frontmatter)
+ * - systemPrompt carries NO header time context (time lives in the tail
+ *   dynamic reminder computed by the assembler per build — R2P-101w)
  * - messageAssembler is MarkdownMessageAssembler
  * - todolist tools are included
  * - inherited tools are passed through
@@ -36,11 +37,6 @@ vi.mock('../../../src/todolist/support.js', () => ({
   }),
 }));
 
-// Mock buildTimeContext to return a known value
-vi.mock('../../../src/runner/system-prompt.js', () => ({
-  buildTimeContext: vi.fn().mockReturnValue('---\nTime: mock\n---'),
-}));
-
 describe('createSubAgentRunner', () => {
   const mockLLMClient = {
     call: vi.fn(),
@@ -60,13 +56,15 @@ describe('createSubAgentRunner', () => {
     expect(runner).toBeDefined();
   });
 
-  it('uses buildTimeContext as systemPrompt', async () => {
+  it('injects NO header time context as systemPrompt (time lives in the tail reminder)', async () => {
     const { createSubAgentRunner } = await import('../../../src/runner/sub-agent-runner.js');
     createSubAgentRunner({
       model: 'gpt-4',
       llmClient: mockLLMClient,
     });
-    expect(capturedOptions!.systemPrompt).toBe('---\nTime: mock\n---');
+    // 头部时间戳是前缀缓存断点（每分钟全量作废）——systemPrompt 必须为空,
+    // 时间行由 MarkdownMessageAssembler 的尾部动态 reminder 现算。
+    expect(capturedOptions!.systemPrompt).toBeUndefined();
   });
 
   it('uses MarkdownMessageAssembler', async () => {

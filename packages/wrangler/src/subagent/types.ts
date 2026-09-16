@@ -2,7 +2,7 @@
  * @fileoverview Sub-agent type definitions
  *
  * Sub-agent types live in wrangler (not colts) because sub-agent creation
- * requires wrangler concerns: buildTimeContext, MarkdownMessageAssembler,
+ * requires wrangler concerns: MarkdownMessageAssembler (tail time/todo reminder),
  * todolist — things a bare colts AgentRunner cannot provide.
  */
 import type { AgentConfig, TokenStats } from '@agentskillmania/colts';

@@ -6,7 +6,7 @@
  * (a trimmed EnhancedRunner) via {@link createSubAgentRunner}.
  *
  * Migrated from colts — the key difference is that sub-agent creation now uses
- * wrangler's SubAgentRunner (with buildTimeContext, MarkdownMessageAssembler,
+ * wrangler's SubAgentRunner (with MarkdownMessageAssembler (tail time/todo reminder),
  * todolist) instead of colts' bare AgentRunner.
  */
 
@@ -23,7 +23,7 @@ import { createSubAgentRunner, type SubAgentRunnerOptions } from '../runner/sub-
  * Factory signature for creating a sub-agent runner.
  *
  * Replaces colts' `ISubAgentFactory`. The default implementation
- * ({@link createSubAgentRunner}) wires up buildTimeContext, MarkdownMessageAssembler,
+ * ({@link createSubAgentRunner}) wires up MarkdownMessageAssembler (tail time/todo reminder),
  * todolist, and tool/skill inheritance. Inject a custom factory to override
  * any of that (pool runners, add middleware, swap assembler, etc.).
  *

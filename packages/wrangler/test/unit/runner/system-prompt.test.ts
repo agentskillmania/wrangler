@@ -1,42 +1,45 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { buildTimeContext } from '../../../src/runner/system-prompt.js';
+import { buildTimeLine } from '../../../src/runner/system-prompt.js';
 
-describe('buildTimeContext', () => {
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** Mirror the expected line from a Date's local getters (pins format, not clock) */
+function expectedLine(now: Date): string {
+  const offsetMinutes = -now.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMinutes);
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  return `${WEEKDAYS[now.getDay()]}, ${p2(now.getMonth() + 1)}/${p2(now.getDate())}/${now.getFullYear()}, ${p2(now.getHours())}:${p2(now.getMinutes())} (${sign}${p2(Math.trunc(abs / 60))}:${p2(abs % 60)})`;
+}
+
+describe('buildTimeLine', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('returns a YAML frontmatter block containing Time and Timezone', () => {
+  it('returns the single-line time context aligned with Rust build_time_line', () => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
     vi.setSystemTime(new Date('2026-05-13T10:06:00Z'));
 
-    const result = buildTimeContext();
+    const result = buildTimeLine();
 
-    expect(result).toMatch(/^---\nTime: .+\nTimezone: .+\n---$/);
-    expect(result).toMatch(/Time: [A-Za-z]+, \d{2}\/\d{2}\/\d{4}, \d{2}:06/);
-    expect(result).toMatch(/Timezone: [A-Za-z0-9/_+-]+/);
+    // 形状：`Wednesday, 13/05/2026, 10:06 (+08:00)` —— 星期, DD/MM/YYYY,
+    // HH:MM, 数字时区偏移（无 IANA 名、无 --- 界符——那是旧头部形态）。
+    expect(result).toMatch(/^[A-Z][a-z]+, \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2} \([+-]\d{2}:\d{2}\)$/);
+    expect(result).toBe(expectedLine(new Date('2026-05-13T10:06:00Z')));
   });
 
-  it('uses the current local timezone from Intl.DateTimeFormat', () => {
-    vi.useFakeTimers({ shouldAdvanceTime: false });
-    vi.setSystemTime(new Date('2026-05-13T10:06:00Z'));
-
-    const result = buildTimeContext();
-    const expectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-    expect(result).toContain(`Timezone: ${expectedTz}`);
+  it('minute-level granularity: two times 1 minute apart differ, sub-minute times do not', () => {
+    expect(buildTimeLine(new Date('2026-05-13T10:06:00'))).not.toBe(
+      buildTimeLine(new Date('2026-05-13T10:07:00'))
+    );
+    expect(buildTimeLine(new Date('2026-05-13T10:06:00'))).toBe(
+      buildTimeLine(new Date('2026-05-13T10:06:59'))
+    );
   });
 
-  it('updates the timestamp when the system time crosses day boundaries', () => {
-    vi.useFakeTimers({ shouldAdvanceTime: false });
-    vi.setSystemTime(new Date('2026-01-02T23:59:00Z'));
-
-    const beforeMidnight = buildTimeContext();
-    expect(beforeMidnight).toMatch(/Time: [A-Za-z]+, 0\d\/0\d\/2026, \d{2}:59/);
-
-    vi.setSystemTime(new Date('2026-01-03T00:01:00Z'));
-
-    const afterMidnight = buildTimeContext();
-    expect(afterMidnight).toMatch(/Time: [A-Za-z]+, 01\/0\d\/2026, 0\d:01/);
+  it('accepts an injected Date (per-build fresh computation in the assembler)', () => {
+    const now = new Date('2026-01-02T23:59:00');
+    expect(buildTimeLine(now)).toBe(expectedLine(now));
   });
 });

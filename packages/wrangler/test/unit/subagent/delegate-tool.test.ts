@@ -39,10 +39,6 @@ vi.mock('../../../src/todolist/support.js', () => ({
   }),
 }));
 
-vi.mock('../../../src/runner/system-prompt.js', () => ({
-  buildTimeContext: vi.fn().mockReturnValue('---\nTime: mock\n---'),
-}));
-
 describe('createDelegateTool — tool inheritance paths', () => {
   const mockLLMProvider = {} as ILLMProvider;
 
