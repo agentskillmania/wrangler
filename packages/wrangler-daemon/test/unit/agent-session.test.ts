@@ -288,6 +288,22 @@ describe('AgentSession', () => {
         type: 'compressed',
         summary: 'summarized',
         removedCount: 5,
+        coveredMessages: 5,
+        timestamp: 0,
+      } as any);
+      expect(result).toEqual({
+        event: 'compressed',
+        data: { summary: 'summarized', removedCount: 5, coveredMessages: 5 },
+      });
+    });
+
+    it('maps compressed event without coveredMessages (legacy kernel payload)', () => {
+      // Older colts kernels omitted coveredMessages — the field must be
+      // absent (not null) on the wire, never a hard error.
+      const result = AgentSession.mapEvent({
+        type: 'compressed',
+        summary: 'summarized',
+        removedCount: 5,
         timestamp: 0,
       } as any);
       expect(result).toEqual({

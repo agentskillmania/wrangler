@@ -5,6 +5,19 @@ import type { CommandRegistry } from './registry.js';
 
 export interface CommandMiddlewareDeps {
   compressor?: IContextCompressor;
+  /**
+   * Event sink for command side effects, wired by EnhancedRunner to the
+   * runner's EventEmitter (same channel stream consumers subscribe to).
+   *
+   * When a handled command advances the compression anchor — `/compact` via
+   * its handler — the middleware emits a `compressed` event here with the
+   * SAME payload shape as the colts kernel's maybeCompress emission. The
+   * middleware is the first-hand truth: it sees both the pre-command state
+   * and the handler-returned state, so consumers don't have to diff state
+   * snapshots to notice a compression. Mirrors Rust CommandMiddleware's
+   * `event_tx` (command.rs Compressed emission). (R2P-104w)
+   */
+  emit?: (type: string, data: Record<string, unknown>) => void;
 }
 
 /**
@@ -48,6 +61,27 @@ export function createCommandMiddleware(
 
       // Command fully handled — stop execution with completed phase
       const finalState = result.state ?? ctx.state;
+
+      // Emit command side-effect events. `/compact` advancing the compression
+      // anchor emits `compressed` with the anchor delta as coveredMessages —
+      // same payload shape and saturating semantics as the kernel's
+      // maybeCompress (missing prior compression counts as anchor 0, so a
+      // first compact reports its full coverage). No-op compacts (handler
+      // early-returns "already compact", anchor not advanced) emit nothing,
+      // matching the Rust middleware guard `new_comp.anchor > old_comp.anchor`.
+      const oldAnchor = ctx.state.context.compression?.anchor ?? 0;
+      const newCompression = result.state?.context.compression;
+      const newAnchor = newCompression?.anchor ?? oldAnchor;
+      const coveredMessages = Math.max(0, newAnchor - oldAnchor);
+      if (newCompression && coveredMessages > 0) {
+        deps?.emit?.('compressed', {
+          summary: newCompression.summary,
+          removedCount: coveredMessages,
+          coveredMessages,
+          timestamp: Date.now(),
+        });
+      }
+
       return {
         state: finalState,
         stop: true,

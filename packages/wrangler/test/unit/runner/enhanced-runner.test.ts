@@ -10,16 +10,17 @@ vi.mock('@agentskillmania/sandbox', () => ({
 import { EnhancedRunner } from '../../../src/runner/enhanced-runner.js';
 import type { EnhancedRunnerOptions } from '../../../src/runner/types.js';
 import type { ILLMProvider, Tool } from '@agentskillmania/colts';
-import { createAgentState } from '@agentskillmania/colts';
+import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { SessionStore } from '../../../src/session/session-store.js';
 import { writeMeta } from '../../../src/session/meta.js';
 import { NodeHostEnv } from '../../../src/host-env/node-host-env.js';
 
 // Use a stable reference so each test can configure mockRun
-const { mockRun, mockRunStream, mockOn } = vi.hoisted(() => ({
+const { mockRun, mockRunStream, mockOn, mockEmit } = vi.hoisted(() => ({
   mockRun: vi.fn(),
   mockRunStream: vi.fn(),
   mockOn: vi.fn(),
+  mockEmit: vi.fn(),
 }));
 
 vi.mock('@agentskillmania/colts', async (importOriginal) => {
@@ -30,7 +31,7 @@ vi.mock('@agentskillmania/colts', async (importOriginal) => {
       run: mockRun,
       runStream: mockRunStream,
       on: mockOn,
-      emit: vi.fn(),
+      emit: mockEmit,
       registerTool: vi.fn(),
       getToolRegistry: vi.fn().mockReturnValue({
         getAll: vi.fn().mockReturnValue([]),
@@ -101,6 +102,7 @@ describe('EnhancedRunner', () => {
     mockRun.mockReset();
     mockRunStream.mockReset();
     mockOn.mockReset();
+    mockEmit.mockReset();
 
     // Default: return success
     mockRun.mockResolvedValue({
@@ -290,6 +292,57 @@ describe('EnhancedRunner', () => {
     expect(callArgs.middleware[0].name).toBe('command');
     expect(callArgs.middleware[1].name).toBe('session');
     expect(callArgs.middleware[2].name).toBe('todolist');
+  });
+
+  it('should wire command middleware emission to the inner runner EventEmitter (/compact → compressed)', async () => {
+    // The command middleware created inside EnhancedRunner.create must emit
+    // command side-effect events on the runner's EventEmitter — the daemon
+    // subscribes there (runner.on('compressed')) to drive SSE. (R2P-104w)
+    const mockCompressor = {
+      shouldCompress: () => true,
+      compress: vi.fn().mockResolvedValue({
+        summary: 'wired summary',
+        anchor: 8,
+        summaryTokenCount: 20,
+        removedTokenCount: 200,
+        compressedAt: 1234567890,
+      }),
+    };
+    await EnhancedRunner.create(
+      makeOptions({
+        compression: mockCompressor as unknown as EnhancedRunnerOptions['compression'],
+      })
+    );
+
+    const calls = await getAgentRunnerCalls();
+    const callArgs = calls[calls.length - 1][0];
+    const commandMiddleware = callArgs.middleware[0];
+    expect(commandMiddleware.name).toBe('command');
+
+    // Prior anchor 2 → 8 ⇒ coveredMessages 6, same shape as the kernel's
+    // maybeCompress emission.
+    let state = createAgentState({ name: 't', instructions: 't', tools: [] });
+    state = addUserMessage(state, 'q1');
+    state = {
+      ...state,
+      context: { ...state.context, compression: { summary: 'old', anchor: 2 } },
+    } as typeof state;
+    state = addUserMessage(state, '/compact');
+
+    const result = await commandMiddleware.beforeAdvance!({
+      state,
+      runnerOptions: {},
+      fromPhase: { type: 'idle' },
+      execState: { startTime: Date.now(), elapsedTokens: 0, stepCount: 0 },
+    });
+
+    expect(result?.stop).toBe(true);
+    expect(mockEmit).toHaveBeenCalledWith('compressed', {
+      summary: 'wired summary',
+      removedCount: 6,
+      coveredMessages: 6,
+      timestamp: expect.any(Number),
+    });
   });
 
   it('should run() delegate to inner runner with correct args', async () => {

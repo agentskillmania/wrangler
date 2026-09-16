@@ -472,6 +472,14 @@ export class EnhancedRunner {
 
       commandMiddleware = createCommandMiddleware(commandRegistry, {
         compressor: compressorInstance,
+        // Command side-effect events (/compact → compressed) ride the runner's
+        // EventEmitter — the same channel stream consumers (daemon SSE) already
+        // subscribe to. Closure over `runner` assigned below; emission only
+        // happens during run(), after assignment (same pattern as the delegate
+        // tool's emit). (R2P-104w)
+        emit: (type, data) => {
+          runner.emit(type as keyof RunnerEventMap, data as never);
+        },
       });
       // commandRegistry 存入实例字段在构造时完成（create 是 static，不能 this.xxx）
       registeredCommands = commandRegistry;

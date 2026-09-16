@@ -1078,9 +1078,18 @@ export class AgentSession {
         return { event: 'compressing', data: {} };
 
       case 'compressed':
+        // `coveredMessages` = messages newly covered THIS round (anchor delta,
+        // unambiguous count) — colts 0.5.0-alpha.1 made it required; pass it
+        // through so the wire shape matches Rust events.rs `compressed`
+        // (summary/removedCount/coveredMessages). Legacy kernels that omit it
+        // serialize without the key (undefined is dropped by JSON).
         return {
           event: 'compressed',
-          data: { summary: event.summary, removedCount: event.removedCount },
+          data: {
+            summary: event.summary,
+            removedCount: event.removedCount,
+            coveredMessages: (event as unknown as { coveredMessages?: number }).coveredMessages,
+          },
         };
 
       case 'session-cleared':
