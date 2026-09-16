@@ -4,6 +4,52 @@ import { addAssistantMessage, addToolMessage, loadSkill } from '@agentskillmania
 import type { CommandHandler } from '../types.js';
 
 /**
+ * The SWITCH_SKILL signal shape the load_skill tool returns (the colts
+ * SkillSignal subset this handler produces).
+ */
+interface SwitchSkillSignalShape {
+  type: 'SWITCH_SKILL';
+  to: string;
+  instructions: string;
+  task: string;
+  resources: string[];
+  scripts: string[];
+}
+
+/**
+ * Format a SWITCH_SKILL signal into its tool-result content — a byte-
+ * compatible mirror of colts's formatSkillToolResult (the load_skill tool
+ * path's single source of truth), covering the SWITCH_SKILL branch this
+ * handler produces.
+ *
+ * Why a local mirror: colts 0.5.0-alpha.1 exports the formatter only from
+ * its internal skills module — the package main entry re-exports neither it
+ * nor a ./skills subpath (deep imports are blocked by the exports field).
+ * Byte parity is pinned by the cross-boundary test in
+ * test/unit/command/handlers/skill.test.ts, which drives colts's real
+ * ExecutingToolHandler + load_skill tool and compares the persisted tool
+ * result byte-for-byte. Handoff: once a colts alpha exports
+ * formatSkillToolResult from the main index, replace this mirror with the
+ * import. (R2P-114w, aligned with Rust f1096cc.)
+ */
+export function formatSkillToolResult(signal: SwitchSkillSignalShape): string {
+  const lines: string[] = [];
+  if (signal.resources.length > 0) {
+    lines.push(`resources: ${signal.resources.join(', ')}`);
+  }
+  if (signal.scripts.length > 0) {
+    lines.push(`scripts: ${signal.scripts.join(', ')}`);
+  }
+  if (lines.length === 0) {
+    return signal.instructions;
+  }
+  return (
+    `${signal.instructions}\n\n--- bundled files (use these exact paths with read_skill_resource` +
+    ` / run_skill_script) ---\n${lines.join('\n')}`
+  );
+}
+
+/**
  * Creates a command handler that loads a skill by name into the agent state.
  *
  * The handler behavior depends on whether a message body is provided:
@@ -58,13 +104,27 @@ export function createSkillHandler(skillProvider: ISkillProvider): CommandHandle
 
         // Synthesize the same history shape the LLM-driven load_skill tool produces:
         // an assistant message carrying the toolCall, followed by a tool message
-        // whose content is the skill instructions. This is the single point where
-        // instructions enter conversation history for the slash-command path.
+        // whose content is the formatted SWITCH_SKILL result — instructions plus
+        // the bundled-file inventory, byte-identical to the tool path. The
+        // read_skill_resource / run_skill_script path contract ("use the exact
+        // paths from the inventory returned by load_skill") requires the
+        // inventory here too: injecting bare instructions would leave the model
+        // with no legal path source under the guard wording.
+        // (R2P-114w, aligned with Rust f1096cc.)
+        const skillResult: SwitchSkillSignalShape = {
+          type: 'SWITCH_SKILL',
+          to: skillName,
+          instructions,
+          task: ctx.command.body,
+          resources: manifest.resources ?? [],
+          scripts: manifest.scripts ?? [],
+        };
+        const formatted = formatSkillToolResult(skillResult);
         const toolCallId = globalThis.crypto.randomUUID();
         newState = addAssistantMessage(newState, '', {
           toolCalls: [{ id: toolCallId, name: 'load_skill', arguments: { name: skillName } }],
         });
-        newState = addToolMessage(newState, instructions, {
+        newState = addToolMessage(newState, formatted, {
           toolCallId,
           toolName: 'load_skill',
         });

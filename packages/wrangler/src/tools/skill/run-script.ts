@@ -8,7 +8,8 @@
  * The script executes in-place on disk, so relative imports (Python `from .`,
  * Node `require('./...')`) resolve naturally against the skill directory.
  */
-import { join } from 'node:path';
+import { stat } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
 
 import type { ISkillProvider } from '@agentskillmania/colts';
 import type { Tool } from '@agentskillmania/colts';
@@ -31,10 +32,20 @@ export function createRunScriptTool(
   return {
     name: 'run_skill_script',
     description:
-      'Run a script bundled with a skill. The script path is relative to the skill directory; relative imports resolve against the skill directory. You choose the interpreter/engine via the `command` parameter — it can be a bare command name resolved from PATH (e.g. "python3", "node", "bash") or a full executable path (e.g. "/usr/local/bin/python3.11", "/opt/homebrew/bin/node"). Use this to select a specific version or installation of the interpreter.',
+      'Run a script bundled with a skill. `script_path` must be one of the scripts listed ' +
+      "when the skill was loaded (load_skill returns the inventory) or named in the skill's " +
+      'instructions — do not guess paths. You choose the interpreter/engine via the ' +
+      '`command` parameter — it can be a bare command name resolved from PATH (e.g. ' +
+      '"python3", "node", "bash") or a full executable path (e.g. ' +
+      '"/usr/local/bin/python3.11", "/opt/homebrew/bin/node"). Use this to select a ' +
+      'specific version or installation of the interpreter.',
     parameters: z.object({
       skill_name: z.string().describe('The skill name the script belongs to'),
-      script_path: z.string().describe('Path to the script, relative to the skill directory'),
+      script_path: z
+        .string()
+        .describe(
+          "Exact script path from the skill's inventory (returned by load_skill). Do not guess"
+        ),
       command: z
         .string()
         .describe(
@@ -48,7 +59,31 @@ export function createRunScriptTool(
         const available = (await skillProvider.listSkills()).map((s) => s.name);
         return `Skill '${skill_name}' not found. Available: ${available.join(', ')}`;
       }
+      // Only accept relative paths inside the skill directory: absolute paths
+      // and `..` components could point outside it — reject both.
+      // (R2P-114w, aligned with Rust c78cfcc.)
+      if (isAbsolute(script_path) || script_path.split(/[\\/]+/).includes('..')) {
+        return (
+          `Invalid script path '${script_path}': must be a relative path inside the skill ` +
+          "directory (see the skill's script inventory)"
+        );
+      }
       const scriptAbs = join(manifest.source, script_path);
+      let scriptExists = false;
+      try {
+        scriptExists = (await stat(scriptAbs)).isFile();
+      } catch {
+        // Missing file — handled by the self-heal branch below.
+      }
+      if (!scriptExists) {
+        // Failure self-heal: attach the skill's ACTUAL script inventory so
+        // the model corrects itself in one shot. (R2P-114w, Rust c78cfcc.)
+        const scripts = manifest.scripts ?? [];
+        if (scripts.length === 0) {
+          return `Script not found: ${scriptAbs}`;
+        }
+        return `Script not found: ${scriptAbs}. Scripts in skill '${skill_name}': ${scripts.join(', ')}`;
+      }
       const result = await deps.execArray(command, [scriptAbs, ...(args ?? [])]);
       if (result.exitCode === 0) {
         return result.stdout || '(no output)';

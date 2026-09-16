@@ -65,6 +65,13 @@ export type {
   A2UIUserResponse,
 } from './tools/a2ui/index.js';
 
+// Skills — inventory alignment layer (wraps an injected provider; collection
+// rules mirror Rust dc5cb1f: recursive walk, junk pruning, sort, cap+tail,
+// single-side partition)
+export { InventorySkillProvider } from './skills/inventory-provider.js';
+export type { SkillDirWalker, InventorySkillProviderOptions } from './skills/inventory-provider.js';
+export { INVENTORY_CAP, isJunkEntry, isDocumentFile, splitInventory } from './skills/inventory.js';
+
 // Todolist (Layer 3)
 export { createTodolistSupport } from './todolist/index.js';
 export type { TodoStatus, TodoItem, TodoList } from './todolist/index.js';

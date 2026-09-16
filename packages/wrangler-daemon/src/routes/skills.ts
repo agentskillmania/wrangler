@@ -1,4 +1,5 @@
 import { FilesystemSkillProvider } from '@agentskillmania/colts';
+import { InventorySkillProvider } from '@agentskillmania/wrangler';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance } from 'fastify';
 
@@ -90,7 +91,10 @@ export async function skillRoutes(fastify: FastifyInstance): Promise<void> {
         .map((s) => s.trim())
         .filter(Boolean) ?? []),
     ];
-    const provider = new FilesystemSkillProvider(dirs);
+    // 清单对齐层与 agent 运行时同一套规则（递归/剪枝/排序/截断），
+    // 保证查询端点与 load_skill 返回的清单一致（对齐 Rust
+    // list_available_skills 复用运行时 provider 的做法）。(R2P-114w)
+    const provider = new InventorySkillProvider(new FilesystemSkillProvider(dirs));
     return { skills: await provider.listSkills() };
   });
 }

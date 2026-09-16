@@ -41,6 +41,7 @@ import { resolveDefaultModel } from '../llm/resolve-model.js';
 import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
 import { createSessionSupport } from '../session/support.js';
+import { InventorySkillProvider } from '../skills/inventory-provider.js';
 import { PlanStore } from '../spec-plan/plan-store.js';
 import { SpecStore } from '../spec-plan/spec-store.js';
 import { createDelegateTool } from '../subagent/delegate-tool.js';
@@ -315,8 +316,15 @@ export class EnhancedRunner {
     // the agent access to reference docs and bundled scripts.
     // 技能 provider：只认注入（浏览器扩展传 OPFS 适配、daemon 由 agent-session
     // 从 dirs 构造后注入）——引擎 core 不构造 FilesystemSkillProvider，
-    // 保持零 node: 依赖，宿主环境决定技能后端
-    const skillProvider = options.skills?.provider;
+    // 保持零 node: 依赖，宿主环境决定技能后端。注入后统一套清单对齐层：
+    // colts 现行收集是顶层扫描（嵌套路径丢失、垃圾不剪、scripts 双列、
+    // 无 cap），而 Rust 的收集+分区都在 wrangler 侧——包装层按 Rust
+    // dc5cb1f 规则重导清单，load_skill 目录//skill: 注入/自愈提示全部
+    // 消费同一份。后端 source 不可读（浏览器 OPFS 等）时原样透传。
+    // (R2P-114w)
+    const skillProvider = options.skills?.provider
+      ? new InventorySkillProvider(options.skills.provider)
+      : undefined;
     const skillTools: Tool<ZodTypeAny>[] = [];
     if (skillProvider) {
       skillTools.push(createReadResourceTool(skillProvider));
