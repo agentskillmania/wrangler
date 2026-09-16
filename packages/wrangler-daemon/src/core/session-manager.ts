@@ -24,6 +24,15 @@ export class SessionManager {
   private readonly sessionWorkspaces = new Map<string, string>();
   private readonly runtimeStatus = new Map<string, string>();
   private activeSessions = new Map<string, AgentSession>();
+  /**
+   * Cold-start assembly reservations (R2P-161, mirrors Rust 32e79ce /
+   * 098adbd 地基C). Lazy AgentSession assembly is check → await → register;
+   * the reservation synchronously occupies the registry slot between the
+   * check and the register so two concurrent first messages on the same
+   * cold session cannot each build an AgentSession and overwrite each
+   * other (orphaned runner + double persistence).
+   */
+  private readonly reservedAgentSessions = new Set<string>();
   private readonly _baseDir: string;
   private readonly runtime: HostEnv;
 
@@ -130,6 +139,9 @@ export class SessionManager {
       session.stop();
       this.activeSessions.delete(id);
     }
+    // Also drop a pending cold-start reservation — deleting mid-assembly
+    // must not leave the slot stuck.
+    this.reservedAgentSessions.delete(id);
     const store = this.getStoreForSession(id);
     if (store) {
       await store.deleteSession(id);
@@ -153,12 +165,44 @@ export class SessionManager {
     return this.getOrCreateStore(workspacePath);
   }
 
-  /** Store an active AgentSession */
+  /**
+   * Synchronously reserve the cold-start assembly slot for a session id.
+   *
+   * MUST be called with zero awaits after the getAgentSession() miss —
+   * callers win or lose atomically (single-threaded JS: no interleaving
+   * between the checks and the add below). Returns false when a real
+   * AgentSession is already registered or another caller holds the slot.
+   *
+   * Pair with setAgentSession() on success (settles the reservation) or
+   * cancelAgentSessionReservation() on failure (frees the slot for a
+   * retry — a leaked reservation would 409 the session forever).
+   */
+  tryReserveAgentSession(id: string): boolean {
+    if (this.activeSessions.has(id)) return false;
+    if (this.reservedAgentSessions.has(id)) return false;
+    this.reservedAgentSessions.add(id);
+    return true;
+  }
+
+  /** Release a cold-start reservation whose assembly failed. */
+  cancelAgentSessionReservation(id: string): void {
+    this.reservedAgentSessions.delete(id);
+  }
+
+  /**
+   * Store an active AgentSession. Also settles any pending cold-start
+   * reservation for the id (assembly completed — publish over the slot).
+   */
   setAgentSession(id: string, session: AgentSession): void {
+    this.reservedAgentSessions.delete(id);
     this.activeSessions.set(id, session);
   }
 
-  /** Get active AgentSession by id */
+  /**
+   * Get active AgentSession by id. A pending cold-start reservation is
+   * invisible here (returns null): while assembly is in flight there is
+   * no real session to stop or respond to yet.
+   */
   getAgentSession(id: string): AgentSession | null {
     return this.activeSessions.get(id) ?? null;
   }
@@ -179,5 +223,6 @@ export class SessionManager {
       session.stop();
     }
     this.activeSessions.clear();
+    this.reservedAgentSessions.clear();
   }
 }

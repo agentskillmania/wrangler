@@ -366,61 +366,82 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       sessionDir = store.getSessionDir(sessionId);
     }
 
-    // Lazily resume AgentSession on first resume chat
+    // Lazily resume AgentSession on first resume chat.
+    //
+    // R2P-161（对齐 Rust 32e79ce/098adbd 地基C）：冷路径 create 竞态。
+    // 判空与占位之间零 await——两个并发首条消息（双击发送/前端重试）
+    // 只有一个能拿到装配槽，另一个同步吃 409；否则各自 await
+    // AgentSession.resume 后互相覆盖注册（孤儿 runner/LLM client 泄漏 +
+    // 同目录双重落盘）。
     let agentSession = sessionManager().getAgentSession(sessionId);
     if (!agentSession) {
-      const agentDetail = await resourceManager().getAgent(info.agentName);
-      const config = configManager().get();
-
-      // Crew session: if the persisted runnerConfig carried a crewId, reload
-      // the crew config and rebuild subAgents so the delegate tool is wired
-      // on resume. Non-crew sessions have no crewId → subAgents stays
-      // undefined and behavior is unchanged.
-      let resumeSubAgents: AgentSessionResumeOptions['subAgents'];
-      const crewId = info.runnerConfig?.crewId;
-      if (crewId) {
-        try {
-          const crewConfig = await resourceManager().loadCrewConfig(crewId);
-          resumeSubAgents = crewToRunnerOptions(crewConfig).subAgents;
-        } catch {
-          // Crew was deleted between session creation and resume — proceed
-          // without subAgents. The primary agent still runs; it just can't
-          // delegate. Surface the situation in logs later if needed.
-        }
+      if (!sessionManager().tryReserveAgentSession(sessionId)) {
+        // Slot already taken: another request is assembling this session
+        // (or it just became active) — same mutual-exclusion semantics as
+        // the busy check below.
+        reply.code(409).send({ error: 'Session is busy' });
+        return;
       }
-
       try {
-        agentSession = await AgentSession.resume(
-          sessionDir,
-          {
-            sessionId,
-            workspacePath: info.workspacePath,
-            agentName: info.agentName,
-            agentConfigPath: agentDetail?.path,
-            sessionStore: store,
-            sessionManager: sessionManager(),
-            runtime: defaultNodeHostEnv,
-            subAgents: resumeSubAgents,
-            // Node 专属：与 create 路径同款合并 + 实例构造（引擎 core 不捆绑 sandbox）。
-            // override 取会话快照的 sandbox 开关（无快照值时默认 true，与 create 一致）
-            sandbox: withSandboxInstance(
-              config.sandbox,
-              info.runnerConfig?.sandbox ?? true,
-              info.workspacePath
-            ),
-            llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
-          },
-          config
-        );
-      } catch (error) {
-        if (error instanceof SessionNotFoundError) {
-          reply.code(410).send({ error: 'Session expired, please start a new conversation' });
-          return;
-        }
-        throw error;
-      }
+        const agentDetail = await resourceManager().getAgent(info.agentName);
+        const config = configManager().get();
 
-      sessionManager().setAgentSession(sessionId, agentSession);
+        // Crew session: if the persisted runnerConfig carried a crewId, reload
+        // the crew config and rebuild subAgents so the delegate tool is wired
+        // on resume. Non-crew sessions have no crewId → subAgents stays
+        // undefined and behavior is unchanged.
+        let resumeSubAgents: AgentSessionResumeOptions['subAgents'];
+        const crewId = info.runnerConfig?.crewId;
+        if (crewId) {
+          try {
+            const crewConfig = await resourceManager().loadCrewConfig(crewId);
+            resumeSubAgents = crewToRunnerOptions(crewConfig).subAgents;
+          } catch {
+            // Crew was deleted between session creation and resume — proceed
+            // without subAgents. The primary agent still runs; it just can't
+            // delegate. Surface the situation in logs later if needed.
+          }
+        }
+
+        try {
+          agentSession = await AgentSession.resume(
+            sessionDir,
+            {
+              sessionId,
+              workspacePath: info.workspacePath,
+              agentName: info.agentName,
+              agentConfigPath: agentDetail?.path,
+              sessionStore: store,
+              sessionManager: sessionManager(),
+              runtime: defaultNodeHostEnv,
+              subAgents: resumeSubAgents,
+              // Node 专属：与 create 路径同款合并 + 实例构造（引擎 core 不捆绑 sandbox）。
+              // override 取会话快照的 sandbox 开关（无快照值时默认 true，与 create 一致）
+              sandbox: withSandboxInstance(
+                config.sandbox,
+                info.runnerConfig?.sandbox ?? true,
+                info.workspacePath
+              ),
+              llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
+            },
+            config
+          );
+        } catch (error) {
+          if (error instanceof SessionNotFoundError) {
+            reply.code(410).send({ error: 'Session expired, please start a new conversation' });
+            return;
+          }
+          throw error;
+        }
+      } finally {
+        // 成功：setAgentSession 结算占位并发布真身；失败（含 410/throw）：
+        // 清除占位，槽位不卡死——后续请求可重试装配。
+        if (agentSession) {
+          sessionManager().setAgentSession(sessionId, agentSession);
+        } else {
+          sessionManager().cancelAgentSessionReservation(sessionId);
+        }
+      }
     }
 
     // Reject if session is already processing a message

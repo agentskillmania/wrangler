@@ -343,9 +343,116 @@ describe('SessionManager', () => {
         expect(Array.isArray(result)).toBe(true);
       }
 
-      // After all registrations complete, a final list should reflect all sessions
+      // After all registrations, a final list should reflect all sessions
       const finalList = await manager.list();
       expect(finalList).toHaveLength(20);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // Cold-start reservation (R2P-161, mirrors Rust 32e79ce/098adbd):
+  // lazy AgentSession assembly must reserve the registry slot
+  // SYNCHRONOUSLY (before any await) so concurrent first messages on the
+  // same cold session cannot each build an AgentSession and overwrite
+  // each other's registration (orphaned runner + double persistence).
+  // ────────────────────────────────────────────────────────────────────
+  describe('cold-start reservation', () => {
+    it('tryReserveAgentSession grants the first caller and rejects the second', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('race-1', wsPath);
+
+      // First caller wins the assembly slot...
+      expect(manager.tryReserveAgentSession('race-1')).toBe(true);
+      // ...every later caller loses (no await between check and reserve)
+      expect(manager.tryReserveAgentSession('race-1')).toBe(false);
+      expect(manager.tryReserveAgentSession('race-1')).toBe(false);
+    });
+
+    it('a pending reservation is invisible to getAgentSession', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('race-2', wsPath);
+
+      expect(manager.tryReserveAgentSession('race-2')).toBe(true);
+      // While assembly is in flight there is no real AgentSession yet —
+      // /stop and /respond must see "not active", not a sentinel object.
+      expect(manager.getAgentSession('race-2')).toBeNull();
+    });
+
+    it('setAgentSession settles the reservation and publishes the real session', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('race-3', wsPath);
+
+      expect(manager.tryReserveAgentSession('race-3')).toBe(true);
+      const realSession = { stop: vi.fn() } as any;
+      manager.setAgentSession('race-3', realSession);
+
+      expect(manager.getAgentSession('race-3')).toBe(realSession);
+      // Reservation is settled: the entry now blocks because a REAL
+      // session exists (not because a stale reservation lingers).
+      expect(manager.tryReserveAgentSession('race-3')).toBe(false);
+    });
+
+    it('cancelAgentSessionReservation clears the slot so a retry can win (failure path)', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('race-4', wsPath);
+
+      expect(manager.tryReserveAgentSession('race-4')).toBe(true);
+      manager.cancelAgentSessionReservation('race-4');
+      // Cleared — a later request must be able to retry the assembly.
+      expect(manager.tryReserveAgentSession('race-4')).toBe(true);
+      expect(manager.getAgentSession('race-4')).toBeNull();
+    });
+
+    it('cancelAgentSessionReservation does not remove an already-registered AgentSession', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('race-5', wsPath);
+
+      manager.tryReserveAgentSession('race-5');
+      const realSession = { stop: vi.fn() } as any;
+      manager.setAgentSession('race-5', realSession);
+      // Late/duplicate cancel after a successful settle must not evict
+      // the published session (settle wins over cancel).
+      manager.cancelAgentSessionReservation('race-5');
+      expect(manager.getAgentSession('race-5')).toBe(realSession);
+    });
+
+    it('a pending reservation is not counted as an active AgentSession', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('race-6', wsPath);
+
+      expect(manager.tryReserveAgentSession('race-6')).toBe(true);
+      expect(manager.activeCount).toBe(0);
+      expect(Array.from(manager.getAllAgentSessions())).toHaveLength(0);
+      // stopAll over a pending reservation must be a safe no-op
+      expect(() => manager.stopAll()).not.toThrow();
+    });
+
+    it('delete clears a pending reservation', async () => {
+      const manager = new SessionManager(sessionsDir);
+      await manager.init();
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('race-7', wsPath);
+      const store = manager.getSessionStore(wsPath);
+      await store.createWithId('race-7', 'test-agent');
+
+      expect(manager.tryReserveAgentSession('race-7')).toBe(true);
+      await manager.delete('race-7');
+      // Deleted while resuming → the reservation must not survive the delete
+      // (the id is not stuck: activeSessions and reservation are both empty).
+      expect(manager.tryReserveAgentSession('race-7')).toBe(true);
+      expect(manager.getAgentSession('race-7')).toBeNull();
     });
   });
 });
