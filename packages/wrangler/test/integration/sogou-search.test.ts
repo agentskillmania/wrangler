@@ -14,6 +14,10 @@
  *
  * 注意：未拦模式下单条查询期间风控突袭（IP 计分随请求加速）属正常现象，
  * 链会正确回退 bing——故未拦分支的 provider 标记接受 'sogou' | 'bing'。
+ * 残余风险披露（翻转容忍不对称）：canary 判「被拦」后，若 sogou 在 canary
+ * 与查询之间中途解封，链会正确走 sogou，但被拦分支的严格 'bing' 断言将
+ * 假红（风控解封慢于测试窗口，概率低）；反向（canary 未拦→查询时被拦）
+ * 已由 ['sogou','bing'] 容忍覆盖——容忍只朝一个方向，不对称是已知取舍。
  *
  * Prerequisites:
  * - Network access to https://www.sogou.com 与 https://www.bing.com
@@ -25,6 +29,7 @@ import { AgentRunner, createAgentState, addUserMessage } from '@agentskillmania/
 import { SogouScrapeSearchProvider } from '../../src/tools/builtin/sogou-scrape-search.js';
 import { BingScrapeSearchProvider } from '../../src/tools/builtin/bing-scrape-search.js';
 import { createWebSearchTool, FallbackSearchProvider } from '../../src/tools/builtin/web-search.js';
+import type { SearchResult } from '../../src/tools/builtin/web-search.js';
 import { MarkdownMessageAssembler } from '../../src/runner/markdown-assembler.js';
 import { testConfig } from './config.js';
 
@@ -73,11 +78,27 @@ function expectProviderMark(result: { provider?: string }): void {
   }
 }
 
+/**
+ * 链级搜索 + 瞬时薄页重试（评审返修）：bing 抓取偶发只解析出 1-2 条
+ * （第三方页面质量波动——全文件连跑时中文查询复现过 1 条薄页、隔离复跑
+ * 恢复）。首轮 <3 时同查询重试一次再进入断言；两连薄页属真信号，应红。
+ * 无条件应用于两个分支：未拦分支中途风控突袭回退 bing 后同样可能撞薄页。
+ */
+async function searchChainWithRetry(query: string): Promise<SearchResult[]> {
+  const chain = createDefaultChain();
+  const first = await chain.search(query);
+  if (first.length >= 3) return first;
+  console.warn(
+    `[sogou-search] 首轮仅 ${first.length} 条（provider=${first[0]?.provider ?? 'none'}），同查询重试一次抗瞬时薄页`
+  );
+  return chain.search(query);
+}
+
 describe('web_search sogou→bing provider chain (live, dual-mode)', () => {
   itif(ENABLE_NETWORK_TESTS)(
     'returns results for a common English query with provider source mark',
     async () => {
-      const results = await createDefaultChain().search('TypeScript tutorial');
+      const results = await searchChainWithRetry('TypeScript tutorial');
       expect(results.length).toBeGreaterThanOrEqual(3);
 
       for (const r of results) {
@@ -106,7 +127,7 @@ describe('web_search sogou→bing provider chain (live, dual-mode)', () => {
   itif(ENABLE_NETWORK_TESTS)(
     'returns results for a Chinese query with provider source mark',
     async () => {
-      const results = await createDefaultChain().search('Python 入门教程');
+      const results = await searchChainWithRetry('Python 入门教程');
       expect(results.length).toBeGreaterThanOrEqual(3);
 
       for (const r of results) {
@@ -121,7 +142,7 @@ describe('web_search sogou→bing provider chain (live, dual-mode)', () => {
   itif(ENABLE_NETWORK_TESTS)(
     'returns results for a technical query with special characters',
     async () => {
-      const results = await createDefaultChain().search('node.js stream.pipe() usage');
+      const results = await searchChainWithRetry('node.js stream.pipe() usage');
       expect(results.length).toBeGreaterThanOrEqual(3);
 
       for (const r of results) {
@@ -136,9 +157,8 @@ describe('web_search sogou→bing provider chain (live, dual-mode)', () => {
   itif(ENABLE_NETWORK_TESTS)(
     'consecutive searches return consistent structure',
     async () => {
-      const chain = createDefaultChain();
-      const results1 = await chain.search('React hooks');
-      const results2 = await chain.search('Vue composition API');
+      const results1 = await searchChainWithRetry('React hooks');
+      const results2 = await searchChainWithRetry('Vue composition API');
 
       expect(results1.length).toBeGreaterThanOrEqual(3);
       expect(results2.length).toBeGreaterThanOrEqual(3);

@@ -18,6 +18,8 @@ export interface SearchProvider {
   /**
    * 带挑战信号的搜索（可选）：能区分「被反爬风控拦截」与「真无结果」的
    * provider 实现（如 sogou antispider 403/302）。回退链据此切换 provider。
+   * 只实现 search() 的 provider 在链中被视为永不挑战——信号缺失即不回退
+   * （回退链构造者需保证主链 provider 带本信号，否则链退化为直连）。
    */
   searchDetailed?(query: string): Promise<SearchOutcome>;
 }

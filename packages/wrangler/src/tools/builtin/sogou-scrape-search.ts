@@ -28,6 +28,11 @@ interface ChallengeProbeResponse {
  * - 裸 HTTP 403
  * - 3xx 重定向且 Location 指向 antispider（302→/antispider/）
  * - 落地 URL 含 antispider（防御：被跟随重定向吞掉 302 的场景）
+ *
+ * 已知取舍（良性 3xx 退化路径）：redirect: 'manual' 不跟随重定向，非
+ * antispider 的 3xx（如 sogou 的 session/geo 自跳）会被当作非挑战的空
+ * 结果返回（challenged=false，链不回退）——受该跳转影响的查询会静默无
+ * 结果，由 web_search 显示 No results found 兜底。
  */
 function isChallengeResponse(response: ChallengeProbeResponse): boolean {
   if (response.status === 403) return true;
