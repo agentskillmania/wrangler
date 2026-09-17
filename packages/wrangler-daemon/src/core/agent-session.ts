@@ -1215,8 +1215,15 @@ export class AgentSession {
       data: event.data,
     };
     this.pushHistory(entry);
+    // 隔离坏订阅者（对齐 Rust event_tx 发送端与接收端的构造性隔离）：一个
+    // listener 抛错不得跳过其余订阅者、不得穿透进 runner 事件 handler 被吞成
+    // 合成 error 帧、也不得跳过同帧的 cockpit 广播（那发生在调用方）。
     for (const listener of this.channelSubscribers) {
-      listener(entry);
+      try {
+        listener(entry);
+      } catch {
+        /* isolate: 坏订阅者自吞，广播链继续 */
+      }
     }
   }
 

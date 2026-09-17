@@ -2664,5 +2664,40 @@ describe('AgentSession', () => {
       expect(session.historySnapshot().length).toBe(3);
       expect(session.historySnapshot().at(-1)!.event).toBe('done');
     });
+
+    describe('session event channel: subscriber isolation (R2P-122 review P2)', () => {
+      it('a throwing subscriber does not break the broadcast chain or pollute the stream', async () => {
+        mockRunnerWithScripts([[['token', { token: 'a' }], ['complete']]]);
+        const session = await AgentSession.create(
+          {
+            workspacePath: '/tmp/test',
+            agentName: 'test',
+            sessionId: 'channel-isolate-test',
+            runtime: defaultNodeHostEnv,
+            llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+          },
+          testConfig
+        );
+
+        const good: HistoryEntry[] = [];
+        const bad = vi.fn(() => {
+          throw new Error('bad subscriber');
+        });
+        const detachBad = session.subscribe(bad);
+        const detachGood = session.subscribe((entry) => good.push(entry));
+
+        const events: SSEEvent[] = [];
+        for await (const sse of session.handleMessage('hello')) events.push(sse);
+        detachBad();
+        detachGood();
+
+        // 好订阅者照常收到全部帧（坏订阅者未拖断广播链）。
+        expect(good.map((e) => e.event)).toEqual(['token', 'done']);
+        // 坏订阅者的异常未被吞成合成 error 帧（历史、好订阅者、SSE 三处皆无）。
+        expect(good.some((e) => e.event === 'error')).toBe(false);
+        expect(session.historySnapshot().some((e) => e.event === 'error')).toBe(false);
+        expect(events.some((e) => e.event === 'error')).toBe(false);
+      });
+    });
   });
 });
