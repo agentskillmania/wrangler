@@ -5,15 +5,20 @@
  * Bridges colts AskHuman tool -> SSE -> frontend for human-in-the-loop interaction.
  */
 
+// R2P-201：daemon 生产代码零 colts/llm-client 直驱——内核状态/HITL/runner
+// 词汇全部经 @agentskillmania/wrangler 定向再导出触达。
 import {
+  EnhancedRunner,
+  SessionStore,
   createAgentState,
   addUserMessage,
   updateState,
-  FilesystemSkillProvider,
-  respond as hitlRespond,
-  removePendingInterrupt,
   deserializeState,
-} from '@agentskillmania/colts';
+  FilesystemSkillProvider,
+  removePendingInterrupt,
+  resolveDefaultModel,
+  respond as hitlRespond,
+} from '@agentskillmania/wrangler';
 import type {
   AgentState,
   RunStreamEvent,
@@ -23,15 +28,17 @@ import type {
   HumanAnswer,
   HitlHumanResponse,
   PendingInterrupt,
-} from '@agentskillmania/colts';
-import type { AskHumanHandler, HumanResponse } from '@agentskillmania/colts';
-import { EnhancedRunner, SessionStore, resolveDefaultModel } from '@agentskillmania/wrangler';
-import type {
-  SubAgentConfig,
-  LimitsConfig,
-  SandboxConfig,
+  AskHumanHandler,
+  HumanResponse,
   HostEnv,
+  ILLMProvider,
+  ISkillProvider,
+  LLMProviderEntry,
+  LimitsConfig,
   ResolvedRunnerConfig,
+  SandboxConfig,
+  SubAgentConfig,
+  Tool,
 } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
@@ -40,7 +47,8 @@ import { mergeSandboxConfig } from './sandbox-config.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
 import type { RunnerFeatureFlags } from './session-diagnostics.js';
 
-// Register the Node SkillFsOps implementation at module load so any
+// Register the Node SkillFsOps implementation once at daemon startup
+// (daemon.ts → wrangler ensureNodeSkillFsOps) so any
 // FilesystemSkillProvider constructed here (or elsewhere in the daemon)
 // resolves node:fs via the global registration point. Idempotent.
 
@@ -85,10 +93,8 @@ export interface AgentSessionResumeOptions {
    * config on every resume). Wins over the meta snapshot's enabled flag.
    */
   compression?: AgentSessionOptions['compression'];
-  /** quickInit 创建器（Node 宿主传 LLMClient.quickInit）——daemon core 不捆绑内置 LLM */
-  llmClientFactory?: (
-    providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
-  ) => import('@agentskillmania/colts').ILLMProvider;
+  /** quickInit 创建器（Node 宿主传 wrangler createLLMClient）——daemon core 不捆绑内置 LLM */
+  llmClientFactory?: (providers: LLMProviderEntry[]) => ILLMProvider;
 }
 
 /** Options for creating an AgentSession */
@@ -100,11 +106,9 @@ export interface AgentSessionOptions {
    * LLM provider injection — browser extensions pass FetchLlmProvider.
    * Omit for Node (uses createLLMClient with pi-ai).
    */
-  llmClient?: import('@agentskillmania/colts').ILLMProvider;
-  /** quickInit 创建器（Node 宿主传 LLMClient.quickInit）——daemon core 不捆绑内置 LLM */
-  llmClientFactory?: (
-    providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
-  ) => import('@agentskillmania/colts').ILLMProvider;
+  llmClient?: ILLMProvider;
+  /** quickInit 创建器（Node 宿主传 wrangler createLLMClient）——daemon core 不捆绑内置 LLM */
+  llmClientFactory?: (providers: LLMProviderEntry[]) => ILLMProvider;
   workspacePath: string;
   agentName: string;
   agentInstructions?: string;
@@ -119,20 +123,18 @@ export interface AgentSessionOptions {
   skills?: {
     dirs?: string[];
     /** External skill provider — BundledSkillProvider for extensions. */
-    provider?: import('@agentskillmania/colts').ISkillProvider;
+    provider?: ISkillProvider;
   };
   tools?: {
     mcpConfigPaths?: string[];
     /** MCP 工具加载器（透传 EnhancedRunner.tools.mcpLoader） */
-    mcpLoader?: (
-      paths: string[]
-    ) => Promise<import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[]>;
+    mcpLoader?: (paths: string[]) => Promise<Tool<import('zod').ZodTypeAny>[]>;
     /** 宿主注入工具（透传 EnhancedRunner.tools.inject） */
-    inject?: import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[];
+    inject?: Tool<import('zod').ZodTypeAny>[];
     /** 宿主注入工具工厂（透传 EnhancedRunner.tools.injectFactory，引擎传解析后的 ToolDeps） */
     injectFactory?: (
       deps: import('@agentskillmania/wrangler').ToolDeps
-    ) => import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[];
+    ) => Tool<import('zod').ZodTypeAny>[];
     builtinFilter?: Record<string, boolean>;
     /** External ToolDeps injection — BrowserToolDeps for extensions. */
     deps?: import('@agentskillmania/wrangler').ToolDeps;
@@ -341,7 +343,7 @@ export class AgentSession {
   private runner: EnhancedRunner;
   private state: AgentState;
   /** LLM provider — 默认 LLMClient（pi-ai），浏览器注入 FetchLlmProvider */
-  private _llmClient!: import('@agentskillmania/colts').ILLMProvider;
+  private _llmClient!: ILLMProvider;
   private abortController: AbortController | null = null;
   private bridge: AskHumanBridge;
   private sessionStore: SessionStore | undefined;
@@ -1595,7 +1597,7 @@ export class AgentSession {
   }
 
   /** Get the LLM provider instance (for model metadata queries) */
-  get llmClient(): import('@agentskillmania/colts').ILLMProvider {
+  get llmClient(): ILLMProvider {
     return this._llmClient;
   }
 

@@ -1,5 +1,4 @@
-import { FilesystemSkillProvider } from '@agentskillmania/colts';
-import { InventorySkillProvider } from '@agentskillmania/wrangler';
+import { FilesystemSkillProvider, InventorySkillProvider } from '@agentskillmania/wrangler';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance } from 'fastify';
 

@@ -7,6 +7,50 @@ import './types/colts-augmentation.js';
 // Types
 export type { SessionMeta, SessionSource, RunnerConfigSnapshot } from './types.js';
 
+// ─── 定向再导出（R2P-201，对齐 Rust c410f79 契约清单 §8）──────────────────
+// daemon 生产代码零 @agentskillmania/colts / llm-client 直驱（daemon 包
+// eslint no-restricted-imports 执法）：内核词汇经 wrangler 门面触达——
+// 「wrangler 是 harness、colts 是 agent」。清单只转发 harness 消费面实际
+// 用到的名字，新增=契约变更须记录。
+//
+// 引擎状态 + LLM 装配词汇（Rust: pub use colts::types::AgentState；
+// LLMQuickInit/LLMProviderEntry 系 colts 自 llm-client 的同源转发）。
+export type {
+  AgentState,
+  ILLMProvider,
+  ISkillProvider,
+  LLMQuickInit,
+  LLMProviderEntry,
+} from '@agentskillmania/colts';
+export {
+  createAgentState,
+  updateState,
+  addUserMessage,
+  deserializeState,
+} from '@agentskillmania/colts';
+
+// runner 事件/选项词汇（Rust: wrangler::events 定向再导出执行词汇）。
+export type { RunStreamEvent, RunOptions, RunnerEventMap } from '@agentskillmania/colts';
+
+// HITL 协议类型（Rust: pub use colts::hitl::{HumanRequest, HumanResponse,
+// PendingInterrupt, ...}）；注入原语 respond/removePendingInterrupt 同源转发。
+export type {
+  HumanRequest,
+  HumanAnswer,
+  HitlHumanResponse,
+  PendingInterrupt,
+  HumanResponse,
+  AskHumanHandler,
+} from '@agentskillmania/colts';
+export { respond, removePendingInterrupt } from '@agentskillmania/colts';
+
+// skill provider（Rust: wrangler::skills::fs::FilesystemSkillProvider——
+// 与运行时/清单端点同一套 provider）。
+export { FilesystemSkillProvider } from '@agentskillmania/colts';
+
+// 宿主自举（Rust: wrangler::bootstrap::ensure_sandbox_runtime 同位）
+export { ensureNodeSkillFsOps } from './bootstrap.js';
+
 // Session support
 export { createSessionSupport } from './session/support.js';
 export { SessionStore } from './session/session-store.js';

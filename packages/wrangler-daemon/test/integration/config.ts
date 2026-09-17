@@ -5,14 +5,17 @@
  * Tests are gated by ENABLE_INTEGRATION_TESTS=true.
  */
 
-import { setDefaultSkillFsOps } from '@agentskillmania/colts';
-import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
+import { ensureNodeSkillFsOps } from '@agentskillmania/wrangler';
 
 // Tests boot bare fastify apps (routes only, not the daemon CLI entry), so the
 // host-side SkillFsOps registration that daemon.ts does at startup must be
 // mirrored here — otherwise skill-dependent routes (crew chat, per-request
 // sessions) 500 with "Default SkillFsOps not registered".
-setDefaultSkillFsOps(nodeFsOps);
+// R2P-201：注册必须走 wrangler 门面（ensureNodeSkillFsOps）——生产代码的
+// FilesystemSkillProvider 经 wrangler 再导出消费的是 wrangler 依赖侧的
+// colts 实例（pnpm peer 变体会拆出两个 .pnpm 实例），直接 import colts
+// 注册会落在另一个实例的全局槽上、路由侧读不到。
+ensureNodeSkillFsOps();
 
 export interface TestConfig {
   apiKey: string;

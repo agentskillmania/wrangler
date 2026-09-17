@@ -136,8 +136,17 @@ const { mockEnhancedRunnerCreate, mockEnhancedRunnerResume } = vi.hoisted(() => 
 }));
 vi.mock('@agentskillmania/wrangler', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agentskillmania/wrangler')>();
+  // R2P-201 后 agent-session 经 wrangler 再导出消费内核符号；wrangler dist
+  // 是 externalized 依赖——其内部的 colts re-export 不经 vitest mock 拦截，
+  // 所以这里显式从 colts mock 转发被测路径用到的符号（工厂内的动态
+  // import 走 mock registry），保持原测试意图（state 构造 mock 成固定 id）。
+  const colts = await import('@agentskillmania/colts');
   return {
     ...actual,
+    createAgentState: colts.createAgentState,
+    updateState: colts.updateState,
+    addUserMessage: colts.addUserMessage,
+    FilesystemSkillProvider: colts.FilesystemSkillProvider,
     EnhancedRunner: { create: mockEnhancedRunnerCreate, resume: mockEnhancedRunnerResume },
     SessionStore: vi.fn(),
   };
@@ -160,7 +169,8 @@ vi.mock('@agentskillmania/colts', async (importOriginal) => {
     addUserMessage: vi.fn((state, _msg, _maxLength?) => state),
     updateState: vi.fn((state) => state),
     FilesystemSkillProvider: vi.fn(),
-    // Called at agent-session.ts module load to register the Node SkillFsOps.
+    // daemon.ts 启动时经 wrangler ensureNodeSkillFsOps 注册（R2P-201 起
+    // Node fs 绑定走 wrangler 门面）；此处仅钉 mock 不触真实 node:fs。
     setDefaultSkillFsOps: vi.fn(),
   };
 });

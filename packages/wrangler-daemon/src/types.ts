@@ -1,5 +1,4 @@
-import type { LLMQuickInit } from '@agentskillmania/colts';
-import type { SandboxConfig } from '@agentskillmania/wrangler';
+import type { LLMQuickInit, SandboxConfig } from '@agentskillmania/wrangler';
 
 import type { ConfigManager } from './core/config-manager.js';
 import type { ResourceManager } from './core/resource-manager.js';

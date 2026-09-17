@@ -1,15 +1,16 @@
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { respond as hitlRespond, removePendingInterrupt } from '@agentskillmania/colts';
-import { LLMClient } from '@agentskillmania/llm-client';
 import { Sandbox } from '@agentskillmania/sandbox';
 import type { SessionMeta } from '@agentskillmania/wrangler';
 import {
   SessionNotFoundError,
   SessionStore,
+  createLLMClient,
   crewToRunnerOptions,
   readMeta,
+  removePendingInterrupt,
+  respond as hitlRespond,
 } from '@agentskillmania/wrangler';
 import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { loadMCPTools } from '@agentskillmania/wrangler/tools/mcp';
@@ -566,7 +567,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     const sessionOptions: AgentSessionOptions = {
       runtime: defaultNodeHostEnv,
-      llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
+      llmClientFactory: createLLMClient,
       workspacePath,
       agentName: agentDetail.name,
       agentInstructions: agentDetail.instructions,
@@ -788,7 +789,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     const sessionOptions: AgentSessionOptions = {
       runtime: defaultNodeHostEnv,
-      llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
+      llmClientFactory: createLLMClient,
       workspacePath,
       agentName: runnerOpts.primaryAgent,
       agentInstructions: runnerOpts.systemPrompt,
@@ -1027,7 +1028,7 @@ async function assembleResumeSession(
         info.runnerConfig?.sandbox ?? true,
         info.workspacePath
       ),
-      llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
+      llmClientFactory: createLLMClient,
     },
     config
   );

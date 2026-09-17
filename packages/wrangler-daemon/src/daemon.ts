@@ -2,8 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { setDefaultSkillFsOps } from '@agentskillmania/colts';
-import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
+import { ensureNodeSkillFsOps } from '@agentskillmania/wrangler';
 import Fastify, {
   type FastifyInstance,
   type FastifyReply,
@@ -37,8 +36,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Register the Node SkillFsOps implementation once at daemon startup so any
 // FilesystemSkillProvider (sessions, routes/skills.ts) resolves node:fs
-// without colts importing node: modules itself. Idempotent.
-setDefaultSkillFsOps(nodeFsOps);
+// without colts importing node: modules itself. Idempotent. Node fs 绑定经
+// wrangler 门面（R2P-201）——daemon 不直驱 colts。
+ensureNodeSkillFsOps();
 
 /**
  * Top-level daemon class coordinating all subsystems.
