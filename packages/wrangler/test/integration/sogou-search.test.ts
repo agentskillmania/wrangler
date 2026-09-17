@@ -104,7 +104,9 @@ describe('web_search sogou→bing provider chain (live, dual-mode)', () => {
       for (const r of results) {
         expect(r.title).toBeTruthy();
         expect(r.url).toMatch(/^https?:\/\//);
-        expect(r.snippet).toBeTruthy();
+        // snippet 非空性对两家 provider 都不成立（bing 薄页、sogou 的
+        // star-wiki/fz-mid 双选择器均可空匹配）——只钉形状，不钉非空。
+        expect(typeof r.snippet).toBe('string');
         expectProviderMark(r);
       }
 
@@ -186,7 +188,18 @@ describe('web_search sogou→bing provider chain (live, dual-mode)', () => {
       const direct = new SogouScrapeSearchProvider();
       const results = await direct.search('TypeScript tutorial');
 
-      if (sogouChallenged) {
+      // 翻转容忍（双向）：beforeAll 的 canary 是快照——实际查询可能已翻入
+      // 被拦态（0 结果）。遇 0 且快照说未拦时当次重探，以**当次**状态定分支；
+      // 重探仍说未拦而结果为 0 才是真回归（选择器坏）。
+      let challenged = sogouChallenged;
+      if (!challenged && results.length === 0) {
+        challenged = await direct.probeChallenged();
+        console.warn(
+          `[sogou-search] canary 快照未拦但实际查询 0 结果——当次重探 challenged=${challenged}（风控状态翻转）`
+        );
+      }
+
+      if (challenged) {
         // 被拦分支的真断言：直连 provider 优雅降级为 []（不抛错）——
         // 结果兜底由回退链负责（上方链级用例已断言 bing 真结果）。
         expect(results).toEqual([]);
