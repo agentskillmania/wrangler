@@ -80,6 +80,29 @@ function startingConflict(detail: string): { error: string; reason: 'starting'; 
   return { error: 'Session is busy', reason: 'starting', detail };
 }
 
+/**
+ * busy 消退宽限（R2P-163，对齐 Rust 76197b9/91c8ae5 的 10×10ms 轮询）。
+ *
+ * done 帧在 'complete' 事件处理器里同步入队，而 busy 闩在 runner.run()
+ * 完全落定后的 finally 才释放——真实 colts runner 在发 'complete' 之后、
+ * promise 决议之前还要 await afterRun 落盘。客户端收到 done 立刻续发是
+ * 正常使用模式（E2E 多轮测试/快速追问），此窗口内的 busy 是误报：给
+ * 100ms 轮询宽限，闩的消退（一次盘写）足够覆盖；真在飞的轮 100ms 后
+ * 照常 409。message 闩模式不受影响——handleMessage 自身的 check-and-set
+ * 仍零 await 原子。
+ */
+const BUSY_CLEAR_GRACE_ATTEMPTS = 10;
+const BUSY_CLEAR_GRACE_INTERVAL_MS = 10;
+
+/** Wait (bounded) for the busy latch to clear. Returns the final busy state. */
+async function busyCleared(session: AgentSession): Promise<boolean> {
+  for (let i = 0; i < BUSY_CLEAR_GRACE_ATTEMPTS; i++) {
+    if (!session.busy) return true;
+    await new Promise<void>((resolve) => setTimeout(resolve, BUSY_CLEAR_GRACE_INTERVAL_MS));
+  }
+  return !session.busy;
+}
+
 /** Predefined slash commands for the chat input */
 const COMMANDS = [
   {
@@ -378,8 +401,10 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       }
       // Tier 2 — in-memory state. Only when idle: injecting into a busy
       // session's pre-run snapshot would be rolled back by that run's
-      // afterRun persistence.
-      if (!agentSession.busy) {
+      // afterRun persistence. Busy at first sight may be the done-frame
+      // clearance window (R2P-163, align Rust 91c8ae5) — wait it out before
+      // falling through; a genuinely running turn stays busy past the grace.
+      if (!agentSession.busy || (await busyCleared(agentSession))) {
         const outcome = await agentSession.respondViaState(body.requestId, body.response);
         if (outcome.status === 'invalid') {
           reply.code(400);
@@ -688,8 +713,11 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       }
     }
 
-    // Reject if session is already processing a message
-    if (agentSession.busy) {
+    // Reject if session is already processing a message. A busy read right
+    // after the previous turn's done frame is usually the clearance window
+    // (busy latch released only after afterRun persistence settles) — wait
+    // it out before rejecting (R2P-163, align Rust 76197b9).
+    if (agentSession.busy && !(await busyCleared(agentSession))) {
       reply
         .code(409)
         .send(
