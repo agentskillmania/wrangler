@@ -15,6 +15,18 @@ if ! command -v pnpm >/dev/null 2>&1; then
 fi
 command -v pnpm >/dev/null 2>&1 || { echo "_GATE_FAIL pnpm 不可用（PATH 无且 nvm 目录未找到）"; exit 1; }
 
+# 边界执法兜底（镜像 Rust check.sh 边界断言 1）：eslint 8.x 的
+# no-restricted-imports 不拦动态 import()——grep 兜底，注释行豁免。
+assert_daemon_boundary() {
+  local hits
+  hits="$(grep -rnE "from ['\"]@agentskillmania/(colts|llm-client)" packages/wrangler-daemon/src --include='*.ts' 2>/dev/null | grep -vE '^\s*//|/\*|\* ' || true)"
+  if [ -n "$hits" ]; then
+    echo "_GATE_FAIL daemon src 越层引用（colts/llm-client）——走 wrangler 门面："
+    echo "$hits"
+    exit 1
+  fi
+}
+
 require_env() {
   [[ -f .env ]] || { echo "_GATE_FAIL .env 不存在（cp .env.example .env 并填值）"; exit 1; }
   grep -q '^ENABLE_INTEGRATION_TESTS=true' .env \
@@ -36,6 +48,7 @@ assert_no_skipped() {
 
 case "$MODE" in
   static)
+    [ -d packages/wrangler-daemon ] && assert_daemon_boundary
     pnpm build || { echo "_GATE_FAIL build"; exit 1; }
     pnpm lint || { echo "_GATE_FAIL lint"; exit 1; }
     ;;

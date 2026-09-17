@@ -5,7 +5,7 @@
  * Tests are gated by ENABLE_INTEGRATION_TESTS=true.
  */
 
-import { ensureNodeSkillFsOps } from '@agentskillmania/wrangler';
+import { ensureNodeSkillFsOps } from '@agentskillmania/wrangler/bootstrap';
 
 // Tests boot bare fastify apps (routes only, not the daemon CLI entry), so the
 // host-side SkillFsOps registration that daemon.ts does at startup must be

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ensureNodeSkillFsOps } from '@agentskillmania/wrangler';
+import { ensureNodeSkillFsOps } from '@agentskillmania/wrangler/bootstrap';
 import Fastify, {
   type FastifyInstance,
   type FastifyReply,

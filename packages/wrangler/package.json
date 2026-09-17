@@ -10,6 +10,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./bootstrap": {
+      "types": "./dist/bootstrap.d.ts",
+      "import": "./dist/bootstrap.js"
+    },
     "./host-env/node-host-env": {
       "types": "./dist/host-env/node-host-env.d.ts",
       "import": "./dist/host-env/node-host-env.js"

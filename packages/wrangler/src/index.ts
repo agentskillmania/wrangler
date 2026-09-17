@@ -49,7 +49,6 @@ export { respond, removePendingInterrupt } from '@agentskillmania/colts';
 export { FilesystemSkillProvider } from '@agentskillmania/colts';
 
 // 宿主自举（Rust: wrangler::bootstrap::ensure_sandbox_runtime 同位）
-export { ensureNodeSkillFsOps } from './bootstrap.js';
 
 // Session support
 export { createSessionSupport } from './session/support.js';
