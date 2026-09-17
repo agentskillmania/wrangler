@@ -179,7 +179,12 @@ describe('R2P-161: cold-session create race (POST /api/chat/:sessionId)', () => 
 
       // B must be excluded while A owns the assembly slot.
       expect(resB.status).toBe(409);
-      expect(await resB.json()).toEqual({ error: 'Session is busy' });
+      // 409 分诊（R2P-154a，对齐 32bf25f「说清在等什么」）：error 原文案
+      // 保留，reason 说清这一档是冷装配占位（starting），detail 给出路。
+      const bodyB = await resB.json();
+      expect(bodyB.error).toBe('Session is busy');
+      expect(bodyB.reason).toBe('starting');
+      expect(typeof bodyB.detail).toBe('string');
 
       // Let A finish: assembly resolves, registers, streams done.
       releaseA(firstSession);

@@ -12,6 +12,7 @@ import {
   FilesystemSkillProvider,
   respond as hitlRespond,
   removePendingInterrupt,
+  deserializeState,
 } from '@agentskillmania/colts';
 import type {
   AgentState,
@@ -34,6 +35,7 @@ import type {
 } from '@agentskillmania/wrangler';
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
+import { truncateStateFile } from '../utils.js';
 import { mergeSandboxConfig } from './sandbox-config.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
 import type { RunnerFeatureFlags } from './session-diagnostics.js';
@@ -781,6 +783,45 @@ export class AgentSession {
       status: 'answered',
       remaining: (next.context.pendingInterrupts ?? []).map((p) => p.request),
     };
+  }
+
+  /**
+   * 按轮截断本会话（温会话路径，R2P-154a，对齐 Rust 0a2cc4e /truncate 的
+   * 温分支语义）：在 busy 闩锁的临界区内完成 读盘 → 截断 → 写盘 →
+   * 内存重载。磁盘是事实，内存跟盘走 —— 否则温会话内存里的旧状态会在
+   * 下一次消费轮被取用、随 afterRun 落盘，把截断静默回滚（「回魂」；
+   * Rust 侧即 098adbd 给 truncate 收编 send_lock 临界区的动机）。
+   *
+   * 闩锁与 respondViaState 的写穿盘闩锁同款：check-and-set 到 latch 之间
+   * 零 await（单线程 JS 上原子），临界区里并发 handleMessage 被挡在
+   * busy 之外；finally 释放，失败不得卡死会话。截到 0 的空态也能被下一
+   * 次 send 正常整体覆盖（空 context resume 通路）。
+   *
+   * @param statePath - 路由解析出的 state.json 绝对路径（sessionDir query
+   *   显式目录优先，与 /messages 同款解析）
+   * @returns 成功带钳制后的 keptTurns；失败带 HTTP 语义码与文案（调用方
+   *   包成响应，不在此处直接回 HTTP）
+   */
+  async truncateTurns(
+    statePath: string,
+    keepTurns: number
+  ): Promise<
+    { ok: true; keptTurns: number } | { ok: false; code: 409 | 404 | 500; error: string }
+  > {
+    if (this._busy) {
+      return { ok: false, code: 409, error: 'Session is busy' };
+    }
+    this._busy = true;
+    try {
+      const out = await truncateStateFile(statePath, keepTurns);
+      if (!out.ok) return out;
+      // 状态同步：截断态重载进内存（deserializeState 即 JSON.parse 的
+      // 直通形状，截空后的 state 依然是合法 AgentState）。
+      this.state = deserializeState(out.json);
+      return { ok: true, keptTurns: out.keptTurns };
+    } finally {
+      this._busy = false;
+    }
   }
 
   /**

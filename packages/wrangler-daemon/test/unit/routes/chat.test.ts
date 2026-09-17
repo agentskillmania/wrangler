@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -12,11 +12,13 @@ import { chatRoutes } from '../../../src/routes/chat.js';
 
 // ─── Mock setup ───
 
-const { mockAgentSessionCreate, mockAgentSessionResume, mockHandleMessage } = vi.hoisted(() => ({
-  mockAgentSessionCreate: vi.fn(),
-  mockAgentSessionResume: vi.fn(),
-  mockHandleMessage: vi.fn(),
-}));
+const { mockAgentSessionCreate, mockAgentSessionResume, mockHandleMessage, mockTruncateTurns } =
+  vi.hoisted(() => ({
+    mockAgentSessionCreate: vi.fn(),
+    mockAgentSessionResume: vi.fn(),
+    mockHandleMessage: vi.fn(),
+    mockTruncateTurns: vi.fn(),
+  }));
 
 vi.mock('../../../src/core/agent-session.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/core/agent-session.js')>();
@@ -55,6 +57,8 @@ const mockSession = {
   stop: vi.fn(),
   respondHumanInput: vi.fn(),
   emitCockpitEvent: vi.fn(),
+  // /truncate 的温会话路径（busy 闩锁临界区内读盘→截断→写盘→重载）。
+  truncateTurns: mockTruncateTurns,
   // The chat route reads `agentSession.getRunnerConfig()` (new accessor) to
   // build the `session-start` SSE payload (chat.ts streamAgentSession).
   // Without this the route throws synchronously after hijacking the reply,
@@ -143,6 +147,7 @@ describe('Chat API', () => {
     mockSession.respondViaState.mockClear();
     mockSession.continueRun.mockClear();
     mockSession.emitCockpitEvent.mockClear();
+    mockTruncateTurns.mockReset();
   });
 
   afterEach(async () => {
@@ -298,6 +303,259 @@ describe('Chat API', () => {
       expect(body.ok).toBe(true);
       // stop should NOT have been called since there was no active session
       expect(mockSession.stop).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── POST /api/chat/:sessionId/truncate（R2P-154a，对齐 Rust 0a2cc4e）───
+
+  describe('POST /api/chat/:sessionId/truncate', () => {
+    /** Seed a 3-turn state (+todoList/统计字段) on the standard tree. */
+    async function seedTurns(sessionId = 'existing-session'): Promise<void> {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      const store = sm.getSessionStore(join(tempDir, 'workspace'));
+      await store.saveState(sessionId, {
+        id: sessionId,
+        config: { name: 'test-agent', instructions: '', tools: [] },
+        usage: { totalTokens: 12345 },
+        context: {
+          messages: [
+            { role: 'user', content: 'u1' },
+            { role: 'assistant', content: 'a1' },
+            { role: 'tool', content: 't1' },
+            { role: 'user', content: 'u2' },
+            { role: 'assistant', content: 'a2' },
+            { role: 'user', content: 'u3' },
+          ],
+          stepCount: 7,
+          totalTokens: { input: 99, output: 5 },
+          todoList: { items: [{ id: 1, subject: 'task', status: 'pending' }], nextId: 2 },
+        },
+      } as never);
+    }
+
+    function statePathOnDisk(sessionId = 'existing-session'): string {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      const store = sm.getSessionStore(join(tempDir, 'workspace'));
+      return join(store.getSessionDir(sessionId), 'state.json');
+    }
+
+    async function readRawState(sessionId = 'existing-session'): Promise<Record<string, never>> {
+      return JSON.parse(await readFile(statePathOnDisk(sessionId), 'utf-8')) as Record<
+        string,
+        never
+      >;
+    }
+
+    function postTruncate(keepTurns: unknown, sessionId = 'existing-session'): Promise<Response> {
+      return fetch(`${getUrl()}/api/chat/${sessionId}/truncate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keepTurns }),
+      });
+    }
+
+    it('rejects a non-integer / negative / missing keepTurns with 400', async () => {
+      for (const bad of [undefined, -1, 1.5, '2']) {
+        const res = await postTruncate(bad);
+        expect(res.status).toBe(400);
+        expect((await res.json()).error).toBe('keepTurns must be a non-negative integer');
+      }
+    });
+
+    it('explicit sessionDir without state.json is a hard 404', async () => {
+      const res = await fetch(
+        `${getUrl()}/api/chat/whatever/truncate?sessionDir=${encodeURIComponent(join(tempDir, 'no-state-dir'))}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keepTurns: 1 }),
+        }
+      );
+      expect(res.status).toBe(404);
+      expect((await res.json()).error).toBe('Session state not found');
+    });
+
+    it('unknown session on the standard tree is 404', async () => {
+      const res = await postTruncate(1, 'no-such-session');
+      expect(res.status).toBe(404);
+      expect((await res.json()).error).toBe('Session not found');
+    });
+
+    it('cold path truncates on disk: turn = user opener + trailing tool/assistant', async () => {
+      await seedTurns();
+      const res = await postTruncate(1);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, kept: 1 });
+
+      const v = await readRawState();
+      const ctx = v.context as unknown as {
+        messages: Array<{ role: string; content: string }>;
+        todoList?: unknown;
+        totalTokens: { input: number; output: number };
+        stepCount: number;
+      };
+      // 轮 = user 开启,tool/assistant 尾随随轮保留;后两轮被丢弃。
+      expect(ctx.messages.map((m) => m.content)).toEqual(['u1', 'a1', 't1']);
+      // todoList 随截断删键(前端按缺席降级)。
+      expect('todoList' in ctx).toBe(false);
+      // 统计/计费字段永不动。
+      expect(ctx.totalTokens).toEqual({ input: 99, output: 5 });
+      expect(ctx.stepCount).toBe(7);
+      expect(v.usage).toEqual({ totalTokens: 12345 });
+    });
+
+    it('keepTurns beyond total turns is a clamped no-op for messages', async () => {
+      await seedTurns();
+      const res = await postTruncate(99);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, kept: 3 });
+      const v = await readRawState();
+      const messages = (v.context as unknown as { messages: unknown[] }).messages;
+      expect(messages).toHaveLength(6);
+    });
+
+    it('applying the same keepTurns twice is idempotent (byte-equal state)', async () => {
+      await seedTurns();
+      await postTruncate(2);
+      const first = await readFile(statePathOnDisk(), 'utf-8');
+      const res = await postTruncate(2);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, kept: 2 });
+      const second = await readFile(statePathOnDisk(), 'utf-8');
+      expect(second).toBe(first);
+    });
+
+    it('keepTurns=0 clears messages and the emptied state still loads via loadState (空会话 resume 往返)', async () => {
+      await seedTurns();
+      const res = await postTruncate(0);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, kept: 0 });
+
+      // 磁盘:messages 清空,todoList 删键,统计不动。
+      const v = await readRawState();
+      const ctx = v.context as unknown as {
+        messages: unknown[];
+        todoList?: unknown;
+        totalTokens: { input: number };
+      };
+      expect(ctx.messages).toEqual([]);
+      expect('todoList' in ctx).toBe(false);
+      expect(ctx.totalTokens.input).toBe(99);
+
+      // 往返:SessionStore.loadState 可恢复(截空后的 state 依然是合法
+      // AgentState——编辑/重发首轮的空会话 resume 通路)。
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      const store = sm.getSessionStore(join(tempDir, 'workspace'));
+      const reloaded = await store.loadState('existing-session');
+      expect(reloaded).not.toBeNull();
+      expect(reloaded!.context.messages).toEqual([]);
+    });
+
+    it('truncates the explicit sessionDir state.json (notebook-dir addressing)', async () => {
+      const dir = join(tempDir, 'notebook-state');
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        join(dir, 'state.json'),
+        JSON.stringify({
+          context: {
+            messages: [
+              { role: 'user', content: 'u1' },
+              { role: 'assistant', content: 'a1' },
+              { role: 'user', content: 'u2' },
+            ],
+          },
+        })
+      );
+
+      const res = await fetch(
+        `${getUrl()}/api/chat/notebook/truncate?sessionDir=${encodeURIComponent(dir)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keepTurns: 1 }),
+        }
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, kept: 1 });
+      const v = JSON.parse(await readFile(join(dir, 'state.json'), 'utf-8')) as {
+        context: { messages: Array<{ content: string }> };
+      };
+      expect(v.context.messages.map((m) => m.content)).toEqual(['u1', 'a1']);
+    });
+
+    it('corrupt state.json is 500 and the file is NOT overwritten', async () => {
+      await seedTurns();
+      await writeFile(statePathOnDisk(), 'not json', 'utf-8');
+      const res = await postTruncate(1);
+      expect(res.status).toBe(500);
+      expect((await res.json()).error).toContain('truncate failed');
+      expect(await readFile(statePathOnDisk(), 'utf-8')).toBe('not json');
+    });
+
+    it('warm busy session → 409 with busy triage fields', async () => {
+      await seedTurns();
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      sm.setAgentSession('existing-session', mockSession as never);
+      mockSession.busy = true;
+      try {
+        const res = await postTruncate(1);
+        expect(res.status).toBe(409);
+        const body = await res.json();
+        // 向后兼容保留原 error;分诊字段说清在等什么。
+        expect(body.error).toBe('Session is busy');
+        expect(body.reason).toBe('busy');
+        expect(typeof body.detail).toBe('string');
+        expect(mockTruncateTurns).not.toHaveBeenCalled();
+      } finally {
+        mockSession.busy = false;
+      }
+    });
+
+    it('warm idle session delegates to AgentSession.truncateTurns and maps the outcome', async () => {
+      await seedTurns();
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      sm.setAgentSession('existing-session', mockSession as never);
+      mockTruncateTurns.mockResolvedValue({ ok: true, keptTurns: 2 });
+
+      const res = await postTruncate(2);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, kept: 2 });
+      // 温路径走会话闩锁(读盘→截断→写盘→内存重载),路径与 /messages 同款解析。
+      expect(mockTruncateTurns).toHaveBeenCalledTimes(1);
+      const [statePath, keepTurns] = mockTruncateTurns.mock.calls[0] as [string, number];
+      expect(statePath).toBe(statePathOnDisk());
+      expect(keepTurns).toBe(2);
+
+      // 错误映射:温路径 404 → 404。
+      mockTruncateTurns.mockResolvedValue({
+        ok: false,
+        code: 404,
+        error: 'Session state not found',
+      });
+      const res404 = await postTruncate(2);
+      expect(res404.status).toBe(404);
+      expect((await res404.json()).error).toBe('Session state not found');
+    });
+
+    it('cold session under assembly reservation → 409 with starting triage fields', async () => {
+      await seedTurns();
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      // 占位中(另一请求正在装配该冷会话)。
+      expect(sm.tryReserveAgentSession('existing-session')).toBe(true);
+      try {
+        const res = await postTruncate(1);
+        expect(res.status).toBe(409);
+        const body = await res.json();
+        expect(body.error).toBe('Session is busy');
+        expect(body.reason).toBe('starting');
+        expect(typeof body.detail).toBe('string');
+      } finally {
+        sm.cancelAgentSessionReservation('existing-session');
+      }
+      // 占位释放后同一请求即可截断(槽位不卡死)。
+      const resAfter = await postTruncate(1);
+      expect(resAfter.status).toBe(200);
+      expect(await resAfter.json()).toEqual({ ok: true, kept: 1 });
     });
   });
 
@@ -1074,7 +1332,7 @@ describe('Chat API', () => {
       expect((errorEvent!.data as { message: string }).message).toBe('Internal server error');
     });
 
-    it('returns 409 when session is busy', async () => {
+    it('returns 409 when session is busy (with busy triage fields, R2P-154a)', async () => {
       const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
       mockSession.busy = true;
       sm.setAgentSession('existing-session', mockSession as never);
@@ -1087,7 +1345,10 @@ describe('Chat API', () => {
 
       expect(res.status).toBe(409);
       const body = await res.json();
+      // 向后兼容:error 原文案保留;分诊字段说清在等什么(对齐 32bf25f)。
       expect(body.error).toBe('Session is busy');
+      expect(body.reason).toBe('busy');
+      expect(typeof body.detail).toBe('string');
 
       // Reset for other tests
       mockSession.busy = false;

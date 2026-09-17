@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { respond as hitlRespond, removePendingInterrupt } from '@agentskillmania/colts';
@@ -31,7 +31,7 @@ import type {
   CreateAndChatRequest,
   ResumeChatRequest,
 } from '../types.js';
-import { writeSSE } from '../utils.js';
+import { writeSSE, truncateStateFile } from '../utils.js';
 
 /**
  * 归一 `config.compression` 的请求形状:统一对象 `{enabled}` 与旧式裸布尔
@@ -40,6 +40,21 @@ import { writeSSE } from '../utils.js';
  */
 function normalizeCompression(v: boolean | { enabled?: boolean } | undefined): boolean | undefined {
   return typeof v === 'boolean' ? v : v?.enabled;
+}
+
+/**
+ * 409 分诊体（R2P-154a，对齐 Rust 32bf25f「说清在等什么」）：保留原
+ * `error` 文案向后兼容，`reason`/`detail` 让客户端可编程分诊 ——
+ * `busy` = 温会话在跑一轮（可 stop），`starting` = 冷装配占位中（重试
+ * 即可）。
+ */
+function busyConflict(detail: string): { error: string; reason: 'busy'; detail: string } {
+  return { error: 'Session is busy', reason: 'busy', detail };
+}
+
+/** starting 形态的 409 分诊体（冷会话装配占位中）。 */
+function startingConflict(detail: string): { error: string; reason: 'starting'; detail: string } {
+  return { error: 'Session is busy', reason: 'starting', detail };
 }
 
 /** Predefined slash commands for the chat input */
@@ -203,6 +218,102 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * POST /api/chat/:sessionId/truncate — 按轮截断会话（R2P-154a，对齐
+   * Rust 0a2cc4e 的 `POST /api/chat/:id/truncate`）。
+   *
+   * 编辑重发/重新生成/回退/Fork 四个前端动作共享的后端原语：把会话
+   * `context.messages` 截到前 `keepTurns` 轮（轮 = 一条 user 消息开启；
+   * 语义详见 wrangler `truncateStateTurns`）。body: `{ keepTurns }`，0 =
+   * 清空 messages（编辑/重发首轮）。
+   *
+   * 会话寻址与 /messages 同款：`sessionDir` query 显式目录优先（「笔记目
+   * 录即会话」），显式目录缺 state.json 是硬 404；标准树解析不到也 404。
+   *
+   * 活跃 run 409（带分诊字段）：温会话 busy → `reason: 'busy'`；冷会话
+   * 装配占位 → `reason: 'starting'`。温会话的截断在 AgentSession 的
+   * busy 闩锁临界区内完成并重载内存态（防「回魂」）；冷会话在占位闩锁
+   * 下纯写盘（防与首次消息的装配竞态）。
+   */
+  fastify.post('/api/chat/:sessionId/truncate', async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string };
+    const query = request.query as { sessionDir?: string };
+    const body = request.body as { keepTurns?: unknown };
+
+    if (
+      typeof body.keepTurns !== 'number' ||
+      !Number.isInteger(body.keepTurns) ||
+      body.keepTurns < 0
+    ) {
+      reply.code(400);
+      return { error: 'keepTurns must be a non-negative integer' };
+    }
+
+    // 显式会话目录优先，与 /messages 同一解析规则：显式目录缺 state.json
+    // 是硬 404（路径解析先于 busy 判定，与 Rust 同序）；标准树扫描找不
+    // 到也 404。
+    let statePath: string;
+    const explicitDir = query.sessionDir?.trim();
+    if (explicitDir) {
+      statePath = join(explicitDir, 'state.json');
+      try {
+        await stat(statePath);
+      } catch {
+        reply.code(404);
+        return { error: 'Session state not found' };
+      }
+    } else {
+      const ctx = await resolveSessionContext(sessionId, undefined, {
+        sessionManager: sessionManager(),
+      });
+      if (!ctx) {
+        reply.code(404);
+        return { error: 'Session not found' };
+      }
+      statePath = join(ctx.sessionDir, 'state.json');
+    }
+
+    // 温会话：busy 409 分诊；闲时在 AgentSession 闩锁临界区内截断并重
+    // 载内存态（截断后旧内存态会被下一轮 afterRun 落盘回滚）。
+    const agentSession = sessionManager().getAgentSession(sessionId);
+    if (agentSession) {
+      if (agentSession.busy) {
+        reply.code(409);
+        return busyConflict(
+          'a run is in progress on this session; wait for it to finish or POST /stop before truncating'
+        );
+      }
+      const out = await agentSession.truncateTurns(statePath, body.keepTurns);
+      if (!out.ok) {
+        reply.code(out.code);
+        // 闩锁内的复检撞上并发轮（路由 busy 检查与 latch 之间被插队）
+        // 同样是 busy 分诊。
+        if (out.code === 409) return busyConflict(out.error);
+        return { error: out.error };
+      }
+      return { ok: true, kept: out.keptTurns };
+    }
+
+    // 冷会话：同步占位闩锁（与 resume 路由同款互斥）防装配竞态，纯写盘
+    // （无内存态可同步）。
+    if (!sessionManager().tryReserveAgentSession(sessionId)) {
+      reply.code(409);
+      return startingConflict(
+        'the session is being assembled from disk (cold start); retry shortly'
+      );
+    }
+    try {
+      const out = await truncateStateFile(statePath, body.keepTurns);
+      if (!out.ok) {
+        reply.code(out.code);
+        return { error: out.error };
+      }
+      return { ok: true, kept: out.keptTurns };
+    } finally {
+      sessionManager().cancelAgentSessionReservation(sessionId);
+    }
+  });
+
+  /**
    * POST /api/chat/:sessionId/respond — respond to AskHuman
    *
    * Three tiers (R2P-165②, aligned with Rust 09b03af/9995668):
@@ -310,7 +421,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     // continuation as this response (Rust rebuild_active_run + 续跑).
     if (!sessionManager().tryReserveAgentSession(sessionId)) {
       reply.code(409);
-      return { error: 'Session is busy' };
+      return startingConflict(
+        'the session is being assembled from disk (cold start); retry shortly'
+      );
     }
     let rebuilt: AgentSession | null = null;
     try {
@@ -506,7 +619,11 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         // Slot already taken: another request is assembling this session
         // (or it just became active) — same mutual-exclusion semantics as
         // the busy check below.
-        reply.code(409).send({ error: 'Session is busy' });
+        reply
+          .code(409)
+          .send(
+            startingConflict('the session is being assembled from disk (cold start); retry shortly')
+          );
         return;
       }
       try {
@@ -540,7 +657,13 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Reject if session is already processing a message
     if (agentSession.busy) {
-      reply.code(409).send({ error: 'Session is busy' });
+      reply
+        .code(409)
+        .send(
+          busyConflict(
+            'a run is in progress on this session; wait for it to finish or POST /stop before sending'
+          )
+        );
       return;
     }
 

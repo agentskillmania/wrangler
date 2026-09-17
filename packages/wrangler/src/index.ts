@@ -12,6 +12,8 @@ export { createSessionSupport } from './session/support.js';
 export { SessionStore } from './session/session-store.js';
 export { writeMeta, readMeta } from './session/meta.js';
 export { SessionNotFoundError } from './session/errors.js';
+export { truncateStateTurns } from './session/truncate.js';
+export type { TruncatedState, TruncateResult } from './session/truncate.js';
 
 // Middleware (advanced usage)
 export { createSessionMiddleware } from './middleware/session-middleware.js';

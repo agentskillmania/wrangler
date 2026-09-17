@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import {
   AgentSession,
@@ -1056,6 +1059,179 @@ describe('AgentSession', () => {
       const written = JSON.stringify(saveState.mock.calls[0][1]);
       expect(written).toContain('call-1');
       expect(written).not.toContain('hello');
+    });
+  });
+
+  describe('truncateTurns (R2P-154a warm truncation path, aligned Rust 0a2cc4e/098adbd)', () => {
+    /** 两轮会话（u1/a1 | u2/a2）+ todoList + 统计字段，磁盘与内存同形。 */
+    function twoTurnState() {
+      return {
+        id: 'seeded',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [
+            { role: 'user', content: 'u1' },
+            { role: 'assistant', content: 'a1' },
+            { role: 'user', content: 'u2' },
+            { role: 'assistant', content: 'a2' },
+          ],
+          stepCount: 3,
+          createdAt: 0,
+          updatedAt: 0,
+          totalTokens: { input: 10, output: 4 },
+          todoList: { items: [], nextId: 1 },
+        },
+      };
+    }
+
+    /** 带一个 pending 中断的种子（用于 park respondViaState 撑起 busy 闩锁）。 */
+    function pendingInterruptState() {
+      return {
+        id: 'seeded',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [],
+          stepCount: 0,
+          createdAt: 0,
+          updatedAt: 0,
+          pendingInterrupts: [
+            {
+              request: {
+                type: 'question',
+                questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+                toolCallId: 'call-1',
+              },
+              createdAt: 1,
+            },
+          ],
+        },
+      };
+    }
+
+    async function createWarmSession(seed: unknown) {
+      mockRunnerWithEvents([], seed);
+      return AgentSession.create(
+        {
+          sessionId: 'seeded',
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+          sessionStore: {
+            loadState: vi.fn().mockResolvedValue(seed),
+            saveState: vi.fn(),
+            isDirBound: false,
+          } as unknown as AgentSessionOptions['sessionStore'],
+        },
+        testConfig
+      );
+    }
+
+    it('truncates on disk and reloads the truncated state into memory (anti-rollback)', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'truncate-warm-'));
+      const statePath = join(dir, 'state.json');
+      const onDisk = twoTurnState();
+      await writeFile(statePath, JSON.stringify(onDisk));
+      try {
+        // 温会话内存态与磁盘同形（最后一轮刚落定的形状）——没有内存重载
+        // 的话,下一次消费轮取旧内存态、随 afterRun 落盘,截断被回滚。
+        const session = await createWarmSession(onDisk);
+
+        const out = await session.truncateTurns(statePath, 1);
+        expect(out).toEqual({ ok: true, keptTurns: 1 });
+
+        // 磁盘:一轮保留,todoList 删键,统计/计费不动。
+        const disk = JSON.parse(await readFile(statePath, 'utf-8')) as {
+          context: Record<string, unknown> & {
+            messages: Array<{ content: string }>;
+            totalTokens: { input: number; output: number };
+          };
+        };
+        expect(disk.context.messages.map((m) => m.content)).toEqual(['u1', 'a1']);
+        expect('todoList' in disk.context).toBe(false);
+        expect(disk.context.totalTokens).toEqual({ input: 10, output: 4 });
+
+        // 内存跟盘走（getState 反映截断态）。
+        const memCtx = session.getState().context as Record<string, unknown> & {
+          messages: Array<{ content: string }>;
+        };
+        expect(memCtx.messages.map((m) => m.content)).toEqual(['u1', 'a1']);
+        expect('todoList' in memCtx).toBe(false);
+        // 闩锁释放。
+        expect(session.busy).toBe(false);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('keepTurns=0 empties messages — the emptied state stays a legal AgentState', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'truncate-warm-0'));
+      const statePath = join(dir, 'state.json');
+      const onDisk = twoTurnState();
+      await writeFile(statePath, JSON.stringify(onDisk));
+      try {
+        const session = await createWarmSession(onDisk);
+        const out = await session.truncateTurns(statePath, 0);
+        expect(out).toEqual({ ok: true, keptTurns: 0 });
+        const memCtx = session.getState().context as { messages: unknown[] };
+        expect(memCtx.messages).toEqual([]);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('reports 404 when the state file is missing', async () => {
+      const session = await createWarmSession(twoTurnState());
+      const out = await session.truncateTurns(join(tmpdir(), 'no-such-state.json'), 1);
+      expect(out).toEqual({ ok: false, code: 404, error: 'Session state not found' });
+    });
+
+    it('reports 409 without touching disk when the session is busy (latch guard)', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'truncate-warm-busy'));
+      const statePath = join(dir, 'state.json');
+      const onDisk = twoTurnState();
+      await writeFile(statePath, JSON.stringify(onDisk));
+      try {
+        // Park respondViaState 的写穿盘 —— busy 闩锁被撑起。
+        let releaseSave!: () => void;
+        const saveGate = new Promise<void>((resolve) => {
+          releaseSave = resolve;
+        });
+        const seed = pendingInterruptState();
+        mockRunnerWithEvents([], seed);
+        const session = await AgentSession.create(
+          {
+            sessionId: 'seeded',
+            workspacePath: '/tmp/test',
+            agentName: 'test',
+            runtime: defaultNodeHostEnv,
+            llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+            sessionStore: {
+              loadState: vi.fn().mockResolvedValue(seed),
+              saveState: vi.fn().mockImplementation(async () => {
+                await saveGate;
+              }),
+              isDirBound: false,
+            } as unknown as AgentSessionOptions['sessionStore'],
+          },
+          testConfig
+        );
+        const parked = session.respondViaState('q1', { q1: { type: 'direct', value: 'A' } });
+        expect(session.busy).toBe(true);
+
+        const out = await session.truncateTurns(statePath, 1);
+        expect(out).toEqual({ ok: false, code: 409, error: 'Session is busy' });
+        // 磁盘原样未动。
+        const disk = JSON.parse(await readFile(statePath, 'utf-8')) as {
+          context: { messages: unknown[] };
+        };
+        expect(disk.context.messages).toHaveLength(4);
+
+        releaseSave();
+        await parked;
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
     });
   });
 
