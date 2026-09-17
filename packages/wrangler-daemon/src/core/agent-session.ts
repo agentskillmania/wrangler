@@ -310,6 +310,29 @@ function toRunnerCompression(
   return tuning;
 }
 
+// ─── 会话级事件通道（R2P-122，P2-b seq 的结构前提）─────────────────────
+//
+// 对齐 Rust session/live.rs：会话拥有自己的事件通道，run 帧（轮内从
+// runner 事件映射而来）与人类输入桥的帧经 pushEvent 汇入——「先落史后
+// 广播，落下的史就是广播的帧」（同一 seq 空间）。本批裁剪：seq 只在
+// HistoryEntry 里自增保留，不上 SSE 线协议（SSE 帧加 seq 是 P2-b）。
+
+/**
+ * 一条会话事件通道的历史帧（对齐 Rust session/live.rs 的 HistoryFrame）。
+ * seq 是会话内单调全序，P2-b 断线重连按它去重（≤ 已见）与补洞（> 已见）。
+ */
+export interface HistoryEntry {
+  seq: number;
+  event: string;
+  data: unknown;
+}
+
+/**
+ * 滚动历史的安全阀（对齐 Rust HISTORY_CAP = 500_000）：防内存失控的
+ * 保险丝，正常会话到不了——超上限丢最旧。
+ */
+export const HISTORY_CAP = 500_000;
+
 export class AgentSession {
   readonly sessionId: string;
   readonly workspacePath: string;
@@ -344,6 +367,13 @@ export class AgentSession {
   /** Event history for cockpit replay — new connections receive full sequence */
   private eventHistory: SSEEvent[] = [];
   private readonly MAX_HISTORY = 500;
+  // ─── 会话级事件通道（R2P-122）───
+  /** 滚动历史（会话内存态，随对象生灭——驱逐即失，盘回放是 P2-b） */
+  private readonly history: HistoryEntry[] = [];
+  /** 通道订阅者（每请求一流在这里 attach；退订即摘除） */
+  private readonly channelSubscribers = new Set<(entry: HistoryEntry) => void>();
+  /** 帧序号分配器（会话内单调递增，pushEvent 唯一分配点；对齐 Rust frame_seq） */
+  private frameSeq = 0;
 
   private constructor(
     runner: EnhancedRunner,
@@ -988,9 +1018,18 @@ export class AgentSession {
     this.lastSystemPrompt = null;
     this.doneFlag = false;
 
-    this.bridge.sseSender = (event: SSEEvent) => this.pushEvent(event);
-
+    // 本请求的流订阅会话通道（R2P-122）：从 attach 时刻起收增量（不重放
+    // 全史——落下的史就是广播的帧，重放/补洞按 seq 是 P2-b）。外部形状
+    // 零变化：仍每请求一流，HistoryEntry 在此剥掉 seq 再入队（SSE 帧不
+    // 加 seq 字段是本批的裁剪约定）。seed 是纯状态变换（不发帧）且可能
+    // 抛（addUserMessage 拒绝）——放在订阅之前，不留「订了没 finally」的窗。
     this.state = seed(this.state);
+
+    const detachChannel = this.subscribe((entry) => {
+      this.enqueueSse({ event: entry.event, data: entry.data });
+    });
+
+    this.bridge.sseSender = (event: SSEEvent) => this.pushEvent(event);
 
     const consumeStream = async () => {
       // Register EventEmitter listeners for all event types
@@ -1105,10 +1144,16 @@ export class AgentSession {
 
     consumeStream();
 
-    while (true) {
-      const event = await this.pullEvent();
-      if (event === null) break;
-      yield event;
+    try {
+      while (true) {
+        const event = await this.pullEvent();
+        if (event === null) break;
+        yield event;
+      }
+    } finally {
+      // 流终止（正常收尾，或消费方 break/throw 触发的提前 return）即退订
+      // ——不退订的话残留订阅会把下一轮的帧重复喂进重置后的队列。
+      detachChannel();
     }
   }
 
@@ -1122,9 +1167,63 @@ export class AgentSession {
     this.abortController = null;
   }
 
+  // ─── 会话级事件通道（R2P-122，对齐 Rust session/live.rs）───
+
+  /**
+   * Subscribe to the session event channel.
+   *
+   * Listeners receive HistoryEntry increments FROM THE MOMENT OF SUBSCRIPTION
+   * (no replay of prior history — 重放/按 seq 补洞是 P2-b)。The returned
+   * disposer removes this listener; per-request streams MUST call it when the
+   * stream terminates (normal end or early return), or later turns would feed
+   * duplicate frames into the reset queue.
+   */
+  subscribe(listener: (entry: HistoryEntry) => void): () => void {
+    this.channelSubscribers.add(listener);
+    return () => {
+      this.channelSubscribers.delete(listener);
+    };
+  }
+
+  /**
+   * Rolling history snapshot (oldest first, newest last). P2-b 的断线重放源，
+   * 本批仅测试与诊断观测用。驱逐/重建后新 AgentSession 新通道——历史随
+   * 旧对象走（对齐 Rust：滚动历史是内存态，随 Session drop 而失）。
+   */
+  historySnapshot(): HistoryEntry[] {
+    return [...this.history];
+  }
+
+  /** 压入一帧滚动历史（超安全阀丢最旧——对齐 Rust push_history）。 */
+  private pushHistory(entry: HistoryEntry): void {
+    if (this.history.length >= HISTORY_CAP) {
+      this.history.shift();
+    }
+    this.history.push(entry);
+  }
+
+  /**
+   * 通道的唯一写入点（对齐 Rust Session::emit）：分配 seq → 先同步落史 →
+   * 再广播同一帧。同步实现：返回时历史已更新、订阅者已全部收到——
+   * 落史与广播无时序窗（落史失败的广播不发生）。seq 会话内单调递增
+   * （从 1 起，对齐 Rust frame_seq 的 fetch_add+1），暂不上 SSE 线协议。
+   */
+  private pushEvent(event: SSEEvent): void {
+    const entry: HistoryEntry = {
+      seq: ++this.frameSeq,
+      event: event.event,
+      data: event.data,
+    };
+    this.pushHistory(entry);
+    for (const listener of this.channelSubscribers) {
+      listener(entry);
+    }
+  }
+
   // ─── Event queue internals ───
 
-  private pushEvent(event: SSEEvent): void {
+  /** 本请求流的入队点（由会话通道的订阅回调喂入；等待者直通，否则排队）。 */
+  private enqueueSse(event: SSEEvent): void {
     if (this.eventWaiters.length > 0) {
       const resolve = this.eventWaiters.shift()!;
       resolve(event);

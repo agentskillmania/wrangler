@@ -5,10 +5,12 @@ import { tmpdir } from 'node:os';
 import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import {
   AgentSession,
+  HISTORY_CAP,
   humanRequestPayloads,
   findPendingInterrupt,
   hitlResponseFromValue,
 } from '../../src/core/agent-session.js';
+import type { HistoryEntry } from '../../src/core/agent-session.js';
 import type { AgentSessionOptions } from '../../src/core/agent-session.js';
 import type { SSEEvent } from '../../src/types.js';
 
@@ -2488,6 +2490,179 @@ describe('AgentSession', () => {
 
       const call = mockEnhancedRunnerResume.mock.calls.at(-1)?.[1] as Record<string, unknown>;
       expect(call.subAgents).toBeUndefined();
+    });
+  });
+
+  // ─── 会话级事件通道（R2P-122，P2-b seq 的结构前提）────────────────────
+  //
+  // 对齐 Rust session/live.rs 的 emit：唯一写入点「先落史后广播」——
+  // 落下的史就是广播的帧（同一序号空间）。本批裁剪：seq 只在 HistoryEntry
+  // 里自增保留，不上 SSE 线协议（那是 P2-b）。
+  describe('session event channel (R2P-122)', () => {
+    /** 最小 finalState（mockRunnerWithEvents 的默认同形）。 */
+    const turnFinalState = {
+      id: 'test-state',
+      config: { name: 'test', instructions: '', tools: [] },
+      context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+    };
+
+    /**
+     * 多轮 runner：run() 每被调用一次，弹出一个「事件脚本」逐帧发射后
+     * 返回终态——同会话跨轮订正事件序列用。
+     */
+    function mockRunnerWithScripts(scripts: Array<Array<[string, unknown?]>>) {
+      const queue = [...scripts];
+      const mock = createMockRunner({
+        run: vi.fn().mockImplementation(async () => {
+          const script = queue.shift() ?? [['complete']];
+          for (const [type, payload] of script) {
+            if (payload === undefined) mock.emit(type);
+            else mock.emit(type, payload);
+          }
+          return {
+            state: turnFinalState,
+            result: { type: 'success', answer: '', totalSteps: 1, tokens: { input: 0, output: 0 } },
+          };
+        }),
+      });
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      return mock;
+    }
+
+    async function createChannelSession() {
+      return AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          sessionId: 'channel-test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+    }
+
+    it('records history BEFORE broadcast — the landed frame is the broadcast frame (shared seq space)', async () => {
+      mockRunnerWithScripts([[['token', { token: 'a' }], ['token', { token: 'b' }], ['complete']]]);
+      const session = await createChannelSession();
+
+      const received: HistoryEntry[] = [];
+      const detach = session.subscribe((entry) => {
+        received.push(entry);
+        // 先落史后广播：订阅者收到本帧的此刻，滚动历史已含本帧且恰为末帧
+        // （同步实现下无时序窗——落史失败的广播不发生）。
+        const hist = session.historySnapshot();
+        expect(hist[hist.length - 1]).toEqual(entry);
+      });
+
+      const events: SSEEvent[] = [];
+      for await (const sse of session.handleMessage('hello')) events.push(sse);
+      detach();
+
+      // 订阅者收到的与历史一致（同对象、同序）。
+      expect(received).toEqual(session.historySnapshot());
+      // seq 会话内单调递增，从 1 起（对齐 Rust frame_seq 的 fetch_add+1）。
+      expect(received.map((e) => e.seq)).toEqual([1, 2, 3]);
+      // 外部 SSE 形状零变化：逐帧等于「剥掉 seq 的 HistoryEntry」，无 seq 键。
+      expect(events).toEqual(received.map((e) => ({ event: e.event, data: e.data })));
+      for (const sse of events) {
+        expect(Object.keys(sse).sort()).toEqual(['data', 'event']);
+      }
+    });
+
+    it('subscriber receives increments from attach — pre-attach history is NOT replayed', async () => {
+      mockRunnerWithScripts([
+        [['token', { token: 'turn-one' }], ['complete']],
+        [['token', { token: 'turn-two' }], ['complete']],
+      ]);
+      const session = await createChannelSession();
+
+      // 第一轮：历史里落下 2 帧（token + done），订阅者尚未 attach。
+      for await (const _ of session.handleMessage('first')) {
+        // drain
+      }
+      const historyAfterTurnOne = session.historySnapshot();
+      expect(historyAfterTurnOne.length).toBe(2);
+
+      // attach 后第二轮：只收增量（不重放第一轮）。
+      const received: HistoryEntry[] = [];
+      const detach = session.subscribe((entry) => received.push(entry));
+      for await (const _ of session.handleMessage('second')) {
+        // drain
+      }
+      detach();
+
+      expect(received.length).toBe(2);
+      expect(received[0].seq).toBe(3, 'seq 续前轮单调，不重置');
+      const deltas = received.map((e) => (e.data as { delta?: string }).delta);
+      expect(deltas).toEqual(['turn-two', undefined], 'no replay of turn-one token');
+      // 全史 = 第一轮 2 帧 + 第二轮 2 帧，seq 连续。
+      const full = session.historySnapshot();
+      expect(full.map((e) => e.seq)).toEqual([1, 2, 3, 4]);
+    });
+
+    it('rolling history drops the OLDEST beyond HISTORY_CAP (aligned with Rust live.rs)', async () => {
+      // 一轮猛吐 HISTORY_CAP + 2 个 token（+1 done）——历史封顶在
+      // HISTORY_CAP，最旧的 3 帧被丢。500k 突发只走推入侧（同步突发
+      // ~百毫秒级）；per-request 队列的 shift 排空是 O(n²)，故只拉少量
+      // 帧后提前 return()（顺带钉死「流提前终止必须退订」的 finally 路径）。
+      const burst: Array<[string, unknown?]> = [];
+      for (let i = 0; i < HISTORY_CAP + 2; i++) {
+        burst.push(['token', { token: `e${i}` }]);
+      }
+      burst.push(['complete']);
+      // 第二轮小脚本：验证提前退订后下一轮流不受上一轮残留污染。
+      mockRunnerWithScripts([burst, [['token', { token: 'after-burst' }], ['complete']]]);
+      const session = await createChannelSession();
+
+      const gen = session.handleMessage('hello');
+      const first = await gen.next();
+      expect(first.done).toBe(false);
+      expect(first.value).toEqual({
+        event: 'token',
+        data: expect.objectContaining({ delta: 'e0' }),
+      });
+      await gen.return(undefined); // 提前终止：detach 必须在 finally 里发生
+      await vi.waitFor(() => expect(session.busy).toBe(false));
+
+      const hist = session.historySnapshot();
+      expect(hist.length).toBe(HISTORY_CAP, 'history length capped');
+      // 共 HISTORY_CAP + 3 帧，丢最旧 3 帧（e0/e1/e2）：首帧 seq = 4，末帧是 done。
+      expect(hist[0].seq).toBe(4);
+      expect((hist[0].data as { delta?: string }).delta).toBe('e3');
+      expect(hist.at(-1)!.event).toBe('done');
+      expect(hist.at(-1)!.seq).toBe(HISTORY_CAP + 3);
+
+      // 提前终止后的下一轮：只含自己的帧——上一轮的爆量队列与订阅
+      // 残留都不 bleed 进来。
+      const events: SSEEvent[] = [];
+      for await (const sse of session.handleMessage('next')) events.push(sse);
+      expect(events).toEqual([
+        { event: 'token', data: expect.objectContaining({ delta: 'after-burst' }) },
+        expect.objectContaining({ event: 'done' }),
+      ]);
+    });
+
+    it('unsubscribed listeners receive nothing further (history keeps recording)', async () => {
+      mockRunnerWithScripts([[['complete']], [['token', { token: 'late' }], ['complete']]]);
+      const session = await createChannelSession();
+
+      const received: HistoryEntry[] = [];
+      const detach = session.subscribe((entry) => received.push(entry));
+      for await (const _ of session.handleMessage('first')) {
+        // drain
+      }
+      detach();
+      const receivedAtDetach = received.length;
+      expect(receivedAtDetach).toBe(1);
+
+      for await (const _ of session.handleMessage('second')) {
+        // drain
+      }
+      expect(received.length).toBe(receivedAtDetach, '退订后不再收');
+      // 退订只摘听者：历史照常落（第二轮 2 帧续在后面）。
+      expect(session.historySnapshot().length).toBe(3);
+      expect(session.historySnapshot().at(-1)!.event).toBe('done');
     });
   });
 });
