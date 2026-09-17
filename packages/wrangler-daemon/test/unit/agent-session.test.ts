@@ -1529,6 +1529,128 @@ describe('AgentSession', () => {
     });
   });
 
+  // ────────────────────────────────────────────────────────────────────
+  // Idle-TTL activity touch (R2P-121, mirrors Rust Session::touch being
+  // called at every turn-drive entry): driveTurn is the shared choke
+  // point for handleMessage and continueRun, so ONE touch there covers
+  // every turn start. The SessionManager uses this timestamp to decide
+  // warm→cold eviction — a session with recent turn activity must not be
+  // evicted even if its registration is older than the TTL.
+  // ────────────────────────────────────────────────────────────────────
+  describe('idle-TTL activity touch (R2P-121)', () => {
+    it('handleMessage (turn start) touches sessionManager activity with the session id', async () => {
+      mockRunnerWithEvents();
+      const touchAgentSession = vi.fn();
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          sessionId: 'touch-target',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+          sessionManager: { getStatus: vi.fn().mockReturnValue('idle'), touchAgentSession },
+        },
+        testConfig
+      );
+
+      const events: SSEEvent[] = [];
+      for await (const sse of session.handleMessage('hello')) events.push(sse);
+      expect(events.some((e) => e.event === 'done')).toBe(true);
+
+      // Turn start = activity: touched exactly once with the session id.
+      expect(touchAgentSession).toHaveBeenCalledTimes(1);
+      expect(touchAgentSession).toHaveBeenCalledWith('touch-target');
+    });
+
+    it('continueRun (respond continuation) also goes through driveTurn and touches', async () => {
+      mockRunnerWithEvents();
+      const touchAgentSession = vi.fn();
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          sessionId: 'cont-target',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+          sessionManager: { getStatus: vi.fn().mockReturnValue('idle'), touchAgentSession },
+        },
+        testConfig
+      );
+
+      for await (const _ of session.continueRun()) {
+        // drain
+      }
+      expect(touchAgentSession).toHaveBeenCalledWith('cont-target');
+    });
+
+    it('a rejected (busy) turn does not touch again — the in-flight turn already did', async () => {
+      mockRunnerWithEvents();
+      const touchAgentSession = vi.fn();
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          sessionId: 'busy-target',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+          sessionManager: { getStatus: vi.fn().mockReturnValue('running'), touchAgentSession },
+        },
+        testConfig
+      );
+
+      // First turn: drives (touches once), completes.
+      for await (const _ of session.handleMessage('first')) {
+        // drain
+      }
+      expect(touchAgentSession).toHaveBeenCalledTimes(1);
+
+      // Simulate an in-flight turn: busy → the busy rejection path yields
+      // an error WITHOUT entering driveTurn, so no second touch.
+      (session as unknown as { _busy: boolean })._busy = true;
+      const events: SSEEvent[] = [];
+      for await (const sse of session.handleMessage('second')) events.push(sse);
+      expect(events).toEqual([
+        { event: 'error', data: { message: 'Session is busy processing a message' } },
+      ]);
+      expect(touchAgentSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('no sessionManager injected → no touch, no crash (old hosts keep working)', async () => {
+      mockRunnerWithEvents();
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+
+      const events: SSEEvent[] = [];
+      for await (const sse of session.handleMessage('hello')) events.push(sse);
+      expect(events.some((e) => e.event === 'done')).toBe(true);
+    });
+
+    it('a getStatus-only sessionManager stub (no touchAgentSession) keeps working', async () => {
+      mockRunnerWithEvents();
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+          sessionManager: { getStatus: vi.fn().mockReturnValue('idle') },
+        },
+        testConfig
+      );
+
+      const events: SSEEvent[] = [];
+      for await (const sse of session.handleMessage('hello')) events.push(sse);
+      expect(events.some((e) => e.event === 'done')).toBe(true);
+    });
+  });
+
   describe('AgentSession.create()', () => {
     const baseOptions: AgentSessionOptions = {
       workspacePath: '/tmp/test-workspace',

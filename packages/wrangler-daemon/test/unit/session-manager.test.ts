@@ -455,4 +455,165 @@ describe('SessionManager', () => {
       expect(manager.getAgentSession('race-7')).toBeNull();
     });
   });
+
+  // ────────────────────────────────────────────────────────────────────
+  // Idle-TTL lazy eviction (R2P-121, mirrors Rust SessionManager::
+  // evict_idle_locked + Session::is_quiet/idle_for): the active
+  // AgentSession pool is a WARM registry whose entry lifetime is "session
+  // not cooled down", not "turn in flight". Sessions idle past the TTL
+  // are lazily evicted (warm→cold) on the next registry insert or via the
+  // public evictIdleSessions(); eviction takes memory offline but never
+  // touches disk (disk is the source of truth; disk deletion is the
+  // DELETE endpoint's job).
+  //
+  // Fake clock throughout — no real sleeping: time only moves when the
+  // test says so.
+  // ────────────────────────────────────────────────────────────────────
+  describe('idle TTL lazy eviction (R2P-121)', () => {
+    const TTL = 1_000;
+    let nowMs: number;
+    let manager: SessionManager;
+
+    beforeEach(async () => {
+      nowMs = 1_000_000;
+      manager = new SessionManager(sessionsDir, undefined, {
+        now: () => nowMs,
+        idleTtlMs: TTL,
+      });
+      await manager.init();
+    });
+
+    const advance = (ms: number) => {
+      nowMs += ms;
+    };
+    const mkSession = (busy = false) => ({ busy, stop: vi.fn() }) as any;
+
+    it('idle past TTL: next registry insert sweeps it — memory gone, disk dir kept, getInfo still serves from disk', async () => {
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('idle-1', wsPath);
+      const store = manager.getSessionStore(wsPath);
+      await store.createWithId('idle-1', 'test-agent');
+      manager.setAgentSession('idle-1', mkSession());
+      expect(manager.getAgentSession('idle-1')).not.toBeNull();
+
+      advance(TTL + 1);
+      // 下一次注册表操作 = 另一会话的 insert 顺手清扫（对齐 Rust insert
+      // 时顺手回收，不让回收只依赖公开入口）。
+      manager.registerSession('idle-2', wsPath);
+      manager.setAgentSession('idle-2', mkSession());
+
+      expect(manager.getAgentSession('idle-1')).toBeNull();
+      expect(manager.getAgentSession('idle-2')).not.toBeNull();
+      // 驱逐 = 内存下线，盘保留（温→冷；盘是事实源）。
+      expect(existsSync(store.getSessionDir('idle-1'))).toBe(true);
+      const info = await manager.getInfo('idle-1');
+      expect(info).not.toBeNull();
+      expect(info!.agentName).toBe('test-agent');
+    });
+
+    it('busy session is not evictable (survives clock advancing past TTL)', async () => {
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('busy-1', wsPath);
+      manager.setAgentSession('busy-1', mkSession(true));
+
+      advance(TTL * 10);
+      manager.evictIdleSessions();
+
+      expect(manager.getAgentSession('busy-1')).not.toBeNull();
+    });
+
+    it('pending cold-start reservation pins the id: sweep evicts others but never touches the assembly latch', async () => {
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('hold-1', wsPath);
+      manager.registerSession('old-1', wsPath);
+      manager.setAgentSession('old-1', mkSession());
+      expect(manager.tryReserveAgentSession('hold-1')).toBe(true);
+
+      advance(TTL + 1);
+      expect(manager.evictIdleSessions()).toBe(1); // old-1 goes cold
+      expect(manager.getAgentSession('old-1')).toBeNull();
+      // The reservation SURVIVES the sweep — it is an assembly latch
+      // (R2P-161), not an idle resource; a mid-assembly sweep must not
+      // free the slot underneath the assembling caller.
+      expect(manager.tryReserveAgentSession('hold-1')).toBe(false);
+      // And settlement still works after the sweep.
+      const real = mkSession();
+      manager.setAgentSession('hold-1', real);
+      expect(manager.getAgentSession('hold-1')).toBe(real);
+    });
+
+    it('within TTL not evicted; exactly at TTL not evicted either (strict >, aligned with idle_for() > ttl)', async () => {
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('young-1', wsPath);
+      manager.setAgentSession('young-1', mkSession());
+
+      advance(TTL - 1);
+      manager.evictIdleSessions();
+      expect(manager.getAgentSession('young-1')).not.toBeNull();
+
+      advance(1); // exactly at TTL → not yet
+      manager.evictIdleSessions();
+      expect(manager.getAgentSession('young-1')).not.toBeNull();
+
+      advance(1); // past TTL → evicted
+      expect(manager.evictIdleSessions()).toBe(1);
+      expect(manager.getAgentSession('young-1')).toBeNull();
+    });
+
+    it('eviction is idempotent: already-evicted entries are not re-processed, and eviction is a map removal (no stop call)', async () => {
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('dup-1', wsPath);
+      const session = mkSession();
+      manager.setAgentSession('dup-1', session);
+
+      advance(TTL + 1);
+      expect(manager.evictIdleSessions()).toBe(1);
+      expect(manager.evictIdleSessions()).toBe(0);
+      expect(manager.evictIdleSessions()).toBe(0);
+      expect(manager.getAgentSession('dup-1')).toBeNull();
+      // Pure registry removal (aligned with Rust reg.retain dropping the
+      // Arc): a non-busy session has no in-flight turn to stop.
+      expect(session.stop).not.toHaveBeenCalled();
+    });
+
+    it('lastActiveAt touch semantics: registration older than TTL but recent activity → not evicted; stale again → evicted', async () => {
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('touch-1', wsPath);
+      manager.setAgentSession('touch-1', mkSession());
+
+      advance(TTL + 1); // registration timestamp is now stale...
+      manager.touchAgentSession('touch-1'); // ...but a turn just started (driveTurn touch)
+      manager.evictIdleSessions();
+      expect(manager.getAgentSession('touch-1')).not.toBeNull();
+
+      advance(TTL + 1); // idle again past TTL with no activity
+      manager.evictIdleSessions();
+      expect(manager.getAgentSession('touch-1')).toBeNull();
+    });
+
+    it('re-publishing via setAgentSession refreshes the activity timestamp', async () => {
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('refresh-1', wsPath);
+      manager.setAgentSession('refresh-1', mkSession());
+
+      advance(TTL + 1);
+      manager.setAgentSession('refresh-1', mkSession()); // rebuild/换模型 republish = warm again
+      manager.evictIdleSessions();
+      expect(manager.getAgentSession('refresh-1')).not.toBeNull();
+    });
+
+    it('a late touch for an evicted/unknown id is a no-op (no resurrected bookkeeping)', async () => {
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('ghost-1', wsPath);
+      manager.setAgentSession('ghost-1', mkSession());
+      advance(TTL + 1);
+      manager.evictIdleSessions();
+      expect(manager.getAgentSession('ghost-1')).toBeNull();
+
+      expect(() => manager.touchAgentSession('ghost-1')).not.toThrow();
+      expect(() => manager.touchAgentSession('never-registered')).not.toThrow();
+      expect(manager.activeCount).toBe(0);
+      expect(manager.evictIdleSessions()).toBe(0);
+    });
+  });
 });

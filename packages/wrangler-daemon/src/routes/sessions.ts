@@ -19,6 +19,10 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
    * Optional query parameter `workspacePath` filters by workspace.
    */
   fastify.get('/api/sessions', async (request) => {
+    // 健康快照时机顺带惰性驱逐（R2P-121，对齐 Rust daemon 在挂流/健康快照/
+    // 定时清扫调 evict_idle——温会话回收不只依赖"有新会话插入"时的顺手
+    // 清扫）。驱逐=内存下线、盘保留，list 本身走盘不受影响。
+    manager().evictIdleSessions();
     const query = request.query as { workspacePath?: string };
     return manager().list(query.workspacePath);
   });

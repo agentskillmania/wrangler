@@ -72,7 +72,7 @@ export interface AgentSessionResumeOptions {
   agentInstructions?: string;
   agentConfigPath?: string;
   sessionStore?: SessionStore;
-  sessionManager?: { getStatus(id: string): string };
+  sessionManager?: SessionManagerRef;
   /** HostEnv — injected into EnhancedRunner.resume. Node host: defaultNodeHostEnv. */
   runtime?: HostEnv;
   /** Sub-agent configs to rebuild crew delegation on resume */
@@ -111,8 +111,8 @@ export interface AgentSessionOptions {
   model?: string;
   sessionBaseDir?: string;
   sessionStore?: SessionStore;
-  /** SessionManager instance for reading runtime status. */
-  sessionManager?: { getStatus(id: string): string };
+  /** SessionManager instance for reading runtime status + idle-TTL activity touch (R2P-121). */
+  sessionManager?: SessionManagerRef;
   /** Agent definition file path. */
   agentConfigPath?: string;
   // Structured EnhancedRunner option groups (see EnhancedRunnerOptions)
@@ -179,6 +179,16 @@ const DEFAULT_INSTRUCTIONS = `You are a capable AI assistant. You can:
 6. Manage task lists (todo_* tools)
 
 Please respond in the same language as the user's message.`;
+
+/**
+ * SessionManager 视图（AgentSession 依赖的窄接口）：运行状态查询 +
+ * 闲置 TTL 活动触碰（R2P-121，对齐 Rust Session::touch 只在轮驱动入口
+ * 调用）。touchAgentSession 可选——旧宿主/测试桩只给 getStatus 也能跑。
+ */
+export interface SessionManagerRef {
+  getStatus(id: string): string;
+  touchAgentSession?(id: string): void;
+}
 
 /**
  * Single agent session backed by wrangler EnhancedRunner.
@@ -312,7 +322,7 @@ export class AgentSession {
   private abortController: AbortController | null = null;
   private bridge: AskHumanBridge;
   private sessionStore: SessionStore | undefined;
-  private readonly sessionManager?: { getStatus(id: string): string };
+  private readonly sessionManager?: SessionManagerRef;
   private readonly agentConfigPath?: string;
   private _busy = false;
   /** Max input length in characters, enforced in handleMessage. */
@@ -966,6 +976,11 @@ export class AgentSession {
     options?: { thinkingEnabled?: boolean; model?: string }
   ): AsyncIterable<SSEEvent> {
     this._busy = true;
+    // 闲置 TTL 活动触碰（R2P-121，对齐 Rust Session::touch 在轮驱动入口）：
+    // handleMessage 与 continueRun（respond 续跑）共用本收口，一处触碰全覆盖。
+    // 观察（cockpit SSE / 诊断快照）不触碰——对齐 Rust 侧 agent-state 挂流
+    // 不 touch。近期有活动的会话即使注册超龄也不可驱逐。
+    this.sessionManager?.touchAgentSession?.(this.sessionId);
     this.abortController = new AbortController();
     this.eventQueue = [];
     this.eventWaiters = [];
