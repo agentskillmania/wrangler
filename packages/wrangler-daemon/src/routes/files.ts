@@ -116,57 +116,63 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
-   * PUT /api/files/:sessionId/content
+   * PUT /api/files/:sessionId/content?sessionDir=<dir>
    *
    * Writes content to an existing file in the session's workspace.
    * Body must contain `path` and `content` fields.
    */
   fastify.put('/api/files/:sessionId/content', async (request) => {
     const { sessionId } = request.params as { sessionId: string };
+    const query = request.query as { sessionDir?: string };
     const body = request.body as { path?: string; content?: string };
-    const info = await sessionManager().getInfo(sessionId);
-    if (!info) return { error: 'Session not found' };
+    // 与读侧(tree/content)对齐：显式 sessionDir 优先（笔记目录即会话），
+    // 否则按会话 id 查标准 sessions 树。此前写侧只认标准树，notebook
+    // 会话的写/建/删全 404——读写不对称（R2P-234，对齐 Rust 96ddf46）。
+    const workspacePath = await resolveWorkspace(sessionId, query.sessionDir);
+    if (!workspacePath) return { error: 'Session not found' };
     if (!body.path || body.content === undefined) return { error: 'path and content required' };
 
-    const fullPath = resolveWithinRoot(info.workspacePath, body.path);
+    const fullPath = resolveWithinRoot(workspacePath, body.path);
     await writeFile(fullPath, body.content, 'utf-8');
     return { ok: true };
   });
 
   /**
-   * POST /api/files/:sessionId
+   * POST /api/files/:sessionId?sessionDir=<dir>
    *
    * Creates a new file (and any missing parent directories) in the workspace.
    * Body must contain `path`. `content` defaults to empty string.
    */
   fastify.post('/api/files/:sessionId', async (request) => {
     const { sessionId } = request.params as { sessionId: string };
+    const query = request.query as { sessionDir?: string };
     const body = request.body as { path?: string; content?: string };
-    const info = await sessionManager().getInfo(sessionId);
-    if (!info) return { error: 'Session not found' };
+    const workspacePath = await resolveWorkspace(sessionId, query.sessionDir);
+    if (!workspacePath) return { error: 'Session not found' };
     if (!body.path) return { error: 'path is required' };
 
-    const fullPath = resolveWithinRoot(info.workspacePath, body.path);
+    const fullPath = resolveWithinRoot(workspacePath, body.path);
     await mkdir(dirname(fullPath), { recursive: true });
     await writeFile(fullPath, body.content ?? '', 'utf-8');
     return { ok: true, path: body.path };
   });
 
   /**
-   * DELETE /api/files/:sessionId
+   * DELETE /api/files/:sessionId?sessionDir=<dir>
    *
    * Deletes a file from the session's workspace.
    * Body must contain `path`.
    */
   fastify.delete('/api/files/:sessionId', async (request) => {
     const { sessionId } = request.params as { sessionId: string };
+    const query = request.query as { sessionDir?: string };
     const body = request.body as { path?: string };
-    const info = await sessionManager().getInfo(sessionId);
-    if (!info) return { error: 'Session not found' };
+    const workspacePath = await resolveWorkspace(sessionId, query.sessionDir);
+    if (!workspacePath) return { error: 'Session not found' };
     if (!body.path) return { error: 'path is required' };
 
     try {
-      const fullPath = resolveWithinRoot(info.workspacePath, body.path);
+      const fullPath = resolveWithinRoot(workspacePath, body.path);
       await unlink(fullPath);
       return { ok: true };
     } catch {

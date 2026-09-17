@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -206,6 +206,73 @@ describe('Chat API', () => {
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.messages).toEqual([]);
+    });
+
+    // ─── todo 快照透传（R2P-237，对齐 Rust 9b0c46d/dfa2105）───
+    // TS 侧 todo 存 state.context.todoList（todo-middleware immer 写入），
+    // messages 返回体透传该字段——resume 后前端 todo 卡的数据源。
+    // 旧档缺键省略（前端按缺席降级），不断言 undefined 键存在。
+
+    it('passes context.todoList through when present (standard tree)', async () => {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      const store = sm.getSessionStore(join(tempDir, 'workspace'));
+      await store.saveState('existing-session', {
+        id: 'existing-session',
+        config: { name: 'test-agent', instructions: '', tools: [] },
+        context: {
+          messages: [],
+          stepCount: 0,
+          createdAt: 0,
+          updatedAt: 0,
+          todoList: { items: [{ id: 1, subject: 'task one', status: 'in_progress' }], nextId: 2 },
+        },
+      } as never);
+
+      const res = await fetch(`${getUrl()}/api/chat/existing-session/messages`);
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body.todoList).toEqual({
+        items: [{ id: 1, subject: 'task one', status: 'in_progress' }],
+        nextId: 2,
+      });
+    });
+
+    it('omits the todoList key when the state has none (old archives)', async () => {
+      const res = await fetch(`${getUrl()}/api/chat/existing-session/messages`);
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect('todoList' in body).toBe(false);
+    });
+
+    it('passes todoList through for explicit sessionDir reads', async () => {
+      const dir = join(tempDir, 'notebook-state');
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        join(dir, 'state.json'),
+        JSON.stringify({
+          context: { messages: [], todoList: { items: [], nextId: 1 } },
+        })
+      );
+
+      const res = await fetch(
+        `${getUrl()}/api/chat/notebook/messages?sessionDir=${encodeURIComponent(dir)}`
+      );
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body.todoList).toEqual({ items: [], nextId: 1 });
+    });
+
+    it('omits todoList for explicit sessionDir state without one', async () => {
+      const dir = join(tempDir, 'notebook-state-bare');
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, 'state.json'), JSON.stringify({ context: { messages: [] } }));
+
+      const res = await fetch(
+        `${getUrl()}/api/chat/notebook/messages?sessionDir=${encodeURIComponent(dir)}`
+      );
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect('todoList' in body).toBe(false);
     });
   });
 

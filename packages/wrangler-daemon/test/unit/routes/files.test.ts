@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { SessionManager } from '../../../src/core/session-manager.js';
 import { fileRoutes } from '../../../src/routes/files.js';
+import { writeMeta } from '@agentskillmania/wrangler';
+import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import type { DecoratedFastifyInstance } from '../../../src/types.js';
 
 /**
@@ -283,6 +285,112 @@ describe('workspace file routes', () => {
       });
       expect(res.ok).toBe(true);
       expect((await res.json()).error).toBe('File not found');
+    });
+  });
+
+  // ------------------------------------------------------------------ Notebook sessionDir writes
+
+  describe('notebook sessionDir addressing on write endpoints (R2P-234, aligned with Rust 96ddf46)', () => {
+    // 笔记目录即会话：meta.yaml 落在 sessionDir 内，标准 sessions 树看不到
+    // 该 id。读侧（tree/content）早已认 ?sessionDir=；写侧此前只查标准树
+    // ——notebook 会话写/建/删全 404，读写不对称。
+    let notebookDir: string;
+
+    beforeEach(async () => {
+      notebookDir = join(tempDir, 'notebook-note');
+      await mkdir(notebookDir, { recursive: true });
+      const now = new Date().toISOString();
+      await writeMeta(
+        notebookDir,
+        {
+          id: 'notebook-note',
+          workspacePath,
+          createdAt: now,
+          updatedAt: now,
+          agentName: 'test-agent',
+        },
+        defaultNodeHostEnv
+      );
+    });
+
+    it('PUT writes through explicit sessionDir', async () => {
+      const res = await fetch(
+        `${baseUrl()}/api/files/notebook-note/content?sessionDir=${encodeURIComponent(notebookDir)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: 'note.txt', content: 'from notebook' }),
+        }
+      );
+      expect(res.ok).toBe(true);
+      expect((await res.json()).ok).toBe(true);
+
+      // Landed in the workspace pointed at by the notebook's meta.yaml
+      const disk = await readFile(join(workspacePath, 'note.txt'), 'utf-8');
+      expect(disk).toBe('from notebook');
+    });
+
+    it('POST creates through explicit sessionDir', async () => {
+      const res = await fetch(
+        `${baseUrl()}/api/files/notebook-note?sessionDir=${encodeURIComponent(notebookDir)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: 'notes/new.md', content: 'fresh' }),
+        }
+      );
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.path).toBe('notes/new.md');
+
+      const disk = await readFile(join(workspacePath, 'notes', 'new.md'), 'utf-8');
+      expect(disk).toBe('fresh');
+    });
+
+    it('DELETE removes through explicit sessionDir', async () => {
+      await writeFile(join(workspacePath, 'note.txt'), 'gone soon', 'utf-8');
+
+      const res = await fetch(
+        `${baseUrl()}/api/files/notebook-note?sessionDir=${encodeURIComponent(notebookDir)}`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: 'note.txt' }),
+        }
+      );
+      expect(res.ok).toBe(true);
+      expect((await res.json()).ok).toBe(true);
+
+      await expect(access(join(workspacePath, 'note.txt'))).rejects.toThrow();
+    });
+
+    it('returns Session not found when sessionDir has no meta.yaml', async () => {
+      const emptyDir = join(tempDir, 'not-a-session');
+      await mkdir(emptyDir, { recursive: true });
+
+      const res = await fetch(
+        `${baseUrl()}/api/files/notebook-note/content?sessionDir=${encodeURIComponent(emptyDir)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: 'note.txt', content: 'x' }),
+        }
+      );
+      expect(res.ok).toBe(true);
+      expect((await res.json()).error).toBe('Session not found');
+    });
+
+    it('keeps traversal protection on the sessionDir write path', async () => {
+      const res = await fetch(
+        `${baseUrl()}/api/files/notebook-note/content?sessionDir=${encodeURIComponent(notebookDir)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: '../escape.txt', content: 'x' }),
+        }
+      );
+      expect(res.status).toBe(500);
     });
   });
 });

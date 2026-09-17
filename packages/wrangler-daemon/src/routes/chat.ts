@@ -142,6 +142,13 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
    * Returns chat message history for a session.
    * Reads the full AgentState from state.json — includes thinking,
    * tool calls, and tool results (unlike the old session.jsonl format).
+   *
+   * Also passes through the persisted todo snapshot (`context.todoList`,
+   * immer-written by the todo middleware) as the top-level `todoList` field
+   * — the data source for the frontend's inline todo card + sidebar on
+   * resume (R2P-237, aligned with Rust 9b0c46d/dfa2105; TS keeps todo in
+   * state.context rather than a sidecar). Old archives without the key omit
+   * it — the frontend degrades on absence.
    */
   fastify.get('/api/chat/:sessionId/messages', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
@@ -153,8 +160,14 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     if (query.sessionDir) {
       try {
         const raw = await readFile(join(query.sessionDir, 'state.json'), 'utf-8');
-        const state = JSON.parse(raw) as { context?: { messages?: unknown[] } };
-        return { messages: state.context?.messages ?? [] };
+        const state = JSON.parse(raw) as {
+          context?: { messages?: unknown[]; todoList?: unknown };
+        };
+        const body: { messages: unknown[]; todoList?: unknown } = {
+          messages: state.context?.messages ?? [],
+        };
+        if (state.context?.todoList !== undefined) body.todoList = state.context.todoList;
+        return body;
       } catch {
         reply.code(404);
         return { error: 'Session state not found' };
@@ -167,7 +180,12 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     const store = sessionManager().getSessionStore(info.workspacePath);
     const state = await store.loadState(sessionId);
-    return { messages: state?.context.messages ?? [] };
+    const body: { messages: unknown[]; todoList?: unknown } = {
+      messages: state?.context.messages ?? [],
+    };
+    const todoList = (state?.context as { todoList?: unknown } | undefined)?.todoList;
+    if (todoList !== undefined) body.todoList = todoList;
+    return body;
   });
 
   /**
