@@ -75,8 +75,21 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
    *
    * Deletes a session by id. Stops the active AgentSession if running.
    */
-  fastify.delete('/api/sessions/:id', async (request) => {
+  fastify.delete('/api/sessions/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
+    // R2P-161b①（对齐 Rust 098adbd 的先查注册表再删盘）：冷装配占位中的
+    // id 不可删——delete() 会清掉占位并删盘，而在飞装配的 finally 随后
+    // setAgentSession 注册一个盘上已删的僵尸会话（下一轮 afterRun 落盘
+    // 还会把目录"复活"）。409 starting 分诊让客户端等装配落定后重试。
+    if (manager().isReservedAgentSession(id)) {
+      reply.code(409);
+      return {
+        error: 'Session is busy',
+        reason: 'starting',
+        detail:
+          'the session is being assembled from disk (cold start); retry the delete after it finishes',
+      };
+    }
     await manager().delete(id);
     return { ok: true };
   });

@@ -226,6 +226,18 @@ export class SessionManager {
   }
 
   /**
+   * Read-only query: is a cold-start assembly currently holding the slot
+   * for this id (R2P-161b①, aligns Rust 098adbd's registry-first delete)?
+   * DELETE uses this to refuse deleting mid-assembly — clearing the
+   * placeholder under an in-flight assembly lets its `finally` re-register
+   * a zombie AgentSession over the deleted disk (afterRun persistence then
+   * resurrects the directory).
+   */
+  isReservedAgentSession(id: string): boolean {
+    return this.reservedAgentSessions.has(id);
+  }
+
+  /**
    * Store an active AgentSession. Also settles any pending cold-start
    * reservation for the id (assembly completed — publish over the slot).
    *
