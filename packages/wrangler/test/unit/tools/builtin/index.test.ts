@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -6,6 +6,7 @@ import { createCoreTools } from '../../../../src/tools/builtin/index.js';
 import { createWebTools } from '../../../../src/tools/web/index.js';
 import { HostToolDeps, SandboxToolDeps } from '../../../../src/tools/builtin/workspace-deps.js';
 import { NodeHostEnv } from '../../../../src/host-env/node-host-env.js';
+import type { SearchProvider } from '../../../../src/tools/builtin/web-search.js';
 
 // HostToolDeps.exec/execArray now set cwd to workspaceRoot, so tests need
 // a real directory (not a fake path like /tmp/test-workspace).
@@ -118,5 +119,65 @@ describe('createWebTools (tools/web subpath)', () => {
     expect(webSearch).toHaveProperty('name', 'web_search');
     expect(webSearch).toHaveProperty('parameters');
     expect(webSearch).toHaveProperty('execute');
+  });
+
+  /** Bing-shaped results page for stubbed fetch. */
+  const BING_HTML = `
+    <html><body><ol>
+      <li class="b_algo"><h2><a href="https://example.com/bing-1">Bing Result</a></h2>
+        <p class="b_lineclamp2">A bing snippet</p></li>
+    </ol></body></html>`;
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('default assembly falls back to bing results when sogou is challenged (R2P-243)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string | URL | Request) => {
+        const u = url.toString();
+        if (u.includes('sogou.com')) {
+          return { ok: false, status: 403, text: () => Promise.resolve('forbidden') };
+        }
+        if (u.includes('bing.com')) {
+          return { ok: true, status: 200, text: () => Promise.resolve(BING_HTML) };
+        }
+        return { ok: false, status: 404, text: () => Promise.resolve('') };
+      })
+    );
+
+    const tools = createWebTools({ deps: makeDeps() }); // 默认 = sogou→bing 回退链
+    const webSearch = tools.find((t) => t.name === 'web_search')!;
+    const output = await webSearch.execute({ query: 'test' });
+
+    expect(output).toContain('https://example.com/bing-1');
+    expect(output).not.toContain('No results found');
+  });
+
+  it('explicit bing provider answers directly without sogou', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string | URL | Request) => {
+      return { ok: true, status: 200, text: () => Promise.resolve(BING_HTML) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const tools = createWebTools({ deps: makeDeps(), provider: 'bing' });
+    const webSearch = tools.find((t) => t.name === 'web_search')!;
+    const output = await webSearch.execute({ query: 'test' });
+
+    expect(output).toContain('https://example.com/bing-1');
+    const calls = fetchMock.mock.calls.map((c) => c[0].toString());
+    expect(calls.some((c) => c.includes('sogou.com'))).toBe(false);
+  });
+
+  it('passes a custom SearchProvider instance through untouched', async () => {
+    const custom: SearchProvider = {
+      search: async () => [{ title: 'Custom', url: 'https://example.com/custom', snippet: 's' }],
+    };
+    const tools = createWebTools({ deps: makeDeps(), provider: custom });
+    const webSearch = tools.find((t) => t.name === 'web_search')!;
+    const output = await webSearch.execute({ query: 'test' });
+
+    expect(output).toContain('https://example.com/custom');
   });
 });

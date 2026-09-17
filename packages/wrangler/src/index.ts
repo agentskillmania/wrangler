@@ -49,7 +49,12 @@ export type { ParsedAgent } from './agent/index.js';
 export { createCoreTools } from './tools/builtin/index.js';
 export type { CoreToolsOptions } from './tools/builtin/index.js';
 // 搜索 provider 类型（type-only，web 工具的宿主注入参数）——运行时零依赖
-export type { SearchProvider, SearchResult } from './tools/web/index.js';
+export type {
+  SearchProvider,
+  SearchResult,
+  SearchOutcome,
+  NamedSearchProvider,
+} from './tools/web/index.js';
 export { resolvePath, truncateOutput } from './tools/builtin/index.js';
 export type { ToolDeps, ExecResult } from './tools/builtin/index.js';
 export { HostToolDeps } from './tools/builtin/index.js';

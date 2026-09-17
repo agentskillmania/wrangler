@@ -183,7 +183,7 @@ export interface DelegationConfig {
 }
 
 export interface SearchConfig {
-  /** Search provider instance or name. Defaults to 'sogou'. */
+  /** Search provider instance or name. Defaults to 'sogou'（sogou→bing 回退链）. */
   provider?: SearchProvider | 'bing' | 'sogou';
 }
 

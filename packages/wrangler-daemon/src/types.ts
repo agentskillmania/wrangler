@@ -250,7 +250,7 @@ export interface SessionInitParams {
       maxToolOutput?: number;
       toolTimeout?: number;
     };
-    /** Web search provider. Defaults to 'sogou'. */
+    /** Web search provider. Defaults to 'sogou'（sogou→bing 回退链）. */
     search?: { provider?: 'sogou' | 'bing' };
     /** Context compression. Unified `{enabled}` shape (matches the other
      * feature groups and the SSE session-start payload); legacy bare boolean
