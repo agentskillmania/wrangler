@@ -23,8 +23,13 @@ import {
   humanRequestPayloads,
   findPendingInterrupt,
   hitlResponseFromValue,
+  frameToSse,
 } from '../core/agent-session.js';
-import type { AgentSessionOptions, AgentSessionResumeOptions } from '../core/agent-session.js';
+import type {
+  AgentSessionOptions,
+  AgentSessionResumeOptions,
+  HistoryEntry,
+} from '../core/agent-session.js';
 import { mergeSandboxConfig } from '../core/sandbox-config.js';
 import type {
   DecoratedFastifyInstance,
@@ -265,6 +270,123 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       agentSession.stop();
     }
     return { ok: true };
+  });
+
+  /**
+   * GET /api/chat/:sessionId/events — 会话级常驻事件流（R2P-151，对齐
+   * Rust routes/chat/events.rs 的只读裁剪）。
+   *
+   * 与请求级的发消息流（POST /api/chat/:id——轮结束即关）不同，这条流
+   * 不随某一轮结束而关闭：建连先重放滚动历史里 `seq > lastSeq` 的帧
+   * （断线期间的洞补上），之后把会话通道上的全部帧按全序直播下去，
+   * 只在客户端断开时退订。没有流级 done 收尾——done 只是流上的一种
+   * 事件。
+   *
+   * 重放门控在服务端做：`?lastSeq=N` 丢弃 seq≤N 的历史帧（客户端已
+   * 见）；缺省 lastSeq=0（全量重放）。重放段与直播段同经 frameToSse
+   * （seq 注入 data），wire 形状单源；直播侧再按已发 seq 去重一道，
+   * 把「无重帧」做成服务端保证（滚动历史被安全阀裁头时重放起点后移，
+   * 直播帧必大于全部重放帧，此守卫通常空转）。
+   *
+   * 滚动历史是内存态、随 AgentSession 对象生灭：驱逐/重建后新对象新
+   * 通道，重放为空（历史随旧对象走——客户端应重读磁盘历史对账，对齐
+   * Rust 的 bufferStartSeq 语义裁剪）。冷会话按 `?sessionDir=` 或标准
+   * 树物化（订阅本身是活跃信号，与 resume/respond 同一装配路径+互斥）。
+   * 只读观察：断开只退订，不 stop 会话。
+   */
+  fastify.get('/api/chat/:sessionId/events', async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string };
+    const query = request.query as { sessionDir?: string; lastSeq?: string };
+
+    let lastSeq = 0;
+    if (query.lastSeq !== undefined) {
+      const n = Number(query.lastSeq);
+      if (!Number.isInteger(n) || n < 0) {
+        reply.code(400).send({ error: 'lastSeq must be a non-negative integer' });
+        return;
+      }
+      lastSeq = n;
+    }
+
+    // 挂流是高频入口，顺带做一次 TTL 驱逐（对齐 Rust chat_events 的
+    // evict_idle()——闲置温会话的回收不依赖"有新会话插入"）。
+    sessionManager().evictIdleSessions();
+
+    // 温会话直接挂；冷会话物化（与 resume/respond 同一装配路径）。
+    let agentSession = sessionManager().getAgentSession(sessionId);
+    if (!agentSession) {
+      const ctx = await resolveSessionContext(sessionId, query.sessionDir, {
+        sessionManager: sessionManager(),
+      });
+      if (!ctx) {
+        reply.code(404).send({ error: 'Session not found' });
+        return;
+      }
+      if (!sessionManager().tryReserveAgentSession(sessionId)) {
+        reply
+          .code(409)
+          .send(
+            startingConflict('the session is being assembled from disk (cold start); retry shortly')
+          );
+        return;
+      }
+      let rebuilt: AgentSession | null = null;
+      try {
+        rebuilt = await assembleResumeSession(
+          sessionId,
+          {
+            sessionManager: sessionManager(),
+            configManager: configManager(),
+            resourceManager: resourceManager(),
+          },
+          ctx
+        );
+      } catch (error) {
+        if (error instanceof SessionNotFoundError) {
+          reply.code(410).send({ error: 'Session expired, please start a new conversation' });
+          return;
+        }
+        throw error;
+      } finally {
+        if (rebuilt) {
+          sessionManager().setAgentSession(sessionId, rebuilt);
+        } else {
+          sessionManager().cancelAgentSessionReservation(sessionId);
+        }
+      }
+      agentSession = rebuilt;
+    }
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    // 头部即刻上线（flushHeaders）：writeHead 只备好头部、要等首次写入才
+    // 随行发送——常驻流建连时滚动历史可能为空（驱逐后重建/全新会话），
+    // 第一帧可能很久之后才来，不 flush 的话客户端 fetch 挂到首帧。
+    reply.raw.flushHeaders();
+
+    // 先订阅再拍历史，两者之间零 await（单线程 JS 上不可能插入发射）：
+    // 建连之后才发生的帧走直播，之前的帧走重放——交界处既不漏帧，
+    // forward 的 seq 守卫再把可能的重复压成零。
+    let lastSentSeq = lastSeq;
+    const forward = (entry: HistoryEntry): void => {
+      if (entry.seq <= lastSentSeq) return;
+      lastSentSeq = entry.seq;
+      const wire = frameToSse(entry);
+      writeSSE(reply, wire.event, wire.data);
+    };
+    const detach = agentSession.subscribe(forward);
+    for (const entry of agentSession.historySnapshot()) {
+      forward(entry);
+    }
+    // 断开即退订（只读观察者，无 CONC5 停轮语义）。Listen on reply.raw
+    // (the socket) — the request body is consumed by the time SSE opens.
+    reply.raw.on('close', () => {
+      detach();
+    });
   });
 
   /**

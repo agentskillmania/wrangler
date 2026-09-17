@@ -316,12 +316,13 @@ function toRunnerCompression(
 //
 // 对齐 Rust session/live.rs：会话拥有自己的事件通道，run 帧（轮内从
 // runner 事件映射而来）与人类输入桥的帧经 pushEvent 汇入——「先落史后
-// 广播，落下的史就是广播的帧」（同一 seq 空间）。本批裁剪：seq 只在
-// HistoryEntry 里自增保留，不上 SSE 线协议（SSE 帧加 seq 是 P2-b）。
+// 广播，落下的史就是广播的帧」（同一 seq 空间）。R2P-151 起 seq 随
+// frameToSse 注入 data 上 SSE 线协议（重连去重/补洞的依据），常驻
+// events 流（routes/chat.ts）与每请求的 chat 流共用该入口。
 
 /**
  * 一条会话事件通道的历史帧（对齐 Rust session/live.rs 的 HistoryFrame）。
- * seq 是会话内单调全序，P2-b 断线重连按它去重（≤ 已见）与补洞（> 已见）。
+ * seq 是会话内单调全序，断线重连按它去重（≤ 已见）与补洞（> 已见）。
  */
 export interface HistoryEntry {
   seq: number;
@@ -334,6 +335,22 @@ export interface HistoryEntry {
  * 保险丝，正常会话到不了——超上限丢最旧。
  */
 export const HISTORY_CAP = 500_000;
+
+/**
+ * 把一条会话通道的历史帧包成 SSE wire 帧（R2P-151，对齐 Rust
+ * core/sse.rs 的 `frame_to_sse`）：把 seq 注入 data 对象——重放段与
+ * 直播段同用这一个入口，wire 形状单源，客户端按 `data.seq` 去重
+ * （≤ 已见）/补洞（> 已见）。timestamp 已在 runner 事件 handler 落帧
+ * 时注入（注入时点与 Rust 不同、wire 形状相同）；非对象 data 保持
+ * 原样（对齐 Rust `as_object_mut` 守卫——seq 只进对象）。
+ */
+export function frameToSse(frame: HistoryEntry): SSEEvent {
+  const data =
+    typeof frame.data === 'object' && frame.data !== null && !Array.isArray(frame.data)
+      ? { ...(frame.data as Record<string, unknown>), seq: frame.seq }
+      : frame.data;
+  return { event: frame.event, data };
+}
 
 export class AgentSession {
   readonly sessionId: string;
@@ -376,6 +393,14 @@ export class AgentSession {
   private readonly channelSubscribers = new Set<(entry: HistoryEntry) => void>();
   /** 帧序号分配器（会话内单调递增，pushEvent 唯一分配点；对齐 Rust frame_seq） */
   private frameSeq = 0;
+  /**
+   * 轮次编号（R2P-152，对齐 Rust 1b24852 的 turn_seq/current_turn）：每次
+   * driveTurn 开跑 +1，本驱动的 done 帧经 pushEvent 注入此值——等待方按
+   * 值精确归属（消费轮的 done 不误满足用户轮）。busy 拒绝路径不进
+   * driveTurn，不耗号（跳号允许，单调性才是契约）。单线程 JS 无并发
+   * 驱动（busy 闩锁），Rust 的分配器/当前值双字段在此塌缩为一个计数器。
+   */
+  private turnSeq = 0;
 
   private constructor(
     runner: EnhancedRunner,
@@ -1008,10 +1033,14 @@ export class AgentSession {
     options?: { thinkingEnabled?: boolean; model?: string }
   ): AsyncIterable<SSEEvent> {
     this._busy = true;
+    // 轮次编号 +1（R2P-152，对齐 Rust begin_turn 在驱动入口开轮）：含
+    // continueRun/HITL 续跑——消费轮的 done 与用户轮的 done 各带各的
+    // turnSeq；send/respond ack 体携带待等的轮次是 Task 3（R2P-153）。
+    this.turnSeq += 1;
     // 闲置 TTL 活动触碰（R2P-121，对齐 Rust Session::touch 在轮驱动入口）：
     // handleMessage 与 continueRun（respond 续跑）共用本收口，一处触碰全覆盖。
-    // 观察（cockpit SSE / 诊断快照）不触碰——对齐 Rust 侧 agent-state 挂流
-    // 不 touch。近期有活动的会话即使注册超龄也不可驱逐。
+    // 观察（cockpit SSE / 诊断快照 / 常驻 events 流）不触碰——对齐 Rust 侧
+    // agent-state 挂流不 touch。近期有活动的会话即使注册超龄也不可驱逐。
     this.sessionManager?.touchAgentSession?.(this.sessionId);
     this.abortController = new AbortController();
     this.eventQueue = [];
@@ -1021,14 +1050,14 @@ export class AgentSession {
     this.doneFlag = false;
 
     // 本请求的流订阅会话通道（R2P-122）：从 attach 时刻起收增量（不重放
-    // 全史——落下的史就是广播的帧，重放/补洞按 seq 是 P2-b）。外部形状
-    // 零变化：仍每请求一流，HistoryEntry 在此剥掉 seq 再入队（SSE 帧不
-    // 加 seq 字段是本批的裁剪约定）。seed 是纯状态变换（不发帧）且可能
-    // 抛（addUserMessage 拒绝）——放在订阅之前，不留「订了没 finally」的窗。
+    // 全史——常驻流的重放/补洞走 routes/chat.ts 的 events 端点）。seq 经
+    // frameToSse 注入 data 上线（R2P-151）——落下的史就是广播的帧，重连
+    // 按 data.seq 对账。seed 是纯状态变换（不发帧）且可能抛
+    // （addUserMessage 拒绝）——放在订阅之前，不留「订了没 finally」的窗。
     this.state = seed(this.state);
 
     const detachChannel = this.subscribe((entry) => {
-      this.enqueueSse({ event: entry.event, data: entry.data });
+      this.enqueueSse(frameToSse(entry));
     });
 
     this.bridge.sseSender = (event: SSEEvent) => this.pushEvent(event);
@@ -1175,10 +1204,11 @@ export class AgentSession {
    * Subscribe to the session event channel.
    *
    * Listeners receive HistoryEntry increments FROM THE MOMENT OF SUBSCRIPTION
-   * (no replay of prior history — 重放/按 seq 补洞是 P2-b)。The returned
-   * disposer removes this listener; per-request streams MUST call it when the
-   * stream terminates (normal end or early return), or later turns would feed
-   * duplicate frames into the reset queue.
+   * (no replay of prior history — replay/seq-gated hole-filling lives in the
+   * persistent events route, R2P-151). The returned disposer removes this
+   * listener; per-request streams MUST call it when the stream terminates
+   * (normal end or early return), or later turns would feed duplicate frames
+   * into the reset queue.
    */
   subscribe(listener: (entry: HistoryEntry) => void): () => void {
     this.channelSubscribers.add(listener);
@@ -1188,9 +1218,10 @@ export class AgentSession {
   }
 
   /**
-   * Rolling history snapshot (oldest first, newest last). P2-b 的断线重放源，
-   * 本批仅测试与诊断观测用。驱逐/重建后新 AgentSession 新通道——历史随
-   * 旧对象走（对齐 Rust：滚动历史是内存态，随 Session drop 而失）。
+   * Rolling history snapshot (oldest first, newest last). 常驻 events 流的
+   * 断线重放源（R2P-151，`seq > lastSeq` 的条目直出后转入直播）。驱逐/
+   * 重建后新 AgentSession 新通道——历史随旧对象走（对齐 Rust：滚动历史
+   * 是内存态，随 Session drop 而失）。
    */
   historySnapshot(): HistoryEntry[] {
     return [...this.history];
@@ -1208,13 +1239,21 @@ export class AgentSession {
    * 通道的唯一写入点（对齐 Rust Session::emit）：分配 seq → 先同步落史 →
    * 再广播同一帧。同步实现：返回时历史已更新、订阅者已全部收到——
    * 落史与广播无时序窗（落史失败的广播不发生）。seq 会话内单调递增
-   * （从 1 起，对齐 Rust frame_seq 的 fetch_add+1），暂不上 SSE 线协议。
+   * （从 1 起，对齐 Rust frame_seq 的 fetch_add+1），上线注入在
+   * frameToSse（重放/直播单源）。done 帧在此注入所属轮次编号 turnSeq
+   * （R2P-152，对齐 Rust emit 对 name=="done" 的注入——所有 done 产生
+   * 路径单源收口：complete 映射、abort 收尾），且随落史进滚动历史——
+   * 常驻流重放段照样可见，重连后 done 归属不丢。
    */
   private pushEvent(event: SSEEvent): void {
+    const data =
+      event.event === 'done' && typeof event.data === 'object' && event.data !== null
+        ? { ...(event.data as Record<string, unknown>), turnSeq: this.turnSeq }
+        : event.data;
     const entry: HistoryEntry = {
       seq: ++this.frameSeq,
       event: event.event,
-      data: event.data,
+      data,
     };
     this.pushHistory(entry);
     // 隔离坏订阅者（对齐 Rust event_tx 发送端与接收端的构造性隔离）：一个

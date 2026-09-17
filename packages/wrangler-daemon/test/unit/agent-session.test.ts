@@ -2573,11 +2573,19 @@ describe('AgentSession', () => {
       expect(received).toEqual(session.historySnapshot());
       // seq 会话内单调递增，从 1 起（对齐 Rust frame_seq 的 fetch_add+1）。
       expect(received.map((e) => e.seq)).toEqual([1, 2, 3]);
-      // 外部 SSE 形状零变化：逐帧等于「剥掉 seq 的 HistoryEntry」，无 seq 键。
-      expect(events).toEqual(received.map((e) => ({ event: e.event, data: e.data })));
+      // R2P-151：seq 上线协议——订阅回调不再剥 seq，wire 帧 data 含 seq
+      // （对齐 Rust frame_to_sse 的注入形状：seq 进 data 对象）。信封仍是
+      // event/data 两键，seq 住在 data 里。
+      expect(events).toEqual(
+        received.map((e) => ({ event: e.event, data: { ...e.data, seq: e.seq } }))
+      );
       for (const sse of events) {
         expect(Object.keys(sse).sort()).toEqual(['data', 'event']);
       }
+      expect(events.map((e) => (e.data as { seq: number }).seq)).toEqual([1, 2, 3]);
+      expect((events[0].data as { seq: number }).seq).toBe(1, '首帧 seq=1');
+      // turnSeq 只进 done 帧——过程帧不带（轮次归属是终帧契约）。
+      expect('turnSeq' in (events[0].data as object)).toBe(false);
     });
 
     it('subscriber receives increments from attach — pre-attach history is NOT replayed', async () => {
@@ -2597,8 +2605,9 @@ describe('AgentSession', () => {
       // attach 后第二轮：只收增量（不重放第一轮）。
       const received: HistoryEntry[] = [];
       const detach = session.subscribe((entry) => received.push(entry));
-      for await (const _ of session.handleMessage('second')) {
-        // drain
+      const wire: SSEEvent[] = [];
+      for await (const sse of session.handleMessage('second')) {
+        wire.push(sse);
       }
       detach();
 
@@ -2609,6 +2618,8 @@ describe('AgentSession', () => {
       // 全史 = 第一轮 2 帧 + 第二轮 2 帧，seq 连续。
       const full = session.historySnapshot();
       expect(full.map((e) => e.seq)).toEqual([1, 2, 3, 4]);
+      // 跨轮 wire 级单调（R2P-151）：本轮 data.seq 续前轮，不重置。
+      expect(wire.map((e) => (e.data as { seq: number }).seq)).toEqual([3, 4]);
     });
 
     it('rolling history drops the OLDEST beyond HISTORY_CAP (aligned with Rust live.rs)', async () => {
@@ -2707,6 +2718,103 @@ describe('AgentSession', () => {
         expect(good.some((e) => e.event === 'error')).toBe(false);
         expect(session.historySnapshot().some((e) => e.event === 'error')).toBe(false);
         expect(events.some((e) => e.event === 'error')).toBe(false);
+      });
+    });
+
+    // ─── turnSeq（R2P-152，对齐 Rust 1b24852：done 帧归属地基）────────────
+    describe('turnSeq (R2P-152)', () => {
+      it('two turns — each done frame carries its OWN turnSeq, strictly increasing and turn-aligned', async () => {
+        mockRunnerWithScripts([
+          [['token', { token: 'one' }], ['complete']],
+          [['token', { token: 'two' }], ['complete']],
+        ]);
+        const session = await createChannelSession();
+
+        const turns: SSEEvent[][] = [];
+        for (const msg of ['first', 'second']) {
+          const events: SSEEvent[] = [];
+          for await (const sse of session.handleMessage(msg)) events.push(sse);
+          turns.push(events);
+        }
+
+        // wire 级：每轮恰一个 done，data.turnSeq 与轮对齐且严格递增。
+        const dones = turns.map(
+          (events) => events.find((e) => e.event === 'done')!.data as { turnSeq: number }
+        );
+        expect(dones.map((d) => d.turnSeq)).toEqual([1, 2]);
+        // 历史级：turnSeq 随落史进滚动历史——常驻流重放段照样可见，
+        // 重连后 done 归属不丢。
+        const histDones = session
+          .historySnapshot()
+          .filter((e) => e.event === 'done')
+          .map((e) => e.data as { turnSeq: number });
+        expect(histDones.map((d) => d.turnSeq)).toEqual([1, 2]);
+      });
+
+      it('consumption turn (continueRun / HITL resume) gets a NEW turnSeq — not confused with the user turn', async () => {
+        // 用户轮以 waiting-human 终结（HITL 挂起），消费轮走 continueRun
+        // （respond 路由清空中断后的续跑同款收口）——两个 done 各带各的
+        // turnSeq，常驻流下可归属。归属消费归 Task 3（R2P-153），此处钉字段。
+        mockRunnerWithScripts([
+          [
+            [
+              'complete',
+              {
+                result: {
+                  type: 'waiting-human',
+                  request: {
+                    type: 'question',
+                    questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+                    toolCallId: 'call-1',
+                  },
+                  totalSteps: 1,
+                  tokens: { input: 0, output: 0 },
+                },
+              },
+            ],
+          ],
+          [['token', { token: 'resumed' }], ['complete']],
+        ]);
+        const session = await createChannelSession();
+
+        const userTurn: SSEEvent[] = [];
+        for await (const sse of session.handleMessage('hello')) userTurn.push(sse);
+        const userDone = userTurn.find((e) => e.event === 'done')!.data as {
+          turnSeq: number;
+          type: string;
+        };
+        expect(userDone.type).toBe('waiting-human');
+        expect(userDone.turnSeq).toBe(1);
+
+        const consumptionTurn: SSEEvent[] = [];
+        for await (const sse of session.continueRun()) consumptionTurn.push(sse);
+        const consumptionDone = consumptionTurn.find((e) => e.event === 'done')!.data as {
+          turnSeq: number;
+        };
+        expect(consumptionDone.turnSeq).toBe(2, '消费轮新号，不与用户轮混淆');
+      });
+
+      it('busy-rejected drives consume no turn number (gaps only from real drives)', async () => {
+        mockRunnerWithScripts([[['complete']], [['complete']]]);
+        const session = await createChannelSession();
+
+        // 第一轮正常跑完（turnSeq=1）。
+        for await (const _ of session.handleMessage('first')) {
+          // drain
+        }
+        // busy 拒绝路径不进 driveTurn——不耗号。
+        (session as unknown as { _busy: boolean })._busy = true;
+        const rejected: SSEEvent[] = [];
+        for await (const sse of session.handleMessage('rejected')) rejected.push(sse);
+        (session as unknown as { _busy: boolean })._busy = false;
+        expect(rejected.map((e) => e.event)).toEqual(['error']);
+
+        // 第二轮真实驱动 → turnSeq=2（拒绝没消费 2）。
+        const events: SSEEvent[] = [];
+        for await (const sse of session.handleMessage('second')) events.push(sse);
+        expect((events.find((e) => e.event === 'done')!.data as { turnSeq: number }).turnSeq).toBe(
+          2
+        );
       });
     });
   });
