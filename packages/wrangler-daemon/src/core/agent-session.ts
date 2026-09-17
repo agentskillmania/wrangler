@@ -79,6 +79,12 @@ export interface AgentSessionResumeOptions {
   subAgents?: SubAgentConfig[];
   /** Sandbox config with host-constructed instance (Node 宿主职责，镜像 create 路径) */
   sandbox?: import('@agentskillmania/wrangler').SandboxConfig;
+  /**
+   * Compression policy read fresh from config.yaml (R2P-239, mirrors Rust
+   * 934d8ce: tuning is NOT restored from session meta — the route re-reads
+   * config on every resume). Wins over the meta snapshot's enabled flag.
+   */
+  compression?: AgentSessionOptions['compression'];
   /** quickInit 创建器（Node 宿主传 LLMClient.quickInit）——daemon core 不捆绑内置 LLM */
   llmClientFactory?: (
     providers: import('@agentskillmania/llm-client').LLMProviderEntry[]
@@ -140,7 +146,21 @@ export interface AgentSessionOptions {
   thinking?: { enabled?: boolean; promptLevel?: boolean };
   a2ui?: { enabled?: boolean };
   search?: { provider?: 'sogou' | 'bing' };
-  compression?: boolean;
+  /**
+   * Compression policy (R2P-239). The daemon merges the request-level
+   * `{enabled}` with config.yaml tuning fields before handing it here;
+   * EnhancedRunner receives `false` (off) or the tuning subset
+   * (strategy/threshold/keepRecent — colts DefaultContextCompressor
+   * constructor params). Legacy bare boolean still accepted.
+   */
+  compression?:
+    | boolean
+    | {
+        enabled?: boolean;
+        strategy?: 'summarize' | 'truncate';
+        threshold?: number;
+        keepRecent?: number;
+      };
   /** Sub-agent configs — enables the 'delegate' tool for crew delegation */
   subAgents?: SubAgentConfig[];
   /** Crew identifier — persisted into runnerConfig snapshot so resume can reload crew config */
@@ -256,12 +276,35 @@ export function hitlResponseFromValue(
   };
 }
 
+/**
+ * Translate the daemon-level compression policy into the EnhancedRunner input
+ * (R2P-239): `false` / `{enabled:false}` → false (off); everything else → the
+ * tuning subset (strategy/threshold/keepRecent) the colts
+ * DefaultContextCompressor constructor consumes; absent tuning → undefined
+ * (runner default: enabled, strategy summarize — Rust 934d8ce's usable
+ * default). `enabled: true` is dropped: it is the runner's default already.
+ */
+function toRunnerCompression(
+  v: AgentSessionOptions['compression']
+):
+  | false
+  | undefined
+  | { strategy?: 'summarize' | 'truncate'; threshold?: number; keepRecent?: number } {
+  if (v === false || (typeof v === 'object' && v !== null && v.enabled === false)) {
+    return false;
+  }
+  if (v === undefined || v === true) {
+    return undefined;
+  }
+  const { enabled: _enabled, ...tuning } = v;
+  return tuning;
+}
+
 export class AgentSession {
   readonly sessionId: string;
   readonly workspacePath: string;
   readonly agentName: string;
   readonly model: string;
-
   private runner: EnhancedRunner;
   private state: AgentState;
   /** LLM provider — 默认 LLMClient（pi-ai），浏览器注入 FetchLlmProvider */
@@ -309,6 +352,15 @@ export class AgentSession {
     this.agentName = options.agentName;
     this.model = runner.getConfig().model;
     this.maxInputLength = options.limits?.maxInputLength;
+    // session-title 接线（R2P-232，对齐 Rust 2287cc1 的 set_naming_event_sink
+    // + Weak 闭包 sink）：命名中间件 Phase-2 LLM 改题成功（先落盘）后经晚
+    // 绑定槽通知本会话。帧走 cockpit 通道（广播 + 滚动历史），与 Rust 经
+    // 会话通道 emit（落史+序号+广播）同构——主轮 done 与标题 LLM 完成时序
+    // 不定，帧可能晚于 chat SSE 关闭才入史，这正是滚动历史存在的意义。
+    // 载荷只有 title（与 ACP 翻译层逐字段一致的最小契约形状）。
+    this.runner.setSessionTitleListener((title) => {
+      this.emitCockpitEvent({ event: 'session-title', data: { title } });
+    });
   }
 
   /**
@@ -381,8 +433,9 @@ export class AgentSession {
       a2ui: options.a2ui,
       skills: { ...options.skills, provider: skillProvider },
       search: options.search,
-      // API boolean: undefined = default enabled; false = disabled.
-      compression: options.compression === false ? false : undefined,
+      // API boolean→策略对象:R2P-239 起 compression 透传调优字段
+      // (strategy/threshold/keepRecent),不再塌缩成布尔。
+      compression: toRunnerCompression(options.compression),
       delegation: { subAgents: options.subAgents },
       crewId: options.crewId,
       limits: options.limits,
@@ -457,6 +510,9 @@ export class AgentSession {
       askHumanHandler,
       subAgents: options.subAgents,
       sandbox: options.sandbox,
+      // R2P-239：config.yaml 现读的压缩策略随 resume 注入（宿主提供的
+      // 优先于 meta 快照——Rust merge_opt_opt 同序）。
+      compression: toRunnerCompression(options.compression),
     });
 
     const session = new AgentSession(runner, state, bridge, {
@@ -816,8 +872,21 @@ export class AgentSession {
       const out = await truncateStateFile(statePath, keepTurns);
       if (!out.ok) return out;
       // 状态同步：截断态重载进内存（deserializeState 即 JSON.parse 的
-      // 直通形状，截空后的 state 依然是合法 AgentState）。
-      this.state = deserializeState(out.json);
+      // 直通形状，截空后的 state 依然是合法 AgentState）。重载前做最小
+      // 形状校验（context 必须是对象）：磁盘上 JSON 合法但形状畸形的
+      // state（手改/半损）不能毒化内存——不合则跳过重载保旧内存，对齐
+      // Rust load_state 的降级语义（下一轮整体覆盖写盘，畸形内存态会
+      // 被冲掉，但在此之前服务的是旧好态而非垃圾）。
+      try {
+        const parsed: unknown = JSON.parse(out.json);
+        const context = (parsed as { context?: unknown } | null)?.context;
+        if (typeof context !== 'object' || context === null) {
+          return { ok: true, keptTurns: out.keptTurns };
+        }
+        this.state = deserializeState(out.json);
+      } catch {
+        return { ok: true, keptTurns: out.keptTurns };
+      }
       return { ok: true, keptTurns: out.keptTurns };
     } finally {
       this._busy = false;

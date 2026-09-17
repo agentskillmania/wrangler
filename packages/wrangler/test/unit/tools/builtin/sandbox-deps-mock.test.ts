@@ -22,6 +22,12 @@ describe('SandboxToolDeps (mock sandbox)', () => {
     deps = new SandboxToolDeps(sandbox);
   });
 
+  // 工况标记（R2P-242）：sandbox 实现钉扎 env='sandbox'——shell/python/git
+  // 的沙箱文案(wsh 方言、MicroPython、libgit2 边界)据此启用。
+  it('carries the sandbox env marker for 工况-aware tool descriptions', () => {
+    expect(deps.env).toBe('sandbox');
+  });
+
   describe('resolvePath', () => {
     it('resolves relative path within / (workspace-as-root mapping)', () => {
       expect(deps.resolvePath('src/index.ts')).toBe('/src/index.ts');

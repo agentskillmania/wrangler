@@ -12,9 +12,20 @@ const GitSchema = z.object({
 });
 
 export function createGitTool(deps: ToolDeps): Tool<ZodTypeAny> {
+  // 工况-aware description (R2P-242, aligned with Rust e531684): the sandbox
+  // git is the libgit2 busybox component with a FIXED subcommand table —
+  // without the boundary spelled out the model writes `git merge` and gets a
+  // confusing error. The supported/unsupported lists mirror libgit2's fixed
+  // cli_cmds[] table (same busybox-wasm component as the Rust daemon's
+  // sandbox). Host or unknown environments keep the neutral text.
+  const description =
+    deps.env === 'sandbox'
+      ? 'Execute git commands in the workspace sandbox — libgit2-based git, NOT full git. Supported subcommands: add, blame, branch, cat-file, checkout, clone, commit, config, diff, fetch, hash-object, init, log, pull, push, remote, reset, show, stash, status, tag. NOT supported: merge, rebase, revert, cherry-pick, restore, switch, rm, mv, submodule, worktree; hooks never fire. Authenticated remotes are unreliable (no credential helpers).'
+      : 'Execute git commands in the workspace.';
+
   return {
     name: 'git',
-    description: 'Execute git commands in the workspace.',
+    description,
     parameters: GitSchema,
     async execute(args: z.infer<typeof GitSchema>) {
       // Parse the command string into argv via shell-quote, then run via

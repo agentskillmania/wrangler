@@ -36,13 +36,28 @@ describe('isJunkEntry', () => {
 });
 
 describe('isDocumentFile', () => {
-  it('documents/data files go to resources', () => {
-    expect(isDocumentFile('reference.md')).toBe(true);
-    expect(isDocumentFile('notes.markdown')).toBe(true);
-    expect(isDocumentFile('a/b/data.json')).toBe(true);
-    expect(isDocumentFile('conf.yaml')).toBe(true);
-    expect(isDocumentFile('table.csv')).toBe(true);
-    expect(isDocumentFile('diagram.svg')).toBe(true);
+  // DOC_EXTS 全表钉扎（17 项）：删任一扩展名（如 'pdf'）必须红——半表
+  // 钉扎时删表尾项的变异存活。
+  it.each([
+    'md',
+    'markdown',
+    'txt',
+    'json',
+    'yaml',
+    'yml',
+    'toml',
+    'csv',
+    'tsv',
+    'png',
+    'jpg',
+    'jpeg',
+    'gif',
+    'svg',
+    'webp',
+    'pdf',
+    'ico',
+  ])("'%s' files go to resources (full DOC_EXTS table pin)", (ext) => {
+    expect(isDocumentFile(`a/b/file.${ext}`)).toBe(true);
   });
 
   it('extension match is case-insensitive', () => {

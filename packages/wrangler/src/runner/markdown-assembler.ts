@@ -43,11 +43,13 @@ const STATUS_CHECK: Record<string, string> = {
  * deliberately NOT `localeCompare`.
  *
  * Same semantics as colts' internal `compareByCodeUnit` (not barrel-exported;
- * duplicated here one-to-one). The sub-agent catalog feeds the provider prefix
- * cache, and `localeCompare` collation is host/locale-dependent — two machines
- * could enumerate the same set differently and invalidate the cache wholesale.
- * Code-unit order is host-independent and matches Rust's byte ordering for the
- * ASCII slugs used as agent names. (R2P-101w, aligned with Rust 5e238bc.)
+ * duplicated here one-to-one). Once colts barrel-exports it, switch this
+ * replica back to importing the real export. The sub-agent catalog feeds the
+ * provider prefix cache, and `localeCompare` collation is host/locale-dependent
+ * — two machines could enumerate the same set differently and invalidate the
+ * cache wholesale. Code-unit order is host-independent and matches Rust's byte
+ * ordering for the ASCII slugs used as agent names. (R2P-101w, aligned with
+ * Rust 5e238bc.)
  */
 function compareByCodeUnit(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;

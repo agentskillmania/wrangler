@@ -40,6 +40,7 @@ function createMockRunner(
     delete eventHandlers[type];
   });
   const emit = (type: string, ...args: unknown[]) => eventHandlers[type]?.(...args);
+  const setSessionTitleListener = vi.fn();
   const runner = {
     run:
       overrides.run ??
@@ -58,11 +59,12 @@ function createMockRunner(
       }),
     on,
     off,
+    setSessionTitleListener,
     getToolInfo: overrides.getToolInfo ?? vi.fn().mockReturnValue([]),
     getSkillInfo: overrides.getSkillInfo ?? vi.fn().mockReturnValue([]),
     getConfig: overrides.getConfig ?? vi.fn().mockReturnValue({ model: 'test-model' }),
   };
-  return { runner, on, off, emit };
+  return { runner, on, off, emit, setSessionTitleListener };
 }
 
 /**
@@ -118,6 +120,7 @@ const { mockEnhancedRunnerCreate, mockEnhancedRunnerResume } = vi.hoisted(() => 
       run: vi.fn(),
       on: vi.fn(),
       off: vi.fn(),
+      setSessionTitleListener: vi.fn(),
       getToolInfo: vi.fn().mockReturnValue([]),
       getSkillInfo: vi.fn().mockReturnValue([]),
       getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
@@ -902,6 +905,46 @@ describe('AgentSession', () => {
     });
   });
 
+  describe('session-title wiring (R2P-232, aligned Rust 2287cc1)', () => {
+    it('late-binds the naming sink: a Phase-2 title upgrade lands on the cockpit stream + history with the minimal {title} payload', async () => {
+      const mock = mockRunnerWithEvents();
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+
+      // The constructor wired the naming middleware's late-bound slot into
+      // the runner (the TS analog of Rust's set_naming_event_sink).
+      expect(mock.setSessionTitleListener).toHaveBeenCalledTimes(1);
+      const sink = mock.setSessionTitleListener.mock.calls[0][0] as (t: string) => void;
+
+      // Observe via the cockpit channel — the frame rides broadcast + rolling
+      // history (the main-round done may close the chat SSE before the title
+      // LLM resolves; Rust polls the session history for the same reason).
+      const frames: SSEEvent[] = [];
+      session.addCockpitSender((e) => frames.push(e));
+
+      sink('修复登录问题');
+
+      const titleFrames = frames.filter((f) => f.event === 'session-title');
+      expect(titleFrames).toHaveLength(1);
+      // 最小契约形状：载荷只有 title 键（与 Rust events.rs 的
+      // session-title 帧及 ACP 翻译层逐字段一致）。
+      expect(titleFrames[0].data).toEqual({ title: '修复登录问题' });
+      expect(Object.keys(titleFrames[0].data as Record<string, unknown>)).toEqual(['title']);
+
+      // Late subscribers still see it via history replay.
+      const replayed: SSEEvent[] = [];
+      session.addCockpitSender((e) => replayed.push(e));
+      expect(replayed.some((f) => f.event === 'session-title')).toBe(true);
+    });
+  });
+
   describe('respondViaState (R2P-165② warm-state tier)', () => {
     /** State with two pending question interrupts (as colts persists them). */
     function seededState() {
@@ -1175,6 +1218,33 @@ describe('AgentSession', () => {
         expect(out).toEqual({ ok: true, keptTurns: 0 });
         const memCtx = session.getState().context as { messages: unknown[] };
         expect(memCtx.messages).toEqual([]);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    // 评审 P3⑨：磁盘上 JSON 合法但形状畸形的 state（手改/半损，context 非
+    // 对象）不能毒化内存——重载前最小形状校验,不合则跳过重载保旧内存,
+    // 对齐 Rust load_state 的降级语义（截断本身照常成功落盘）。
+    it('malformed on-disk context skips the memory reload and keeps the old in-memory state', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'truncate-warm-shape'));
+      const statePath = join(dir, 'state.json');
+      const good = twoTurnState();
+      await writeFile(statePath, JSON.stringify({ ...good, context: 'corrupted-not-an-object' }));
+      try {
+        // 会话创建时内存是好态；磁盘在会话存活期间被手改/半损成畸形
+        // context（JSON 合法、形状不合法）。
+        const session = await createWarmSession(good);
+
+        const out = await session.truncateTurns(statePath, 1);
+        expect(out).toEqual({ ok: true, keptTurns: 0 });
+
+        // 内存保旧:仍是创建时的好态,未被畸形磁盘态覆盖。
+        const memCtx = session.getState().context as { messages: Array<{ content: string }> };
+        expect(memCtx.messages.map((m) => m.content)).toEqual(['u1', 'a1', 'u2', 'a2']);
+        // 磁盘照常被截断流程改写(畸形 context 原样序列化回去)。
+        const disk = JSON.parse(await readFile(statePath, 'utf-8')) as { context: unknown };
+        expect(disk.context).toBe('corrupted-not-an-object');
       } finally {
         await rm(dir, { recursive: true, force: true });
       }

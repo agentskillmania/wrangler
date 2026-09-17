@@ -319,4 +319,11 @@ export interface ResumeOptions {
    * hosts resuming sandboxed sessions should always pass one.
    */
   sandbox?: SandboxConfig;
+  /**
+   * Host-provided compression policy (R2P-239, mirrors Rust 934d8ce's
+   * merge_opt_opt precedence: host options win over the meta snapshot, which
+   * carries `enabled` only — tuning is deliberately NOT persisted; the daemon
+   * re-reads config.yaml fresh on every resume).
+   */
+  compression?: CompressionConfig | false;
 }

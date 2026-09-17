@@ -35,11 +35,34 @@ import { writeSSE, truncateStateFile } from '../utils.js';
 
 /**
  * 归一 `config.compression` 的请求形状:统一对象 `{enabled}` 与旧式裸布尔
- * 都收(undefined = 请求未给,回落 config.yaml 默认)。与 Rust daemon 的
- * CompressionValue(untagged 双形状)同语义;strategy 不在请求级暴露。
+ * 都收(undefined = 请求未给)。与 Rust daemon 的 CompressionValue(untagged
+ * 双形状)同语义;strategy/threshold/keepRecent 不在请求级暴露——属
+ * config.yaml 的部署级配置(Rust 934d8ce 同款边界)。
  */
-function normalizeCompression(v: boolean | { enabled?: boolean } | undefined): boolean | undefined {
-  return typeof v === 'boolean' ? v : v?.enabled;
+function normalizeCompression(v: boolean | { enabled?: boolean } | undefined):
+  | {
+      enabled?: boolean;
+    }
+  | undefined {
+  return typeof v === 'boolean' ? { enabled: v } : v;
+}
+
+/**
+ * 请求级 `{enabled}` 与 config.yaml 调优字段(strategy/threshold/keepRecent)
+ * 的字段级合并(R2P-239,对齐 Rust 934d8ce 的 CompressionGroup 通路——
+ * 此前 TS 在这里塌缩成布尔,调优字段根本到不了 colts DefaultContextCompressor,
+ * 构造参数 threshold/strategy 白支持)。两边都未给、或合并后既无开关又无
+ * 调优字段 = undefined(回落 runner 默认:开启 + summarize)。
+ */
+function resolveCompression(
+  request: { enabled?: boolean } | undefined,
+  config: import('../types.js').RunnerConfig['compression']
+): AgentSessionOptions['compression'] {
+  if (!request && !config) return undefined;
+  const { enabled: _configEnabled, ...tuning } = config ?? {};
+  const enabled = request?.enabled ?? config?.enabled;
+  if (enabled === undefined && Object.keys(tuning).length === 0) return undefined;
+  return { ...tuning, enabled };
 }
 
 /**
@@ -198,7 +221,10 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const body: { messages: unknown[]; todoList?: unknown } = {
       messages: state?.context.messages ?? [],
     };
-    const todoList = (state?.context as { todoList?: unknown } | undefined)?.todoList;
+    // No cast: the wrangler-side colts-augmentation (imported via the
+    // @agentskillmania/wrangler root) already declares `todoList` on
+    // AgentContext — the hand cast duplicated it locally.
+    const todoList = state?.context.todoList;
     if (todoList !== undefined) body.todoList = todoList;
     return body;
   });
@@ -237,13 +263,12 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/api/chat/:sessionId/truncate', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
     const query = request.query as { sessionDir?: string };
-    const body = request.body as { keepTurns?: unknown };
+    // Optional chaining mirrors the sibling routes' `body.message?.trim()`
+    // boundary pattern: a bodyless POST is a client mistake → 400, not a
+    // TypeError dereferencing undefined → 500.
+    const keepTurns = (request.body as { keepTurns?: unknown } | undefined)?.keepTurns;
 
-    if (
-      typeof body.keepTurns !== 'number' ||
-      !Number.isInteger(body.keepTurns) ||
-      body.keepTurns < 0
-    ) {
+    if (typeof keepTurns !== 'number' || !Number.isInteger(keepTurns) || keepTurns < 0) {
       reply.code(400);
       return { error: 'keepTurns must be a non-negative integer' };
     }
@@ -282,12 +307,17 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
           'a run is in progress on this session; wait for it to finish or POST /stop before truncating'
         );
       }
-      const out = await agentSession.truncateTurns(statePath, body.keepTurns);
+      const out = await agentSession.truncateTurns(statePath, keepTurns);
       if (!out.ok) {
         reply.code(out.code);
         // 闩锁内的复检撞上并发轮（路由 busy 检查与 latch 之间被插队）
-        // 同样是 busy 分诊。
-        if (out.code === 409) return busyConflict(out.error);
+        // 同样是 busy 分诊。detail 用固定解释文案——out.error 本身就是
+        // 'Session is busy'，原样透传会让 detail 与 error 字段逐字重复。
+        if (out.code === 409) {
+          return busyConflict(
+            'a run started between the busy check and the truncate latch; wait for it to finish or POST /stop, then retry'
+          );
+        }
         return { error: out.error };
       }
       return { ok: true, kept: out.keptTurns };
@@ -302,7 +332,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       );
     }
     try {
-      const out = await truncateStateFile(statePath, body.keepTurns);
+      const out = await truncateStateFile(statePath, keepTurns);
       if (!out.ok) {
         reply.code(out.code);
         return { error: out.error };
@@ -558,7 +588,10 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       sandbox: withSandboxInstance(config.sandbox, body.config?.sandbox, workspacePath),
       a2ui: body.config?.a2ui ?? rc?.a2ui,
       search: searchConfig,
-      compression: normalizeCompression(body.config?.compression) ?? rc?.compression?.enabled,
+      compression: resolveCompression(
+        normalizeCompression(body.config?.compression),
+        rc?.compression
+      ),
       limits: body.config?.limits ?? rc?.limits,
     };
 
@@ -770,7 +803,10 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       commands: body.config?.commands ?? rc?.commands,
       a2ui: body.config?.a2ui ?? rc?.a2ui,
       search: searchConfig,
-      compression: normalizeCompression(body.config?.compression) ?? rc?.compression?.enabled,
+      compression: resolveCompression(
+        normalizeCompression(body.config?.compression),
+        rc?.compression
+      ),
       limits: body.config?.limits ?? rc?.limits,
     };
 
@@ -953,6 +989,9 @@ async function assembleResumeSession(
       sessionManager: deps.sessionManager,
       runtime: defaultNodeHostEnv,
       subAgents: resumeSubAgents,
+      // R2P-239：resume 现读 config.yaml 的压缩策略（调优字段不落 meta
+      // 快照，对齐 Rust 934d8ce 的 merge_opt_opt——宿主现读优先于快照）。
+      compression: resolveCompression(undefined, config.runner?.compression),
       // Node 专属：与 create 路径同款合并 + 实例构造（引擎 core 不捆绑 sandbox）。
       // override 取会话快照的 sandbox 开关（无快照值时默认 true，与 create 一致）
       sandbox: withSandboxInstance(

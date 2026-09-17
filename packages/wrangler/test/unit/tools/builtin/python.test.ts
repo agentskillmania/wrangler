@@ -165,4 +165,25 @@ describe('createPythonTool (unit, mocked deps)', () => {
       expect(args).toEqual(['/workspace/foo; rm -rf /workspace.py']);
     });
   });
+  // 工况化描述（R2P-242，对齐 Rust e531684）：沙箱 python 是 MicroPython,
+  // 非 CPython——模型按 CPython 写 numpy/pip 代码必失败,方言边界须写进文案。
+  describe('description 工况化 (R2P-242)', () => {
+    it('sandbox 工况: documents MicroPython ≠ CPython (no pip / C extensions)', () => {
+      const deps = { ...makeMockDeps(), env: 'sandbox' as const };
+      const tool = createPythonTool(deps);
+      expect(tool.description).toContain('MicroPython');
+      expect(tool.description).toContain('NOT CPython');
+      expect(tool.description).toContain('numpy');
+      // 双参数形状指引保留。
+      expect(tool.description).toContain('`code`');
+      expect(tool.description).toContain('`file`');
+    });
+
+    it('host/neutral 工况: keeps the neutral text', () => {
+      const tool = createPythonTool(makeMockDeps());
+      expect(tool.description).toBe(
+        'Execute Python code. Provide either `code` (inline) or `file` (script path).'
+      );
+    });
+  });
 });

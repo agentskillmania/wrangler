@@ -6,6 +6,7 @@ import { SessionStore } from './session-store.js';
 import type { HostEnv } from '../host-env/index.js';
 import { createSessionMiddleware } from '../middleware/session-middleware.js';
 import { createSessionNamingMiddleware } from '../middleware/session-naming-middleware.js';
+import type { SessionTitleSlot } from '../middleware/session-naming-middleware.js';
 import type { RunnerConfigSnapshot, SessionSource } from '../types.js';
 
 /**
@@ -35,6 +36,13 @@ export function createSessionSupport(options: {
 }): {
   middlewares: AgentMiddleware[];
   store: SessionStore;
+  /**
+   * Late-bound session-title notification slot (R2P-232, aligned Rust
+   * 2287cc1). The host binds a sink here after the runner is constructed —
+   * the naming middleware fires it after a Phase-2 LLM title upgrade lands
+   * on disk. Absent sink = silent (title still persists).
+   */
+  titleEventSlot: SessionTitleSlot;
 } {
   const { runtime } = options;
   // Dir-bound mode: session lives directly in the given directory.
@@ -47,6 +55,7 @@ export function createSessionSupport(options: {
         runtime
       );
 
+  const titleEventSlot: SessionTitleSlot = {};
   const sessionMiddleware = createSessionMiddleware(store, {
     runnerConfigSnapshot: options.runnerConfigSnapshot,
     source: options.source,
@@ -55,7 +64,8 @@ export function createSessionSupport(options: {
     store,
     llmClient: options.llmClient,
     model: options.model,
+    titleEventSlot,
   });
 
-  return { middlewares: [sessionMiddleware, namingMiddleware], store };
+  return { middlewares: [sessionMiddleware, namingMiddleware], store, titleEventSlot };
 }

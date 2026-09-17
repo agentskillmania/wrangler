@@ -11,6 +11,7 @@
 import type { LLMQuickInit, LLMProviderEntry } from '@agentskillmania/colts';
 import { LLMClient } from '@agentskillmania/llm-client';
 import type { LLMResponse } from '@agentskillmania/llm-client';
+import { resolveDefaultModel } from '@agentskillmania/wrangler';
 
 import type { EvalLlmConfig } from '../config.js';
 import type { Evaluator, EvalTrace, EvaluatorSpec, EvalResult } from '../types.js';
@@ -41,7 +42,12 @@ export class LlmJudgeEvaluator implements Evaluator {
       throw new Error('LlmJudgeEvaluator requires either config or llm option');
     }
     this.client = createClientFromProviders(llm.providers);
-    this.model = options.model ?? llm.providers[0]?.models?.[0]?.modelId ?? 'gpt-4o';
+    // Same defect form as R2P-231: providers[0].models[0] ignores which
+    // provider actually HAS a key — a keyless head provider (env injection /
+    // built-in placeholder) would steal the default slot and every judge call
+    // without an explicit model would 401. resolveDefaultModel skips keyless
+    // providers (aligned with Rust c90cbd9).
+    this.model = options.model ?? resolveDefaultModel(llm.providers) ?? 'gpt-4o';
   }
 
   async evaluate(trace: EvalTrace, spec: EvaluatorSpec): Promise<EvalResult> {

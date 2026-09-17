@@ -146,6 +146,12 @@ describe('HostToolDeps', () => {
     await rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
+  // 工况标记（R2P-242）：两个内置实现各自钉扎 env——工具描述据此分叉,
+  // mock/浏览器 deps 不设 env 时走中性文案。
+  it('carries the host env marker for 工况-aware tool descriptions', () => {
+    expect(deps.env).toBe('host');
+  });
+
   describe('resolvePath', () => {
     it('should resolve relative path within workspace', () => {
       const result = deps.resolvePath('src/index.ts');

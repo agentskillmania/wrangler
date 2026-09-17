@@ -173,7 +173,7 @@ describe('createSkillHandler', () => {
           description: 'Review code',
           source: '/skills/code-review',
           resources: ['a.md', 'b.json'],
-          scripts: ['run.js'],
+          scripts: ['run.js', 'helper.py'],
         }),
         loadInstructions: vi.fn().mockResolvedValue('Review instructions body.'),
       });
@@ -187,8 +187,10 @@ describe('createSkillHandler', () => {
       const toolMsg = result.state!.context.messages.find(
         (m) => m.role === 'tool' && m.toolName === 'load_skill'
       );
+      // 两侧各 ≥2 文件：单元素 join 对分隔符变异不敏感，精确字节断言
+      // 钉不住 handler 侧的 join 分隔符。
       expect(toolMsg!.content).toBe(
-        `Review instructions body.${BUNDLED_SUFFIX}resources: a.md, b.json\nscripts: run.js`
+        `Review instructions body.${BUNDLED_SUFFIX}resources: a.md, b.json\nscripts: run.js, helper.py`
       );
     });
 
@@ -233,6 +235,10 @@ describe('createSkillHandler', () => {
         '---\nname: demo\ndescription: Demo skill\n---\n\nUse the references.\n'
       );
       await writeFile(join(skillDir, 'reference', 'catalog.md'), 'catalog');
+      // 两侧各 ≥2 文件：单元素 join 对分隔符变异不敏感（', ' 改成任意
+      // 分隔符输出不变），字节等价断言就钉不住 colts/handler 两侧的
+      // join 语义了。
+      await writeFile(join(skillDir, 'reference', 'notes.json'), 'notes');
       await writeFile(join(skillDir, 'scripts', 'run.js'), 'code');
       await writeFile(join(skillDir, 'scripts', 'helper.py'), 'code');
     });
@@ -303,8 +309,11 @@ describe('createSkillHandler', () => {
       const viaTool = await runColtsLoadSkillPath(makeRunnerProvider());
 
       expect(viaCommand).toBe(viaTool);
-      // Both paths deliver the recursive, partitioned inventory (sorted).
-      expect(viaCommand).toContain(`${BUNDLED_SUFFIX}resources: reference/catalog.md\n`);
+      // Both paths deliver the recursive, partitioned inventory (sorted), with
+      // ≥2 entries per side so the ', ' join separator itself is pinned.
+      expect(viaCommand).toContain(
+        `${BUNDLED_SUFFIX}resources: reference/catalog.md, reference/notes.json\n`
+      );
       expect(viaCommand).toContain('scripts: scripts/helper.py, scripts/run.js');
     });
   });

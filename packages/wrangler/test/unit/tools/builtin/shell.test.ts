@@ -94,6 +94,43 @@ describe('createShellTool', () => {
       expect(tool.description).not.toContain('Current shell:');
       expect(tool.description).toBe('Execute shell commands in the workspace.');
     });
+
+    // 工况化描述（R2P-242，对齐 Rust e0517a8）：裸机必须显式否认沙箱——
+    // 否则模型会把"workspace"措辞读成隔离环境,在真机上按一次性环境行事。
+    it('host 工况: explicitly disclaims sandbox (REAL machine)', () => {
+      const tool = createShellTool(deps); // HostToolDeps → env 'host'
+      expect(tool.description).toContain('no sandbox');
+      expect(tool.description).toContain('REAL machine');
+      // 无状态语义:cwd 重置 + env 不留 + 串联指引。
+      expect(tool.description).toContain('do not persist');
+      expect(tool.description).toContain('&&');
+    });
+
+    // 工况化描述（R2P-242，对齐 Rust be7a1b0）：沙箱是 wsh/busybox,方言
+    // 边界(单引号规则、无 2>&1、缺失命令)必须写进文案——中性文案会让
+    // 模型按 bash 语义写命令然后撞 argv bug。
+    it('sandbox 工况: documents wsh dialect + busybox command set', () => {
+      const sandboxDeps = createMockToolDeps({ env: 'sandbox' });
+      const tool = createShellTool(sandboxDeps);
+      expect(tool.description).toContain('wsh');
+      expect(tool.description).toContain('NOT available');
+      expect(tool.description).toContain('single quotes');
+      expect(tool.description).toContain('2>&1');
+      expect(tool.description).toContain('mounted at /');
+      // 沙箱文案不得声称宿主真机语义,也不得断言网络开关(读不到配置,
+      // 错误声称比不声称更糟)。
+      expect(tool.description).not.toContain('REAL machine');
+      expect(tool.description).not.toContain('network is');
+    });
+
+    // 工况判据是显式 env 标记,不是 shell 缺席——mock/浏览器 deps 不设
+    // env 时必须拿到中性文案(不是沙箱文案)。
+    it('deps without env and without shell keeps the neutral text', () => {
+      const tool = createShellTool(createMockToolDeps());
+      expect(tool.description).toBe('Execute shell commands in the workspace.');
+      expect(tool.description).not.toContain('wsh');
+      expect(tool.description).not.toContain('REAL machine');
+    });
   });
 
   it('should propagate exec errors', async () => {

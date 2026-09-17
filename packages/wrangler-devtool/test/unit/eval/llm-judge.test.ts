@@ -149,4 +149,27 @@ describe('LlmJudgeEvaluator', () => {
     expect(result.passed).toBe(false);
     expect(result.message).toContain('non-llm-judge');
   });
+
+  // 评审 P3⑤（R2P-231 同缺陷形态）：providers[0].models[0] 直取会无视
+  // 「哪个 provider 真有 key」——无 key 的头部 provider（env 注入/内置占位）
+  // 会抢走默认槽位,未显式给 model 的 judge 调用全部 401。默认模型必须
+  // 落在有 key 的 provider 上。
+  it('picks the default model from the first KEYED provider, not providers[0]', async () => {
+    mockJudgeResponse(5, 'ok');
+    const keyed = new LlmJudgeEvaluator({
+      llm: {
+        providers: [
+          // 无 key 头部 provider：老实现会错选它的 headless-model。
+          { name: 'placeholder', models: [{ modelId: 'keyless-head-model' }] },
+          { name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4o' }] },
+        ],
+      },
+    });
+
+    const result = await keyed.evaluate(makeTrace(), judgeSpec());
+    expect(result.passed).toBe(true);
+    const callArg = mockCall.mock.calls[0][0] as { model?: string };
+    expect(callArg.model).toBe('gpt-4o');
+    expect(callArg.model).not.toBe('keyless-head-model');
+  });
 });

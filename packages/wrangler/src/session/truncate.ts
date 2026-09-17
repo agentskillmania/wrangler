@@ -16,11 +16,14 @@
  * 累计账是计费语义，永不因 UI 操作清零。
  *
  * `context.compression`（含 anchor）对齐 Rust 的处理：**完全不触碰**
- * （Rust truncate 既不删整个 compression 键、也不钳制 anchor）。消费侧
- * 天然安全：message-assembler 以 `for (i = anchor; i < messages.length;
- * i++)` 循环取活区，越界 anchor 只会让本轮发给 LLM 的活区为空、摘要
- * 照发；compressor 的 `Math.max(existingAnchor, …)` 也不会因 anchor 越
- * 界而崩溃，下一次压缩自行重算边界。
+ * （Rust truncate 既不删整个 compression 键、也不钳制 anchor）——截断后
+ * anchor 可能悬空（越过截短后的 messages 尾部）。消费侧天然安全：
+ * message-assembler 以 `for (i = anchor; i < messages.length; i++)`
+ * 循环取活区，悬空 anchor 在截断后新增的轮次期间（messages 尚未重生长
+ * 到 anchor 之前）只让本轮发给 LLM 的活区为空、摘要照发；新消息增长
+ * 越过 anchor 后活区自然恢复（最终自愈）。compressor 的
+ * `Math.max(existingAnchor, …)` 也不会因 anchor 越界而崩溃，下一次压缩
+ * 自行重算边界。
  */
 
 /** 截断产物：改写后的 state JSON 文本 + 实际保留的轮数（钳制后）。 */

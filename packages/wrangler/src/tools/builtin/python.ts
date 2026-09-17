@@ -10,9 +10,18 @@ const PythonSchema = z.object({
 });
 
 export function createPythonTool(deps: ToolDeps): Tool<ZodTypeAny> {
+  // 工况-aware description (R2P-242, aligned with Rust e531684): the sandbox
+  // python is MicroPython (busybox-wasm component) — a CPython-assuming model
+  // would write numpy/pip code and then be confused by the errors. Host or
+  // unknown environments keep the neutral text.
+  const description =
+    deps.env === 'sandbox'
+      ? 'Execute Python code in the workspace sandbox via MicroPython — NOT CPython: a Python 3 language subset with a pure-Python standard library subset (json, os, sys, re, math and similar); NO pip, venv, or C-extension packages (numpy/pandas etc. are unavailable). Multi-line inline code works. Provide either `code` (inline) or `file` (script path).'
+      : 'Execute Python code. Provide either `code` (inline) or `file` (script path).';
+
   return {
     name: 'python',
-    description: 'Execute Python code. Provide either `code` (inline) or `file` (script path).',
+    description,
     parameters: PythonSchema,
     async execute(args: z.infer<typeof PythonSchema>) {
       if (!args.code && !args.file) {

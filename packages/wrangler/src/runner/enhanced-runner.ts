@@ -38,6 +38,7 @@ import { createSkillsHandler } from '../command/handlers/skills.js';
 import { CommandRegistry } from '../command/registry.js';
 import type { HostEnv } from '../host-env/index.js';
 import { resolveDefaultModel } from '../llm/resolve-model.js';
+import type { SessionTitleSlot } from '../middleware/session-naming-middleware.js';
 import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
 import { createSessionSupport } from '../session/support.js';
@@ -125,23 +126,45 @@ export class EnhancedRunner {
   private readonly resolvedConfig: ResolvedRunnerConfig;
   /** Tool metadata map: tool name → enriched info with type and enabled state. */
   private readonly toolMetadataMap: Map<string, ToolMetadata>;
-  /** Skill metadata list with source paths. */
+  /** Skill metadata list: source paths. */
   private readonly skillMetadataList: SkillMetadata[];
   /** Registered slash command handlers (populated at create() when commands enabled). */
   private commandRegistry: CommandRegistry | null = null;
+  /**
+   * Session-title notification slot (R2P-232, aligned Rust 2287cc1's
+   * NamingEventSlot). Undefined when sessions are disabled — the late-binding
+   * setter is then a silent no-op.
+   */
+  private readonly titleEventSlot?: SessionTitleSlot;
 
   private constructor(
     runner: AgentRunner,
     config: ResolvedRunnerConfig,
     toolMetadataMap: Map<string, ToolMetadata>,
     skillMetadataList: SkillMetadata[],
-    commandRegistry: CommandRegistry | null = null
+    commandRegistry: CommandRegistry | null = null,
+    titleEventSlot?: SessionTitleSlot
   ) {
     this.innerRunner = runner;
     this.resolvedConfig = config;
     this.toolMetadataMap = toolMetadataMap;
     this.commandRegistry = commandRegistry;
     this.skillMetadataList = skillMetadataList;
+    this.titleEventSlot = titleEventSlot;
+  }
+
+  /**
+   * Late-bind the `session-title` notification sink (R2P-232, the TS analog
+   * of Rust 2287cc1's `set_naming_event_sink`): the host (daemon session
+   * materialization) injects a listener AFTER the runner is constructed; the
+   * naming middleware fires it once a Phase-2 LLM title upgrade has landed
+   * on disk. Not injected (or sessions disabled) = silent — the title still
+   * persists, nobody is notified.
+   */
+  setSessionTitleListener(sink: (title: string) => void): void {
+    if (this.titleEventSlot) {
+      this.titleEventSlot.sink = sink;
+    }
   }
 
   /**
@@ -533,6 +556,12 @@ export class EnhancedRunner {
           source: options.source,
         })
       : { middlewares: [{ name: 'session' }] };
+    // The naming-title slot exists only when sessions are enabled (mirror of
+    // Rust 2287cc1's MiddlewareChain.naming_event_slot: None when disabled).
+    // Narrow on the support object itself — `sessionEnabled` is an independent
+    // variable, so a ternary on it cannot narrow the union type.
+    const titleEventSlot =
+      'titleEventSlot' in sessionSupport ? sessionSupport.titleEventSlot : undefined;
 
     // Build skill metadata from the injected provider (if any).
     const skillMeta: SkillMetadata[] = skillProvider
@@ -628,7 +657,14 @@ export class EnhancedRunner {
       contextWindow,
     };
 
-    return new EnhancedRunner(runner, resolvedConfig, toolMeta, skillMeta, registeredCommands);
+    return new EnhancedRunner(
+      runner,
+      resolvedConfig,
+      toolMeta,
+      skillMeta,
+      registeredCommands,
+      titleEventSlot
+    );
   }
 
   /**
@@ -672,7 +708,10 @@ export class EnhancedRunner {
         promptLevel: rc.thinking?.promptLevel,
       },
       limits: rc.limits,
-      compression: rc.compression?.enabled === false ? false : undefined,
+      // R2P-239（对齐 Rust 934d8ce 的 resume merge）：宿主(daemon)现读的
+      // 压缩策略优先;缺省回落 meta 快照的 enabled 开关(调优字段不落
+      // 快照——每次 resume 从 config.yaml 现读)。
+      compression: options.compression ?? (rc.compression?.enabled === false ? false : undefined),
       search: rc.search as SearchConfig | undefined,
       workspacePath: meta.workspacePath,
       skills: { dirs: rc.skillDirs },

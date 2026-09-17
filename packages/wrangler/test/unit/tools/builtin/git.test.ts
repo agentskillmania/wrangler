@@ -154,4 +154,22 @@ describe('createGitTool (unit, mocked deps)', () => {
       expect(args).toEqual(['log', '`whoami`']);
     });
   });
+  // 工况化描述（R2P-242，对齐 Rust e531684）：沙箱 git 是 libgit2 组件,
+  // 子命令表固定 23 个且无 merge 家族——边界不写进文案,模型会写出
+  // `git merge` 然后收到困惑报错。
+  describe('description 工况化 (R2P-242)', () => {
+    it('sandbox 工况: documents the libgit2 subcommand boundary', () => {
+      const deps = { ...makeMockDeps(), env: 'sandbox' as const };
+      const tool = createGitTool(deps);
+      expect(tool.description).toContain('libgit2');
+      expect(tool.description).toContain('NOT full git');
+      expect(tool.description).toContain('NOT supported: merge');
+      expect(tool.description).toContain('hooks never fire');
+    });
+
+    it('host/neutral 工况: keeps the neutral text', () => {
+      const tool = createGitTool(makeMockDeps());
+      expect(tool.description).toBe('Execute git commands in the workspace.');
+    });
+  });
 });

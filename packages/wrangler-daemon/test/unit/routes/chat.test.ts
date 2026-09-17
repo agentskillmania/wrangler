@@ -537,6 +537,36 @@ describe('Chat API', () => {
       expect((await res404.json()).error).toBe('Session state not found');
     });
 
+    // 闩锁内复检撞上并发轮:out.error 就是 'Session is busy',detail 若原样
+    // 透传则与 error 逐字重复——detail 必须是固定解释文案(评审 P3⑧)。
+    it('latch-recheck 409 keeps triage shape without duplicating error into detail', async () => {
+      await seedTurns();
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      sm.setAgentSession('existing-session', mockSession as never);
+      mockTruncateTurns.mockResolvedValue({ ok: false, code: 409, error: 'Session is busy' });
+
+      const res = await postTruncate(2);
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error).toBe('Session is busy');
+      expect(body.reason).toBe('busy');
+      expect(typeof body.detail).toBe('string');
+      expect(body.detail).not.toBe(body.error);
+      expect(body.detail).not.toBe('');
+    });
+
+    // 无 body 的 POST 是客户端错误:可选链守卫后走 400 分支,而不是
+    // 解引用 undefined 的 TypeError → 500(评审 P3⑦,兄弟路由
+    // body.message?.trim() 同款边界)。
+    it('bodyless POST is 400 (not a 500 from dereferencing undefined body)', async () => {
+      await seedTurns();
+      const res = await fetch(`${getUrl()}/api/chat/existing-session/truncate`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('keepTurns must be a non-negative integer');
+    });
+
     it('cold session under assembly reservation → 409 with starting triage fields', async () => {
       await seedTurns();
       const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
@@ -1029,13 +1059,14 @@ describe('Chat API', () => {
       expect(msgOpts.thinkingEnabled).toBe(true);
     });
 
-    it('normalizes compression to boolean for both request shapes', async () => {
+    it('normalizes compression for both request shapes (R2P-239 policy object, not collapsed boolean)', async () => {
       mockAgentSessionCreate.mockResolvedValue(mockSession);
       mockHandleMessage.mockImplementation(async function* () {
         yield { event: 'done', data: {} };
       });
 
-      // 统一对象形状 {enabled: false} → compression: false
+      // 统一对象形状 {enabled: false} → policy 对象 {enabled: false}
+      // (AgentSession.create 再译成 runner 的 false;不再在路由层塌缩布尔)
       let res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1048,10 +1079,10 @@ describe('Chat API', () => {
       expect(res.status).toBe(200);
       expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
       let callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
-      expect(callArg.compression).toBe(false);
+      expect(callArg.compression).toEqual({ enabled: false });
 
       mockAgentSessionCreate.mockClear();
-      // 旧式裸布尔 true → compression: true
+      // 旧式裸布尔 true → policy 对象 {enabled: true}
       res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1064,10 +1095,10 @@ describe('Chat API', () => {
       expect(res.status).toBe(200);
       expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
       callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
-      expect(callArg.compression).toBe(true);
+      expect(callArg.compression).toEqual({ enabled: true });
 
       mockAgentSessionCreate.mockClear();
-      // 空对象 {} = enabled 未给 → 回落 config.yaml(undefined)
+      // 空对象 {} = enabled 未给且无 config.yaml 调优 → 未配置(undefined)
       res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1080,6 +1111,81 @@ describe('Chat API', () => {
       expect(res.status).toBe(200);
       callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
       expect(callArg.compression).toBeUndefined();
+    });
+
+    it('passes config.yaml compression tuning through to the session (R2P-239, aligned Rust 934d8ce)', async () => {
+      // 自带 config.yaml 的独立 app:runner.compression 带 strategy/threshold/
+      // keepRecent(请求体只暴露 enabled,调优字段是部署级)。
+      const cfgDir = await mkdtemp(join(tmpdir(), 'daemon-chat-cmp-'));
+      const configPath = join(cfgDir, 'config.yaml');
+      await writeFile(
+        configPath,
+        `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      baseUrl: 'https://api.example.com'\n      models:\n        - modelId: test-model\nserver:\n  port: 3100\n  host: localhost\nrunner:\n  compression:\n    enabled: true\n    strategy: truncate\n    threshold: 60\n    keepRecent: 5\n`
+      );
+      const configManager = new ConfigManager(configPath);
+      await configManager.init();
+      const agentsDir = join(cfgDir, 'agents');
+      const resourceManager = new ResourceManager(
+        agentsDir,
+        join(cfgDir, 'skills'),
+        join(cfgDir, 'crews')
+      );
+      await resourceManager.init();
+      await resourceManager.createAgent({ name: 'test-agent', instructions: 'test instructions' });
+      const cfgSessionManager = new SessionManager(join(cfgDir, 'sessions'));
+      await cfgSessionManager.init();
+      const app = Fastify();
+      app.decorate('configManager', configManager);
+      app.decorate('resourceManager', resourceManager);
+      app.decorate('sessionManager', cfgSessionManager);
+      await app.register(chatRoutes);
+      await app.listen({ port: 0, host: '127.0.0.1' });
+      const appUrl = `http://127.0.0.1:${(app.addresses()[0] as { port: number }).port}`;
+
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      try {
+        // ① 请求未给 compression → config.yaml 调优字段整体透传。
+        let res = await fetch(`${appUrl}/api/agents/test-agent/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
+        });
+        expect(res.status).toBe(200);
+        let callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
+        expect(callArg.compression).toEqual({
+          enabled: true,
+          strategy: 'truncate',
+          threshold: 60,
+          keepRecent: 5,
+        });
+
+        // ② 请求级 enabled 覆盖开关,调优字段仍来自 config.yaml(字段级合并)。
+        mockAgentSessionCreate.mockClear();
+        res = await fetch(`${appUrl}/api/agents/test-agent/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: 'hello',
+            workspacePath: '/tmp/test-ws',
+            config: { compression: { enabled: false } },
+          }),
+        });
+        expect(res.status).toBe(200);
+        callArg = mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
+        expect(callArg.compression).toEqual({
+          enabled: false,
+          strategy: 'truncate',
+          threshold: 60,
+          keepRecent: 5,
+        });
+      } finally {
+        await app.close();
+        await rm(cfgDir, { recursive: true, force: true });
+      }
     });
 
     it('inline mcpServers bypass mcpConfigPaths (replacement semantics)', async () => {

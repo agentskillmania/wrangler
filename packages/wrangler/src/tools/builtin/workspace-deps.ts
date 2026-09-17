@@ -33,6 +33,18 @@ export interface ShellInfo {
 }
 
 /**
+ * Execution-environment discriminator for 工况-aware tool descriptions
+ * (R2P-242, the TS analog of Rust be7a1b0/e531684's ToolEnv profiles).
+ *
+ * `HostToolDeps` sets `'host'` and `SandboxToolDeps` sets `'sandbox'`; other
+ * implementors (test mocks, a future browser deps) may omit it — tool
+ * descriptions then fall back to the environment-neutral text, the same
+ * behavior they get today. Descriptions must never *infer* the environment
+ * from `shell` presence: a mock deps without `shell` is NOT the WASM sandbox.
+ */
+export type ToolDepsEnv = 'host' | 'sandbox';
+
+/**
  * 极简 POSIX 路径拼接 + 规范化（替代 path.resolve 的浏览器场景）。
  * 以 '/' 开头的部分会重置累积结果（与 path.resolve 语义一致）。
  */
@@ -82,6 +94,12 @@ export interface WorkspaceToolDeps {
 export interface ToolDeps {
   /** Root directory of the workspace */
   readonly workspaceRoot: string;
+
+  /**
+   * Execution environment marker for 工况-aware tool descriptions
+   * (R2P-242). Set by the two built-in implementors; omitted by mocks.
+   */
+  readonly env?: ToolDepsEnv;
 
   /** Detected shell information (only available in host mode) */
   readonly shell?: ShellInfo;
@@ -144,6 +162,8 @@ export class HostToolDeps implements ToolDeps {
   readonly workspaceRoot: string;
   readonly maxOutputSize: number;
   readonly shell: ShellInfo;
+  /** 工况 marker: host (real machine) — drives e0517a8-style descriptions. */
+  readonly env: ToolDepsEnv = 'host';
   private readonly defaultTimeout: number;
 
   constructor(
@@ -292,6 +312,8 @@ export class HostToolDeps implements ToolDeps {
 export class SandboxToolDeps implements ToolDeps {
   readonly workspaceRoot = '/';
   readonly maxOutputSize: number;
+  /** 工况 marker: WASM busybox/wsh sandbox — drives be7a1b0-style descriptions. */
+  readonly env: ToolDepsEnv = 'sandbox';
 
   private readonly sandbox: Sandbox;
 

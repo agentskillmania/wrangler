@@ -6,6 +6,19 @@ import { extractTitle, generateTitlePrompt } from '../session/naming.js';
 import type { SessionStore } from '../session/session-store.js';
 
 /**
+ * Late-bound sink slot for `session-title` notifications — the TS analog of
+ * Rust 2287cc1's `NamingEventSlot` (an RwLock<Option<EventSink>>).
+ *
+ * Empty slot (no sink) = no session listener: the upgrade still persists to
+ * meta.yaml, it just does not notify (devtool / bare-harness default). The
+ * host (daemon session materialization) binds the sink AFTER the runner is
+ * constructed — hence a mutable holder instead of a callback dep.
+ */
+export interface SessionTitleSlot {
+  sink?: (title: string) => void;
+}
+
+/**
  * Dependencies for session naming middleware.
  * `llmClient` is optional — when provided, Phase 2 LLM title upgrade is enabled.
  */
@@ -15,6 +28,8 @@ export interface SessionNamingDeps {
   llmClient?: ILLMProvider;
   /** Model to use for Phase 2 title generation. Required when llmClient is provided. */
   model?: string;
+  /** Late-bound session-title notification slot (R2P-232, aligned Rust 2287cc1). */
+  titleEventSlot?: SessionTitleSlot;
 }
 
 /**
@@ -29,7 +44,7 @@ export interface SessionNamingDeps {
  * - Phase 2: only runs when titleSource === 'auto' (skips 'generated' or 'manual')
  */
 export function createSessionNamingMiddleware(deps: SessionNamingDeps): AgentMiddleware {
-  const { store, llmClient, model: namingModel } = deps;
+  const { store, llmClient, model: namingModel, titleEventSlot } = deps;
 
   // Dir-bound stores don't accept a sessionId — pass undefined instead
   // (mirrors session-middleware's resolveSid).
@@ -87,10 +102,16 @@ export function createSessionNamingMiddleware(deps: SessionNamingDeps): AgentMid
 
                 const llmTitle = res.content?.trim();
                 if (llmTitle) {
+                  const title = llmTitle.replace(/^["']|["']$/g, '');
                   await store.updateMeta(capturedSessionId, {
-                    title: llmTitle.replace(/^["']|["']$/g, ''),
+                    title,
                     titleSource: 'generated',
                   });
+                  // 先落盘后通知（R2P-232，对齐 Rust 2287cc1）：事件只在
+                  // "标题已改"后发出；载荷只有 title —— 与 ACP 翻译层
+                  // (SessionInfoUpdate.title)逐字段一致的最小契约形状。
+                  // 槽空（会话未物化/devtool）则静默——没有听众不喊。
+                  titleEventSlot?.sink?.(title);
                 }
               }
             }

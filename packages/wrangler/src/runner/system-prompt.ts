@@ -20,8 +20,12 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
  *
  * Format (byte-aligned with Rust `build_time_line`):
  * ```
- * Wednesday, 13/05/2026, 10:06 (+08:00)
+ * Wednesday, 05/13/2026, 10:06 (+08:00)
  * ```
+ * MM/DD/YYYY (month first) — both this and Rust's `build_time_line` format
+ * `{:02}/{:02}` as month/day. Rust's own doc example historically showed the
+ * DD/MM direction (13/05/2026), a self-contradiction inherited by the TS
+ * port's JSDoc; this example states the actual emitted direction.
  *
  * The timezone is the numeric UTC offset (never the IANA name): the offset is
  * what the Rust reference emits and it keeps this line host-stable in shape.

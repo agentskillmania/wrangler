@@ -23,7 +23,8 @@ describe('buildTimeLine', () => {
 
     const result = buildTimeLine();
 
-    // 形状：`Wednesday, 13/05/2026, 10:06 (+08:00)` —— 星期, DD/MM/YYYY,
+    // 形状：`Wednesday, 05/13/2026, 10:06 (+08:00)` —— 星期, MM/DD/YYYY
+    // （月在前，与 Rust build_time_line 的 {:02}/{:02} 逐字节对齐）,
     // HH:MM, 数字时区偏移（无 IANA 名、无 --- 界符——那是旧头部形态）。
     expect(result).toMatch(/^[A-Z][a-z]+, \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2} \([+-]\d{2}:\d{2}\)$/);
     expect(result).toBe(expectedLine(new Date('2026-05-13T10:06:00Z')));

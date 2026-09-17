@@ -17,7 +17,10 @@ export type { TruncatedState, TruncateResult } from './session/truncate.js';
 
 // Middleware (advanced usage)
 export { createSessionMiddleware } from './middleware/session-middleware.js';
-export type { SessionNamingDeps } from './middleware/session-naming-middleware.js';
+export type {
+  SessionNamingDeps,
+  SessionTitleSlot,
+} from './middleware/session-naming-middleware.js';
 
 // Runner (Layer 2)
 export { EnhancedRunner, buildTimeLine } from './runner/index.js';

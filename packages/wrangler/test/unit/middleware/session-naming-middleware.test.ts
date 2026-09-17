@@ -313,4 +313,111 @@ describe('createSessionNamingMiddleware', () => {
       expect(mockLLM.call).not.toHaveBeenCalled();
     });
   });
+
+  describe('Phase 2 — session-title notification slot (R2P-232, aligned Rust 2287cc1)', () => {
+    /** Drive afterStep with a terminal done result on a seeded auto-titled state. */
+    async function runDonePhase(mw: AgentMiddleware, stateId: string) {
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      // Pin the id the test seeded (createAgentState mints a fresh one).
+      state = { ...state, id: stateId };
+      state = addUserMessage(state, 'Write hello world');
+      state = addAssistantMessage(state, 'Here is the program');
+      const stepResult: StepResult = {
+        type: 'done',
+        answer: 'Here is the program',
+        tokens: { input: 100, output: 50 },
+      };
+      await mw.afterStep!({
+        state,
+        result: stepResult,
+        stepNumber: 0,
+        runnerOptions: mockRunnerOptions,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    it('notifies the late-bound sink AFTER the title lands on disk (先落盘后通知)', async () => {
+      const mockLLM = createMockLLM('"Generated Title"');
+      const notified: Array<{ title: string; persistedTitleAtNotify: string | undefined }> = [];
+      const state0 = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      const titleEventSlot: { sink?: (title: string) => void } = {
+        sink: (title) => {
+          // Read the meta at notification time — it must ALREADY carry the
+          // upgraded title (the event is only sent once the title "has
+          // changed" on disk).
+          void store.getMeta(state0.id).then((meta) => {
+            notified.push({ title, persistedTitleAtNotify: meta?.title });
+          });
+        },
+      };
+      const mw = createSessionNamingMiddleware({
+        store,
+        llmClient: mockLLM,
+        model: 'GLM-5.1',
+        titleEventSlot,
+      });
+
+      await store.createWithId(state0.id, 'test');
+      await store.updateMeta(state0.id, { title: 'Write hello world', titleSource: 'auto' });
+      await runDonePhase(mw, state0.id);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(notified).toHaveLength(1);
+      // 引号剥除后的标题进事件载荷。
+      expect(notified[0].title).toBe('Generated Title');
+      expect(notified[0].persistedTitleAtNotify).toBe('Generated Title');
+      const meta = await store.getMeta(state0.id);
+      expect(meta?.titleSource).toBe('generated');
+    });
+
+    it('stays silent when the upgrade is skipped (titleSource already generated)', async () => {
+      const mockLLM = createMockLLM('Should not be used');
+      const sink = vi.fn();
+      const mw = createSessionNamingMiddleware({
+        store,
+        llmClient: mockLLM,
+        model: 'GLM-5.1',
+        titleEventSlot: { sink },
+      });
+
+      let state = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      state = addUserMessage(state, 'Write hello world');
+      state = addAssistantMessage(state, 'Here is the program');
+      await store.createWithId(state.id, 'test');
+      await store.updateMeta(state.id, { title: 'Already Good', titleSource: 'generated' });
+      const stepResult: StepResult = {
+        type: 'done',
+        answer: 'Here is the program',
+        tokens: { input: 100, output: 50 },
+      };
+      await mw.afterStep!({
+        state,
+        result: stepResult,
+        stepNumber: 0,
+        runnerOptions: mockRunnerOptions,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      expect(sink).not.toHaveBeenCalled();
+    });
+
+    it('empty slot (no sink) is silent — title still persists (devtool/bare-harness default)', async () => {
+      const mockLLM = createMockLLM('Generated Title');
+      const state0 = createAgentState({ name: 'test', instructions: 'test', tools: [] });
+      const mw = createSessionNamingMiddleware({
+        store,
+        llmClient: mockLLM,
+        model: 'GLM-5.1',
+        titleEventSlot: {},
+      });
+
+      await store.createWithId(state0.id, 'test');
+      await store.updateMeta(state0.id, { title: 'Write hello world', titleSource: 'auto' });
+      await runDonePhase(mw, state0.id);
+
+      const meta = await store.getMeta(state0.id);
+      expect(meta?.title).toBe('Generated Title');
+      expect(meta?.titleSource).toBe('generated');
+    });
+  });
 });

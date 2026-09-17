@@ -28,7 +28,19 @@ export interface RunnerConfig {
   specPlan?: { enabled?: boolean };
   commands?: { enabled?: boolean };
   a2ui?: { enabled?: boolean };
-  compression?: { enabled?: boolean; strategy?: string };
+  /**
+   * Compression policy (config.yaml `compression` section, R2P-239 aligned
+   * with Rust 934d8ce's CompressionYaml + the TS-native tuning fields colts'
+   * DefaultContextCompressor already accepts). `enabled` gates; strategy /
+   * threshold / keepRecent tune the compressor and are deployment-level
+   * (config.yaml only — the request body exposes `enabled` alone).
+   */
+  compression?: {
+    enabled?: boolean;
+    strategy?: 'summarize' | 'truncate';
+    threshold?: number;
+    keepRecent?: number;
+  };
   skillDirs?: string[];
   mcpConfigPaths?: string[];
 }
@@ -254,8 +266,10 @@ export interface SessionInitParams {
     search?: { provider?: 'sogou' | 'bing' };
     /** Context compression. Unified `{enabled}` shape (matches the other
      * feature groups and the SSE session-start payload); legacy bare boolean
-     * still accepted. Omit = config.yaml default. `strategy` is deployment
-     * level (config.yaml only), not exposed per-request. */
+     * still accepted. Omit = config.yaml default. The daemon merges this
+     * request-level `enabled` with the config.yaml tuning fields (strategy /
+     * threshold / keepRecent) before the runner — those stay deployment-level
+     * and are not exposed per-request (mirrors Rust 934d8ce CompressionValue). */
     compression?: boolean | { enabled?: boolean };
   };
 }
