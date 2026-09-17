@@ -18,12 +18,16 @@ const { mockAgentSessionCreate, mockAgentSessionResume, mockHandleMessage } = vi
   mockHandleMessage: vi.fn(),
 }));
 
-vi.mock('../../../src/core/agent-session.js', () => ({
-  AgentSession: {
-    create: mockAgentSessionCreate,
-    resume: mockAgentSessionResume,
-  },
-}));
+vi.mock('../../../src/core/agent-session.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/core/agent-session.js')>();
+  return {
+    ...actual,
+    AgentSession: {
+      create: mockAgentSessionCreate,
+      resume: mockAgentSessionResume,
+    },
+  };
+});
 
 /** Shared mock session instance reused across SSE streaming tests. */
 const mockRunnerConfig = {
@@ -46,6 +50,8 @@ const mockSession = {
   sessionId: 'mock-session-123',
   busy: false,
   handleMessage: mockHandleMessage,
+  continueRun: vi.fn(),
+  respondViaState: vi.fn(),
   stop: vi.fn(),
   respondHumanInput: vi.fn(),
   emitCockpitEvent: vi.fn(),
@@ -134,6 +140,8 @@ describe('Chat API', () => {
     mockHandleMessage.mockClear();
     mockSession.stop.mockClear();
     mockSession.respondHumanInput.mockClear();
+    mockSession.respondViaState.mockClear();
+    mockSession.continueRun.mockClear();
     mockSession.emitCockpitEvent.mockClear();
   });
 
@@ -240,22 +248,46 @@ describe('Chat API', () => {
       expect(body.error).toBe('requestId is required');
     });
 
-    it('returns error when no active agent session', async () => {
+    it('cold session without state → 404 Session state not found', async () => {
       const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId: 'req-1', response: 'yes' }),
       });
-      expect(res.ok).toBe(true);
+      expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error).toBe('Session not found or not yet active');
+      expect(body.error).toBe('Session state not found');
     });
 
-    it('returns error when request not found', async () => {
-      // Register active session but respondHumanInput returns false
+    it('cold session with state but no matching interrupt → 404 with activation guidance', async () => {
+      // Seed a state WITHOUT pendingInterrupts (a daemon restart mid-wait
+      // under the blocking bridge leaves exactly this on disk).
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      const store = sm.getSessionStore(join(tempDir, 'workspace'));
+      await store.saveState('existing-session', {
+        id: 'existing-session',
+        config: { name: 'test-agent', instructions: '', tools: [] },
+        context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+      });
+
+      const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: 'req-1', response: 'yes' }),
+      });
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toContain('No pending human request matches');
+      expect(body.error).toContain('send a message first to activate');
+    });
+
+    it('returns error when warm request not found', async () => {
+      // Register active session but respondHumanInput returns false and the
+      // state tier finds nothing either.
       const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
       sm.setAgentSession('existing-session', mockSession as never);
       mockSession.respondHumanInput.mockReturnValue(false);
+      mockSession.respondViaState.mockResolvedValue({ status: 'not-found' });
 
       const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
         method: 'POST',
@@ -267,7 +299,7 @@ describe('Chat API', () => {
       expect(body.error).toBe('Request not found or already answered');
     });
 
-    it('responds successfully to valid request', async () => {
+    it('tier 1 — warm parked bridge resolve wins memory-first', async () => {
       const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
       sm.setAgentSession('existing-session', mockSession as never);
       mockSession.respondHumanInput.mockReturnValue(true);
@@ -281,6 +313,184 @@ describe('Chat API', () => {
       const body = await res.json();
       expect(body.ok).toBe(true);
       expect(mockSession.respondHumanInput).toHaveBeenCalledWith('req-1', 'my answer');
+      // Bridge hit must NOT fall through to the state tier.
+      expect(mockSession.respondViaState).not.toHaveBeenCalled();
+    });
+
+    it('tier 2 — warm state recovery with remaining interrupts reports the open list', async () => {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      sm.setAgentSession('existing-session', mockSession as never);
+      mockSession.respondHumanInput.mockReturnValue(false);
+      mockSession.respondViaState.mockResolvedValue({
+        status: 'answered',
+        remaining: [
+          {
+            type: 'question',
+            questions: [{ id: 'q2', question: 'B?', type: 'text' }],
+            toolCallId: 'call-2',
+          },
+        ],
+      });
+
+      const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: 'q1', response: { q1: 'A' } }),
+      });
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.waiting).toBe(true);
+      // Rust 9995668 shape: remaining interrupts in human-input frame shape.
+      expect(body.interrupts).toEqual([
+        {
+          requestId: 'call-2',
+          questions: [{ id: 'q2', question: 'B?', type: 'text' }],
+          context: undefined,
+        },
+      ]);
+      expect(mockSession.respondViaState).toHaveBeenCalledWith('q1', { q1: 'A' });
+    });
+
+    it('tier 2 — warm state emptied → respond response becomes the continuation SSE stream', async () => {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      sm.setAgentSession('existing-session', mockSession as never);
+      mockSession.respondHumanInput.mockReturnValue(false);
+      mockSession.respondViaState.mockResolvedValue({ status: 'answered', remaining: [] });
+      mockSession.continueRun.mockImplementation(async function* () {
+        yield { event: 'token', data: { delta: 'thanks' } };
+        yield { event: 'done', data: { type: 'success' } };
+      });
+
+      const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: 'q1', response: { q1: 'A' } }),
+      });
+      expect(res.headers.get('content-type')).toBe('text/event-stream');
+      const events = parseSSE(await res.text());
+      // Pinned wire sequence: resolved → run-resumed → continuation → done.
+      expect(events[0]).toEqual({
+        event: 'human-input-resolved',
+        data: { requestId: 'q1', response: { q1: 'A' } },
+      });
+      expect(events[1]).toEqual({ event: 'run-resumed', data: {} });
+      expect(events.map((e) => e.event)).toContain('token');
+      expect(events.at(-1)!.event).toBe('done');
+      // Continuation frames also reach the cockpit/history channel.
+      expect(mockSession.emitCockpitEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'run-resumed' })
+      );
+    });
+
+    it('tier 3 — cold recovery from persisted pendingInterrupts: one answer of two stays waiting', async () => {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      const store = sm.getSessionStore(join(tempDir, 'workspace'));
+      await store.saveState('existing-session', {
+        id: 'existing-session',
+        config: { name: 'test-agent', instructions: '', tools: [] },
+        context: {
+          messages: [],
+          stepCount: 0,
+          createdAt: 0,
+          updatedAt: 0,
+          pendingInterrupts: [
+            {
+              request: {
+                type: 'question',
+                questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+                toolCallId: 'call-1',
+              },
+              createdAt: 1,
+            },
+            {
+              request: {
+                type: 'question',
+                questions: [{ id: 'q2', question: 'B?', type: 'text' }],
+                toolCallId: 'call-2',
+              },
+              createdAt: 2,
+            },
+          ],
+        },
+      });
+
+      // Answer by QUESTION id (frontend convention — dual matching).
+      const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: 'q1', response: { q1: { type: 'direct', value: 'A' } } }),
+      });
+      expect(res.ok).toBe(true);
+      const body = await res.json();
+      expect(body).toEqual({
+        ok: true,
+        waiting: true,
+        interrupts: [
+          {
+            requestId: 'call-2',
+            questions: [{ id: 'q2', question: 'B?', type: 'text' }],
+            context: undefined,
+          },
+        ],
+      });
+      // Injection is on disk (Rust 09b03af write-through): tool result paired
+      // to call-1, call-2 still pending.
+      const next = await store.loadState('existing-session');
+      expect(
+        next!.context.messages.some((m: { toolCallId?: string }) => m.toolCallId === 'call-1')
+      ).toBe(true);
+      expect(next!.context.pendingInterrupts).toHaveLength(1);
+      expect(next!.context.pendingInterrupts![0].request.toolCallId).toBe('call-2');
+    });
+
+    it('tier 3 — last cold answer rebuilds the session and streams the continuation', async () => {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      const store = sm.getSessionStore(join(tempDir, 'workspace'));
+      await store.saveState('existing-session', {
+        id: 'existing-session',
+        config: { name: 'test-agent', instructions: '', tools: [] },
+        context: {
+          messages: [],
+          stepCount: 0,
+          createdAt: 0,
+          updatedAt: 0,
+          pendingInterrupts: [
+            {
+              request: {
+                type: 'question',
+                questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+                toolCallId: 'call-1',
+              },
+              createdAt: 1,
+            },
+          ],
+        },
+      });
+      mockAgentSessionResume.mockResolvedValue(mockSession);
+      mockSession.continueRun.mockImplementation(async function* () {
+        yield { event: 'token', data: { delta: 'resumed' } };
+        yield { event: 'done', data: { type: 'success' } };
+      });
+
+      const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: 'call-1', response: { q1: 'A' } }),
+      });
+      expect(res.headers.get('content-type')).toBe('text/event-stream');
+      const events = parseSSE(await res.text());
+      expect(events[0]).toEqual({
+        event: 'human-input-resolved',
+        data: { requestId: 'call-1', response: { q1: 'A' } },
+      });
+      expect(events[1]).toEqual({ event: 'run-resumed', data: {} });
+      expect(events.at(-1)!.event).toBe('done');
+
+      // Rebuild went through AgentSession.resume with the resolved sessionDir
+      // and the rebuilt session is registered as the active one.
+      expect(mockAgentSessionResume).toHaveBeenCalledTimes(1);
+      expect(sm.getAgentSession('existing-session')).toBe(mockSession);
     });
   });
 

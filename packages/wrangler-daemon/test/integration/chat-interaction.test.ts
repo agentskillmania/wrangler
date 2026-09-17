@@ -364,15 +364,15 @@ describe('US-C4: Agent Chat Interaction', () => {
       expect(body.error).toBe('requestId is required');
     });
 
-    it('returns error for inactive (no AgentSession) session', async () => {
+    it('returns error for inactive (no AgentSession, no session on disk) session', async () => {
       const res = await fetch(`${getUrl()}/api/chat/test/respond`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId: 'r1', response: 'yes' }),
       });
-      expect(res.ok).toBe(true);
+      expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error).toBe('Session not found or not yet active');
+      expect(body.error).toBe('Session not found');
     });
 
     it('returns error when request id is not found in pending map', async () => {
@@ -380,7 +380,9 @@ describe('US-C4: Agent Chat Interaction', () => {
       await createTestSession(wsPath, 'respond-session', 'test-agent');
 
       const mockAgentSession = {
+        busy: false,
         respondHumanInput: (_requestId: string, _response: unknown) => false,
+        respondViaState: async () => ({ status: 'not-found' }),
         stop: () => {},
       };
       const manager = (fastify as any).sessionManager as SessionManager;

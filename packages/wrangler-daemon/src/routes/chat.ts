@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { respond as hitlRespond, removePendingInterrupt } from '@agentskillmania/colts';
 import { LLMClient } from '@agentskillmania/llm-client';
 import { Sandbox } from '@agentskillmania/sandbox';
 import type { SessionMeta } from '@agentskillmania/wrangler';
@@ -16,7 +17,12 @@ import { createWebTools } from '@agentskillmania/wrangler/tools/web';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
-import { AgentSession } from '../core/agent-session.js';
+import {
+  AgentSession,
+  humanRequestPayloads,
+  findPendingInterrupt,
+  hitlResponseFromValue,
+} from '../core/agent-session.js';
 import type { AgentSessionOptions, AgentSessionResumeOptions } from '../core/agent-session.js';
 import { mergeSandboxConfig } from '../core/sandbox-config.js';
 import type {
@@ -181,10 +187,24 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /api/chat/:sessionId/respond — respond to AskHuman
    *
-   * Resolves a pending human-input request.
+   * Three tiers (R2P-165②, aligned with Rust 09b03af/9995668):
+   *
+   * 1. Warm session, parked bridge — resolve the in-memory pendingHumanInput
+   *    promise; the parked run continues on its ORIGINAL chat stream.
+   *    Memory-first: never touched by the tiers below.
+   * 2. Warm session, state recovery — match against the session's IN-MEMORY
+   *    state's pendingInterrupts (Rust 09b03af 温会话内存优先: memory is
+   *    always ≥ disk), inject + persist. Remaining asks → {ok, waiting,
+   *    interrupts}; emptied → hijack this response into the continuation
+   *    SSE stream (resolved → run-resumed → continuation frames → done).
+   * 3. Cold session (no active AgentSession) — load state from disk, match
+   *    the persisted pendingInterrupts (tool-call id or question id), inject
+   *    via colts respond(), remove, save; emptied → rebuild the session
+   *    (AgentSession.resume) and stream the continuation (Rust 9995668).
    */
-  fastify.post('/api/chat/:sessionId/respond', async (request) => {
+  fastify.post('/api/chat/:sessionId/respond', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
+    const query = request.query as { sessionDir?: string };
     const body = request.body as { requestId?: string; response?: unknown };
 
     if (!body.requestId) {
@@ -192,15 +212,108 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     const agentSession = sessionManager().getAgentSession(sessionId);
-    if (!agentSession) {
-      return { error: 'Session not found or not yet active' };
-    }
-
-    const found = agentSession.respondHumanInput(body.requestId, body.response);
-    if (!found) {
+    if (agentSession) {
+      // Tier 1 — parked bridge promise (memory-first, unchanged semantics).
+      if (agentSession.respondHumanInput(body.requestId, body.response)) {
+        return { ok: true };
+      }
+      // Tier 2 — in-memory state. Only when idle: injecting into a busy
+      // session's pre-run snapshot would be rolled back by that run's
+      // afterRun persistence.
+      if (!agentSession.busy) {
+        const outcome = await agentSession.respondViaState(body.requestId, body.response);
+        if (outcome.status === 'answered') {
+          if (outcome.remaining.length > 0) {
+            return {
+              ok: true,
+              waiting: true,
+              interrupts: humanRequestPayloads(outcome.remaining),
+            };
+          }
+          return streamRespondContinuation(reply, agentSession, {
+            requestId: body.requestId,
+            response: body.response,
+            sessionId,
+            sessionManager: sessionManager(),
+          });
+        }
+      }
       return { error: 'Request not found or already answered' };
     }
-    return { ok: true };
+
+    // Tier 3 — cold session: recover from the persisted pendingInterrupts.
+    const ctx = await resolveSessionContext(sessionId, query.sessionDir, {
+      sessionManager: sessionManager(),
+    });
+    if (!ctx) {
+      reply.code(404);
+      return { error: 'Session not found' };
+    }
+    const stateKey = ctx.store.isDirBound ? undefined : sessionId;
+    const state = await ctx.store.loadState(stateKey);
+    if (!state) {
+      reply.code(404);
+      return { error: 'Session state not found' };
+    }
+    const pending = findPendingInterrupt(state, body.requestId);
+    if (!pending) {
+      // Explicit guidance (the sanctioned cold fallback): the session is not
+      // active and nothing on disk matches — tell the caller how to proceed
+      // instead of a bare "not found".
+      reply.code(404);
+      return {
+        error:
+          'No pending human request matches this requestId. ' +
+          'The session is not active — send a message first to activate it, then answer the re-surfaced request.',
+      };
+    }
+    const humanResponse = hitlResponseFromValue(pending.request, body.response);
+    let next = hitlRespond(state, pending.request, humanResponse);
+    next = removePendingInterrupt(next, pending.request.toolCallId);
+    await ctx.store.saveState(stateKey, next);
+    const remaining = (next.context.pendingInterrupts ?? []).map((p) => p.request);
+    if (remaining.length > 0) {
+      // Parallel double-ask, partially answered: report what is still open
+      // (Rust 9995668's {ok, waiting, interrupts} shape).
+      return { ok: true, waiting: true, interrupts: humanRequestPayloads(remaining) };
+    }
+
+    // All answered — rebuild the session from disk and stream the
+    // continuation as this response (Rust rebuild_active_run + 续跑).
+    if (!sessionManager().tryReserveAgentSession(sessionId)) {
+      reply.code(409);
+      return { error: 'Session is busy' };
+    }
+    let rebuilt: AgentSession | null = null;
+    try {
+      rebuilt = await assembleResumeSession(
+        sessionId,
+        {
+          sessionManager: sessionManager(),
+          configManager: configManager(),
+          resourceManager: resourceManager(),
+        },
+        ctx
+      );
+    } catch (error) {
+      if (error instanceof SessionNotFoundError) {
+        reply.code(410);
+        return { error: 'Session expired, please start a new conversation' };
+      }
+      throw error;
+    } finally {
+      if (rebuilt) {
+        sessionManager().setAgentSession(sessionId, rebuilt);
+      } else {
+        sessionManager().cancelAgentSessionReservation(sessionId);
+      }
+    }
+    return streamRespondContinuation(reply, rebuilt, {
+      requestId: body.requestId,
+      response: body.response,
+      sessionId,
+      sessionManager: sessionManager(),
+    });
   });
 
   /**
@@ -343,28 +456,14 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     // Explicit sessionDir ("notebook dir is the session") bypasses the
     // standard {root}/sessions tree: identity comes from the persisted
     // meta.yaml in that directory.
-    let info: SessionMeta;
-    let store: SessionStore;
-    let sessionDir: string;
-    if (body.sessionDir) {
-      const meta = await readMeta(body.sessionDir, defaultNodeHostEnv);
-      if (!meta) {
-        reply.code(404).send({ error: 'Session not found' });
-        return;
-      }
-      info = meta;
-      store = SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv);
-      sessionDir = body.sessionDir;
-    } else {
-      const meta = await sessionManager().getInfo(sessionId);
-      if (!meta) {
-        reply.code(404).send({ error: 'Session not found' });
-        return;
-      }
-      info = meta;
-      store = sessionManager().getSessionStore(meta.workspacePath);
-      sessionDir = store.getSessionDir(sessionId);
+    const ctx = await resolveSessionContext(sessionId, body.sessionDir, {
+      sessionManager: sessionManager(),
+    });
+    if (!ctx) {
+      reply.code(404).send({ error: 'Session not found' });
+      return;
     }
+    const { info, store, sessionDir } = ctx;
 
     // Lazily resume AgentSession on first resume chat.
     //
@@ -383,48 +482,15 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         return;
       }
       try {
-        const agentDetail = await resourceManager().getAgent(info.agentName);
-        const config = configManager().get();
-
-        // Crew session: if the persisted runnerConfig carried a crewId, reload
-        // the crew config and rebuild subAgents so the delegate tool is wired
-        // on resume. Non-crew sessions have no crewId → subAgents stays
-        // undefined and behavior is unchanged.
-        let resumeSubAgents: AgentSessionResumeOptions['subAgents'];
-        const crewId = info.runnerConfig?.crewId;
-        if (crewId) {
-          try {
-            const crewConfig = await resourceManager().loadCrewConfig(crewId);
-            resumeSubAgents = crewToRunnerOptions(crewConfig).subAgents;
-          } catch {
-            // Crew was deleted between session creation and resume — proceed
-            // without subAgents. The primary agent still runs; it just can't
-            // delegate. Surface the situation in logs later if needed.
-          }
-        }
-
         try {
-          agentSession = await AgentSession.resume(
-            sessionDir,
+          agentSession = await assembleResumeSession(
+            sessionId,
             {
-              sessionId,
-              workspacePath: info.workspacePath,
-              agentName: info.agentName,
-              agentConfigPath: agentDetail?.path,
-              sessionStore: store,
               sessionManager: sessionManager(),
-              runtime: defaultNodeHostEnv,
-              subAgents: resumeSubAgents,
-              // Node 专属：与 create 路径同款合并 + 实例构造（引擎 core 不捆绑 sandbox）。
-              // override 取会话快照的 sandbox 开关（无快照值时默认 true，与 create 一致）
-              sandbox: withSandboxInstance(
-                config.sandbox,
-                info.runnerConfig?.sandbox ?? true,
-                info.workspacePath
-              ),
-              llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
+              configManager: configManager(),
+              resourceManager: resourceManager(),
             },
-            config
+            { info, store, sessionDir }
           );
         } catch (error) {
           if (error instanceof SessionNotFoundError) {
@@ -647,6 +713,156 @@ async function streamAgentSession(
       thinkingEnabled: opts.thinkingEnabled,
       model: opts.model,
     })) {
+      if (clientGone) break;
+      writeSSE(reply, sse.event, sse.data);
+    }
+    if (!clientGone) opts.sessionManager.updateStatus(opts.sessionId, 'idle');
+  } catch {
+    if (!clientGone) {
+      writeSSE(reply, 'error', { message: 'Internal server error' });
+      opts.sessionManager.updateStatus(opts.sessionId, 'error');
+    }
+  } finally {
+    settled = true;
+    if (!clientGone) reply.raw.end();
+  }
+}
+
+/**
+ * Resolve a session's meta/store/dir from id-or-dir addressing (R2P-165②).
+ *
+ * An explicit `sessionDir` ("notebook dir is the session") bypasses the
+ * standard {root}/sessions tree — identity comes from the persisted meta.yaml
+ * in that directory. Returns null when the session cannot be resolved (callers
+ * map that to 404). Shared by the resume-chat route and the respond route's
+ * cold tier.
+ */
+async function resolveSessionContext(
+  sessionId: string,
+  sessionDir: string | undefined,
+  deps: { sessionManager: DecoratedFastifyInstance['sessionManager'] }
+): Promise<{ info: SessionMeta; store: SessionStore; sessionDir: string } | null> {
+  if (sessionDir) {
+    const meta = await readMeta(sessionDir, defaultNodeHostEnv);
+    if (!meta) return null;
+    return { info: meta, store: SessionStore.fromDir(sessionDir, defaultNodeHostEnv), sessionDir };
+  }
+  const meta = await deps.sessionManager.getInfo(sessionId);
+  if (!meta) return null;
+  const store = deps.sessionManager.getSessionStore(meta.workspacePath);
+  return { info: meta, store, sessionDir: store.getSessionDir(sessionId) };
+}
+
+/**
+ * Assemble a resumed AgentSession from a resolved session context — the
+ * rebuild path shared by the resume-chat route and the respond route's cold
+ * tier (R2P-165②, the TS counterpart of Rust 9995668's rebuild_active_run).
+ * The route's sessionId (not info.id) keys the session so registration and
+ * AgentSession.sessionId agree. Throws SessionNotFoundError when the on-disk
+ * session has expired; the caller maps it.
+ */
+async function assembleResumeSession(
+  sessionId: string,
+  deps: {
+    sessionManager: DecoratedFastifyInstance['sessionManager'];
+    configManager: DecoratedFastifyInstance['configManager'];
+    resourceManager: DecoratedFastifyInstance['resourceManager'];
+  },
+  ctx: { info: SessionMeta; store: SessionStore; sessionDir: string }
+): Promise<AgentSession> {
+  const { info, store, sessionDir } = ctx;
+  const agentDetail = await deps.resourceManager.getAgent(info.agentName);
+  const config = deps.configManager.get();
+
+  // Crew session: if the persisted runnerConfig carried a crewId, reload
+  // the crew config and rebuild subAgents so the delegate tool is wired
+  // on resume. Non-crew sessions have no crewId → subAgents stays
+  // undefined and behavior is unchanged.
+  let resumeSubAgents: AgentSessionResumeOptions['subAgents'];
+  const crewId = info.runnerConfig?.crewId;
+  if (crewId) {
+    try {
+      const crewConfig = await deps.resourceManager.loadCrewConfig(crewId);
+      resumeSubAgents = crewToRunnerOptions(crewConfig).subAgents;
+    } catch {
+      // Crew was deleted between session creation and resume — proceed
+      // without subAgents. The primary agent still runs; it just can't
+      // delegate. Surface the situation in logs later if needed.
+    }
+  }
+
+  return AgentSession.resume(
+    sessionDir,
+    {
+      sessionId,
+      workspacePath: info.workspacePath,
+      agentName: info.agentName,
+      agentConfigPath: agentDetail?.path,
+      sessionStore: store,
+      sessionManager: deps.sessionManager,
+      runtime: defaultNodeHostEnv,
+      subAgents: resumeSubAgents,
+      // Node 专属：与 create 路径同款合并 + 实例构造（引擎 core 不捆绑 sandbox）。
+      // override 取会话快照的 sandbox 开关（无快照值时默认 true，与 create 一致）
+      sandbox: withSandboxInstance(
+        config.sandbox,
+        info.runnerConfig?.sandbox ?? true,
+        info.workspacePath
+      ),
+      llmClientFactory: (providers) => LLMClient.quickInit({ providers }),
+    },
+    config
+  );
+}
+
+/**
+ * Stream the post-respond continuation as THIS response (R2P-165②, aligned
+ * with Rust 9995668's "响应即续跑 SSE 流"): the waiting run's original chat
+ * stream already closed (waiting-human is a run terminal), so the resolved
+ * acknowledgement and the resumed turn both live on the respond response.
+ *
+ * Wire sequence (matches skill-ui's pinned reducer contract):
+ *   human-input-resolved → run-resumed → continuation frames → done.
+ * CON5 disconnect handling mirrors streamAgentSession.
+ */
+async function streamRespondContinuation(
+  reply: FastifyReply,
+  agentSession: AgentSession,
+  opts: {
+    requestId: string;
+    response: unknown;
+    sessionId: string;
+    sessionManager: DecoratedFastifyInstance['sessionManager'];
+  }
+): Promise<void> {
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  let clientGone = false;
+  let settled = false;
+  const onDisconnect = () => {
+    if (!settled && !clientGone) {
+      clientGone = true;
+      agentSession.stop();
+    }
+  };
+  reply.raw.on('close', onDisconnect);
+
+  const resolvedData = { requestId: opts.requestId, response: opts.response };
+  writeSSE(reply, 'human-input-resolved', resolvedData);
+  agentSession.emitCockpitEvent({ event: 'human-input-resolved', data: resolvedData });
+  // Host-synthesized latch reopener: the waiting done closed the turn on the
+  // client — continuation tokens must not be dropped as out-of-turn noise.
+  writeSSE(reply, 'run-resumed', {});
+  agentSession.emitCockpitEvent({ event: 'run-resumed', data: {} });
+
+  opts.sessionManager.updateStatus(opts.sessionId, 'running');
+  try {
+    for await (const sse of agentSession.continueRun()) {
       if (clientGone) break;
       writeSSE(reply, sse.event, sse.data);
     }

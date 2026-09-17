@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
-import { AgentSession } from '../../src/core/agent-session.js';
+import {
+  AgentSession,
+  humanRequestPayloads,
+  findPendingInterrupt,
+  hitlResponseFromValue,
+} from '../../src/core/agent-session.js';
 import type { AgentSessionOptions } from '../../src/core/agent-session.js';
 import type { SSEEvent } from '../../src/types.js';
 
@@ -135,18 +140,22 @@ vi.mock('@agentskillmania/llm-client', () => ({
     registerApiKey: vi.fn(),
   }),
 }));
-vi.mock('@agentskillmania/colts', () => ({
-  createAgentState: vi.fn().mockReturnValue({
-    id: 'test-state',
-    config: { name: 'test', instructions: '', tools: [] },
-    context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
-  }),
-  addUserMessage: vi.fn((state, _msg, _maxLength?) => state),
-  updateState: vi.fn((state) => state),
-  FilesystemSkillProvider: vi.fn(),
-  // Called at agent-session.ts module load to register the Node SkillFsOps.
-  setDefaultSkillFsOps: vi.fn(),
-}));
+vi.mock('@agentskillmania/colts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agentskillmania/colts')>();
+  return {
+    ...actual,
+    createAgentState: vi.fn().mockReturnValue({
+      id: 'test-state',
+      config: { name: 'test', instructions: '', tools: [] },
+      context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+    }),
+    addUserMessage: vi.fn((state, _msg, _maxLength?) => state),
+    updateState: vi.fn((state) => state),
+    FilesystemSkillProvider: vi.fn(),
+    // Called at agent-session.ts module load to register the Node SkillFsOps.
+    setDefaultSkillFsOps: vi.fn(),
+  };
+});
 
 const testConfig = {
   llm: {
@@ -672,6 +681,340 @@ describe('AgentSession', () => {
       expect(events).toHaveLength(2);
       const objResult = events.find((e) => (e.data as { callId: string }).callId === 'c1');
       expect((objResult!.data as { result: string }).result).toContain('error');
+    });
+
+    // ── waiting-human done 帧：requests 全量数组（R2P-165③）──
+
+    it('maps waiting-human complete with the full requests array', () => {
+      const result = AgentSession.mapEvent({
+        type: 'complete',
+        result: {
+          type: 'waiting-human',
+          request: {
+            type: 'question',
+            questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+            toolCallId: 'call-1',
+          },
+          requests: [
+            {
+              type: 'question',
+              questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+              toolCallId: 'call-1',
+            },
+            {
+              type: 'tool-confirm',
+              toolName: 'shell',
+              args: { cmd: 'rm -rf' },
+              toolCallId: 'call-2',
+            },
+          ],
+          totalSteps: 1,
+          tokens: { input: 0, output: 0 },
+          duration: 10,
+        },
+      } as any);
+      const data = result!.data as Record<string, unknown>;
+      expect(data.type).toBe('waiting-human');
+      const requests = data.requests as Array<Record<string, unknown>>;
+      // 全量下发：两个挂起请求都在（并行双问），形状与单 request 字段一致
+      // （question → requestId/questions；tool-confirm → requestId/confirm）。
+      expect(requests).toHaveLength(2);
+      expect(requests[0]).toEqual({
+        requestId: 'call-1',
+        questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+        context: undefined,
+      });
+      expect(requests[1]).toEqual({
+        requestId: 'call-2',
+        confirm: { toolName: 'shell', arguments: { cmd: 'rm -rf' } },
+      });
+    });
+
+    it('falls back to the single request for legacy waiting-human results', () => {
+      const result = AgentSession.mapEvent({
+        type: 'complete',
+        result: {
+          type: 'waiting-human',
+          request: {
+            type: 'question',
+            questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+            toolCallId: 'call-1',
+          },
+          totalSteps: 1,
+        },
+      } as any);
+      const data = result!.data as Record<string, unknown>;
+      const requests = data.requests as Array<Record<string, unknown>>;
+      expect(requests).toHaveLength(1);
+      expect(requests[0].requestId).toBe('call-1');
+    });
+
+    it('keeps non-waiting done frames free of the requests field', () => {
+      const result = AgentSession.mapEvent({
+        type: 'complete',
+        result: { type: 'success', answer: 'ok', totalSteps: 1 },
+      } as any);
+      const data = result!.data as Record<string, unknown>;
+      expect('requests' in data).toBe(false);
+    });
+  });
+
+  describe('HITL wire helpers (R2P-165)', () => {
+    const questionRequest = {
+      type: 'question',
+      questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+      context: 'ctx',
+      toolCallId: 'call-1',
+    } as const;
+    const confirmRequest = {
+      type: 'tool-confirm',
+      toolName: 'shell',
+      args: { cmd: 'ls' },
+      toolCallId: 'call-2',
+    } as const;
+
+    it('humanRequestPayloads serializes both request variants in frame shape', () => {
+      const payloads = humanRequestPayloads([questionRequest, confirmRequest] as any);
+      expect(payloads[0]).toEqual({
+        requestId: 'call-1',
+        questions: questionRequest.questions,
+        context: 'ctx',
+      });
+      expect(payloads[1]).toEqual({
+        requestId: 'call-2',
+        confirm: { toolName: 'shell', arguments: { cmd: 'ls' } },
+      });
+    });
+
+    it('findPendingInterrupt matches by tool-call id AND by question id', () => {
+      const state = {
+        context: {
+          pendingInterrupts: [
+            { request: { ...questionRequest, toolCallId: 'call-1' }, createdAt: 1 },
+          ],
+        },
+      } as any;
+      expect(findPendingInterrupt(state, 'call-1')?.request.toolCallId).toBe('call-1');
+      expect(findPendingInterrupt(state, 'q1')?.request.toolCallId).toBe('call-1');
+      expect(findPendingInterrupt(state, 'nope')).toBeUndefined();
+    });
+
+    it('findPendingInterrupt tolerates a missing list (legacy archives)', () => {
+      expect(findPendingInterrupt({ context: {} } as any, 'call-1')).toBeUndefined();
+    });
+
+    it('hitlResponseFromValue passes question answers through and defaults confirm to reject', () => {
+      const q = hitlResponseFromValue(questionRequest as any, {
+        q1: { type: 'direct', value: 'A' },
+      });
+      expect(q).toEqual({ type: 'question', answers: { q1: { type: 'direct', value: 'A' } } });
+      // tool-confirm：approved 缺席按拒绝（镜像 Rust response_from_value）
+      expect(hitlResponseFromValue(confirmRequest as any, {})).toEqual({
+        type: 'tool-confirm',
+        approved: false,
+      });
+      expect(hitlResponseFromValue(confirmRequest as any, { approved: true })).toEqual({
+        type: 'tool-confirm',
+        approved: true,
+      });
+    });
+  });
+
+  describe('AskHuman bridge requestId (R2P-165①)', () => {
+    it('issues collision-proof UUID requestIds — parallel double-ask parks two distinct entries', async () => {
+      mockRunnerWithEvents();
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+
+      // The AskHuman handler the session wired into EnhancedRunner.create.
+      const createOptions = mockEnhancedRunnerCreate.mock.calls.at(-1)![0] as {
+        tools: {
+          askHumanHandler: (p: {
+            questions: Array<{ id: string; question: string; type: string }>;
+          }) => Promise<unknown>;
+        };
+      };
+      const handler = createOptions.tools.askHumanHandler;
+
+      // Observe the human-input frames via the cockpit channel (the chat
+      // sseSender is only wired during an active run).
+      const frames: SSEEvent[] = [];
+      session.addCockpitSender((e) => frames.push(e));
+
+      // Two asks in the same batch — under the old `human-${Date.now()}` both
+      // parked under ONE key (same millisecond), so the first respond settled
+      // the wrong promise.
+      const p1 = handler({ questions: [{ id: 'q1', question: 'A?', type: 'text' }] });
+      const p2 = handler({ questions: [{ id: 'q2', question: 'B?', type: 'text' }] });
+
+      const humanFrames = frames.filter((f) => f.event === 'human-input');
+      expect(humanFrames).toHaveLength(2);
+      const ids = humanFrames.map((f) => (f.data as Record<string, unknown>).requestId as string);
+      expect(ids[0]).not.toBe(ids[1]);
+      for (const id of ids) {
+        expect(id).toMatch(/^human-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      }
+      // ③ additive full-list field: each frame carries its request in the
+      // same shape as the single-request fields.
+      expect((humanFrames[0].data as Record<string, unknown>).requests).toEqual([
+        {
+          requestId: ids[0],
+          questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+          context: undefined,
+        },
+      ]);
+
+      // Each id resolves exactly its own parked promise.
+      expect(session.respondHumanInput(ids[0], { q1: { type: 'direct', value: 'A' } })).toBe(true);
+      expect(session.respondHumanInput(ids[0], { q1: { type: 'direct', value: 'A' } })).toBe(false);
+      expect(session.respondHumanInput(ids[1], { q2: { type: 'direct', value: 'B' } })).toBe(true);
+      await expect(p1).resolves.toEqual({ q1: { type: 'direct', value: 'A' } });
+      await expect(p2).resolves.toEqual({ q2: { type: 'direct', value: 'B' } });
+    });
+  });
+
+  describe('respondViaState (R2P-165② warm-state tier)', () => {
+    /** State with two pending question interrupts (as colts persists them). */
+    function seededState() {
+      return {
+        id: 'seeded',
+        config: { name: 'test', instructions: '', tools: [] },
+        context: {
+          messages: [],
+          stepCount: 0,
+          createdAt: 0,
+          updatedAt: 0,
+          pendingInterrupts: [
+            {
+              request: {
+                type: 'question',
+                questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+                toolCallId: 'call-1',
+              },
+              createdAt: 1,
+            },
+            {
+              request: {
+                type: 'question',
+                questions: [{ id: 'q2', question: 'B?', type: 'text' }],
+                toolCallId: 'call-2',
+              },
+              createdAt: 2,
+            },
+          ],
+        },
+      };
+    }
+
+    async function createSessionWithSeed(seed: unknown) {
+      const saveState = vi.fn();
+      mockRunnerWithEvents([], seed);
+      const session = await AgentSession.create(
+        {
+          sessionId: 'seeded',
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+          sessionStore: {
+            loadState: vi.fn().mockResolvedValue(seed),
+            saveState,
+            isDirBound: false,
+          } as unknown as AgentSessionOptions['sessionStore'],
+        },
+        testConfig
+      );
+      return { session, saveState };
+    }
+
+    it('answers one of two pending interrupts, reports the remaining request, writes through', async () => {
+      const { session, saveState } = await createSessionWithSeed(seededState());
+      const outcome = await session.respondViaState('q1', {
+        q1: { type: 'direct', value: 'A' },
+      });
+      expect(outcome.status).toBe('answered');
+      expect(outcome.remaining).toHaveLength(1);
+      expect(outcome.remaining[0].toolCallId).toBe('call-2');
+      // Injection: tool result for call-1 is in history, call-2 stays pending.
+      const state = session.getState();
+      const toolMsg = state.context.messages.find(
+        (m: { toolCallId?: string }) => m.toolCallId === 'call-1'
+      );
+      expect(toolMsg?.role).toBe('tool');
+      expect(state.context.pendingInterrupts).toHaveLength(1);
+      // Write-through to the session store (Rust 09b03af: waiting-state
+      // injections must hit disk — memory-only answers roll back).
+      expect(saveState).toHaveBeenCalledWith('seeded', state);
+    });
+
+    it('matches by tool-call id as well', async () => {
+      const { session } = await createSessionWithSeed(seededState());
+      const outcome = await session.respondViaState('call-1', {
+        q1: { type: 'direct', value: 'A' },
+      });
+      expect(outcome.status).toBe('answered');
+      expect(outcome.remaining[0].toolCallId).toBe('call-2');
+    });
+
+    it('empties the list when the last interrupt is answered (continuation may run)', async () => {
+      const { session } = await createSessionWithSeed(seededState());
+      await session.respondViaState('q1', { q1: { type: 'direct', value: 'A' } });
+      const outcome = await session.respondViaState('call-2', {
+        q2: { type: 'free-text', value: 'off-script' },
+      });
+      expect(outcome.status === 'answered' && outcome.remaining).toHaveLength(0);
+      expect(session.getState().context.pendingInterrupts).toBeUndefined();
+    });
+
+    it('reports not-found for an unknown id', async () => {
+      const { session } = await createSessionWithSeed(seededState());
+      expect((await session.respondViaState('zzz', {})).status).toBe('not-found');
+    });
+  });
+
+  describe('assertResumableState guard passthrough (R2P-165④)', () => {
+    const PENDING_MSG =
+      'Unanswered tool call(s) on the last assistant message: call-1 ' +
+      '(pending human interrupt — answer it via respond() + removePendingInterrupt() before resuming). ' +
+      'Answer the pending interrupts and inject their tool results before calling run().';
+    const DANGLING_MSG =
+      'Unanswered tool call(s) on the last assistant message: call-9 ' +
+      '(no tool result, not approved, not pending — dangling tool_call; the provider would reject the next call with 400). ' +
+      'Answer the pending interrupts and inject their tool results before calling run().';
+
+    it.each([
+      ['pending-interrupt tier', PENDING_MSG],
+      ['dangling tool_call tier', DANGLING_MSG],
+    ])('surfaces the %s error text verbatim on the SSE error frame', async (_name, message) => {
+      // colts run() throws assertResumableState errors into its catch, which
+      // emits an `error` event (daemon maps it 1:1) before the error result.
+      mockRunnerWithEvents([['error', { error: { message } }]]);
+
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+
+      const events: SSEEvent[] = [];
+      for await (const sse of session.handleMessage('hello')) events.push(sse);
+
+      const errorFrame = events.find((e) => e.event === 'error');
+      expect(errorFrame).toBeDefined();
+      // 原样透传：两档文案（先应答再续跑 / 悬挂 tool_call provider 400）
+      // 到达前端，可诊断。
+      expect((errorFrame!.data as { message: string }).message).toBe(message);
     });
   });
 

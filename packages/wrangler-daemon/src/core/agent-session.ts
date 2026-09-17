@@ -10,12 +10,18 @@ import {
   addUserMessage,
   updateState,
   FilesystemSkillProvider,
+  respond as hitlRespond,
+  removePendingInterrupt,
 } from '@agentskillmania/colts';
 import type {
   AgentState,
   RunStreamEvent,
   RunOptions,
   RunnerEventMap,
+  HumanRequest,
+  HumanAnswer,
+  HitlHumanResponse,
+  PendingInterrupt,
 } from '@agentskillmania/colts';
 import type { AskHumanHandler, HumanResponse } from '@agentskillmania/colts';
 import { EnhancedRunner, SessionStore, resolveDefaultModel } from '@agentskillmania/wrangler';
@@ -160,6 +166,60 @@ Please respond in the same language as the user's message.`;
  * bridges AskHuman tool calls to interactive UI prompts.
  */
 export { mergeSandboxConfig } from './sandbox-config.js';
+
+// ─── HITL wire helpers（R2P-165，镜像 Rust wrangler::hitl 门面）──────────
+//
+// 未答中断的 wire 形状单源：human-input 帧、waiting-human done 帧的
+// requests 数组、respond 路由的 interrupts 清单共用 humanRequestPayloads
+// （对齐 Rust `interrupt_payloads`——前端一套解析器）。
+
+/**
+ * Serialize human requests into the `human-input` frame payload shape.
+ *
+ * Question requests → {requestId, questions, context}; tool-confirm →
+ * {requestId, confirm:{toolName, arguments}}. Used for the additive
+ * `requests` full-list field (waiting-human done frame, respond route's
+ * remaining-interrupt payloads) so array consumers see the same shape the
+ * single-request fields have always used.
+ */
+export function humanRequestPayloads(
+  requests: HumanRequest[]
+): Array<{ requestId: string; questions?: unknown; context?: unknown; confirm?: unknown }> {
+  return requests.map((r) =>
+    r.type === 'question'
+      ? { requestId: r.toolCallId, questions: r.questions, context: r.context }
+      : { requestId: r.toolCallId, confirm: { toolName: r.toolName, arguments: r.args } }
+  );
+}
+
+/**
+ * Find an unanswered interrupt by request id: tool-call id or any question id
+ * matches (the frontend answers question-type requests by question id).
+ * Mirrors Rust `find_pending_interrupt` dual matching.
+ */
+export function findPendingInterrupt(
+  state: AgentState,
+  requestId: string
+): PendingInterrupt | undefined {
+  return (state.context.pendingInterrupts ?? []).find(
+    (p) =>
+      p.request.toolCallId === requestId ||
+      (p.request.type === 'question' && p.request.questions.some((q) => q.id === requestId))
+  );
+}
+
+/**
+ * Convert a respond-route JSON body into the typed hitl HumanResponse:
+ * question → answers passthrough; tool-confirm → `approved` (absent counts
+ * as rejection, mirroring Rust `response_from_value`).
+ */
+export function hitlResponseFromValue(request: HumanRequest, value: unknown): HitlHumanResponse {
+  if (request.type === 'tool-confirm') {
+    const v = (value ?? {}) as { approved?: unknown };
+    return { type: 'tool-confirm', approved: v.approved === true };
+  }
+  return { type: 'question', answers: (value ?? {}) as Record<string, HumanAnswer> };
+}
 
 export class AgentSession {
   readonly sessionId: string;
@@ -390,8 +450,25 @@ export class AgentSession {
   /** Create an AskHumanHandler wired to the given bridge. */
   private static _createAskHumanHandler(bridge: AskHumanBridge): AskHumanHandler {
     return async ({ questions, context }) => {
-      const requestId = `human-${Date.now()}`;
-      const payload: SSEEvent = { event: 'human-input', data: { requestId, questions, context } };
+      // Collision-proof frontend requestId (R2P-165①, aligned with the kernel's
+      // host-bridge id convention `human-<uuid>`): `human-${Date.now()}` collides
+      // when the LLM issues two ask_human calls in one batch — both park under
+      // the same pendingHumanInput key, so the first respond resolves the WRONG
+      // promise and the second answer lands on an already-settled entry.
+      const requestId = `human-${globalThis.crypto.randomUUID()}`;
+      // Full-list field (R2P-165③, additive for array consumers): the blocking
+      // bridge surfaces one frame per ask, so this frame's list is the single
+      // request it carries; the complete list reaches the frontend via the
+      // waiting-human done frame and the respond route's `interrupts` payload.
+      const payload: SSEEvent = {
+        event: 'human-input',
+        data: {
+          requestId,
+          questions,
+          context,
+          requests: [{ requestId, questions, context }],
+        },
+      };
       bridge.sseSender?.(payload);
       for (const sender of bridge.cockpitSenders) sender(payload);
       return new Promise<HumanResponse>((resolve, reject) => {
@@ -611,6 +688,57 @@ export class AgentSession {
   }
 
   /**
+   * Answer a pending interrupt through session STATE (not the in-memory
+   * bridge) — the warm-session tier of the respond route (R2P-165②, Rust
+   * 09b03af's "温会话内存优先" semantics: the in-memory state is assembled
+   * first because it can be AHEAD of disk).
+   *
+   * Matches `findPendingInterrupt` (tool-call id or question id), injects the
+   * answer via colts `respond()`, consumes the entry with
+   * `removePendingInterrupt`, updates the in-memory state and writes it
+   * through to the session store. Only call this when the session is NOT
+   * busy: injecting into the pre-run snapshot while a run is in flight would
+   * be rolled back by that run's afterRun persistence.
+   *
+   * @returns the remaining unanswered requests (possibly empty) — an empty
+   *   list means the caller may drive a continuation run (continueRun).
+   */
+  async respondViaState(
+    requestId: string,
+    response: unknown
+  ): Promise<{ status: 'not-found' } | { status: 'answered'; remaining: HumanRequest[] }> {
+    const pending = findPendingInterrupt(this.state, requestId);
+    if (!pending) return { status: 'not-found' };
+    const humanResponse = hitlResponseFromValue(pending.request, response);
+    let next = hitlRespond(this.state, pending.request, humanResponse);
+    next = removePendingInterrupt(next, pending.request.toolCallId);
+    this.state = next;
+    if (this.sessionStore) {
+      await this.sessionStore.saveState(
+        this.sessionStore.isDirBound ? undefined : this.sessionId,
+        next
+      );
+    }
+    return {
+      status: 'answered',
+      remaining: (next.context.pendingInterrupts ?? []).map((p) => p.request),
+    };
+  }
+
+  /**
+   * Stream process a user message, yielding SSE events.
+   *
+   * Adds the user message to state, runs the EnhancedRunner stream,
+   * maps colts RunStreamEvents to SSEEvents, and yields them to the caller.
+   * Handles abort and error cases gracefully.
+   *
+   * @param message - The user's text message
+   * @param options - Optional per-request configuration
+   * @param options.thinkingEnabled - Override thinking mode for this request
+   * @param options.model - Override model for this request
+   * @yields SSEEvent for each event in the agent execution stream
+   */
+  /**
    * Stream process a user message, yielding SSE events.
    *
    * Adds the user message to state, runs the EnhancedRunner stream,
@@ -631,15 +759,6 @@ export class AgentSession {
       yield { event: 'error', data: { message: 'Session is busy processing a message' } };
       return;
     }
-    this._busy = true;
-    this.abortController = new AbortController();
-    this.eventQueue = [];
-    this.eventWaiters = [];
-    this.eventHistory = [];
-    this.lastSystemPrompt = null;
-    this.doneFlag = false;
-
-    this.bridge.sseSender = (event: SSEEvent) => this.pushEvent(event);
 
     // Enforce maxInputLength before appending — throws if message exceeds limit.
     // The error propagates out of the async generator, surfaced to the client
@@ -652,11 +771,56 @@ export class AgentSession {
             message: `Input exceeds maximum length of ${this.maxInputLength} characters (got ${message.length})`,
           },
         };
-        this._busy = false;
         return;
       }
     }
-    this.state = addUserMessage(this.state, message, this.maxInputLength);
+
+    yield* this.driveTurn((s) => addUserMessage(s, message, this.maxInputLength), options);
+  }
+
+  /**
+   * Continue a run from the current state WITHOUT appending a user message
+   * (R2P-165②, the daemon counterpart of Rust 9995668's rebuild+续跑).
+   *
+   * Used by the respond route after the last pending interrupt is answered:
+   * the injected tool results already pair the dangling tool_calls, so the
+   * LLM continues the turn from history. Same streaming contract as
+   * handleMessage.
+   *
+   * @param options - Optional per-request configuration (model/thinking)
+   * @yields SSEEvent for each event in the continuation stream
+   */
+  async *continueRun(options?: {
+    thinkingEnabled?: boolean;
+    model?: string;
+  }): AsyncIterable<SSEEvent> {
+    if (this._busy) {
+      yield { event: 'error', data: { message: 'Session is busy processing a message' } };
+      return;
+    }
+    yield* this.driveTurn((s) => s, options);
+  }
+
+  /**
+   * Shared turn machinery for handleMessage (seed = append user message) and
+   * continueRun (seed = identity): busy flag, abort controller, event-queue
+   * lifecycle, runner event wiring, and the runner.run() drive loop.
+   */
+  private async *driveTurn(
+    seed: (state: AgentState) => AgentState,
+    options?: { thinkingEnabled?: boolean; model?: string }
+  ): AsyncIterable<SSEEvent> {
+    this._busy = true;
+    this.abortController = new AbortController();
+    this.eventQueue = [];
+    this.eventWaiters = [];
+    this.eventHistory = [];
+    this.lastSystemPrompt = null;
+    this.doneFlag = false;
+
+    this.bridge.sseSender = (event: SSEEvent) => this.pushEvent(event);
+
+    this.state = seed(this.state);
 
     const consumeStream = async () => {
       // Register EventEmitter listeners for all event types
@@ -1102,16 +1266,27 @@ export class AgentSession {
         // RunResult carries tokens, totalSteps, duration, and (for success) the answer.
         // Surface them so the client can display final metrics.
         const result = (event as unknown as { result: Record<string, unknown> }).result;
-        return {
-          event: 'done',
-          data: {
-            type: result?.type,
-            answer: result?.answer,
-            totalSteps: result?.totalSteps,
-            tokens: result?.tokens,
-            duration: result?.duration,
-          },
+        const data: Record<string, unknown> = {
+          type: result?.type,
+          answer: result?.answer,
+          totalSteps: result?.totalSteps,
+          tokens: result?.tokens,
+          duration: result?.duration,
         };
+        // Waiting-human terminal (R2P-165③): carry ALL suspended requests in
+        // the additive `requests` array (parallel double-ask — the host must
+        // see everything it has to answer before resuming; colts 0.5.0-alpha.1
+        // guarantees the field, the fallback covers legacy kernels). Frame
+        // shape mirrors the single-request fields via humanRequestPayloads.
+        if (result?.type === 'waiting-human') {
+          const waiting = result as unknown as {
+            request?: HumanRequest;
+            requests?: HumanRequest[];
+          };
+          const all = waiting.requests ?? (waiting.request ? [waiting.request] : []);
+          data.requests = humanRequestPayloads(all);
+        }
+        return { event: 'done', data };
       }
 
       case 'error': {
