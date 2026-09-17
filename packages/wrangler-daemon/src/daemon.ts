@@ -48,6 +48,7 @@ setDefaultSkillFsOps(nodeFsOps);
  */
 export class Daemon {
   private fastify: FastifyInstance;
+  private evictionTimer: ReturnType<typeof setInterval> | undefined;
   private configManager: ConfigManager;
   private resourceManager: ResourceManager;
   private sessionManager: SessionManager;
@@ -193,10 +194,20 @@ export class Daemon {
       const host = this.cliOptions.host ?? config.server.host;
       await this.fastify.listen({ port, host });
     }
+
+    // 定时清扫闲置温会话（对齐 Rust server.rs 的 60s interval）：惰性驱逐
+    // 的另外两个触发点（新会话插入顺手扫、GET /api/sessions 快照扫）在
+    // headless 无流量 daemon 中可能长期不触发——本定时器保证回收最终发生，
+    // 不依赖流量形状。unref：不阻止进程退出。
+    this.evictionTimer = setInterval(() => {
+      this.sessionManager.evictIdleSessions();
+    }, 60_000);
+    this.evictionTimer.unref();
   }
 
   /** Gracefully stop server and clean up */
   async shutdown(): Promise<void> {
+    if (this.evictionTimer) clearInterval(this.evictionTimer);
     this.sessionManager.stopAll();
     await this.fastify.close();
   }
