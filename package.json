@@ -10,7 +10,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/agentskillmania/wrangler.git"
+    "url": "https://gitee.com/agentskillmania/wrangler.git"
   },
   "type": "module",
   "scripts": {

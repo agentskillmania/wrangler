@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![中文文档](https://img.shields.io/badge/docs-中文-blue.svg)](./README.zh_CN.md)
 
-**Wrangler** is a pnpm-based TypeScript monorepo — the abstraction layer between the [colts](https://github.com/agentskillmania/colts) ReAct framework and a usable agent system. It provides agent/crew configuration loading, the `EnhancedRunner` entry point, skill management, and development tooling.
+**Wrangler** is a pnpm-based TypeScript monorepo — the abstraction layer between the [colts](https://gitee.com/agentskillmania/colts) ReAct framework and a usable agent system. It provides agent/crew configuration loading, the `EnhancedRunner` entry point, skill management, and development tooling.
 
 ## Packages
 
@@ -18,7 +18,7 @@
 
 ```bash
 # Clone and install
-git clone https://github.com/agentskillmania/wrangler.git
+git clone https://gitee.com/agentskillmania/wrangler.git
 cd wrangler
 pnpm install
 

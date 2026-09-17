@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@agentskillmania/wrangler.svg)](https://www.npmjs.com/package/@agentskillmania/wrangler)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Wrangler** 是一个基于 pnpm 的 TypeScript monorepo —— 位于 [colts](https://github.com/agentskillmania/colts) ReAct 框架与可用智能体系统之间的抽象层。提供智能体/团队配置加载、`EnhancedRunner` 入口、技能管理和开发工具。
+**Wrangler** 是一个基于 pnpm 的 TypeScript monorepo —— 位于 [colts](https://gitee.com/agentskillmania/colts) ReAct 框架与可用智能体系统之间的抽象层。提供智能体/团队配置加载、`EnhancedRunner` 入口、技能管理和开发工具。
 
 ## 包
 
@@ -17,7 +17,7 @@
 
 ```bash
 # 克隆并安装
-git clone https://github.com/agentskillmania/wrangler.git
+git clone https://gitee.com/agentskillmania/wrangler.git
 cd wrangler
 pnpm install
 
