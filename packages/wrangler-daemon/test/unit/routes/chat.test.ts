@@ -352,6 +352,50 @@ describe('Chat API', () => {
       expect(mockSession.respondViaState).toHaveBeenCalledWith('q1', { q1: 'A' });
     });
 
+    it('tier 2 — busy session with bridge miss returns not-found and never touches state (返修 P2-1)', async () => {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      sm.setAgentSession('existing-session', mockSession as never);
+      mockSession.busy = true;
+      mockSession.respondHumanInput.mockReturnValue(false);
+      try {
+        const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestId: 'q1',
+            response: { q1: { type: 'direct', value: 'A' } },
+          }),
+        });
+        expect(res.ok).toBe(true);
+        const body = await res.json();
+        expect(body.error).toBe('Request not found or already answered');
+        // The state tier must not run: injecting into a busy session's
+        // pre-run snapshot would be rolled back by that run's afterRun.
+        expect(mockSession.respondViaState).not.toHaveBeenCalled();
+      } finally {
+        mockSession.busy = false;
+      }
+    });
+
+    it('tier 2 — garbage question payload → 400 before injection (返修 P3)', async () => {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      sm.setAgentSession('existing-session', mockSession as never);
+      mockSession.respondHumanInput.mockReturnValue(false);
+      mockSession.respondViaState.mockResolvedValue({
+        status: 'invalid',
+        error: "Invalid answer for question 'q1': expected {type: 'direct' | 'free-text', value}",
+      });
+
+      const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: 'q1', response: { q1: 'garbage' } }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("question 'q1'");
+    });
+
     it('tier 2 — warm state emptied → respond response becomes the continuation SSE stream', async () => {
       const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
       sm.setAgentSession('existing-session', mockSession as never);
@@ -476,13 +520,16 @@ describe('Chat API', () => {
       const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId: 'call-1', response: { q1: 'A' } }),
+        body: JSON.stringify({
+          requestId: 'call-1',
+          response: { q1: { type: 'direct', value: 'A' } },
+        }),
       });
       expect(res.headers.get('content-type')).toBe('text/event-stream');
       const events = parseSSE(await res.text());
       expect(events[0]).toEqual({
         event: 'human-input-resolved',
-        data: { requestId: 'call-1', response: { q1: 'A' } },
+        data: { requestId: 'call-1', response: { q1: { type: 'direct', value: 'A' } } },
       });
       expect(events[1]).toEqual({ event: 'run-resumed', data: {} });
       expect(events.at(-1)!.event).toBe('done');
@@ -491,6 +538,46 @@ describe('Chat API', () => {
       // and the rebuilt session is registered as the active one.
       expect(mockAgentSessionResume).toHaveBeenCalledTimes(1);
       expect(sm.getAgentSession('existing-session')).toBe(mockSession);
+    });
+
+    it('tier 3 — garbage question payload → 400, disk untouched (返修 P3)', async () => {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      const store = sm.getSessionStore(join(tempDir, 'workspace'));
+      await store.saveState('existing-session', {
+        id: 'existing-session',
+        config: { name: 'test-agent', instructions: '', tools: [] },
+        context: {
+          messages: [],
+          stepCount: 0,
+          createdAt: 0,
+          updatedAt: 0,
+          pendingInterrupts: [
+            {
+              request: {
+                type: 'question',
+                questions: [{ id: 'q1', question: 'A?', type: 'text' }],
+                toolCallId: 'call-1',
+              },
+              createdAt: 1,
+            },
+          ],
+        },
+      });
+
+      const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: 'q1', response: 'yes' }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain('Invalid question response');
+      // No injection: the interrupt stays pending on disk, no tool message.
+      const next = await store.loadState('existing-session');
+      expect(next!.context.pendingInterrupts).toHaveLength(1);
+      expect(
+        next!.context.messages.some((m: { toolCallId?: string }) => m.toolCallId === 'call-1')
+      ).toBe(false);
     });
   });
 

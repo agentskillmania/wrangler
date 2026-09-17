@@ -807,16 +807,35 @@ describe('AgentSession', () => {
       const q = hitlResponseFromValue(questionRequest as any, {
         q1: { type: 'direct', value: 'A' },
       });
-      expect(q).toEqual({ type: 'question', answers: { q1: { type: 'direct', value: 'A' } } });
+      expect(q).toEqual({
+        ok: true,
+        response: { type: 'question', answers: { q1: { type: 'direct', value: 'A' } } },
+      });
       // tool-confirm：approved 缺席按拒绝（镜像 Rust response_from_value）
       expect(hitlResponseFromValue(confirmRequest as any, {})).toEqual({
-        type: 'tool-confirm',
-        approved: false,
+        ok: true,
+        response: { type: 'tool-confirm', approved: false },
       });
       expect(hitlResponseFromValue(confirmRequest as any, { approved: true })).toEqual({
-        type: 'tool-confirm',
-        approved: true,
+        ok: true,
+        response: { type: 'tool-confirm', approved: true },
       });
+    });
+
+    it('hitlResponseFromValue rejects garbage question payloads at the boundary (返修 P3)', () => {
+      // 非对象（字符串/数组/null）——垃圾载荷在注入之前被拒。
+      expect(hitlResponseFromValue(questionRequest as any, 'yes').ok).toBe(false);
+      expect(hitlResponseFromValue(questionRequest as any, ['yes']).ok).toBe(false);
+      expect(hitlResponseFromValue(questionRequest as any, null).ok).toBe(false);
+      // 条目缺 type / type 未知——错误信息点名问题 id，可诊断。
+      const missingType = hitlResponseFromValue(questionRequest as any, { q1: 'A' });
+      expect(missingType.ok).toBe(false);
+      if (!missingType.ok) expect(missingType.error).toContain("question 'q1'");
+      expect(
+        hitlResponseFromValue(questionRequest as any, { q1: { type: 'telepathy', value: 'A' } }).ok
+      ).toBe(false);
+      // 空对象合法（零问答对，同 Rust 宽容）。
+      expect(hitlResponseFromValue(questionRequest as any, {}).ok).toBe(true);
     });
   });
 
@@ -976,6 +995,67 @@ describe('AgentSession', () => {
     it('reports not-found for an unknown id', async () => {
       const { session } = await createSessionWithSeed(seededState());
       expect((await session.respondViaState('zzz', {})).status).toBe('not-found');
+    });
+
+    it('rejects garbage payloads before touching state (返修 P3)', async () => {
+      const { session } = await createSessionWithSeed(seededState());
+      const outcome = await session.respondViaState('q1', 'yes');
+      expect(outcome.status).toBe('invalid');
+      // State untouched: both interrupts still pending, no tool message.
+      expect(session.getState().context.pendingInterrupts).toHaveLength(2);
+    });
+
+    it('holds a busy latch across the write-through — a concurrent turn cannot interleave (返修 P2-2)', async () => {
+      // Park saveState mid-write: the stale-snapshot window the latch guards.
+      let releaseSave!: () => void;
+      const saveGate = new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+      const saveState = vi.fn().mockImplementation(async () => {
+        await saveGate;
+      });
+      const seed = seededState();
+      const mock = mockRunnerWithEvents([], seed);
+      const session = await AgentSession.create(
+        {
+          sessionId: 'seeded',
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+          sessionStore: {
+            loadState: vi.fn().mockResolvedValue(seed),
+            saveState,
+            isDirBound: false,
+          } as unknown as AgentSessionOptions['sessionStore'],
+        },
+        testConfig
+      );
+
+      const promise = session.respondViaState('q1', { q1: { type: 'direct', value: 'A' } });
+      // Injection is in memory; the write is parked — the latch must be ON
+      // (without it a turn that completes inside the window gets its afterRun
+      // persistence rolled back by our late stale write).
+      expect(session.busy).toBe(true);
+
+      const events: SSEEvent[] = [];
+      for await (const sse of session.handleMessage('hello')) events.push(sse);
+      // Concurrent turn rejected with the standard busy error, NOT driven.
+      expect(events).toEqual([
+        { event: 'error', data: { message: 'Session is busy processing a message' } },
+      ]);
+      expect(mock.runner.run).not.toHaveBeenCalled();
+
+      releaseSave();
+      const outcome = await promise;
+      expect(outcome.status).toBe('answered');
+      expect(session.busy).toBe(false);
+      // The write that landed is the injected snapshot; the rejected turn
+      // left no trace on it.
+      expect(saveState).toHaveBeenCalledTimes(1);
+      const written = JSON.stringify(saveState.mock.calls[0][1]);
+      expect(written).toContain('call-1');
+      expect(written).not.toContain('hello');
     });
   });
 

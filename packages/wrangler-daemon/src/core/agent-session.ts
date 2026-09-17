@@ -209,16 +209,49 @@ export function findPendingInterrupt(
 }
 
 /**
- * Convert a respond-route JSON body into the typed hitl HumanResponse:
- * question → answers passthrough; tool-confirm → `approved` (absent counts
- * as rejection, mirroring Rust `response_from_value`).
+ * Convert a respond-route JSON body into the typed hitl HumanResponse.
+ *
+ * Question answers are validated at the boundary (garbage in → 400 out,
+ * before any injection mutates state): the payload must be an answers map
+ * `{[questionId]: {type: 'direct' | 'free-text', value}}` — non-objects and
+ * entries missing (or with an unknown) `type` are rejected with a diagnosable
+ * message instead of being serialized into the tool result the LLM reads.
+ * Tool-confirm stays lenient like Rust `response_from_value`: `approved`
+ * absent → rejection (false).
  */
-export function hitlResponseFromValue(request: HumanRequest, value: unknown): HitlHumanResponse {
+export function hitlResponseFromValue(
+  request: HumanRequest,
+  value: unknown
+): { ok: true; response: HitlHumanResponse } | { ok: false; error: string } {
   if (request.type === 'tool-confirm') {
-    const v = (value ?? {}) as { approved?: unknown };
-    return { type: 'tool-confirm', approved: v.approved === true };
+    const v = (typeof value === 'object' && value !== null ? value : {}) as {
+      approved?: unknown;
+    };
+    return { ok: true, response: { type: 'tool-confirm', approved: v.approved === true } };
   }
-  return { type: 'question', answers: (value ?? {}) as Record<string, HumanAnswer> };
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return {
+      ok: false,
+      error: `Invalid question response: expected an answers object keyed by question id, got ${JSON.stringify(
+        value
+      )?.slice(0, 80)}`,
+    };
+  }
+  for (const [qid, answer] of Object.entries(value)) {
+    const type = (answer as { type?: unknown } | null)?.type;
+    if (type !== 'direct' && type !== 'free-text') {
+      return {
+        ok: false,
+        error: `Invalid answer for question '${qid}': expected {type: 'direct' | 'free-text', value}, got ${JSON.stringify(
+          answer
+        )?.slice(0, 80)}`,
+      };
+    }
+  }
+  return {
+    ok: true,
+    response: { type: 'question', answers: value as Record<string, HumanAnswer> },
+  };
 }
 
 export class AgentSession {
@@ -460,6 +493,12 @@ export class AgentSession {
       // bridge surfaces one frame per ask, so this frame's list is the single
       // request it carries; the complete list reaches the frontend via the
       // waiting-human done frame and the respond route's `interrupts` payload.
+      // The entry is hand-built (NOT via humanRequestPayloads): that helper
+      // keys `requestId` off the request's toolCallId, but the bridge id and
+      // the toolCallId are DUAL namespaces here — the frontend must answer
+      // with the bridge-invented `human-<uuid>` (the pendingHumanInput key),
+      // while the toolCallId is only minted by the parked promise's owner and
+      // is unknown at emission time.
       const payload: SSEEvent = {
         event: 'human-input',
         data: {
@@ -706,18 +745,37 @@ export class AgentSession {
   async respondViaState(
     requestId: string,
     response: unknown
-  ): Promise<{ status: 'not-found' } | { status: 'answered'; remaining: HumanRequest[] }> {
+  ): Promise<
+    | { status: 'not-found' }
+    | { status: 'invalid'; error: string }
+    | { status: 'answered'; remaining: HumanRequest[] }
+  > {
     const pending = findPendingInterrupt(this.state, requestId);
     if (!pending) return { status: 'not-found' };
-    const humanResponse = hitlResponseFromValue(pending.request, response);
-    let next = hitlRespond(this.state, pending.request, humanResponse);
+    const converted = hitlResponseFromValue(pending.request, response);
+    if (!converted.ok) return { status: 'invalid', error: converted.error };
+    let next = hitlRespond(this.state, pending.request, converted.response);
     next = removePendingInterrupt(next, pending.request.toolCallId);
     this.state = next;
-    if (this.sessionStore) {
-      await this.sessionStore.saveState(
-        this.sessionStore.isDirBound ? undefined : this.sessionId,
-        next
-      );
+    // Write-through race latch (R2P-165 返修): the `next` snapshot is stale
+    // the moment an await opens — a concurrent handleMessage that completes a
+    // whole turn inside the saveState window would have its afterRun
+    // persistence rolled back by our late write (memory intact, disk stale;
+    // visible on crash/resume). Hold the SAME busy flag turns use: the
+    // check-and-set from the route's !busy guard through here is await-free
+    // (atomic on JS's single thread), so a turn starting during the write is
+    // rejected with the standard busy error instead of interleaving. Released
+    // in finally — a failed write must not wedge the session.
+    this._busy = true;
+    try {
+      if (this.sessionStore) {
+        await this.sessionStore.saveState(
+          this.sessionStore.isDirBound ? undefined : this.sessionId,
+          next
+        );
+      }
+    } finally {
+      this._busy = false;
     }
     return {
       status: 'answered',
@@ -725,19 +783,6 @@ export class AgentSession {
     };
   }
 
-  /**
-   * Stream process a user message, yielding SSE events.
-   *
-   * Adds the user message to state, runs the EnhancedRunner stream,
-   * maps colts RunStreamEvents to SSEEvents, and yields them to the caller.
-   * Handles abort and error cases gracefully.
-   *
-   * @param message - The user's text message
-   * @param options - Optional per-request configuration
-   * @param options.thinkingEnabled - Override thinking mode for this request
-   * @param options.model - Override model for this request
-   * @yields SSEEvent for each event in the agent execution stream
-   */
   /**
    * Stream process a user message, yielding SSE events.
    *

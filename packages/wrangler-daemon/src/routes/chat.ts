@@ -222,6 +222,10 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       // afterRun persistence.
       if (!agentSession.busy) {
         const outcome = await agentSession.respondViaState(body.requestId, body.response);
+        if (outcome.status === 'invalid') {
+          reply.code(400);
+          return { error: outcome.error };
+        }
         if (outcome.status === 'answered') {
           if (outcome.remaining.length > 0) {
             return {
@@ -267,8 +271,14 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
           'The session is not active — send a message first to activate it, then answer the re-surfaced request.',
       };
     }
-    const humanResponse = hitlResponseFromValue(pending.request, body.response);
-    let next = hitlRespond(state, pending.request, humanResponse);
+    const converted = hitlResponseFromValue(pending.request, body.response);
+    if (!converted.ok) {
+      // Boundary validation (garbage in → 400 out, before any injection
+      // mutates the persisted state).
+      reply.code(400);
+      return { error: converted.error };
+    }
+    let next = hitlRespond(state, pending.request, converted.response);
     next = removePendingInterrupt(next, pending.request.toolCallId);
     await ctx.store.saveState(stateKey, next);
     const remaining = (next.context.pendingInterrupts ?? []).map((p) => p.request);
