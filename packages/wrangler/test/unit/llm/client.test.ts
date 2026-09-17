@@ -32,6 +32,41 @@ describe('llm client factory', () => {
     expect(resolveDefaultModel(providers)).toBe('gpt-4o');
   });
 
+  describe('key-aware default resolution (R2P-231, aligned with Rust c90cbd9)', () => {
+    // 与 Rust resolve_default_model 兜底链对齐：第一个【有 key】的 provider
+    // 优先；全部无 key 时回退列表第一个（保持旧状）；再无则 undefined。
+    // 无 key 的 provider 发不出请求——不能让它抢占默认位（env 注入的
+    // 空占位项排在前面时，默认请求全部打到空 key 上 401）。
+
+    it('should skip the first provider when it has an empty apiKey', () => {
+      const mixed: LLMProviderEntry[] = [
+        { name: 'builtin-openai', apiKey: '', models: [{ modelId: 'gpt-4o' }] },
+        { name: 'deepseek', apiKey: 'sk-x', models: [{ modelId: 'deepseek-chat' }] },
+      ];
+      expect(resolveDefaultModel(mixed)).toBe('deepseek-chat');
+    });
+
+    it('should fall back to the first provider when no provider has a key', () => {
+      const allKeyless: LLMProviderEntry[] = [
+        { name: 'a', apiKey: '', models: [{ modelId: 'model-a' }] },
+        { name: 'b', apiKey: '', models: [{ modelId: 'model-b' }] },
+      ];
+      expect(resolveDefaultModel(allKeyless)).toBe('model-a');
+    });
+
+    it('should keep the first provider when it already has a key', () => {
+      const keyed: LLMProviderEntry[] = [
+        { name: 'openai', apiKey: 'sk-1', models: [{ modelId: 'gpt-4o' }] },
+        { name: 'deepseek', apiKey: 'sk-2', models: [{ modelId: 'deepseek-chat' }] },
+      ];
+      expect(resolveDefaultModel(keyed)).toBe('gpt-4o');
+    });
+
+    it('should return undefined for an empty provider list', () => {
+      expect(resolveDefaultModel([])).toBeUndefined();
+    });
+  });
+
   it('should return an LLMClient instance', () => {
     const client = createLLMClient(providers);
     expect(client).toBeInstanceOf(LLMClient);
