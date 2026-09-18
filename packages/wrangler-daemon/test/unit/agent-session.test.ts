@@ -1002,6 +1002,7 @@ describe('AgentSession', () => {
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
           sessionStore: {
             loadState: vi.fn().mockResolvedValue(seed),
+            loadDeliveries: vi.fn().mockResolvedValue([]),
             saveState,
             isDirBound: false,
           } as unknown as AgentSessionOptions['sessionStore'],
@@ -1083,6 +1084,7 @@ describe('AgentSession', () => {
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
           sessionStore: {
             loadState: vi.fn().mockResolvedValue(seed),
+            loadDeliveries: vi.fn().mockResolvedValue([]),
             saveState,
             isDirBound: false,
           } as unknown as AgentSessionOptions['sessionStore'],
@@ -1174,6 +1176,7 @@ describe('AgentSession', () => {
           llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
           sessionStore: {
             loadState: vi.fn().mockResolvedValue(seed),
+            loadDeliveries: vi.fn().mockResolvedValue([]),
             saveState: vi.fn(),
             isDirBound: false,
           } as unknown as AgentSessionOptions['sessionStore'],
@@ -1290,6 +1293,7 @@ describe('AgentSession', () => {
             llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
             sessionStore: {
               loadState: vi.fn().mockResolvedValue(seed),
+              loadDeliveries: vi.fn().mockResolvedValue([]),
               saveState: vi.fn().mockImplementation(async () => {
                 await saveGate;
               }),
@@ -2809,13 +2813,243 @@ describe('AgentSession', () => {
         (session as unknown as { _busy: boolean })._busy = false;
         expect(rejected.map((e) => e.event)).toEqual(['error']);
 
-        // 第二轮真实驱动 → turnSeq=2（拒绝没消费 2）。
+        // 第二轮真实驱动 → turnSeq=2（拒绝没消耗 2）。
         const events: SSEEvent[] = [];
         for await (const sse of session.handleMessage('second')) events.push(sse);
         expect((events.find((e) => e.event === 'done')!.data as { turnSeq: number }).turnSeq).toBe(
           2
         );
       });
+    });
+  });
+
+  // ─── 邮箱 + 消费轮（R2P-141b，对齐 Rust live.rs 的 deliver/run_mail_consumer）───
+  describe('mailbox + consumption turn (R2P-141b)', () => {
+    const mkDelivery = (id: string) => ({
+      subtaskId: `${id}-sub`,
+      agent: 'researcher',
+      content: `result of ${id}`,
+      status: 'success',
+      completedAt: 42,
+    });
+
+    async function createMailboxSession(store?: unknown) {
+      return AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          sessionId: 'mailbox-test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+          ...(store ? { sessionStore: store as AgentSessionOptions['sessionStore'] } : {}),
+        },
+        testConfig
+      );
+    }
+
+    /** 多轮 runner：run() 每被调用一次弹出一个「事件脚本」逐帧发射后返回终态。 */
+    function mockScripts(scripts: Array<Array<[string, unknown?]>>) {
+      const queue = [...scripts];
+      const mock = createMockRunner({
+        run: vi.fn().mockImplementation(async () => {
+          const script = queue.shift() ?? [['complete']];
+          for (const [type, payload] of script) {
+            if (payload === undefined) mock.emit(type);
+            else mock.emit(type, payload);
+          }
+          return {
+            state: {
+              id: 'test-state',
+              config: { name: 'test', instructions: '', tools: [] },
+              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+            },
+            result: { type: 'success', answer: '', totalSteps: 1, tokens: { input: 0, output: 0 } },
+          };
+        }),
+      });
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      return mock;
+    }
+
+    it('formatDeliveries marks mail with <delivery> tags (pure contract)', async () => {
+      const { formatDeliveries } = await import('../../src/core/agent-session.js');
+      const text = formatDeliveries([mkDelivery('x')]);
+      expect(text).toContain('<delivery agent="researcher" subtaskId="x-sub" status="success">');
+      expect(text).toContain('result of x');
+      expect(text).toContain('</delivery>');
+      expect(text).toContain('delivered automatically');
+    });
+
+    it('deliver on idle session drives a mail consumption turn (marker + MAIL_INPUT_CAP seed)', async () => {
+      const { MAIL_INPUT_CAP } = await import('../../src/core/agent-session.js');
+      mockScripts([[['complete']]]);
+      const session = await createMailboxSession();
+      const { addUserMessage } = (await import('@agentskillmania/colts')) as unknown as {
+        addUserMessage: { mock: { calls: Array<[unknown, string, number | undefined]> } };
+      };
+      const callsBefore = addUserMessage.mock.calls.length;
+
+      session.deliver(mkDelivery('r1'));
+
+      // 消费轮跑完：done 帧落史（后台驱动，历史可见）且邮箱清空。
+      await vi.waitFor(() =>
+        expect(session.historySnapshot().some((e) => e.event === 'done')).toBe(true)
+      );
+      expect(session.hasPendingDeliveries()).toBe(false);
+      // 播种消息带 <delivery> 标记，且以 MAIL_INPUT_CAP 为限额（内部消息
+      // 不受人类输入限额约束）。
+      const seedCall = addUserMessage.mock.calls
+        .slice(callsBefore)
+        .find(([, msg]) => String(msg).includes('<delivery'));
+      expect(seedCall).toBeDefined();
+      expect(String(seedCall![1])).toContain('result of r1');
+      expect(seedCall![2]).toBe(MAIL_INPUT_CAP);
+      // 消费轮的 done 帧上常驻流（历史可见）。
+      const dones = session
+        .historySnapshot()
+        .filter((e) => e.event === 'done')
+        .map((e) => e.data as { turnSeq: number });
+      expect(dones.length).toBe(1, '消费轮自己开轮（无用户轮在先）');
+    });
+
+    it('delivery frame lands in rolling history on deliver (background frame, no turn running)', async () => {
+      mockScripts([[['complete']]]);
+      const session = await createMailboxSession();
+
+      session.deliver(mkDelivery('e1'));
+
+      const frame = session.historySnapshot().find((e) => e.event === 'delivery');
+      expect(frame).toBeDefined();
+      expect(frame!.data).toMatchObject({
+        subtaskId: 'e1-sub',
+        agent: 'researcher',
+        status: 'success',
+        content: 'result of e1',
+      });
+      await vi.waitFor(() => expect(session.hasPendingDeliveries()).toBe(false));
+    });
+
+    it('deliver while busy: write-through waits, the turn-end hook digests afterwards (new turnSeq)', async () => {
+      let releaseRun: (() => void) | undefined;
+      const gate = new Promise<void>((resolve) => {
+        releaseRun = resolve;
+      });
+      const mock = createMockRunner({
+        run: vi.fn().mockImplementation(async () => {
+          mock.emit('token', { token: 'turn-one' });
+          await gate;
+          mock.emit('complete');
+          return {
+            state: {
+              id: 'test-state',
+              config: { name: 'test', instructions: '', tools: [] },
+              context: { messages: [], stepCount: 0, createdAt: 0, updatedAt: 0 },
+            },
+            result: { type: 'success', answer: '', totalSteps: 1, tokens: { input: 0, output: 0 } },
+          };
+        }),
+      });
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      const session = await createMailboxSession();
+
+      const iterator = session.handleMessage('hello')[Symbol.asyncIterator]();
+      const first = await iterator.next();
+      expect(first.done).toBe(false);
+      expect(session.busy).toBe(true, 'turn in flight');
+
+      session.deliver(mkDelivery('r2'));
+      expect(session.hasPendingDeliveries()).toBe(true, 'busy: 写穿邮箱，不打扰进行中的轮');
+
+      releaseRun!();
+      for (;;) {
+        const r = await iterator.next();
+        if (r.done) break;
+      }
+      // 轮收尾钩子接力消费：等两个 done 都落史（用户轮 1 + 消费轮 2）。
+      const doneSeqs = (): number[] =>
+        session
+          .historySnapshot()
+          .filter((e) => e.event === 'done')
+          .map((e) => (e.data as { turnSeq: number }).turnSeq);
+      await vi.waitFor(() => expect(doneSeqs()).toEqual([1, 2]));
+      expect(session.hasPendingDeliveries()).toBe(false, 'hook digested the mail');
+    });
+
+    it('mail is NOT consumed while a human input is pending (wait for the human)', async () => {
+      const mock = mockScripts([[['complete']], [['complete']]]);
+      const session = await createMailboxSession();
+      // 未答 HITL 中断驻留内存态——消费轮必须等人（respond 轮的钩子再试）。
+      (session as unknown as { state: unknown }).state = {
+        ...(session.getState() as unknown as object),
+        context: {
+          ...(session.getState() as unknown as { context: object }).context,
+          pendingInterrupts: [
+            {
+              request: { type: 'question', toolCallId: 'c1', questions: [] },
+            },
+          ],
+        },
+      };
+
+      session.deliver(mkDelivery('hitl'));
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(session.hasPendingDeliveries()).toBe(true, 'HITL 未答——邮件驻留');
+      expect(mock.runner.run).not.toHaveBeenCalled();
+    });
+
+    it('oversized delivery batch is dropped visibly (error frame, not requeued forever)', async () => {
+      const { MAIL_INPUT_CAP } = await import('../../src/core/agent-session.js');
+      mockScripts([[['complete']]]);
+      const session = await createMailboxSession();
+
+      const huge = mkDelivery('huge');
+      huge.content = 'x'.repeat(MAIL_INPUT_CAP + 10);
+      session.deliver(huge);
+
+      await vi.waitFor(() => {
+        expect(
+          session
+            .historySnapshot()
+            .some(
+              (e) =>
+                e.event === 'error' &&
+                String((e.data as { message?: string }).message).includes('oversized')
+            )
+        ).toBe(true);
+      });
+      expect(session.hasPendingDeliveries()).toBe(false, 'dropped, not requeued');
+      expect(
+        (session.getState() as unknown as { context: { messages: unknown[] } }).context.messages
+      ).toHaveLength(0);
+    });
+
+    it('mailbox write-through persists batches; materialize (loadMailbox) re-consumes on warm-up', async () => {
+      const savedBatches: unknown[][] = [];
+      const fakeStore = {
+        isDirBound: true,
+        loadState: vi.fn().mockResolvedValue(null),
+        saveState: vi.fn(),
+        getMeta: vi.fn().mockResolvedValue(null),
+        loadDeliveries: vi.fn().mockResolvedValue([mkDelivery('boot')]),
+        saveDeliveries: vi.fn(async (_key: undefined, items: unknown[]) => {
+          savedBatches.push(items);
+        }),
+        getSessionDir: vi.fn().mockReturnValue('/tmp/mailbox-test'),
+      };
+      const mock = mockScripts([[['complete']]]);
+      // 崩溃语义（对齐 Rust「邮箱在盘不丢投递」）：重新物化装载侧车并补消费。
+      const session = await createMailboxSession(fakeStore);
+
+      // 物化即消费：loadDeliveries 读回 1 条 → 消费轮跑一轮 → 排空。
+      await vi.waitFor(() => expect(session.hasPendingDeliveries()).toBe(false));
+      expect(fakeStore.loadDeliveries).toHaveBeenCalledWith(undefined);
+      // drain 写穿空箱（盘上不回魂）。
+      await vi.waitFor(() => {
+        const last = savedBatches.at(-1);
+        expect(Array.isArray(last) && last.length === 0).toBe(true);
+      });
+      expect(mock.runner.run).toHaveBeenCalledTimes(1, '只消费轮驱动（无用户轮）');
     });
   });
 });

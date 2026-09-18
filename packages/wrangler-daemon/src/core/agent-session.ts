@@ -338,6 +338,32 @@ export interface HistoryEntry {
  */
 export const HISTORY_CAP = 500_000;
 
+// ─── 邮箱与消费轮（R2P-141b，对齐 Rust live.rs 的 D2 段）─────────────────
+
+/**
+ * 消费轮的入口限额（对齐 Rust MAIL_INPUT_CAP = 1_000_000）：投递内容是
+ * 子任务结果，远大于人类输入的默认限额；内部消息不应被限额拒绝——
+ * 消费失败的塞回路径只是兜底。
+ */
+export const MAIL_INPUT_CAP = 1_000_000;
+
+/**
+ * 把一批投递拼成一条带标记的 user 消息（对齐 Rust format_deliveries）：
+ * `<delivery>` 包裹让历史里可识别这是自动投递而非人类输入（契约：注入
+ * 消息带 delivery 标记）。引导语用英文——协议层（工具描述/系统提示）的
+ * 统一语言。
+ */
+export function formatDeliveries(
+  deliveries: import('@agentskillmania/wrangler').PendingDelivery[]
+): string {
+  let body =
+    'The following are results from sub-tasks you delegated earlier (delivered automatically — not a new message from the user). Incorporate them and continue:\n\n';
+  for (const d of deliveries) {
+    body += `<delivery agent="${d.agent}" subtaskId="${d.subtaskId}" status="${d.status}">\n${d.content}\n</delivery>\n\n`;
+  }
+  return body;
+}
+
 /**
  * 把一条会话通道的历史帧包成 SSE wire 帧（R2P-151，对齐 Rust
  * core/sse.rs 的 `frame_to_sse`）：把 seq 注入 data 对象——重放段与
@@ -441,6 +467,14 @@ export class AgentSession {
     // 载荷只有 title（与 ACP 翻译层逐字段一致的最小契约形状）。
     this.runner.setSessionTitleListener((title) => {
       this.emitCockpitEvent({ event: 'session-title', data: { title } });
+    });
+    // 监督者挂钩绑定（R2P-141b，对齐 Rust materialize 的 supervisor.bind）：
+    // 子完成投递走本会话邮箱（deliver），子任务 Subagent* 帧走会话通道
+    // （落史+序号+广播——轮外也可见，断线重放不丢子女进展）。
+    // delegate 工具的槽接线随 1c（EnhancedRunner.setDelegateSupervisor）。
+    this.subagentSupervisor.bind({
+      deliver: (d) => this.deliver(d),
+      emit: (type, data) => this.emitBackgroundEvent(type, data),
     });
   }
 
@@ -556,6 +590,9 @@ export class AgentSession {
 
     const session = new AgentSession(runner, state, bridge, options);
     session._llmClient = llmClient;
+    // resume 语义（R2P-141b，对齐 Rust materialize 先消费邮箱）：崩溃前
+    // 已送达未消化的投递在会话重新变热时补一轮消费。
+    await session.loadMailbox();
     return session;
   }
 
@@ -607,6 +644,8 @@ export class AgentSession {
       model: runner.getConfig().model,
     });
     session._llmClient = llmClient;
+    // resume 语义（R2P-141b）：冷启动装载邮箱，非空即唤醒消费轮。
+    await session.loadMailbox();
     return session;
   }
 
@@ -1260,6 +1299,10 @@ export class AgentSession {
         this.sendStateSnapshot();
         this.signalDone();
         this.bridge.sseSender = null;
+        // 轮收尾钩子（R2P-141b，对齐 Rust after_turn_end）：邮箱非空自动
+        // 续一轮消费——投递在轮内到达时由这里接力。busy 先清：消费轮的
+        // 空闲判定据此放行（HITL 未答时消费轮自行等待）。
+        this.afterTurnEnd();
       }
     };
 
@@ -1281,11 +1324,213 @@ export class AgentSession {
   /**
    * Stop the current agent execution stream.
    *
-   * Aborts the underlying LLM call and tool executions.
+   * Aborts the underlying LLM call and tool executions. 取消级联（R2P-141b，
+   * 对齐 Rust Session::cancel = 当前轮 + 全部子女）：被 abort 的子女不
+   * 投递——用户叫停的语义是「别再来了」（daemon /stop 走这里）。
    */
   stop(): void {
     this.abortController?.abort();
     this.abortController = null;
+    this.subagentSupervisor.cancelAll();
+  }
+
+  // ─── 邮箱：投递 + 消费轮（R2P-141b，对齐 Rust live.rs D2 段）───
+
+  /** store 寻址键（目录绑定 = undefined；标准树 = sessionId）。 */
+  private get deliveryStoreKey(): string | undefined {
+    return this.sessionStore?.isDirBound ? undefined : this.sessionId;
+  }
+
+  /**
+   * 投递入口（监督者的子完成回调，测试亦可直调）：先发 `delivery` 后台帧
+   * （常驻流与滚动历史都看到这次投递），再写穿邮箱；闲则立即 spawn 消费
+   * 轮，忙则由进行中轮的收尾钩子（afterTurnEnd）接力消费。HITL 未答时
+   * 消费轮自行等待（等人），由 respond 轮的钩子再试。
+   */
+  deliver(delivery: PendingDelivery): void {
+    this.emitBackgroundSse({
+      event: 'delivery',
+      data: {
+        subtaskId: delivery.subtaskId,
+        agent: delivery.agent,
+        status: delivery.status,
+        content: delivery.content,
+      },
+    });
+    this.pushDelivery(delivery);
+    if (!this._busy) {
+      this.spawnMailConsumer();
+    }
+  }
+
+  /** 入箱一条投递（写穿 deliveries.json）。 */
+  private pushDelivery(delivery: PendingDelivery): void {
+    this.deliveries.push(delivery);
+    void this.persistDeliveries();
+  }
+
+  /** 清空并取走全部投递（写穿空箱；消费轮拼一条标记消息续跑）。 */
+  private drainDeliveries(): PendingDelivery[] {
+    const taken = this.deliveries.splice(0);
+    void this.persistDeliveries();
+    return taken;
+  }
+
+  /** 写穿邮箱（失败不阻塞投递路径——对齐 Rust 的 `let _ = save`）。 */
+  private async persistDeliveries(): Promise<void> {
+    if (!this.sessionStore) return;
+    try {
+      await this.sessionStore.saveDeliveries(this.deliveryStoreKey, this.deliveries);
+    } catch {
+      /* 盘写失败不吞投递：内存箱仍在，下次 push/drain 再试 */
+    }
+  }
+
+  /**
+   * 物化时装载邮箱（resume 语义）：冷启动从 deliveries.json 读回未消化
+   * 投递；非空即唤醒消费轮——崩溃前已送达的邮件在会话重新变热时补消费。
+   */
+  private async loadMailbox(): Promise<void> {
+    if (!this.sessionStore) return;
+    const loaded = await this.sessionStore.loadDeliveries(this.deliveryStoreKey);
+    if (loaded.length === 0) return;
+    this.deliveries.push(...loaded);
+    this.spawnMailConsumer();
+  }
+
+  /** 轮收尾钩子：邮箱非空自动续一轮消费（投递在轮内到达由这里接力；
+   * deliver 在闲时的直投自行 spawn）。链式收尾——消费轮自己的收尾也会
+   * 再查一轮（轮内可能又来了新投递）。 */
+  private afterTurnEnd(): void {
+    if (this.deliveries.length > 0) {
+      this.spawnMailConsumer();
+    }
+  }
+
+  private spawnMailConsumer(): void {
+    // setTimeout(0) 逃出当前栈（对齐 tokio::spawn 的调度语义）：deliver 的
+    // 调用点可能在轮收尾的同步段里，直接跑消费轮会重入 driveTurn。
+    const timer = setTimeout(() => {
+      void this.runMailConsumer();
+    }, 0);
+    // 看门狗式的后台任务不得阻止进程退出（Node 环境；浏览器无此口）。
+    (timer as unknown as { unref?: () => void }).unref?.();
+  }
+
+  /**
+   * 消费轮（对齐 Rust run_mail_consumer）：邮箱取空 → 拼一条带 delivery
+   * 标记的 user 消息 → 后台驱动一轮把结果喂给 LLM。驱动失败（入口拒绝）
+   * 时把邮件塞回，不丢信；HITL 未答时不消费（等人），respond 轮的钩子
+   * 再试。超长批次显式丢弃（错误帧可见）——塞回会每次消费都被拒，把
+   * 会话永久钉死在不冷却状态。
+   */
+  private async runMailConsumer(): Promise<void> {
+    // HITL 未答时不消费（等人）；respond 轮的收尾钩子会再试。
+    if ((this.state?.context?.pendingInterrupts ?? []).length > 0) {
+      return;
+    }
+    // 有轮在飞：不打扰——进行中轮的收尾钩子接力。
+    if (this._busy) {
+      return;
+    }
+    const deliveries = this.drainDeliveries();
+    if (deliveries.length === 0) {
+      return;
+    }
+    const userContent = formatDeliveries(deliveries);
+    if (userContent.length > MAIL_INPUT_CAP) {
+      this.emitBackgroundSse({
+        event: 'error',
+        data: {
+          message: `dropped oversized delivery batch (${userContent.length} chars > cap ${MAIL_INPUT_CAP}): subtasks [${deliveries
+            .map((d) => d.subtaskId)
+            .join(', ')}]`,
+        },
+      });
+      return;
+    }
+    const ack = this.sendBackground(userContent, MAIL_INPUT_CAP);
+    if (!ack.ok) {
+      // 入口拒绝（busy/超长的防御兜底——常态路径上方预检已挡）：邮件塞回，
+      // 下轮钩子/物化再试。
+      for (const d of deliveries) {
+        this.pushDelivery(d);
+      }
+    }
+  }
+
+  /**
+   * 后台驱动一轮已拼好的消息（sendMessageInBackground 的内核形态）：
+   * `maxLen` 由调用方给定——消费轮用 MAIL_INPUT_CAP（内部消息不受人类
+   * 输入限额约束），用户路径用会话级 maxInputLength。帧不进任何请求级
+   * 响应——runner 帧经 driveTurn 落会话通道（滚动历史+广播），常驻
+   * events 流是唯一收看面；这里的迭代消费只为推着生成器走完生命周期。
+   */
+  private sendBackground(
+    message: string,
+    maxLen: number | undefined
+  ):
+    | { ok: true; turnSeq: number; completion: Promise<{ hadError: boolean }> }
+    | { ok: false; code: 409 | 400; error: string } {
+    if (this._busy) {
+      return { ok: false, code: 409, error: 'Session is busy processing a message' };
+    }
+    if (maxLen !== undefined && message.length > maxLen) {
+      return {
+        ok: false,
+        code: 400,
+        error: `Input exceeds maximum length of ${maxLen} characters (got ${message.length})`,
+      };
+    }
+    // turnSeq+1 是 driveTurn 即将分配的轮号：busy 复检到此零 await，
+    // 没有并发驱动能插进来抢号。
+    const turnSeq = this.turnSeq + 1;
+    const iterator = this.driveTurn((s) => addUserMessage(s, message, maxLen))[
+      Symbol.asyncIterator
+    ]();
+    const completion = (async (): Promise<{ hadError: boolean }> => {
+      try {
+        for (;;) {
+          const r = await iterator.next();
+          if (r.done) return { hadError: false };
+        }
+      } catch (err) {
+        this.pushEvent({ event: 'error', data: { message: `drive failed: ${String(err)}` } });
+        return { hadError: true };
+      }
+    })();
+    return { ok: true, turnSeq, completion };
+  }
+
+  // ─── 后台帧（R2P-141b：无轮在跑也进会话通道）───
+
+  /**
+   * 监督者 emit 挂钩：子任务的 Subagent* 帧（raw runner 事件形状）经
+   * mapEvent 映射后写会话通道——与轮帧同一条落史+序号+广播路径。
+   */
+  private emitBackgroundEvent(type: string, data: Record<string, unknown>): void {
+    const mapped = AgentSession.mapEvent({ type, ...data });
+    const events = Array.isArray(mapped) ? mapped : [mapped];
+    for (const sse of events) {
+      this.emitBackgroundSse(sse);
+    }
+  }
+
+  /**
+   * 写一帧后台事件（delivery 投递回执、子女 Subagent* 进展）：pushEvent
+   * （会话通道唯一写口：seq + 滚动历史 + 广播）+ cockpit 广播 + 请求级
+   * 重放史——与轮内帧的三联投递同构，注入 daemon 侧 timestamp。
+   */
+  private emitBackgroundSse(sse: SSEEvent): void {
+    if (typeof sse.data === 'object' && sse.data !== null && !Array.isArray(sse.data)) {
+      (sse.data as Record<string, unknown>).timestamp = Date.now();
+    }
+    this.pushEvent(sse);
+    this._broadcastToCockpit(sse);
+    this.eventHistory.push(sse);
+    if (this.eventHistory.length > this.MAX_HISTORY) {
+      this.eventHistory.shift();
+    }
   }
 
   // ─── 会话级事件通道（R2P-122，对齐 Rust session/live.rs）───

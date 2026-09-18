@@ -6,6 +6,7 @@ import type { AgentState } from '@agentskillmania/colts';
 import { writeMeta, readMeta } from './meta.js';
 import type { HostEnv } from '../host-env/index.js';
 import type { SessionMeta } from '../types.js';
+import type { PendingDelivery } from './types.js';
 
 /**
  * Session persistence manager.
@@ -16,7 +17,8 @@ import type { SessionMeta } from '../types.js';
  * Directory structure:
  * {baseDir}/{hash(workspacePath)}/{sessionId}/
  *   ├── meta.yaml
- *   └── state.json
+ *   ├── state.json
+ *   └── deliveries.json（异步委派邮箱 sidecar，R2P-141b）
  *
  * 所有 fs/path/crypto 操作通过 HostEnv 注入（浏览器走 OPFS，Node 走 node:fs）。
  */
@@ -146,6 +148,37 @@ export class SessionStore {
       return deserializeState(raw);
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * 写邮箱 sidecar（`deliveries.json`，R2P-141b 对齐 Rust save_deliveries）：
+   * 写穿语义——空箱也落空文件（drain 排空后盘上同步为空，崩溃重启不回魂）。
+   * 邮箱只会在一轮 run 之后出现（state.json 已建目录），与 Rust 同款不
+   * 预建目录。
+   */
+  async saveDeliveries(sessionId: string | undefined, items: PendingDelivery[]): Promise<void> {
+    return this.serialize(this.getQueueKey(sessionId), async () => {
+      const dir = this.getSessionDir(sessionId);
+      await this.runtime.fs.writeFile(
+        this.runtime.path.join(dir, 'deliveries.json'),
+        JSON.stringify(items)
+      );
+    });
+  }
+
+  /**
+   * 读邮箱 sidecar；缺失或非法返回空（缺席按空箱降级，对齐 Rust
+   * load_deliveries 的 unwrap_or_default）。
+   */
+  async loadDeliveries(sessionId?: string): Promise<PendingDelivery[]> {
+    try {
+      const dir = this.getSessionDir(sessionId);
+      const raw = await this.runtime.fs.readFile(this.runtime.path.join(dir, 'deliveries.json'));
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? (parsed as PendingDelivery[]) : [];
+    } catch {
+      return [];
     }
   }
 

@@ -348,4 +348,67 @@ describe('SessionStore', () => {
       await expect(store.deleteSession('no-such-session')).resolves.toBeUndefined();
     });
   });
+
+  // ─── 邮箱 sidecar（R2P-141b，对齐 Rust save_deliveries/load_deliveries）───
+  describe('saveDeliveries / loadDeliveries', () => {
+    const delivery = (id: string) => ({
+      subtaskId: `${id}-sub`,
+      agent: 'researcher',
+      content: `result of ${id}`,
+      status: 'success',
+      completedAt: 42,
+    });
+
+    it('round-trips a non-empty mailbox (camelCase wire shape)', async () => {
+      const sessionId = '1745800000-mail';
+      await store.createWithId(sessionId, 'test-agent');
+
+      await store.saveDeliveries(sessionId, [delivery('a'), delivery('b')]);
+      const loaded = await store.loadDeliveries(sessionId);
+
+      expect(loaded).toHaveLength(2);
+      expect(loaded[0]).toEqual(delivery('a'));
+      expect(loaded[1]).toEqual(delivery('b'));
+      // camelCase 键（对齐 Rust serde rename_all = "camelCase"）。
+      const raw = JSON.parse(
+        await readFile(join(store.getSessionDir(sessionId), 'deliveries.json'), 'utf-8')
+      );
+      expect(Object.keys(raw[0])).toEqual(expect.arrayContaining(['subtaskId', 'completedAt']));
+    });
+
+    it('drain write-through persists the EMPTY box (crash does not resurrect mail)', async () => {
+      const sessionId = '1745800000-mail-drain';
+      await store.createWithId(sessionId, 'test-agent');
+      await store.saveDeliveries(sessionId, [delivery('x')]);
+
+      await store.saveDeliveries(sessionId, []);
+      expect(await store.loadDeliveries(sessionId)).toEqual([]);
+      const raw = JSON.parse(
+        await readFile(join(store.getSessionDir(sessionId), 'deliveries.json'), 'utf-8')
+      );
+      expect(raw).toEqual([]);
+    });
+
+    it('missing sidecar degrades to an empty box', async () => {
+      expect(await store.loadDeliveries('never-created')).toEqual([]);
+    });
+
+    it('corrupt sidecar degrades to an empty box (unwrap_or_default)', async () => {
+      const sessionId = '1745800000-mail-corrupt';
+      await store.createWithId(sessionId, 'test-agent');
+      await writeFile(join(store.getSessionDir(sessionId), 'deliveries.json'), 'not-json', 'utf-8');
+      expect(await store.loadDeliveries(sessionId)).toEqual([]);
+    });
+
+    it('dir-bound store addresses the sidecar without sessionId', async () => {
+      const dir = join(testBaseDir, 'bound-session');
+      await mkdir(dir, { recursive: true });
+      const bound = SessionStore.fromDir(dir, new NodeHostEnv());
+
+      await bound.saveDeliveries(undefined, [delivery('d')]);
+      const loaded = await bound.loadDeliveries(undefined);
+      expect(loaded).toHaveLength(1);
+      expect(loaded[0]!.subtaskId).toBe('d-sub');
+    });
+  });
 });
