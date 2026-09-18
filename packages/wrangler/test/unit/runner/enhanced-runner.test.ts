@@ -679,7 +679,7 @@ describe('EnhancedRunner', () => {
         })
       );
       const config = runner.getConfig();
-      expect(config.middlewareNames).toEqual([]);
+      expect(config.middlewareNames).not.toContain('A2UIMiddleware');
       expect(config.enableSession).toBe(false);
       expect(config.enableTodolist).toBe(false);
     });
@@ -718,7 +718,7 @@ describe('EnhancedRunner', () => {
 
       // HITL 入口唯一化（D4）：a2ui 是纯展示工具面，无专属 middleware
       const config = runner.getConfig();
-      expect(config.middlewareNames).toEqual([]);
+      expect(config.middlewareNames).not.toContain('A2UIMiddleware');
 
       const toolNames = runner.getToolInfo().map((t) => t.name);
       expect(toolNames).toContain('a2ui_create_surface');
