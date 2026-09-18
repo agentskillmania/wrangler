@@ -65,6 +65,15 @@ export function useCrewChatState() {
   // ── 常驻 events 流（R2P-153 迁移，与 useChatState 同款）──
   var eventsRef = useRef(null);
   var lastSeqRef = useRef(0);
+  // 重挂兜底的判活/节流状态（返修 P2-1）：streamingRef 是 streaming 的 ref
+  // 镜像——定时器回调若读渲染期闭包里的 streaming，拿到的是创建该函数实例
+  // 那一帧的快照（主冷路径上恒为 false，兜底重试成死代码）；mountedRef 拦
+  // 卸载后的未决定时器；reattach 两 ref 给 404 兜底重试封顶（会话被删的
+  // 持续 404 不再无限打）。
+  var streamingRef = useRef(false);
+  var mountedRef = useRef(true);
+  var reattachTimerRef = useRef(null);
+  var reattachAttemptsRef = useRef(0);
 
   // ── Runner Config ──
   var _sSB = useState(true),
@@ -245,6 +254,13 @@ export function useCrewChatState() {
     [cockpitEvents]
   );
 
+  // 卸载守卫（返修 P2-1）：组件卸载后未决的兜底定时器不得再触发重挂。
+  useEffect(function () {
+    return function () {
+      mountedRef.current = false;
+    };
+  }, []);
+
   useEffect(
     function () {
       if (cockpitEsRef.current) {
@@ -253,8 +269,7 @@ export function useCrewChatState() {
       }
 
       if (!sessionId) {
-        if (eventsRef.current && eventsRef.current.handle) eventsRef.current.handle.close();
-        eventsRef.current = null;
+        closeEvents();
         setCockpitEvents([]);
         setDiagnosticsData(null);
         setRightFileTree([]);
@@ -312,8 +327,8 @@ export function useCrewChatState() {
           cockpitEsRef.current.close();
           cockpitEsRef.current = null;
         }
-        if (eventsRef.current && eventsRef.current.handle) eventsRef.current.handle.close();
-        eventsRef.current = null;
+        // 卸载/换会话收束常驻流与未决兜底定时器（返修 P2-1）。
+        closeEvents();
       };
     },
     [sessionId]
@@ -365,9 +380,9 @@ export function useCrewChatState() {
         setSessionId(p.sessionId);
       }
       if (ev === 'done') {
-        setStreaming(false);
+        updateStreaming(false);
       } else if (ev === 'error') {
-        setStreaming(false);
+        updateStreaming(false);
       }
       var tag = eventToTag(ev);
       var text = formatEventData(ev, p);
@@ -401,6 +416,22 @@ export function useCrewChatState() {
   }
 
   // ── 常驻 events 流接线（R2P-153，send ack 化的客户端面）──
+
+  /** streaming 状态 + ref 镜像双写（返修 P2-1：定时器回调读 ref 拿现值）。 */
+  function updateStreaming(v) {
+    streamingRef.current = v;
+    setStreaming(v);
+  }
+
+  /** 常驻流收束（返修 P2-1）：关柄 + 摘未决兜底定时器（卸载/换会话）。 */
+  function closeEvents() {
+    if (reattachTimerRef.current) {
+      clearTimeout(reattachTimerRef.current);
+      reattachTimerRef.current = null;
+    }
+    if (eventsRef.current && eventsRef.current.handle) eventsRef.current.handle.close();
+    eventsRef.current = null;
+  }
 
   /**
    * 全 transport 的帧收口：data.seq 是会话内全序（POST 创建流、respond
@@ -452,6 +483,8 @@ export function useCrewChatState() {
         onOpen: function () {
           if (eventsRef.current && eventsRef.current.handle === me) {
             eventsRef.current.open = true;
+            // 成功挂上即重置兜底预算（返修 P2-1：每次成功建连都是新回合）。
+            reattachAttemptsRef.current = 0;
           }
         },
         onFrame: function (f) {
@@ -460,16 +493,11 @@ export function useCrewChatState() {
         onError: function () {
           // 柄失效（冷会话 404 等）——只处理「本柄仍是当前柄」的失效
           // （ack 分支可能已换成新柄）。错误本身不进对话区（POST 的
-          // ack/错误码才是权威）。
+          // ack/错误码才是权威）。兜底重挂交给 scheduleReattach（返修
+          // P2-1：判活读 ref 现值 + 次数封顶 + 可被卸载清理摘除）。
           if (eventsRef.current && eventsRef.current.handle === me) {
             eventsRef.current = { sid: sid, handle: null, open: false };
-            // 发送中途挂流失败而 ack 未回：延迟重挂兜底（若会话尚未被
-            // 物化会再 404，节奏受延迟约束；ack 分支的重挂先到则此处空转）。
-            if (streaming) {
-              setTimeout(function () {
-                if (streaming) ensureEvents(sid, 'replay');
-              }, 400);
-            }
+            scheduleReattach(sid);
           }
         },
         onTerminal: function () {
@@ -486,13 +514,39 @@ export function useCrewChatState() {
   }
 
   /**
+   * 挂流失败的有界兜底重挂（返修 P2-1）：只在发送在飞（ack 可能仍未
+   * 回、帧需要补）时重试——判活读 streamingRef/mountedRef 的现值；连续
+   * 失败 5 次终态放弃（会话被删的持续 404 不再打）；定时器句柄留在 ref
+   * 上，卸载/换会话由 closeEvents 摘除。ack 成功分支的重挂先到则空转。
+   */
+  function scheduleReattach(sid) {
+    if (!mountedRef.current) return;
+    if (reattachTimerRef.current) return;
+    if (reattachAttemptsRef.current >= 5) return;
+    reattachAttemptsRef.current += 1;
+    reattachTimerRef.current = setTimeout(function () {
+      reattachTimerRef.current = null;
+      if (!mountedRef.current) return;
+      if (!streamingRef.current) return;
+      if (eventsRef.current && eventsRef.current.sid === sid && eventsRef.current.handle) {
+        return;
+      }
+      ensureEvents(sid, 'replay');
+    }, 400);
+  }
+
+  /**
    * ack 语义发送（R2P-153）：先挂流再 POST（订阅早于发送，本轮帧全走
    * 直播——对齐 Rust e2e drive_turn 的次序纪律）；POST 只取 ack/错误码，
-   * 轮帧与错误 error 帧全部从常驻 events 流进状态机。done 帧的
-   * data.turnSeq === ack.turnSeq 即本轮完结（多路帧按 seq 去重归属）。
+   * 轮帧与错误 error 帧全部从常驻 events 流进状态机。本轮完结的客户端
+   * 判据是流上的 done 帧：服务端 busy 串行化保证一轮一 done，任意 done
+   * 即本轮（返修 P3-2 注释对齐——done 帧 wire 上带 turnSeq，按
+   * data.turnSeq === ack.turnSeq 的精确认领留作后续强化）。
    */
   function sendAck(sid, body) {
-    setStreaming(true);
+    updateStreaming(true);
+    // 新的用户发送 = 新的兜底回合（返修 P2-1）。
+    reattachAttemptsRef.current = 0;
     ensureEvents(sid, 'live');
     fetch(BASE + '/api/chat/' + encodeURIComponent(sid), {
       method: 'POST',
@@ -512,7 +566,7 @@ export function useCrewChatState() {
       .then(function (r) {
         if (!r.ok) {
           appendLine('error', JSON.stringify(r.ack));
-          setStreaming(false);
+          updateStreaming(false);
           return;
         }
         // ack 成功：若预挂流在冷会话上 404 了，此刻会话已被 POST 物化——
@@ -523,7 +577,7 @@ export function useCrewChatState() {
         if (e && e.name !== 'AbortError') {
           appendLine('error', 'Connection error: ' + e.message);
         }
-        setStreaming(false);
+        updateStreaming(false);
       });
   }
 
@@ -574,7 +628,7 @@ export function useCrewChatState() {
     if (chatCtrlRef.current) chatCtrlRef.current.abort();
     var ctrl = new AbortController();
     chatCtrlRef.current = ctrl;
-    setStreaming(true);
+    updateStreaming(true);
 
     fetch(BASE + url, {
       method: 'POST',
@@ -591,7 +645,7 @@ export function useCrewChatState() {
             })
             .then(function (err) {
               appendLine('error', JSON.stringify(err));
-              setStreaming(false);
+              updateStreaming(false);
             });
         }
         var reader = res.body.getReader();
@@ -605,7 +659,7 @@ export function useCrewChatState() {
             var done = _ref.done;
             var value = _ref.value;
             if (done) {
-              setStreaming(false);
+              updateStreaming(false);
               return;
             }
             buf += dec.decode(value, { stream: true });
@@ -634,7 +688,7 @@ export function useCrewChatState() {
         if (e.name !== 'AbortError') {
           appendLine('error', 'Connection error: ' + e.message);
         }
-        setStreaming(false);
+        updateStreaming(false);
       });
   }
 
@@ -682,7 +736,7 @@ export function useCrewChatState() {
   function stopChat() {
     if (chatCtrlRef.current) chatCtrlRef.current.abort();
     if (sessionId) api.post('/api/chat/' + sessionId + '/stop');
-    setStreaming(false);
+    updateStreaming(false);
   }
 
   function sendAskResponse() {

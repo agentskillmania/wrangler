@@ -233,7 +233,8 @@ function getUrl(): string {
  */
 async function createWarmSession(
   sessionManager: SessionManager,
-  sessionId: string
+  sessionId: string,
+  limits?: { maxInputLength?: number }
 ): Promise<AgentSession> {
   const workspace = join(tempDir!, 'workspace');
   // 盘身份：meta.yaml（agentName/workspacePath/runnerConfig）。
@@ -249,6 +250,7 @@ async function createWarmSession(
       runtime: defaultNodeHostEnv,
       llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
       sessionManager,
+      limits,
     },
     testConfig
   );
@@ -745,6 +747,34 @@ describe('POST /api/chat/:sessionId ack + persistent events (R2P-153 dual-track)
     expect((frames.find((f) => f.event === 'error')!.data as { message?: string }).message).toBe(
       'Error: kernel exploded'
     );
+  });
+
+  it('oversized message → 400 on the ack track (limit rejected before the turn starts, status not polluted)', async () => {
+    const sessionManager = await buildApp();
+    scriptedRunner([[['complete']]]);
+    // maxInputLength=5 的温会话：超限消息在开轮前拒（对齐 Rust append
+    // 失败 400——ack 响应尚未定形，HTTP 层还能报错）。
+    await createWarmSession(sessionManager, 'ack-limit', { maxInputLength: 5 });
+
+    const post = await fetch(`${getUrl()}/api/chat/ack-limit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'way too long for the limit' }),
+    });
+    expect(post.status).toBe(400);
+    const body = (await post.json()) as { error: string };
+    expect(body.error).toContain('Input exceeds maximum length');
+
+    // 拒绝不得污染会话状态（返修 P3-1：running 只在确定开轮后置位）。
+    expect(
+      (sessionManager as unknown as { getStatus(id: string): string }).getStatus('ack-limit')
+    ).not.toBe('running');
+    // 未开轮：通道无帧（挂流只见 history-end 分界，重放为空）。
+    const res = await fetch(`${getUrl()}/api/chat/ack-limit/events`);
+    const gen = sseFrames(res);
+    const seen = await collectUntil(gen, (fr) => fr.event === 'history-end');
+    await stopSse(gen, res);
+    expect(seen.filter((fr) => fr.event !== 'history-end')).toEqual([]);
   });
 
   it('?stream=1 legacy track: full-shape SSE with Deprecation header, unchanged wire', async () => {

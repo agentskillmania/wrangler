@@ -904,8 +904,6 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       return;
     }
 
-    sessionManager().updateStatus(sessionId, 'running');
-
     const streamOpts = {
       thinkingEnabled: body.thinkingEnabled,
       model: body.model,
@@ -916,6 +914,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     } as const;
 
     if ((request.query as { stream?: string }).stream === '1') {
+      sessionManager().updateStatus(sessionId, 'running');
       await streamAgentSession(reply, agentSession, body.message, streamOpts, {
         Deprecation: 'true',
       });
@@ -936,6 +935,10 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       reply.code(400);
       return { error: ack.error };
     }
+    // running 只在确定开轮后置位（返修 P3-1）：拒绝分支（409/400）不得
+    // 把会话状态污染成 running——上一个 done 的 idle 会被顶掉，诊断面
+    // 误报在跑。
+    sessionManager().updateStatus(sessionId, 'running');
     ack.completion.then((outcome) =>
       sessionManager().updateStatus(sessionId, outcome.hadError ? 'error' : 'idle')
     );
