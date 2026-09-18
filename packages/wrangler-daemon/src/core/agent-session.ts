@@ -1227,6 +1227,15 @@ export class AgentSession {
     return [...this.history];
   }
 
+  /**
+   * 下一帧将取的 seq（frameSeq + 1；对齐 Rust `Session::next_seq`）——
+   * events 流 history-end 分界帧的空历史分支用：firstSeq 语义是「保留窗
+   * 首帧 seq」，空窗时退化为「下一帧将取的 seq」，客户端拿它判对齐。
+   */
+  nextFrameSeq(): number {
+    return this.frameSeq + 1;
+  }
+
   /** 压入一帧滚动历史（超安全阀丢最旧——对齐 Rust push_history）。 */
   private pushHistory(entry: HistoryEntry): void {
     if (this.history.length >= HISTORY_CAP) {
@@ -1246,8 +1255,13 @@ export class AgentSession {
    * 常驻流重放段照样可见，重连后 done 归属不丢。
    */
   private pushEvent(event: SSEEvent): void {
+    // done 帧注入所属轮次编号。对象守卫与 frameToSse 对称（数组/原始值
+    // data 不注入——对齐 Rust serde 只在 Value::Object 上 insert）。
     const data =
-      event.event === 'done' && typeof event.data === 'object' && event.data !== null
+      event.event === 'done' &&
+      typeof event.data === 'object' &&
+      event.data !== null &&
+      !Array.isArray(event.data)
         ? { ...(event.data as Record<string, unknown>), turnSeq: this.turnSeq }
         : event.data;
     const entry: HistoryEntry = {

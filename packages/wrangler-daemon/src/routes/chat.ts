@@ -100,6 +100,13 @@ function startingConflict(detail: string): { error: string; reason: 'starting'; 
 const BUSY_CLEAR_GRACE_ATTEMPTS = 10;
 const BUSY_CLEAR_GRACE_INTERVAL_MS = 10;
 
+/**
+ * 常驻 events 流的僵尸看门狗周期（返修 P2-1）：会话对象被驱逐/替换后，
+ * 挂在旧对象上的流收不到新帧也不会被关闭——周期校验注册表里的对象
+ * 同一性，失配即发 session-evicted 帧并终结流。
+ */
+const EVENTS_STREAM_WATCHDOG_MS = 5000;
+
 /** Wait (bounded) for the busy latch to clear. Returns the final busy state. */
 async function busyCleared(session: AgentSession): Promise<boolean> {
   for (let i = 0; i < BUSY_CLEAR_GRACE_ATTEMPTS; i++) {
@@ -274,13 +281,16 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * GET /api/chat/:sessionId/events — 会话级常驻事件流（R2P-151，对齐
-   * Rust routes/chat/events.rs 的只读裁剪）。
+   * Rust routes/chat/events.rs 的只读裁剪；返修补 history-end 分界帧与
+   * 僵尸流看门狗）。
    *
    * 与请求级的发消息流（POST /api/chat/:id——轮结束即关）不同，这条流
    * 不随某一轮结束而关闭：建连先重放滚动历史里 `seq > lastSeq` 的帧
-   * （断线期间的洞补上），之后把会话通道上的全部帧按全序直播下去，
-   * 只在客户端断开时退订。没有流级 done 收尾——done 只是流上的一种
-   * 事件。
+   * （断线期间的洞补上）+ 一帧 `history-end` 分界（data 带 firstSeq/
+   * lastSeq，客户端比对识别裁头 gap 与驱逐重建复位），之后把会话通道
+   * 上的全部帧按全序直播下去，只在客户端断开或会话被驱逐/替换时结束
+   * （后者发一帧合成 `session-evicted` 再关——僵尸流终结）。没有流级
+   * done 收尾——done 只是流上的一种事件。
    *
    * 重放门控在服务端做：`?lastSeq=N` 丢弃 seq≤N 的历史帧（客户端已
    * 见）；缺省 lastSeq=0（全量重放）。重放段与直播段同经 frameToSse
@@ -312,8 +322,10 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     // evict_idle()——闲置温会话的回收不依赖"有新会话插入"）。
     sessionManager().evictIdleSessions();
 
+    console.error('[dbg-route] entry, warm=', sessionManager().getAgentSession(sessionId) !== null);
     // 温会话直接挂；冷会话物化（与 resume/respond 同一装配路径）。
     let agentSession = sessionManager().getAgentSession(sessionId);
+    if (!agentSession) console.error('[dbg-route] COLD PATH taken');
     if (!agentSession) {
       const ctx = await resolveSessionContext(sessionId, query.sessionDir, {
         sessionManager: sessionManager(),
@@ -355,6 +367,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         }
       }
       agentSession = rebuilt;
+      console.error('[dbg-route] rebuilt registered, active=', sessionManager().activeCount);
     }
 
     reply.hijack();
@@ -379,12 +392,43 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       writeSSE(reply, wire.event, wire.data);
     };
     const detach = agentSession.subscribe(forward);
-    for (const entry of agentSession.historySnapshot()) {
+    const history = agentSession.historySnapshot();
+    // 空历史建连：SSE 注释行打底（与 flushHeaders 同点，代理掐断防御）——
+    // 注释行不是帧，消费方的 SSE 解析器按规范跳过。
+    if (history.length === 0) {
+      reply.raw.write(': keep-alive\n\n');
+    }
+    for (const entry of history) {
       forward(entry);
     }
-    // 断开即退订（只读观察者，无 CONC5 停轮语义）。Listen on reply.raw
-    // (the socket) — the request body is consumed by the time SSE opens.
+    // 重放段收尾分界帧（返修 P1）：客户端拿 firstSeq/lastSeq 与自己的
+    // lastSeq 比对，即可识别两类失配——裁头 gap（firstSeq > 我的
+    // lastSeq+1：保留窗前的帧被安全阀裁掉且我没见过）与驱逐重建复位
+    // （lastSeq < 我的：seq 空间随新 AgentSession 重启）。空窗时 firstSeq
+    // 退化为下一帧将取的 seq（对齐 Rust next_seq 分支）、lastSeq=0——全新
+    // 会话上 firstSeq=1 与 lastSeq=0 自洽（0+1=1）。分界帧是合成帧、无
+    // 自身 seq，不以 frameToSse 包装。
+    writeSSE(reply, 'history-end', {
+      firstSeq: history[0]?.seq ?? agentSession.nextFrameSeq(),
+      lastSeq: history.at(-1)?.seq ?? 0,
+    });
+
+    // 僵尸流看门狗（返修 P2-1）：会话被驱逐/替换（注册表里不再是本流
+    // 订阅的那个对象）后，本流既收不到新帧也不会被任何人关闭——纯漏。
+    // 周期校验对象同一性，失配即发一帧合成 session-evicted（客户端拿到
+    // 明确信号而非裸 EOF）并终结流。unref：看门狗不得阻止进程退出。
+    const watchdog = setInterval(() => {
+      if (sessionManager().getAgentSession(sessionId) !== agentSession) {
+        writeSSE(reply, 'session-evicted', { sessionId });
+        reply.raw.end();
+      }
+    }, EVENTS_STREAM_WATCHDOG_MS);
+    watchdog.unref();
+    // 断开即退订+停表（只读观察者，无 CONC5 停轮语义）。Listen on
+    // reply.raw (the socket) — the request body is consumed by the time SSE
+    // opens. 看门狗自杀终结同样经 end()→close 走到这里（单点清理）。
     reply.raw.on('close', () => {
+      clearInterval(watchdog);
       detach();
     });
   });

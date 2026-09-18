@@ -171,6 +171,16 @@ async function stopSse(gen: AsyncGenerator<WireFrame>, res: Response): Promise<v
   await res.body!.cancel();
 }
 
+/**
+ * 通道帧的 seq 序列——剥掉 history-end/session-evicted 等合成分界帧
+ * （它们无自身 seq，载荷描述的是 seq 空间本身）。
+ */
+function channelSeqs(frames: WireFrame[]): number[] {
+  return frames
+    .filter((f) => f.event !== 'history-end' && f.event !== 'session-evicted')
+    .map((f) => f.data.seq as number);
+}
+
 // ─── App/session 装配 ───
 
 let fastify: FastifyInstance | null = null;
@@ -281,10 +291,14 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     await stopSse(gen, res);
 
     // wire 契约：每帧 data.seq（首帧 =1，严格单调）；done 带所属轮 turnSeq。
-    expect(frames.map((f) => f.data.seq)).toEqual([1, 2, 3]);
+    expect(channelSeqs(frames)).toEqual([1, 2, 3]);
     const done = frames.find((f) => f.event === 'done')!;
     expect(done.data.turnSeq).toBe(1);
-    expect((frames[0].data as { delta?: string }).delta).toBe('a');
+    expect((frames.find((f) => f.event === 'token')!.data as { delta?: string }).delta).toBe('a');
+    // 空历史建连：首帧是 history-end 分界（firstSeq=下一帧将取的 seq=1，
+    // lastSeq=0——空窗），先于任何直播帧。
+    expect(frames[0].event).toBe('history-end');
+    expect(frames[0].data).toEqual({ firstSeq: 1, lastSeq: 0 });
   });
 
   it('default (no lastSeq) replays the FULL rolling history before going live', async () => {
@@ -304,9 +318,10 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     // 同一响应体只开一个读取器（ReadableStream 单锁）——重放段与直播段
     // 共用一个 generator。
     const gen = sseFrames(res);
-    // 重放段：全量（seq 1..2）。
-    const replay = await collectUntil(gen, (f) => f.data.seq === 2);
-    expect(replay.map((f) => f.data.seq)).toEqual([1, 2]);
+    // 重放段：全量（seq 1..2）+ history-end 分界帧收尾（重放段的终结符）。
+    const replay = await collectUntil(gen, (f) => f.event === 'history-end');
+    expect(channelSeqs(replay)).toEqual([1, 2]);
+    expect(replay.at(-1)!.data).toEqual({ firstSeq: 1, lastSeq: 2 });
 
     // 直播段：第二轮的帧续在后面（无缝、无重）。
     const turn = (async () => {
@@ -317,7 +332,7 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     const live = await collectUntil(gen, (f) => f.event === 'done');
     await turn;
     await stopSse(gen, res);
-    expect([...replay, ...live].map((f) => f.data.seq)).toEqual([1, 2, 3, 4]);
+    expect(channelSeqs([...replay, ...live])).toEqual([1, 2, 3, 4]);
   });
 
   it('?lastSeq=N gating: replay drops seq<=N, replay + live seamless', async () => {
@@ -336,9 +351,11 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     // 同一响应体只开一个读取器（ReadableStream 单锁）——重放段与直播段
     // 共用一个 generator。
     const gen = sseFrames(res);
-    // 重放门控：seq=1 的 token 帧被丢弃，重放段只余 seq=2 的 done。
-    const replay = await collectUntil(gen, (f) => f.data.seq === 2);
-    expect(replay.map((f) => f.data.seq)).toEqual([2]);
+    // 重放门控：seq=1 的 token 帧被丢弃，重放段只余 seq=2 的 done +
+    // history-end 分界。分界帧描述保留窗（firstSeq=1），不受门控影响。
+    const replay = await collectUntil(gen, (f) => f.event === 'history-end');
+    expect(channelSeqs(replay)).toEqual([2]);
+    expect(replay.at(-1)!.data).toEqual({ firstSeq: 1, lastSeq: 2 });
 
     const turn = (async () => {
       for await (const _ of session.handleMessage('second')) {
@@ -349,7 +366,7 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     await turn;
     await stopSse(gen, res);
     // 重放+增量无缝：2（重放）→ 3,4（直播），无重帧无丢帧。
-    expect([...replay, ...live].map((f) => f.data.seq)).toEqual([2, 3, 4]);
+    expect(channelSeqs([...replay, ...live])).toEqual([2, 3, 4]);
   });
 
   it('client disconnect unsubscribes — later turns do not feed the dead connection', async () => {
@@ -403,7 +420,7 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
       }
     })();
     const conn1 = await collectUntil(gen1, (f) => f.data.seq === 2);
-    expect(conn1.map((f) => f.data.seq)).toEqual([1, 2]);
+    expect(channelSeqs(conn1)).toEqual([1, 2]);
     await stopSse(gen1, res1);
 
     // 连接 2：带 lastSeq=2 重连——断线期间的帧经重放补上，之后的帧直播。
@@ -413,16 +430,84 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     await turn;
     await stopSse(gen2, res2);
 
-    // 无重帧无丢帧：两连接合并恰为 1..6，严格递增（按 seq 断言）。
-    const all = [...conn1, ...conn2].map((f) => f.data.seq as number);
-    expect(new Set(all).size).toBe(all.length, '无重帧');
-    expect(all).toEqual([1, 2, 3, 4, 5, 6], '无丢帧，按 seq 严格续接');
+    // 无重帧无丢帧：两连接合并恰为 1..6，严格递增（按 seq 断言，剥掉
+    // 合成分界帧）。
+    const all = [...conn1, ...conn2];
+    const seqs = channelSeqs(all);
+    expect(new Set(seqs).size).toBe(seqs.length, '无重帧');
+    expect(seqs).toEqual([1, 2, 3, 4, 5, 6], '无丢帧，按 seq 严格续接');
     // 内容与 seq 对齐（e0..e4 + done 各恰一次）。
-    const deltas = [...conn1, ...conn2]
+    const deltas = all
       .filter((f) => f.event === 'token')
       .map((f) => (f.data as { delta?: string }).delta);
     expect(deltas).toEqual(['e0', 'e1', 'e2', 'e3', 'e4']);
-    expect(all.length).toBe(session.historySnapshot().length);
+    expect(seqs.length).toBe(session.historySnapshot().length);
+  });
+
+  it('history-end divider: normal reconnect aligned; head-trim flags the gap (firstSeq jumps)', async () => {
+    const sessionManager = await buildApp();
+    scriptedRunner([[['token', { token: 'a' }], ['token', { token: 'b' }], ['complete']]]);
+    const session = await createWarmSession(sessionManager, 'divider');
+    for await (const _ of session.handleMessage('first')) {
+      // drain —— 历史落 3 帧（seq 1..3）
+    }
+
+    // 场景一（正常重连，无 gap 信号）：客户端已见 seq=2，窗口完整
+    // [1..3]——分界帧 firstSeq=1 ≤ 2+1、lastSeq=3 ≥ 2，语义自洽。
+    const res1 = await fetch(`${getUrl()}/api/chat/divider/events?lastSeq=2`);
+    const gen1 = sseFrames(res1);
+    const phase1 = await collectUntil(gen1, (f) => f.event === 'history-end');
+    await stopSse(gen1, res1);
+    expect(channelSeqs(phase1)).toEqual([3], '只补 seq=3');
+    const d1 = phase1.at(-1)!.data as { firstSeq: number; lastSeq: number };
+    expect(d1).toEqual({ firstSeq: 1, lastSeq: 3 });
+    expect(d1.firstSeq <= 2 + 1, '无 gap 信号').toBe(true);
+    expect(d1.lastSeq >= 2, '无复位信号').toBe(true);
+
+    // 场景二（裁头 gap）：模拟安全阀裁掉窗口最旧 2 帧（seq 1/2 没了，
+    // 窗口只剩 [3]），客户端 lastSeq=1——firstSeq(3) > 1+1 即 gap 信号。
+    const window = (session as unknown as { history: unknown[] }).history;
+    window.shift();
+    window.shift();
+    const res2 = await fetch(`${getUrl()}/api/chat/divider/events?lastSeq=1`);
+    const gen2 = sseFrames(res2);
+    const phase2 = await collectUntil(gen2, (f) => f.event === 'history-end');
+    await stopSse(gen2, res2);
+    expect(channelSeqs(phase2)).toEqual([3], 'seq=1 已被裁，seq=3 重放');
+    const d2 = phase2.at(-1)!.data as { firstSeq: number; lastSeq: number };
+    expect(d2).toEqual({ firstSeq: 3, lastSeq: 3 });
+    expect(d2.firstSeq > 1 + 1, 'firstSeq 跳变 = 裁头 gap 信号').toBe(true);
+  });
+
+  it('zombie stream watchdog: eviction under an open stream → session-evicted frame + stream ends', async () => {
+    // 闲置 TTL 5ms：连接期间会话被惰性驱逐（模拟另一入口的清扫）——
+    // 看门狗在 ≤5s 内检测到注册表对象失配，发合成分界帧并终结流。
+    const sessionManager = await buildApp({ idleTtlMs: 5 });
+    scriptedRunner([[['token', { token: 'a' }], ['complete']]]);
+    const session = await createWarmSession(sessionManager, 'zombie');
+
+    const res = await fetch(`${getUrl()}/api/chat/zombie/events`);
+    const gen = sseFrames(res);
+    const turn = (async () => {
+      for await (const _ of session.handleMessage('first')) {
+        // drain
+      }
+    })();
+    await collectUntil(gen, (f) => f.event === 'history-end');
+    await turn;
+    await sleep(20); // 轮已结束、闲置超龄
+    // TTL 5ms 下会话可能已被任一惰性触发点先行清扫（events 入口自身的
+    // evictIdleSessions、或本显式调用）——断言的实质是「已下线」而非
+    // 「恰由本次调用下线」。
+    sessionManager.evictIdleSessions();
+    expect(sessionManager.getAgentSession('zombie')).not.toBe(session, '会话已被清扫下线');
+
+    // 看门狗兜底（周期 5s）：拿到明确的 session-evicted 而非裸 EOF 挂死。
+    const tail = await collectUntil(gen, (f) => f.event === 'session-evicted', 9000);
+    expect(tail.at(-1)!.data).toEqual({ sessionId: 'zombie' });
+    // 流真正终结（不是只发了帧还挂着连接）。
+    const after = await gen.next();
+    expect(after.done).toBe(true, '流已被 end() 终结');
   });
 
   it('after idle eviction the cold path rebuilds — replay is EMPTY (history went with the old object)', async () => {
@@ -460,8 +545,15 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     const frames = await collectUntil(gen, (f) => f.event === 'done');
     await turn;
     await stopSse(gen, res);
-    expect((frames[0].data as { delta?: string }).delta).toBe('fresh');
-    expect(frames.map((f) => f.data.seq)).toEqual([1, 2]);
+    // 分界帧场景三（驱逐重建复位）：客户端上一 seq 空间已见 seq=2，
+    // 重建对象的空窗分界 lastSeq=0 < 2——seq 空间重启的明确信号。
+    expect(frames[0].event).toBe('history-end');
+    expect(frames[0].data).toEqual({ firstSeq: 1, lastSeq: 0 });
+    expect((frames[0].data.lastSeq as number) < 2, 'lastSeq 倒退 = 复位信号').toBe(true);
+    expect((frames.find((f) => f.event === 'token')!.data as { delta?: string }).delta).toBe(
+      'fresh'
+    );
+    expect(channelSeqs(frames)).toEqual([1, 2]);
     expect(frames.find((f) => f.event === 'done')!.data.turnSeq).toBe(1);
     expect(
       frames.some((f) => (f.data as { delta?: string }).delta === 'stale'),
