@@ -57,6 +57,24 @@ export { writeMeta, readMeta } from './session/meta.js';
 export { SessionNotFoundError } from './session/errors.js';
 export { truncateStateTurns } from './session/truncate.js';
 export type { TruncatedState, TruncateResult } from './session/truncate.js';
+// 异步委派监督者（R2P-141a，对齐 Rust session/supervisor.rs）
+export {
+  SubagentSupervisor,
+  emptySupervisorSlot,
+  deliveryContent,
+  watchdogOutcome,
+  errorOutcome,
+  DEFAULT_CHILD_TIMEOUT_MS,
+  DEFAULT_MAX_CHILDREN,
+} from './session/supervisor.js';
+export type {
+  SupervisorHooks,
+  EventSink,
+  DelegationJob,
+  DelegateSupervisor,
+  SupervisorSlot,
+} from './session/supervisor.js';
+export type { PendingDelivery } from './session/types.js';
 
 // Middleware (advanced usage)
 export { createSessionMiddleware } from './middleware/session-middleware.js';

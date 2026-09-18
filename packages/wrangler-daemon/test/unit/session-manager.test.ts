@@ -615,5 +615,56 @@ describe('SessionManager', () => {
       expect(manager.activeCount).toBe(0);
       expect(manager.evictIdleSessions()).toBe(0);
     });
+
+    // ─── 冷却补臂回归点（R2P-141a，对齐 Rust is_quiet 三条件全集）───
+    // P2-a 裁剪掉的两臂在此补齐：子女在飞（Supervisor 登记簿）与邮箱
+    // 非空（未消化投递）都把会话钉在「活」——下线即丢后台子任务/投递。
+    it('session with in-flight sub-task children is not evicted (hasActiveChildren arm)', async () => {
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('child-1', wsPath);
+      manager.setAgentSession('child-1', {
+        busy: false,
+        stop: vi.fn(),
+        hasActiveChildren: () => true,
+      } as any);
+
+      advance(TTL * 10);
+      manager.evictIdleSessions();
+      expect(manager.getAgentSession('child-1')).not.toBeNull();
+
+      // 子女清零（看门狗超时后）→ 恢复可驱逐。
+      manager.setAgentSession('child-1', {
+        busy: false,
+        stop: vi.fn(),
+        hasActiveChildren: () => false,
+      } as any);
+      advance(TTL + 1);
+      expect(manager.evictIdleSessions()).toBe(1);
+      expect(manager.getAgentSession('child-1')).toBeNull();
+    });
+
+    it('session with pending (unconsumed) deliveries is not evicted (hasPendingDeliveries arm)', async () => {
+      const wsPath = join(tempDir, 'workspace');
+      manager.registerSession('mail-1', wsPath);
+      manager.setAgentSession('mail-1', {
+        busy: false,
+        stop: vi.fn(),
+        hasPendingDeliveries: () => true,
+      } as any);
+
+      advance(TTL * 10);
+      manager.evictIdleSessions();
+      expect(manager.getAgentSession('mail-1')).not.toBeNull();
+
+      // 邮箱排空（消费轮消化）→ 恢复可驱逐。
+      manager.setAgentSession('mail-1', {
+        busy: false,
+        stop: vi.fn(),
+        hasPendingDeliveries: () => false,
+      } as any);
+      advance(TTL + 1);
+      expect(manager.evictIdleSessions()).toBe(1);
+      expect(manager.getAgentSession('mail-1')).toBeNull();
+    });
   });
 });

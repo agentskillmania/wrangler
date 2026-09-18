@@ -10,6 +10,7 @@
 import {
   EnhancedRunner,
   SessionStore,
+  SubagentSupervisor,
   createAgentState,
   addUserMessage,
   updateState,
@@ -35,6 +36,7 @@ import type {
   ISkillProvider,
   LLMProviderEntry,
   LimitsConfig,
+  PendingDelivery,
   ResolvedRunnerConfig,
   SandboxConfig,
   SubAgentConfig,
@@ -401,6 +403,18 @@ export class AgentSession {
    * 驱动（busy 闩锁），Rust 的分配器/当前值双字段在此塌缩为一个计数器。
    */
   private turnSeq = 0;
+  // ─── 异步委派（R2P-141a，对齐 Rust session/supervisor.rs）───
+  /**
+   * 异步委派监督者：子女登记/并发闸门/看门狗/取消级联。会话物化即拥有
+   * （对齐 Rust Session 的 supervisor 器官）；hooks 绑定与 delegate 槽
+   * 接线随 1b/1c 落地——未接线时受理面为空，查询恒为「安静」。
+   */
+  private readonly subagentSupervisor = new SubagentSupervisor();
+  /**
+   * 投递箱（对齐 Rust Session 的 deliveries 邮箱）：异步子任务的结果
+   * 驻留处，消费轮取走。1b 落地写穿（deliveries.json sidecar）与消费。
+   */
+  private readonly deliveries: PendingDelivery[] = [];
 
   private constructor(
     runner: EnhancedRunner,
@@ -649,6 +663,24 @@ export class AgentSession {
   /** Whether the session is currently processing a message */
   get busy(): boolean {
     return this._busy;
+  }
+
+  // ─── 冷却资格只读查询（R2P-141a，对齐 Rust is_quiet 的后两臂）───
+
+  /**
+   * 子女在飞？——Supervisor 登记簿非空（卡住的子女是活子女，钉住会话；
+   * 看门狗给超时兜底）。sweepIdleAgentSessions 的冷却资格臂之一。
+   */
+  hasActiveChildren(): boolean {
+    return this.subagentSupervisor.hasActiveChildren();
+  }
+
+  /**
+   * 邮箱非空？——未消化的投递钉住会话（下次物化时消费，不能随内存丢）。
+   * sweepIdleAgentSessions 的冷却资格臂之一。
+   */
+  hasPendingDeliveries(): boolean {
+    return this.deliveries.length > 0;
   }
 
   /**

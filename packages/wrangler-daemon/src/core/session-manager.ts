@@ -284,15 +284,17 @@ export class SessionManager {
    * 惰性清扫：冷却资格 + 闲置判定，缺一不可（对齐 Rust
    * `evict_idle_locked` 的 `!(is_quiet() && idle_for() > ttl)` 谓词）。
    *
-   * 冷却资格（本批 R2P-121 的 TS 裁剪）：
+   * 冷却资格（对齐 Rust `Session::is_quiet` 三条件全集，R2P-141a 补齐后两臂）：
    * 1. 非 busy——轮在飞不可下线（对齐 Rust turn_gate 臂）；
    * 2. 非占位——reservedAgentSessions（R2P-161）是冷装配闭锁不是闲置
    *    资源，清扫永不摘除。现行不变量下 active 与 reserved 互斥
    *    （tryReserveAgentSession 见 active 即拒），此处显式判定防不变量漂移。
+   * 3. 子女清零——Supervisor 登记簿空（卡住的子女是活子女，钉住会话；
+   *    看门狗给超时兜底）。
+   * 4. 邮箱空——未消化的投递钉住会话（下次物化时消费，不能随内存丢）。
    *
-   * TS 裁剪说明：Rust `Session::is_quiet` 还有两臂——子女清零（Supervisor
-   * 登记簿）与邮箱空（未消化投递）——属 P2-c 异步委派批；P2-c 回归点：
-   * 在此扩臂（children / pendingDeliveries），谓词仍取"缺一不可"。
+   * 3/4 两臂经 AgentSession 的只读查询（hasActiveChildren /
+   * hasPendingDeliveries）触达；可选调用兼容 P2-a 时代的旧测试桩。
    *
    * 下线动作 = 纯注册表摘除（对齐 Rust `reg.retain` 直接 drop Arc，不调
    * stop——非 busy 会话无在飞轮可停）；runtimeStatus / sessionWorkspaces /
@@ -302,6 +304,10 @@ export class SessionManager {
     let evicted = 0;
     for (const [id, session] of this.activeSessions) {
       if (session.busy || this.reservedAgentSessions.has(id)) continue;
+      // R2P-141a 冷却补臂：子女在飞 / 邮箱非空 → 钉住（async 委派的
+      // 进行中子任务与未消化投递都是「活」，下线即丢）。
+      if (session.hasActiveChildren?.()) continue;
+      if (session.hasPendingDeliveries?.()) continue;
       const last = this.lastActiveAt.get(id);
       if (last === undefined) continue; // 无活动记录不驱（保守；注册即 touch，理论不可达）
       if (this.now() - last <= this.idleTtlMs) continue; // 严格大于，对齐 idle_for() > ttl

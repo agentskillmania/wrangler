@@ -60,6 +60,12 @@ export type DelegateResult =
       totalSteps: number;
       tokens: TokenStats;
       duration: number;
+      /**
+       * 看门狗超时说明（R2P-141a）：监督者看门狗替换 outcome 时携带
+       * （对齐 Rust supervisor.rs 的 `"error": "watchdog timeout after
+       * Xms"`）；子代理配置 timeout 触发的路径无此字段。
+       */
+      error?: string;
     };
 
 /** Default max steps for a sub-agent when not specified in SubAgentConfig */
