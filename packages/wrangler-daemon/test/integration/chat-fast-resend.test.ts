@@ -218,7 +218,8 @@ describe('R2P-163: immediate resend after the done frame (POST /api/chat/:sessio
   }
 
   function postMessage(message: string): Promise<Response> {
-    return fetch(`${getUrl()}/api/chat/${SESSION_ID}`, {
+    // R2P-153 双轨迁移：send 默认 ack 化——旧「send 即流」断言经 ?stream=1 过渡轨保持（断言零改动）。
+    return fetch(`${getUrl()}/api/chat/${SESSION_ID}?stream=1`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message }),

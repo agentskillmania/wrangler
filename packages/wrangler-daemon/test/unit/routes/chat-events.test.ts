@@ -575,3 +575,206 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     expect(notFound.status).toBe(404);
   });
 });
+
+// ─── POST /api/chat/:id ack 化（R2P-153，对齐 Rust 65732f3 的 send ack）───
+//
+// 主接口语义：默认 POST 返回 JSON ack（含本轮轮号），轮帧全部走常驻
+// events 流——「先挂流再发送」（对齐 Rust e2e drive_turn 助手：订阅早于
+// POST，本轮帧全走直播，消灭快轮竞态）；冷会话（挂流 404）退「先 POST
+// 再挂流」，早帧由建连重放补齐。
+
+describe('POST /api/chat/:sessionId ack + persistent events (R2P-153 dual-track)', () => {
+  it('ack→events full chain: POST returns {ok,sessionId,turnSeq} JSON; token+done arrive on the events stream with matching turnSeq', async () => {
+    const sessionManager = await buildApp();
+    scriptedRunner([[['token', { token: 'hello' }], ['complete']]]);
+    await createWarmSession(sessionManager, 'ack-chain');
+
+    // 先挂流再发送——本轮帧全走直播段。
+    const res = await fetch(`${getUrl()}/api/chat/ack-chain/events`);
+    const gen = sseFrames(res);
+
+    const post = await fetch(`${getUrl()}/api/chat/ack-chain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'hi' }),
+    });
+    // ack 契约：JSON（不再是 SSE），带 ok/sessionId/turnSeq。
+    expect(post.status).toBe(200);
+    expect(post.headers.get('content-type')).toContain('application/json');
+    const ack = (await post.json()) as { ok: boolean; sessionId: string; turnSeq: number };
+    expect(ack).toEqual({ ok: true, sessionId: 'ack-chain', turnSeq: 1 });
+
+    // 全链路：token → done 都在 events 流上到达，done 的 turnSeq 与 ack 匹配。
+    const frames = await collectUntil(gen, (f) => f.event === 'done');
+    await stopSse(gen, res);
+    expect((frames.find((f) => f.event === 'token')!.data as { delta?: string }).delta).toBe(
+      'hello'
+    );
+    const done = frames.find((f) => f.event === 'done')!;
+    expect(done.data.turnSeq).toBe(ack.turnSeq);
+  });
+
+  it('one persistent connection spans turns: second ack on the SAME stream, done turnSeq increments', async () => {
+    const sessionManager = await buildApp();
+    scriptedRunner([
+      [['token', { token: 'one' }], ['complete']],
+      [['token', { token: 'two' }], ['complete']],
+    ]);
+    await createWarmSession(sessionManager, 'multi-turn');
+
+    const res = await fetch(`${getUrl()}/api/chat/multi-turn/events`);
+    const gen = sseFrames(res);
+
+    const post1 = await fetch(`${getUrl()}/api/chat/multi-turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'first' }),
+    });
+    const ack1 = (await post1.json()) as { turnSeq: number };
+    const t1 = await collectUntil(gen, (f) => f.event === 'done');
+    expect(t1.at(-1)!.data.turnSeq).toBe(ack1.turnSeq);
+
+    // 第二轮：同一连接（不重连），done 归属第二轮号。
+    const post2 = await fetch(`${getUrl()}/api/chat/multi-turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'second' }),
+    });
+    const ack2 = (await post2.json()) as { turnSeq: number };
+    expect(ack2.turnSeq).toBe(ack1.turnSeq + 1);
+    const t2 = await collectUntil(
+      gen,
+      (f) => f.event === 'done' && f.data.turnSeq === ack2.turnSeq
+    );
+    await stopSse(gen, res);
+    expect((t2.find((f) => f.event === 'token')!.data as { delta?: string }).delta).toBe('two');
+    // 全程一条流：两个 done 之间无分界帧以外的重连痕迹（history-end 只在
+    // 建连时发过一次，位于第一帧）。
+    expect(t1[0].event).toBe('history-end');
+    expect(t2.filter((f) => f.event === 'history-end')).toEqual([]);
+  });
+
+  it('cold session: POST ack first (lazy materialization), then attach — replay covers the whole turn', async () => {
+    const sessionManager = await buildApp();
+    // 冷会话：盘上有身份（daemon 重启后的状态），注册表无温对象。
+    const workspace = join(tempDir!, 'workspace');
+    const store = sessionManager.getSessionStore(workspace);
+    await store.createWithId('cold-ack', 'test-agent');
+    await store.updateMeta('cold-ack', { runnerConfig: { model: 'test-model', sandbox: false } });
+    sessionManager.registerSession('cold-ack', workspace);
+
+    const rebuiltRunner = scriptedRunner([[['token', { token: 'cold' }], ['complete']]]);
+    mockEnhancedRunnerResume.mockResolvedValue({
+      runner: rebuiltRunner.runner,
+      state: FINAL_STATE,
+    });
+
+    const post = await fetch(`${getUrl()}/api/chat/cold-ack`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'hi' }),
+    });
+    const ack = (await post.json()) as { ok: boolean; turnSeq: number };
+    expect(ack.ok).toBe(true);
+
+    // 建连重放（无 lastSeq）补齐 ack 与挂流之间已发生的帧。
+    const res = await fetch(`${getUrl()}/api/chat/cold-ack/events`);
+    const gen = sseFrames(res);
+    const frames = await collectUntil(gen, (f) => f.event === 'done');
+    await stopSse(gen, res);
+    expect((frames.find((f) => f.event === 'token')!.data as { delta?: string }).delta).toBe(
+      'cold'
+    );
+    expect(frames.find((f) => f.event === 'done')!.data.turnSeq).toBe(ack.turnSeq);
+  });
+
+  it('busy → 409 with triage fields (ack path keeps the R2P-154a shape)', async () => {
+    const sessionManager = await buildApp();
+    // 慢轮（帧间隔 300ms > busy 宽限 100ms）：第一轮 ack 后紧接的第二发
+    // 确定性撞 busy。
+    scriptedRunner([[['token', { token: 'slow' }], ['complete']]], 300);
+    await createWarmSession(sessionManager, 'ack-busy');
+
+    const res = await fetch(`${getUrl()}/api/chat/ack-busy/events`);
+    const gen = sseFrames(res);
+    const post1 = await fetch(`${getUrl()}/api/chat/ack-busy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'first' }),
+    });
+    expect(post1.status).toBe(200);
+
+    const post2 = await fetch(`${getUrl()}/api/chat/ack-busy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'second' }),
+    });
+    expect(post2.status).toBe(409);
+    const body = (await post2.json()) as { error: string; reason: string; detail: string };
+    expect(body.error).toBe('Session is busy');
+    expect(body.reason).toBe('busy');
+    expect(typeof body.detail).toBe('string');
+
+    // 收尾：第一轮照常完成（第二发的 409 不影响在飞轮）。
+    await collectUntil(gen, (f) => f.event === 'done', 15000);
+    await stopSse(gen, res);
+  });
+
+  it('drive errors surface as error frames on the events stream (ack already returned)', async () => {
+    const sessionManager = await buildApp();
+    const handle = scriptedRunner([[['complete']]]);
+    // 内核 run() 抛错 → driveTurn 的 catch 把 error 帧经 pushEvent 进通道。
+    handle.runner.run.mockImplementationOnce(async () => {
+      throw new Error('kernel exploded');
+    });
+    await createWarmSession(sessionManager, 'ack-error');
+
+    const res = await fetch(`${getUrl()}/api/chat/ack-error/events`);
+    const gen = sseFrames(res);
+    const post = await fetch(`${getUrl()}/api/chat/ack-error`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'go' }),
+    });
+    expect(post.status).toBe(200);
+
+    const frames = await collectUntil(gen, (f) => f.event === 'error');
+    await stopSse(gen, res);
+    // 与旧轨同源（driveTurn 的 catch 走 String(err)）：错误经会话流 error 帧
+    // 上报，HTTP ack 层无第二次机会。
+    expect((frames.find((f) => f.event === 'error')!.data as { message?: string }).message).toBe(
+      'Error: kernel exploded'
+    );
+  });
+
+  it('?stream=1 legacy track: full-shape SSE with Deprecation header, unchanged wire', async () => {
+    const sessionManager = await buildApp();
+    scriptedRunner([[['token', { token: 'legacy' }], ['complete']]]);
+    await createWarmSession(sessionManager, 'legacy-track');
+
+    const res = await fetch(`${getUrl()}/api/chat/legacy-track?stream=1`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'hi' }),
+    });
+    // 旧轨全形状：SSE 响应 + Deprecation 提示头。
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('text/event-stream');
+    expect(res.headers.get('deprecation')).toBe('true');
+
+    const gen = sseFrames(res);
+    const frames = await collectUntil(gen, (f) => f.event === 'done');
+    expect((frames.find((f) => f.event === 'token')!.data as { delta?: string }).delta).toBe(
+      'legacy'
+    );
+    expect(frames.find((f) => f.event === 'done')!.data.turnSeq).toBe(1);
+    // 旧轨语义不变：请求级流——done 后服务器关流（读到 EOF，非挂起）。
+    const eof = await Promise.race([
+      gen.next(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('legacy stream hung')), 3000)
+      ),
+    ]);
+    expect(eof.done).toBe(true);
+  });
+});

@@ -1373,7 +1373,9 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/chat/existing-session`, {
+      // R2P-153 双轨迁移：POST 默认 ack 化——旧「send 即流」断言经
+      // ?stream=1 过渡轨保持（断言零改动，兼容证明）。
+      const res = await fetch(`${getUrl()}/api/chat/existing-session?stream=1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'continue' }),
@@ -1406,7 +1408,7 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/chat/existing-session`, {
+      const res = await fetch(`${getUrl()}/api/chat/existing-session?stream=1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'continue' }),
@@ -1424,7 +1426,7 @@ describe('Chat API', () => {
         throw new Error('stream blew up');
       });
 
-      const res = await fetch(`${getUrl()}/api/chat/existing-session`, {
+      const res = await fetch(`${getUrl()}/api/chat/existing-session?stream=1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'trigger error' }),
@@ -1480,7 +1482,7 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/chat/existing-session`, {
+      const res = await fetch(`${getUrl()}/api/chat/existing-session?stream=1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1505,7 +1507,7 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/chat/existing-session`, {
+      const res = await fetch(`${getUrl()}/api/chat/existing-session?stream=1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello' }),
@@ -1543,7 +1545,7 @@ describe('Chat API', () => {
         defaultNodeHostEnv
       );
 
-      const res = await fetch(`${getUrl()}/api/chat/some-key`, {
+      const res = await fetch(`${getUrl()}/api/chat/some-key?stream=1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello', sessionDir: explicitDir }),
@@ -1614,7 +1616,7 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/chat/crew-resume-session`, {
+      const res = await fetch(`${getUrl()}/api/chat/crew-resume-session?stream=1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'follow up' }),

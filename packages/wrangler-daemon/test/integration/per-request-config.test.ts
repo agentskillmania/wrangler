@@ -261,7 +261,8 @@ describe('Integration: Per-Request Configuration', () => {
         const sessionId = (startEvent!.data as { sessionId: string }).sessionId;
 
         // Step 2: Resume session with per-request params
-        const resumeRes = await fetch(`${getUrl()}/api/chat/${sessionId}`, {
+        // R2P-153 双轨迁移：send 默认 ack 化——旧「send 即流」断言经 ?stream=1 过渡轨保持。
+        const resumeRes = await fetch(`${getUrl()}/api/chat/${sessionId}?stream=1`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

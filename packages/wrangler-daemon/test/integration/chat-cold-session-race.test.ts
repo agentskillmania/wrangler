@@ -143,7 +143,8 @@ describe('R2P-161: cold-session create race (POST /api/chat/:sessionId)', () => 
   }
 
   function postMessage(): Promise<Response> {
-    return fetch(`${getUrl()}/api/chat/${SESSION_ID}`, {
+    // R2P-153 双轨迁移：send 默认 ack 化——旧「send 即流」断言经 ?stream=1 过渡轨保持（断言零改动）。
+    return fetch(`${getUrl()}/api/chat/${SESSION_ID}?stream=1`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: 'hello' }),

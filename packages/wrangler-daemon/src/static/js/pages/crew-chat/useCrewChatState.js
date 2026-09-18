@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useRef } from '../../utils.js';
 import { api } from '../../api.js';
+import { openEventsStream } from '../../helpers/chatEventsStream.js';
 import { eventToTag, formatEventData } from '../chat/EventCard.js';
 import { sessionEntryToChatLine } from '../../helpers/sessionEntryToChatLine.js';
 
@@ -61,6 +62,9 @@ export function useCrewChatState() {
   // ── Refs ──
   var chatCtrlRef = useRef(null);
   var messagesEndRef = useRef(null);
+  // ── 常驻 events 流（R2P-153 迁移，与 useChatState 同款）──
+  var eventsRef = useRef(null);
+  var lastSeqRef = useRef(0);
 
   // ── Runner Config ──
   var _sSB = useState(true),
@@ -249,6 +253,8 @@ export function useCrewChatState() {
       }
 
       if (!sessionId) {
+        if (eventsRef.current && eventsRef.current.handle) eventsRef.current.handle.close();
+        eventsRef.current = null;
         setCockpitEvents([]);
         setDiagnosticsData(null);
         setRightFileTree([]);
@@ -256,6 +262,10 @@ export function useCrewChatState() {
         setRightFileContent('');
         return;
       }
+
+      // 常驻 events 流（R2P-153）：会话确定即挂；创建路径的轮 1 帧仍经
+      // POST 流到达（重放被 lastSeq 门控），后续轮 send 走 ack 全从此流进。
+      ensureEvents(sessionId, 'live');
 
       var es = new EventSource(BASE + '/api/agent/' + sessionId + '/state');
       es.addEventListener('agent-diagnostics', function (e) {
@@ -302,6 +312,8 @@ export function useCrewChatState() {
           cockpitEsRef.current.close();
           cockpitEsRef.current = null;
         }
+        if (eventsRef.current && eventsRef.current.handle) eventsRef.current.handle.close();
+        eventsRef.current = null;
       };
     },
     [sessionId]
@@ -386,6 +398,133 @@ export function useCrewChatState() {
         appendLine('session', text);
       }
     } catch (_) {}
+  }
+
+  // ── 常驻 events 流接线（R2P-153，send ack 化的客户端面）──
+
+  /**
+   * 全 transport 的帧收口：data.seq 是会话内全序（POST 创建流、respond
+   * 流、events 常驻流共享同一空间）——按它去重后进 UI 状态机。没有 seq
+   * 的帧（session-start 等合成帧）只有单一 transport，直通。
+   */
+  function ingestFrame(ev, data) {
+    var p = data;
+    if (typeof data === 'string') {
+      try {
+        p = JSON.parse(data);
+      } catch (_) {
+        p = data; // 非 JSON 载荷原样进状态机（handleStreamEvent 自带兜底）
+      }
+    }
+    if (p && typeof p === 'object' && typeof p.seq === 'number') {
+      if (p.seq <= lastSeqRef.current) return;
+      lastSeqRef.current = p.seq;
+    }
+    handleStreamEvent(ev, p);
+  }
+
+  /**
+   * 挂/复用会话的常驻 events 订阅（同 sid 且柄存活时幂等；换 sid 关旧流）。
+   * mode:
+   *  - 'live'   （默认）预挂——见过帧则从断点续传（重放段早于断点）；
+   *             没见过帧（resume 旧会话，历史已从磁盘读入）以 lastSeq=0
+   *             建连但抑制重放段投递（history-end 分界前不进状态机），
+   *             避免滚动历史把旧轮帧重复进对话区；
+   *  - 'replay' 要重放——冷首发（会话被 POST 物化后）补 ack 与挂流之间
+   *             已发生的帧：lastSeq=0 全量重放（此刻滚动历史恰为本轮），
+   *             或断点续传（见过帧的重挂场景）。
+   * 挂流失败（冷会话 404）是预期路径：柄作废后由 sendAck 的 ack 成功分支
+   * 以 'replay' 重挂（ack 返回时会话已被物化，重挂确定性成功）；ack 未回
+   * 期间的失败由 onError 的兜底重试（带延迟防 404 紧循环）接管。
+   */
+  function ensureEvents(sid, mode) {
+    if (eventsRef.current && eventsRef.current.sid === sid && eventsRef.current.handle) return;
+    if (eventsRef.current && eventsRef.current.handle) eventsRef.current.handle.close();
+    // lastSeq 必须是真实见过的 seq——服务端的直播守卫同样从它起步，大数
+    // 哨兵会把直播帧一并门掉。「没见过帧的预挂」改用 suppressReplay：重放
+    // 段（磁盘已对账的过去）不投递，history-end 分界后的直播照常。
+    var initial = lastSeqRef.current;
+    var suppressReplay = mode !== 'replay' && lastSeqRef.current === 0;
+    var me = null;
+    var handle = openEventsStream(
+      sid,
+      {
+        onOpen: function () {
+          if (eventsRef.current && eventsRef.current.handle === me) {
+            eventsRef.current.open = true;
+          }
+        },
+        onFrame: function (f) {
+          ingestFrame(f.event, f.data);
+        },
+        onError: function () {
+          // 柄失效（冷会话 404 等）——只处理「本柄仍是当前柄」的失效
+          // （ack 分支可能已换成新柄）。错误本身不进对话区（POST 的
+          // ack/错误码才是权威）。
+          if (eventsRef.current && eventsRef.current.handle === me) {
+            eventsRef.current = { sid: sid, handle: null, open: false };
+            // 发送中途挂流失败而 ack 未回：延迟重挂兜底（若会话尚未被
+            // 物化会再 404，节奏受延迟约束；ack 分支的重挂先到则此处空转）。
+            if (streaming) {
+              setTimeout(function () {
+                if (streaming) ensureEvents(sid, 'replay');
+              }, 400);
+            }
+          }
+        },
+        onTerminal: function () {
+          // session-evicted：seq 空间已随旧会话对象终结，本柄作废。
+          if (eventsRef.current && eventsRef.current.handle === me) {
+            eventsRef.current = { sid: sid, handle: null, open: false };
+          }
+        },
+      },
+      { lastSeq: initial, suppressReplay: suppressReplay }
+    );
+    me = handle;
+    eventsRef.current = { sid: sid, handle: handle, open: false };
+  }
+
+  /**
+   * ack 语义发送（R2P-153）：先挂流再 POST（订阅早于发送，本轮帧全走
+   * 直播——对齐 Rust e2e drive_turn 的次序纪律）；POST 只取 ack/错误码，
+   * 轮帧与错误 error 帧全部从常驻 events 流进状态机。done 帧的
+   * data.turnSeq === ack.turnSeq 即本轮完结（多路帧按 seq 去重归属）。
+   */
+  function sendAck(sid, body) {
+    setStreaming(true);
+    ensureEvents(sid, 'live');
+    fetch(BASE + '/api/chat/' + encodeURIComponent(sid), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(function (res) {
+        return res
+          .json()
+          .catch(function () {
+            return { error: 'HTTP ' + res.status };
+          })
+          .then(function (ack) {
+            return { ok: res.ok, ack: ack };
+          });
+      })
+      .then(function (r) {
+        if (!r.ok) {
+          appendLine('error', JSON.stringify(r.ack));
+          setStreaming(false);
+          return;
+        }
+        // ack 成功：若预挂流在冷会话上 404 了，此刻会话已被 POST 物化——
+        // 以 'replay' 重挂补本轮早帧（ack 与挂流之间的帧经建连重放到达）。
+        ensureEvents(sid, 'replay');
+      })
+      .catch(function (e) {
+        if (e && e.name !== 'AbortError') {
+          appendLine('error', 'Connection error: ' + e.message);
+        }
+        setStreaming(false);
+      });
   }
 
   function buildRunnerConfig() {
@@ -479,7 +618,9 @@ export function useCrewChatState() {
               } else if (line.startsWith('data: ')) {
                 data = line.slice(6);
               } else if (line === '' && ev && data) {
-                handleStreamEvent(ev, data);
+                // 经 ingest 收口：POST 流的帧与常驻 events 流同 seq 空间，
+                // 去重后进状态机（两路同帧只记一次）。
+                ingestFrame(ev, data);
                 ev = '';
                 data = '';
               }
@@ -505,7 +646,9 @@ export function useCrewChatState() {
     if (sessionId) {
       // Continue active session (session-keyed, shared with agent chat)
       appendLine('user', msg);
-      doStream('/api/chat/' + sessionId, {
+      // R2P-153：续发走 ack 语义——帧从常驻 events 流进（doStream 的
+      // send-即流旧轨不再使用；创建端点仍是 POST 流）。
+      sendAck(sessionId, {
         message: msg,
         thinkingEnabled: msgThinking,
         model: perRequestModel,
@@ -513,7 +656,7 @@ export function useCrewChatState() {
     } else if (resumeSessionId) {
       setSessionId(resumeSessionId);
       appendLine('user', msg);
-      doStream('/api/chat/' + resumeSessionId, {
+      sendAck(resumeSessionId, {
         message: msg,
         thinkingEnabled: msgThinking,
         model: perRequestModel,

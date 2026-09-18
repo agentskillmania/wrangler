@@ -322,10 +322,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     // evict_idle()——闲置温会话的回收不依赖"有新会话插入"）。
     sessionManager().evictIdleSessions();
 
-    console.error('[dbg-route] entry, warm=', sessionManager().getAgentSession(sessionId) !== null);
     // 温会话直接挂；冷会话物化（与 resume/respond 同一装配路径）。
     let agentSession = sessionManager().getAgentSession(sessionId);
-    if (!agentSession) console.error('[dbg-route] COLD PATH taken');
     if (!agentSession) {
       const ctx = await resolveSessionContext(sessionId, query.sessionDir, {
         sessionManager: sessionManager(),
@@ -367,7 +365,6 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         }
       }
       agentSession = rebuilt;
-      console.error('[dbg-route] rebuilt registered, active=', sessionManager().activeCount);
     }
 
     reply.hijack();
@@ -805,10 +802,22 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
-   * POST /api/chat/:sessionId — RESUME conversation
+   * POST /api/chat/:sessionId — RESUME conversation（双轨，R2P-153，对齐
+   * Rust 65732f3 的 send ack 化）
+   *
+   * 会话解析/冷装配/busy 宽限两轨共享；尾部二选一：
+   * - 默认（ack）：响应立即返回 JSON `{ok, sessionId, turnSeq}`——turnSeq
+   *   是本轮 done 帧将携带的轮号，等待方挂常驻 events 流
+   *   （GET /api/chat/:id/events）以 `data.turnSeq === ack.turnSeq` 认领
+   *   本轮完结。消息驱动照旧执行（后台），结果不经本响应；驱动失败经
+   *   events 流 error 帧上报（对齐 Rust drive 失败的 emit_error——ack 已
+   *   回，HTTP 层无第二次机会）。
+   * - `?stream=1`（过渡兼容）：旧「send 即流」全形状不变，响应头带
+   *   `Deprecation: true`。选 query 而非 X-Stream 头：curl/测试/前端只需
+   *   拼 URL，且与 events 端点既有的 lastSeq query 风格一致。
    *
    * Loads existing state from SessionStore, appends user message,
-   * runs EnhancedRunner. Streams SSE events until completion.
+   * runs EnhancedRunner.
    */
   fastify.post('/api/chat/:sessionId', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
@@ -897,14 +906,40 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     sessionManager().updateStatus(sessionId, 'running');
 
-    await streamAgentSession(reply, agentSession, body.message, {
+    const streamOpts = {
       thinkingEnabled: body.thinkingEnabled,
       model: body.model,
       sessionId,
       sessionManager: sessionManager(),
       // Resume does NOT emit session-start (the client already has the id).
       emitSessionStart: false,
+    } as const;
+
+    if ((request.query as { stream?: string }).stream === '1') {
+      await streamAgentSession(reply, agentSession, body.message, streamOpts, {
+        Deprecation: 'true',
+      });
+      return;
+    }
+
+    const ack = agentSession.sendMessageInBackground(body.message, {
+      thinkingEnabled: body.thinkingEnabled,
+      model: body.model,
     });
+    if (!ack.ok) {
+      if (ack.code === 409) {
+        reply.code(409);
+        return busyConflict(
+          'a run is in progress on this session; wait for it to finish or POST /stop before sending'
+        );
+      }
+      reply.code(400);
+      return { error: ack.error };
+    }
+    ack.completion.then((outcome) =>
+      sessionManager().updateStatus(sessionId, outcome.hadError ? 'error' : 'idle')
+    );
+    return { ok: true, sessionId, turnSeq: ack.turnSeq };
   });
 
   /**
@@ -1047,13 +1082,17 @@ async function streamAgentSession(
     sessionId: string;
     sessionManager: DecoratedFastifyInstance['sessionManager'];
     emitSessionStart: boolean;
-  }
+  },
+  extraHeaders: Record<string, string> = {}
 ): Promise<void> {
   reply.hijack();
   reply.raw.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
+    // 过渡期标记（R2P-153）：?stream=1 旧轨的响应级提示——hijack 后头
+    // 只能随 writeHead 走，这是唯一注入点。
+    ...extraHeaders,
   });
 
   let clientGone = false;

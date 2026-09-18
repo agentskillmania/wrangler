@@ -1001,6 +1001,64 @@ export class AgentSession {
   }
 
   /**
+   * ack 语义的后台驱动（R2P-153，对齐 Rust `Session::drive_seeded` 的
+   * spawn + begin_turn）：开轮（busy 闩 + turnSeq 自增）与调用方的 busy
+   * 检查之间零 await（单线程 JS 上 check-and-begin 原子——async
+   * generator 的首个 next() 同步执行到 driveTurn 的第一个 await，开轮
+   * 在其中），返回的 turnSeq 就是本轮 done 帧将携带的轮号（等待方按
+   * `data.turnSeq === ack.turnSeq` 认领完结）。
+   *
+   * 与 handleMessage 的请求级流不同，帧不进任何响应：runner 帧经
+   * pushEvent 落会话通道（滚动历史 + 广播），常驻 events 流
+   * （GET /api/chat/:id/events）是唯一收看面；这里的后台消费只为推着
+   * 生成器走完生命周期（否则驱动根本不发生）。
+   *
+   * 消息超限在开轮前拒绝（对齐 Rust append 失败的 400——调用时 ack
+   * 响应尚未发出，路由仍可回 HTTP 错误码；handleMessage 内的同款
+   * yield-error 分支在此路径不可达）。驱动异常不静默：error 帧进会话
+   * 流（对齐 Rust drive 失败的 `emit_error`——ack 已回，等待方靠 events
+   * 流的 error 帧感知失败）。
+   *
+   * @returns 开轮成功带本轮 turnSeq 与完成 promise（hadError 供路由
+   *   映射 SessionManager 状态）；busy/超限带 HTTP 语义码由路由包响应。
+   */
+  sendMessageInBackground(
+    message: string,
+    options?: { thinkingEnabled?: boolean; model?: string }
+  ):
+    | { ok: true; turnSeq: number; completion: Promise<{ hadError: boolean }> }
+    | { ok: false; code: 409 | 400; error: string } {
+    if (this._busy) {
+      return { ok: false, code: 409, error: 'Session is busy processing a message' };
+    }
+    if (this.maxInputLength !== undefined && message.length > this.maxInputLength) {
+      return {
+        ok: false,
+        code: 400,
+        error: `Input exceeds maximum length of ${this.maxInputLength} characters (got ${message.length})`,
+      };
+    }
+    // turnSeq+1 是 driveTurn 即将分配的轮号：busy 复检到此零 await（见上），
+    // 没有并发驱动能插进来抢号。
+    const turnSeq = this.turnSeq + 1;
+    // handleMessage 的静态类型是 AsyncIterable——取显式迭代器驱动（next
+    // 在类型上可见；运行时本就是 async generator）。
+    const iterator = this.handleMessage(message, options)[Symbol.asyncIterator]();
+    const completion = (async (): Promise<{ hadError: boolean }> => {
+      try {
+        for (;;) {
+          const r = await iterator.next();
+          if (r.done) return { hadError: false };
+        }
+      } catch (err) {
+        this.pushEvent({ event: 'error', data: { message: `drive failed: ${String(err)}` } });
+        return { hadError: true };
+      }
+    })();
+    return { ok: true, turnSeq, completion };
+  }
+
+  /**
    * Continue a run from the current state WITHOUT appending a user message
    * (R2P-165②, the daemon counterpart of Rust 9995668's rebuild+续跑).
    *
