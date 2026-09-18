@@ -705,7 +705,7 @@ describe('EnhancedRunner', () => {
       expect(args.toolRegistry).toBeDefined();
     });
 
-    it('should include a2ui tools and middleware when a2ui.enabled is true', async () => {
+    it('should include a2ui display tools when a2ui.enabled is true (no middleware)', async () => {
       const runner = await EnhancedRunner.create(
         makeOptions({
           a2ui: { enabled: true },
@@ -716,15 +716,16 @@ describe('EnhancedRunner', () => {
         })
       );
 
+      // HITL 入口唯一化（D4）：a2ui 是纯展示工具面，无专属 middleware
       const config = runner.getConfig();
-      expect(config.middlewareNames).toContain('A2UIMiddleware');
+      expect(config.middlewareNames).toEqual([]);
 
       const toolNames = runner.getToolInfo().map((t) => t.name);
       expect(toolNames).toContain('a2ui_create_surface');
-      expect(toolNames).toContain('a2ui_wait');
+      expect(toolNames).not.toContain('a2ui_wait');
     });
 
-    it('should not include a2ui tools or middleware when a2ui is disabled', async () => {
+    it('should not include a2ui tools when a2ui is disabled', async () => {
       const runner = await EnhancedRunner.create(
         makeOptions({
           a2ui: { enabled: false },
@@ -735,13 +736,11 @@ describe('EnhancedRunner', () => {
         })
       );
 
-      const config = runner.getConfig();
-      expect(config.middlewareNames).not.toContain('A2UIMiddleware');
       const toolNames = runner.getToolInfo().map((t) => t.name);
       expect(toolNames).not.toContain('a2ui_create_surface');
     });
 
-    it('should not include a2ui tools or middleware when a2ui is omitted', async () => {
+    it('should not include a2ui tools when a2ui is omitted', async () => {
       const runner = await EnhancedRunner.create(
         makeOptions({
           tools: { extra: [] },
@@ -751,8 +750,6 @@ describe('EnhancedRunner', () => {
         })
       );
 
-      const config = runner.getConfig();
-      expect(config.middlewareNames).not.toContain('A2UIMiddleware');
       const toolNames = runner.getToolInfo().map((t) => t.name);
       expect(toolNames).not.toContain('a2ui_create_surface');
     });

@@ -39,14 +39,3 @@ export type ComponentOperation =
     }
   | { op: 'delete'; componentId: string }
   | { op: 'replace'; parentId: string; afterId?: string | null; component: ComponentNode };
-
-/** A2UI user response sent back from renderer */
-export interface A2UIUserResponse {
-  type: 'a2ui-response';
-  surfaceId: string;
-  dataModel: Record<string, unknown>;
-  functionCall?: {
-    name: string;
-    args: Record<string, unknown>;
-  };
-}

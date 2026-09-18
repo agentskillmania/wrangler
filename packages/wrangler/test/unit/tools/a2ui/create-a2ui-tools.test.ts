@@ -1,19 +1,25 @@
 import { describe, it, expect } from 'vitest';
 
 describe('createA2UITools', () => {
-  it('should return 5 tools with correct names', async () => {
+  // ─── 工具面契约(HITL 入口唯一化)─────────────────────────────────────────
+
+  /**
+   * a2ui 的工具面是**纯展示**的四把工具。"要人给东西"只有一个入口:
+   * ask_human。不存在阻塞式的 a2ui_wait(它是"展示"与"要输入"两个概念的
+   * 混合体,已移除——D4,对齐 Rust 02b1bc6)。
+   */
+  it('registered a2ui tools are display-only (no blocking wait)', async () => {
     const { createA2UITools } = await import('../../../../src/tools/a2ui/create-a2ui-tools.js');
 
     const tools = createA2UITools();
 
-    expect(tools).toHaveLength(5);
     expect(tools.map((t) => t.name).sort()).toEqual([
       'a2ui_create_surface',
       'a2ui_delete_surface',
       'a2ui_update_components',
       'a2ui_update_data_model',
-      'a2ui_wait',
     ]);
+    expect(tools.map((t) => t.name)).not.toContain('a2ui_wait');
   });
 
   it('a2ui_create_surface should return success message with layout', async () => {
@@ -122,16 +128,6 @@ describe('createA2UITools', () => {
     const result = await tool.execute({ surfaceId: 'main' });
 
     expect(result).toContain('main');
-  });
-
-  it('a2ui_wait should return no-op message', async () => {
-    const { createA2UITools } = await import('../../../../src/tools/a2ui/create-a2ui-tools.js');
-
-    const tools = createA2UITools();
-    const tool = tools.find((t) => t.name === 'a2ui_wait')!;
-    const result = await tool.execute({ surfaceId: 'form' });
-
-    expect(typeof result).toBe('string');
   });
 
   it('each tool should have name, description, and parameters', async () => {

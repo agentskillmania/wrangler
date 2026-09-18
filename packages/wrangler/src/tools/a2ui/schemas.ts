@@ -71,7 +71,3 @@ export const UpdateDataModelSchema = z.object({
 export const DeleteSurfaceSchema = z.object({
   surfaceId: z.string(),
 });
-
-export const A2UIWaitSchema = z.object({
-  surfaceId: z.string().describe('The surface to wait for user interaction on'),
-});

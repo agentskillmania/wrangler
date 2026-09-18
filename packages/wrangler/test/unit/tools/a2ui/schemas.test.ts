@@ -139,16 +139,4 @@ describe('A2UI Schemas', () => {
     const result2 = DeleteSurfaceSchema.safeParse({});
     expect(result2.success).toBe(false);
   });
-
-  it('should validate a2ui_wait args', async () => {
-    const { A2UIWaitSchema } = await import('../../../../src/tools/a2ui/schemas.js');
-
-    // Valid
-    const result1 = A2UIWaitSchema.safeParse({ surfaceId: 'form' });
-    expect(result1.success).toBe(true);
-
-    // Invalid: missing surfaceId
-    const result2 = A2UIWaitSchema.safeParse({});
-    expect(result2.success).toBe(false);
-  });
 });

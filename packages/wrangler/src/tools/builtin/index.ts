@@ -8,7 +8,6 @@ import { createFileWriteTool } from './file-write.js';
 import { createGitTool } from './git.js';
 import { createGlobTool } from './glob.js';
 import { createGrepTool } from './grep.js';
-import { createListDirTool } from './list-dir.js';
 import { createPythonTool } from './python.js';
 import { createShellTool } from './shell.js';
 import type { ToolDeps } from './workspace-deps.js';
@@ -27,10 +26,13 @@ export interface CoreToolsOptions {
 
 /**
  * 平台无关的核心工具集：calculator / ask_human / file_* / glob / grep /
- * list_dir / shell / python / git。全部通过注入的 ToolDeps 访问宿主能力。
+ * shell / python / git。全部通过注入的 ToolDeps 访问宿主能力。
  *
  * web_fetch / web_search 是 Node 专属（jsdom 爬虫）——由宿主从
  * `@agentskillmania/wrangler/tools/web` 子路径组装后经 tools.inject 注入。
+ *
+ * list_dir 已移除（R2P-240，对齐 Rust 128e109）：与 shell ls 完全重叠，
+ * 而 ls 永远可用且信息严格更多（-p/-F 目录标记）。
  */
 export function createCoreTools(options: CoreToolsOptions): Tool<ZodTypeAny>[] {
   const deps = options.deps;
@@ -47,7 +49,6 @@ export function createCoreTools(options: CoreToolsOptions): Tool<ZodTypeAny>[] {
     createFileEditTool(deps),
     createGlobTool(deps),
     createGrepTool(deps),
-    createListDirTool(deps),
     createShellTool(deps, options.maxToolOutput),
     createPythonTool(deps),
     createGitTool(deps),
@@ -63,7 +64,6 @@ export { createGrepTool } from './grep.js';
 export { createShellTool } from './shell.js';
 export { createPythonTool } from './python.js';
 export { createGitTool } from './git.js';
-export { createListDirTool } from './list-dir.js';
 export { truncateOutput } from './workspace-deps.js';
 export type { ToolDeps, ExecResult } from './workspace-deps.js';
 export { HostToolDeps, SandboxToolDeps, resolvePath } from './workspace-deps.js';

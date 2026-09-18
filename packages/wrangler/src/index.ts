@@ -108,14 +108,13 @@ export { createPythonTool } from './tools/builtin/python.js';
 export { createGitTool } from './tools/builtin/git.js';
 export type { Tool } from '@agentskillmania/colts';
 
-// A2UI support
-export { createA2UITools, A2UIMiddleware, a2uiRespond } from './tools/a2ui/index.js';
+// A2UI support（纯展示工具面——a2ui_wait 已随 HITL 入口唯一化移除，D4）
+export { createA2UITools } from './tools/a2ui/index.js';
 export type {
   A2UIOperation,
   A2UIEvent,
   ComponentNode,
   ComponentOperation,
-  A2UIUserResponse,
 } from './tools/a2ui/index.js';
 
 // Skills — inventory alignment layer (wraps an injected provider; collection

@@ -24,9 +24,9 @@ function makeDeps() {
 }
 
 describe('createCoreTools', () => {
-  it('returns 10 colts Tool instances (calculator + 9 platform-neutral builtin)', () => {
+  it('returns 9 colts Tool instances (calculator + 8 platform-neutral builtin)', () => {
     const tools = createCoreTools({ deps: makeDeps() });
-    expect(tools).toHaveLength(10);
+    expect(tools).toHaveLength(9);
     for (const tool of tools) {
       expect(tool).toHaveProperty('name');
       expect(tool).toHaveProperty('description');
@@ -48,7 +48,8 @@ describe('createCoreTools', () => {
     expect(names).toContain('shell');
     expect(names).toContain('python');
     expect(names).toContain('git');
-    expect(names).toContain('list_dir');
+    // list_dir 已移除（R2P-240，对齐 Rust 128e109）：与 shell ls 完全重叠
+    expect(names).not.toContain('list_dir');
     // web_fetch / web_search 不在 core（走 tools/web 子路径）
     expect(names).not.toContain('web_fetch');
     expect(names).not.toContain('web_search');
@@ -91,7 +92,7 @@ describe('createCoreTools', () => {
     const tools = createCoreTools({
       deps: new SandboxToolDeps(mockSandbox, 100000, 600_000),
     });
-    expect(tools).toHaveLength(10);
+    expect(tools).toHaveLength(9);
     const shell = tools.find((t) => t.name === 'shell')!;
     const result = await shell.execute({ command: 'echo hi' });
     expect(result).toContain('sandbox output');

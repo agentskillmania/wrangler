@@ -1,9 +1,10 @@
 /**
- * @fileoverview Factory for 5 A2UI tools
+ * @fileoverview Factory for 4 A2UI display-only tools
  *
- * 4 rendering tools (return success descriptions) + 1 wait tool (intercepted by middleware).
- * No side effects — tool arguments/results are visible through the runner's existing event system
- * (tool:start and tool:end events carry the action and result data).
+ * All tools return success descriptions and never block. HITL 入口唯一化
+ * （D4，对齐 Rust 02b1bc6）："要人给东西"只有 ask_human 一个入口，a2ui
+ * 只负责展示——工具参数/结果经 runner 既有事件系统（tool:start 携带
+ * action、tool:end 携带 result）到达前端渲染。
  */
 
 import type { Tool } from '@agentskillmania/colts';
@@ -14,7 +15,6 @@ import {
   UpdateComponentsSchema,
   UpdateDataModelSchema,
   DeleteSurfaceSchema,
-  A2UIWaitSchema,
 } from './schemas.js';
 
 export function createA2UITools(): Tool<z.ZodTypeAny>[] {
@@ -53,18 +53,6 @@ export function createA2UITools(): Tool<z.ZodTypeAny>[] {
       parameters: DeleteSurfaceSchema,
       async execute(args: z.infer<typeof DeleteSurfaceSchema>) {
         return `Surface deleted: "${args.surfaceId}"`;
-      },
-    },
-    {
-      name: 'a2ui_wait',
-      description:
-        'Signal that the UI is ready and wait for user interaction on the specified surface. ' +
-        'The agent will pause until the user responds (e.g., submits a form, clicks a button).',
-      parameters: A2UIWaitSchema,
-      async execute(_args: z.infer<typeof A2UIWaitSchema>) {
-        // This tool is intercepted by A2UIMiddleware at beforeAdvance.
-        // If somehow execute() is called directly, return a message.
-        return 'Waiting for user interaction (this should be intercepted by middleware)';
       },
     },
   ];

@@ -46,6 +46,11 @@ export interface A2UIConfig {
 
 // ── Builtin tool filter ──────────────────────────────────────────
 
+/**
+ * Builtin 工具开关（官方集合）。listDir 已移除（R2P-240，对齐 Rust
+ * 128e109）——旧档/请求里残留 `listDir` 键时静默忽略：过滤按官方工具集
+ * 遍历查键，不遍历调用方传入的键，未知键永远不被消费。
+ */
 export interface BuiltinToolFilter {
   calculate?: boolean;
   askHuman?: boolean;
@@ -59,7 +64,6 @@ export interface BuiltinToolFilter {
   webFetch?: boolean;
   python?: boolean;
   git?: boolean;
-  listDir?: boolean;
 }
 
 // ── Structured config groups ─────────────────────────────────────

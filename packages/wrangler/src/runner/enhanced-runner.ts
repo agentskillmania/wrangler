@@ -47,7 +47,7 @@ import { PlanStore } from '../spec-plan/plan-store.js';
 import { SpecStore } from '../spec-plan/spec-store.js';
 import { createDelegateTool } from '../subagent/delegate-tool.js';
 import { createTodolistSupport } from '../todolist/support.js';
-import { createA2UITools, A2UIMiddleware } from '../tools/a2ui/index.js';
+import { createA2UITools } from '../tools/a2ui/index.js';
 import { createCoreTools } from '../tools/builtin/index.js';
 import {
   DEFAULT_MAX_TOOL_OUTPUT,
@@ -276,7 +276,6 @@ export class EnhancedRunner {
             web_fetch: 'webFetch',
             python: 'python',
             git: 'git',
-            list_dir: 'listDir',
           };
           const key = toggleMap[tool.name as string];
           if (!key || !(key in toolToggles)) return false;
@@ -320,10 +319,10 @@ export class EnhancedRunner {
     const planStore = new PlanStore(runtime.path.join(specPlanBaseDir, 'plans'), runtime);
     const specPlanTools = specPlanEnabled ? createSpecPlanTools(specStore, planStore) : [];
 
-    // A2UI support (conditional)
+    // A2UI support (conditional) — 纯展示工具面（D4，对齐 Rust 02b1bc6）：
+    // 四把工具非阻塞、无专属 middleware；需用户输入走 ask_human。
     const a2uiEnabled = options.a2ui?.enabled === true; // a2ui already uses { enabled } shape
     const a2uiTools = a2uiEnabled ? createA2UITools() : [];
-    const a2uiMiddleware = a2uiEnabled ? [new A2UIMiddleware()] : [];
 
     // Sub-agent delegation support (conditional)
     // When subAgents are configured, a delegate tool is created and registered
@@ -594,7 +593,6 @@ export class EnhancedRunner {
         ...(commandMiddleware ? [commandMiddleware] : []),
         ...(sessionEnabled ? sessionSupport.middlewares : []),
         ...(todolistEnabled ? [todolistSupport.middleware] : []),
-        ...a2uiMiddleware,
       ],
       // 头部不带时间上下文——分钟级时间戳在头部会按分钟作废整个 provider
       // 前缀缓存;时间行由装配器在尾部动态 reminder 里现算(R2P-101w,
@@ -651,7 +649,6 @@ export class EnhancedRunner {
         ...(commandMiddleware ? [commandMiddleware.name] : []),
         ...(sessionEnabled ? sessionSupport.middlewares.map((m) => m.name) : []),
         ...(todolistEnabled ? [todolistSupport.middleware.name] : []),
-        ...a2uiMiddleware.map((m) => (m as { name?: string }).name ?? 'a2ui'),
       ].filter(Boolean) as string[],
       compressorEnabled: !!compressorInstance,
       contextWindow,
