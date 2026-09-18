@@ -3052,4 +3052,51 @@ describe('AgentSession', () => {
       expect(mock.runner.run).toHaveBeenCalledTimes(1, '只消费轮驱动（无用户轮）');
     });
   });
+
+  // ─── 委派槽接线（R2P-141c，对齐 Rust materialize 绑定监督者槽）───────────
+  describe('delegate supervisor slot wiring (R2P-141c)', () => {
+    it('constructor late-binds the session supervisor into the runner delegate slot', async () => {
+      const setDelegateSupervisor = vi.fn();
+      const mock = createMockRunner();
+      (mock.runner as unknown as Record<string, unknown>).setDelegateSupervisor =
+        setDelegateSupervisor;
+      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          sessionId: 'slot-wiring-test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+
+      expect(setDelegateSupervisor).toHaveBeenCalledTimes(1);
+      const bound = setDelegateSupervisor.mock.calls[0][0] as unknown as {
+        isAlive: () => boolean;
+        accept: (job: unknown) => void;
+        cancelAll: () => void;
+      };
+      // 绑定的即本会话的监督者：活体（可异步受理）、可级联取消。
+      expect(bound.isAlive()).toBe(true);
+      expect(typeof bound.accept).toBe('function');
+      expect(typeof bound.cancelAll).toBe('function');
+    });
+
+    it('a runner without the setter tolerates the wiring (old mocks / no delegation)', async () => {
+      mockRunnerWithEvents();
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          sessionId: 'no-setter-test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+      expect(session.hasActiveChildren()).toBe(false, 'no slot = sync mode; registry stays empty');
+    });
+  });
 });

@@ -41,6 +41,8 @@ import { resolveDefaultModel } from '../llm/resolve-model.js';
 import type { SessionTitleSlot } from '../middleware/session-naming-middleware.js';
 import { SessionNotFoundError } from '../session/errors.js';
 import { SessionStore } from '../session/session-store.js';
+import { emptySupervisorSlot } from '../session/supervisor.js';
+import type { DelegateSupervisor, SupervisorSlot } from '../session/supervisor.js';
 import { createSessionSupport } from '../session/support.js';
 import { InventorySkillProvider } from '../skills/inventory-provider.js';
 import { PlanStore } from '../spec-plan/plan-store.js';
@@ -136,6 +138,13 @@ export class EnhancedRunner {
    * setter is then a silent no-op.
    */
   private readonly titleEventSlot?: SessionTitleSlot;
+  /**
+   * 异步委派监督者槽（R2P-141c，对齐 Rust SupervisorSlot）：构建时为空
+   * （delegate 同步模式默认），会话物化后由宿主晚绑定
+   * （{@link setDelegateSupervisor}）。与 titleEventSlot 不同，此槽恒存在
+   * ——绑定一个没有 delegate 工具的 runner 无害（无处可读）。
+   */
+  private readonly delegateSupervisorSlot: SupervisorSlot;
 
   private constructor(
     runner: AgentRunner,
@@ -143,7 +152,8 @@ export class EnhancedRunner {
     toolMetadataMap: Map<string, ToolMetadata>,
     skillMetadataList: SkillMetadata[],
     commandRegistry: CommandRegistry | null = null,
-    titleEventSlot?: SessionTitleSlot
+    titleEventSlot?: SessionTitleSlot,
+    delegateSupervisorSlot: SupervisorSlot = emptySupervisorSlot()
   ) {
     this.innerRunner = runner;
     this.resolvedConfig = config;
@@ -151,6 +161,18 @@ export class EnhancedRunner {
     this.commandRegistry = commandRegistry;
     this.skillMetadataList = skillMetadataList;
     this.titleEventSlot = titleEventSlot;
+    this.delegateSupervisorSlot = delegateSupervisorSlot;
+  }
+
+  /**
+   * Late-bind the async-delegation supervisor (R2P-141c, the TS analog of
+   * Rust `set_delegate_supervisor`): the host (daemon session materialization)
+   * injects the supervisor AFTER the runner is constructed; the delegate tool
+   * reads the slot on every call — bound-and-alive = accept-and-return
+   * (accepted receipt), empty = the sync path (zero change).
+   */
+  setDelegateSupervisor(supervisor: DelegateSupervisor): void {
+    this.delegateSupervisorSlot.current = supervisor;
   }
 
   /**
@@ -332,6 +354,9 @@ export class EnhancedRunner {
       options.delegation?.subAgents && options.delegation.subAgents.length > 0
         ? new Map(options.delegation.subAgents.map((sa) => [sa.name, sa]))
         : undefined;
+    // 监督者槽与 runner 同庚创建（空 = 同步默认）；宿主在会话物化后
+    // setDelegateSupervisor 晚绑定（R2P-141c）。
+    const delegateSupervisorSlot = emptySupervisorSlot();
 
     // Build skill-resource tools (read_skill_resource + run_skill_script) when
     // skill directories are configured. These complement load_skill by giving
@@ -621,6 +646,9 @@ export class EnhancedRunner {
         thinkingEnabled: options.thinking?.enabled,
         temperature: options.llm?.temperature,
         subAgentRunnerFactory: options.delegation?.runnerFactory,
+        // 监督者槽晚绑定（R2P-141c）：空槽 = 同步模式；宿主（会话物化）
+        // setDelegateSupervisor 后即异步受理。
+        supervisorSlot: delegateSupervisorSlot,
         emit: (type: string, data: Record<string, unknown>) => {
           runner.emit(type as keyof RunnerEventMap, data as never);
         },
@@ -660,7 +688,8 @@ export class EnhancedRunner {
       toolMeta,
       skillMeta,
       registeredCommands,
-      titleEventSlot
+      titleEventSlot,
+      delegateSupervisorSlot
     );
   }
 

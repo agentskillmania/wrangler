@@ -1240,6 +1240,84 @@ describe('Chat API', () => {
       expect(callArg.agentName).toBe('custom-name');
     });
 
+    it('inline agent subAgents flow through to delegation (R2P-143, aligned Rust e39477c)', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      // 请求体 `agent.subAgents[]` 直传 delegation：不建 crew 也能 delegate。
+      const res = await fetch(`${getUrl()}/api/agents/no-such-agent-file/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp/test-ws',
+          agent: {
+            instructions: '主智能体人设',
+            subAgents: [
+              {
+                name: 'researcher',
+                instructions: '会做调研',
+                description: '调研员',
+                maxSteps: 12,
+                timeout: 45000,
+                inheritParentTools: false,
+              },
+              // 最小形状：只有必填的 name + instructions，其余缺省。
+              { name: 'writer', instructions: '会写文章' },
+            ],
+          },
+        }),
+      });
+      expect(res.status).toBe(200);
+      const callArg = mockAgentSessionCreate.mock.calls[0][0] as {
+        subAgents?: Array<Record<string, unknown>>;
+      };
+      expect(callArg.subAgents).toHaveLength(2);
+      expect(callArg.subAgents![0]).toEqual({
+        name: 'researcher',
+        description: '调研员',
+        config: { name: 'researcher', instructions: '会做调研', tools: [] },
+        maxSteps: 12,
+        timeout: 45000,
+        inheritParentTools: false,
+        inheritParentSkills: undefined,
+      });
+      // 缺省形状：description 落空串、开关保持 undefined（delegate 工具侧
+      // 按 !== false 取默认继承）。
+      expect(callArg.subAgents![1]).toEqual({
+        name: 'writer',
+        description: '',
+        config: { name: 'writer', instructions: '会写文章', tools: [] },
+        maxSteps: undefined,
+        timeout: undefined,
+        inheritParentTools: undefined,
+        inheritParentSkills: undefined,
+      });
+    });
+
+    it('no inline subAgents → delegation stays undefined (unchanged behavior)', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp/test-ws',
+        }),
+      });
+      expect(res.status).toBe(200);
+      const callArg = mockAgentSessionCreate.mock.calls[0][0] as {
+        subAgents?: unknown;
+      };
+      expect(callArg.subAgents).toBeUndefined();
+    });
+
     it('uses agent defaults when config fields omitted', async () => {
       mockAgentSessionCreate.mockResolvedValue(mockSession);
       mockHandleMessage.mockImplementation(async function* () {

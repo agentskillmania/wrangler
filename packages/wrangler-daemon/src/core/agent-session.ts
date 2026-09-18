@@ -471,11 +471,14 @@ export class AgentSession {
     // 监督者挂钩绑定（R2P-141b，对齐 Rust materialize 的 supervisor.bind）：
     // 子完成投递走本会话邮箱（deliver），子任务 Subagent* 帧走会话通道
     // （落史+序号+广播——轮外也可见，断线重放不丢子女进展）。
-    // delegate 工具的槽接线随 1c（EnhancedRunner.setDelegateSupervisor）。
     this.subagentSupervisor.bind({
       deliver: (d) => this.deliver(d),
       emit: (type, data) => this.emitBackgroundEvent(type, data),
     });
+    // 异步委派接线（R2P-141c，对齐 Rust materialize 把 Supervisor 绑进
+    // harness 监督者槽）：delegate 工具自此「受理即返回」。可选调用兜底
+    // 无该口的 runner 装配（旧 mock/无 delegation）——槽空 = 同步模式。
+    this.runner.setDelegateSupervisor?.(this.subagentSupervisor);
   }
 
   /**

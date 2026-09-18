@@ -1459,4 +1459,54 @@ describe('EnhancedRunner', () => {
       expect(resumeCall.subAgents).toBeUndefined();
     });
   });
+
+  // ─── 监督者槽（R2P-141c，对齐 Rust SupervisorSlot 晚绑定）────────────────
+  describe('delegate supervisor slot (R2P-141c)', () => {
+    it('setDelegateSupervisor late-binds: the registered delegate tool flips from sync to accepted', async () => {
+      const subAgents = [
+        {
+          name: 'researcher',
+          description: 'research helper',
+          config: { name: 'researcher', instructions: 'be helpful', tools: [] },
+        },
+      ];
+      const runner = await EnhancedRunner.create(makeOptions({ delegation: { subAgents } }));
+
+      // 从 AgentRunner mock 的返回实例上取 registerTool 的收单记录，
+      // 找到 delegate 工具。
+      const { AgentRunner } = await import('@agentskillmania/colts');
+      const mockFns = (
+        AgentRunner as unknown as {
+          mock: { results: Array<{ value: { registerTool: ReturnType<typeof vi.fn> } }> };
+        }
+      ).mock.results;
+      const instance = mockFns.at(-1)!.value;
+      const registered = instance.registerTool.mock.calls.map((c) => c[0]) as Array<{
+        name: string;
+        execute: (args: unknown, opts: unknown) => Promise<Record<string, unknown>>;
+      }>;
+      const delegate = registered.find((t) => t.name === 'delegate');
+      expect(delegate).toBeDefined();
+
+      // 绑定前（空槽）：同步模式——子 runner 是 mock colts AgentRunner，
+      // run() 落到 mockRun 的默认 success。
+      const syncResult = await delegate!.execute(
+        { agent: 'researcher', task: 't1' } as never,
+        undefined
+      );
+      expect(syncResult['status']).toBe('success');
+
+      // 晚绑定监督者后：受理即返回。
+      const { SubagentSupervisor } = await import('../../../src/session/supervisor.js');
+      const supervisor = new SubagentSupervisor();
+      supervisor.bind({ deliver: vi.fn(), emit: vi.fn() });
+      runner.setDelegateSupervisor(supervisor);
+      const accepted = await delegate!.execute(
+        { agent: 'researcher', task: 't2' } as never,
+        undefined
+      );
+      expect(accepted['status']).toBe('accepted');
+      expect(String(accepted['subtaskId']).startsWith('researcher-')).toBe(true);
+    });
+  });
 });

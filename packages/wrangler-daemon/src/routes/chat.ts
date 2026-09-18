@@ -721,6 +721,19 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const config = configManager().get();
     const rc = config.runner;
 
+    // 内联子 agent（R2P-143，对齐 Rust e39477c 的 Inline 分支）：请求体
+    // `agent.subAgents[]` → SubAgentConfig（与 crew 路径同一类型，wire 字段
+    // 一一对应）。有名单即注册 delegate（异步受理全链路），无需建 crew 目录。
+    const inlineSubAgents: AgentSessionOptions['subAgents'] = body.agent?.subAgents?.map((s) => ({
+      name: s.name,
+      description: s.description ?? '',
+      config: { name: s.name, instructions: s.instructions, tools: [] },
+      maxSteps: s.maxSteps,
+      timeout: s.timeout,
+      inheritParentTools: s.inheritParentTools,
+      inheritParentSkills: s.inheritParentSkills,
+    }));
+
     // 搜索配置解析（供 search 字段与 web 工具注入工厂共用）
     const searchConfig =
       body.config?.search ??
@@ -782,6 +795,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         rc?.compression
       ),
       limits: body.config?.limits ?? rc?.limits,
+      // 内联子 agent 名单（R2P-143）：直传 delegation——与 crew 路径共用
+      // 委派管道，唯一差异是定义存哪（请求体 vs 磁盘目录）。
+      subAgents: inlineSubAgents,
     };
 
     const agentSession = await AgentSession.create(sessionOptions, config);

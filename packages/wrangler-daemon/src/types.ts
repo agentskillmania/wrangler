@@ -203,6 +203,30 @@ export interface PerRequestParams {
   model?: string;
 }
 
+/**
+ * 内联子 agent（请求体 `agent.subAgents[]` 的元素，R2P-143 对齐 Rust
+ * e39477c 的 SubAgentInlineBody）：让 inline 请求也能用 delegate 委派，
+ * 不需要建 crew 目录。wire 字段与 `SubAgentConfig` 一一对应（存储位置是
+ * 唯一差异：inline 嵌在请求体，crew 存盘）——全部可选缺省，唯
+ * name+instructions 必填。
+ */
+export interface SubAgentInlineBody {
+  /** 子 agent 名（delegate 工具的 agent 参数值）。 */
+  name: string;
+  /** 子 agent instructions（人设）。必填。 */
+  instructions: string;
+  /** 描述（delegate 清单展示）。 */
+  description?: string;
+  /** 最大步数（缺省 500）。 */
+  maxSteps?: number;
+  /** 超时毫秒（缺省看门狗 10min）。 */
+  timeout?: number;
+  /** 是否继承父级工具（缺省 true）。 */
+  inheritParentTools?: boolean;
+  /** 是否继承父级 skill（缺省 true）。 */
+  inheritParentSkills?: boolean;
+}
+
 /** Session-init parameters — only create endpoint accepts these */
 export interface SessionInitParams {
   workspacePath: string;
@@ -218,7 +242,16 @@ export interface SessionInitParams {
    * the host owns the definition (embedded-daemon channel; mirrors the
    * Rust daemon contract). `instructions` is required.
    */
-  agent?: { name?: string; instructions: string };
+  agent?: {
+    name?: string;
+    instructions: string;
+    /**
+     * 内联子 agent 名单（R2P-143，对齐 Rust e39477c）：请求体直接定义
+     * 子 agent，无需建 crew——create 路由转成 SubAgentConfig 注入
+     * delegation（delegate 工具注册 + 异步受理全链路）。
+     */
+    subAgents?: SubAgentInlineBody[];
+  };
   /** Structured runner config — mirrors `EnhancedRunnerOptions` groups
    * (field-level merged over the daemon config.yaml defaults; absent groups
    * fall back to runner defaults). */
