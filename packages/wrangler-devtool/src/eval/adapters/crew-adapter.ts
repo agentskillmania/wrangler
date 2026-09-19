@@ -63,6 +63,8 @@ export class CrewAdapter extends BaseAdapter {
       // Crew's skill dirs + the conventional <crewDir>/skills (already in
       // crewRunnerOpts) — pass directly.
       skills: { dirs: opts.skillDirs },
+      // T7 自包含：crew 私有 MCP 轴透传（否则 eval 永远忽略 <crew>/mcp.json）
+      tools: { mcpConfigPaths: opts.mcpPaths },
       session: { enabled: false },
       todolist: { enabled: false },
       commands: { enabled: false },

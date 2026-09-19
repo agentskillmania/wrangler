@@ -768,7 +768,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       agentName: agentDetail.name,
       agentInstructions: agentDetail.instructions,
       model: agentDetail.model,
-      // skills.dirs: body > agent 私有(空则 config.runner 全局) > 内置
+      // skills.dirs: body > agent 私有(空则 config.runner 全局) > devtool 脚手架技能集
+      // （BUILTIN_SKILLS_DIR 来自 wrangler-devtool，恒 append；引擎级 spec-plan 技能
+      //  由 EnhancedRunner.collectSkillDirs 另行注入，两者不同源）
       // spec-plan skills（引擎自带，恒在）。
       skills: {
         dirs: [...(body.config?.skills?.dirs ?? skillDirsFallback), BUILTIN_SKILLS_DIR],

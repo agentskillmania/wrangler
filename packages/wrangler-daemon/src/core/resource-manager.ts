@@ -88,6 +88,26 @@ export class ResourceManager {
     const agentDir = join(this.agentsDir, id);
     try {
       const result = await AgentLoader.loadFrom(agentDir, defaultNodeHostEnv);
+      // skillDirs 是容器目录（T7 自包含后推 `skills/` 本身）——skillCount
+      // 需实测容器内（含 SKILL.md 的子目录）的技能数，不能取容器个数，
+      // 否则 2 个技能的 agent 也报 1。
+      let skillCount = 0;
+      for (const dir of result.skillDirs) {
+        try {
+          const entries = await readdir(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (!entry.isDirectory()) continue;
+            try {
+              await statFn(join(dir, entry.name, 'SKILL.md'));
+              skillCount += 1;
+            } catch {
+              /* not a skill dir */
+            }
+          }
+        } catch {
+          /* container missing */
+        }
+      }
       return {
         id,
         name: result.name,
@@ -98,7 +118,7 @@ export class ResourceManager {
         path: agentDir,
         skillDirs: result.skillDirs,
         mcpPaths: result.mcpPaths,
-        skillCount: result.skillDirs.length,
+        skillCount,
       };
     } catch {
       return null;
