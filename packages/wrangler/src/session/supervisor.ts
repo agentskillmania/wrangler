@@ -250,10 +250,11 @@ export class SubagentSupervisor implements DelegateSupervisor {
         return;
       }
       const waiter: GateWaiter = {
-        // permit 被让渡（releasePermit 直接移交给队首，不经 running--/++）
+        // permit 被让渡（releasePermit 直接移交给队首）：计数不变——
+        // 离场者与入场者各一，running 净变化为 0；只有「真归还」
+        // （无排队者）才 running--。
         proceed: () => {
           cleanup();
-          this.running += 1;
           resolve(true);
         },
         cancel: () => {

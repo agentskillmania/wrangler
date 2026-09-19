@@ -264,4 +264,29 @@ describe('SubagentSupervisor (R2P-141a)', () => {
     await vi.waitFor(() => expect(hooks.deliveries.length).toBe(2));
     expect(sup.childCount()).toBe(0);
   });
+
+  it('permit HANDOFF keeps the running count bounded — a queued child starts on release, and later accepts are not starved', async () => {
+    const hooks = makeHooks();
+    const sup = new SubagentSupervisor({ maxChildren: 1 });
+    sup.bind(hooks);
+
+    let releaseFirst: () => void = () => {};
+    const firstGate = new Promise<void>((r) => {
+      releaseFirst = r;
+    });
+    sup.accept(job('held-1', () => firstGate.then(() => success('held'))));
+    // 排队者：held-1 占着唯一 permit 时受理。
+    sup.accept(job('queued-1', async () => success('queued')));
+
+    releaseFirst();
+    // 让渡后 queued-1 开跑并完成——两次投递都到。
+    await vi.waitFor(() => expect(hooks.deliveries.length).toBe(2));
+    expect(hooks.deliveries.map((d) => d.subtaskId)).toEqual(['held-1', 'queued-1']);
+
+    // 计数未因让渡膨胀：后续受理立即放行（若 handoff 计了双份，
+    // 这里会被误判满员而排队、永不投递）。
+    sup.accept(job('after-1', async () => success('after')));
+    await vi.waitFor(() => expect(hooks.deliveries.map((d) => d.subtaskId)).toContain('after-1'));
+    expect(sup.childCount()).toBe(0);
+  });
 });

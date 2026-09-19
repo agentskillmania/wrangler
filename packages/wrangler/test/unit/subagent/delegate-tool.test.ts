@@ -483,8 +483,7 @@ describe('createDelegateTool — supervised full chain to delivery (R2P-141c/142
     });
     const slot = { current: supervisor as never };
 
-    // 子 runner 桩：收到 signal 参数（看门狗中止口），跑到 success。
-    const seenSignals: AbortSignal[] = [];
+    // 子 runner 桩：跑到 success；捕获收到的 run 选项（signal 断言用）。
     const subRun = vi.fn(async () => ({
       state: {} as AgentState,
       result: {
@@ -495,7 +494,6 @@ describe('createDelegateTool — supervised full chain to delivery (R2P-141c/142
         duration: 7,
       } as RunResult,
     }));
-    void seenSignals;
 
     const configs = new Map([
       [
@@ -542,8 +540,10 @@ describe('createDelegateTool — supervised full chain to delivery (R2P-141c/142
     const endFrame = sinkEvents.find(([t]) => t === 'subagent:end')![1];
     expect((endFrame['result'] as Record<string, unknown>)['status']).toBe('success');
 
-    // run 收到看门狗 signal（监督者侧的中止口；配置 timeout 未设 → 只组合
-    // 该 signal）。
+    // run 收到监督者侧的中止口（看门狗/取消级联经 AbortSignal 组合传入；
+    // 配置 timeout 未设 → 组合源只有监督者 signal）。
     expect(subRun).toHaveBeenCalledTimes(1);
+    const runOpts = subRun.mock.calls[0]![1] as { signal?: AbortSignal } | undefined;
+    expect(runOpts?.signal).toBeInstanceOf(AbortSignal);
   });
 });
