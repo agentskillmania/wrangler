@@ -308,6 +308,34 @@ describe('Chat API', () => {
 
   // ─── POST /api/chat/:sessionId/truncate（R2P-154a，对齐 Rust 0a2cc4e）───
 
+  describe('POST /api/sessions/:id/truncate (resource-face alias, P3 Task 9)', () => {
+    it('serves the same handler as the chat-face path', async () => {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      sm.registerSession('alias-sess', join(tempDir, 'workspace'));
+      const store = sm.getSessionStore(join(tempDir, 'workspace'));
+      await store.createWithId('alias-sess', 'test-agent');
+      await store.saveState('alias-sess', {
+        id: 'alias-sess',
+        config: { name: 'test-agent', instructions: '', tools: [] },
+        context: {
+          messages: [
+            { role: 'user', content: 'a', timestamp: 0 },
+            { role: 'assistant', content: 'b', timestamp: 0 },
+          ],
+          stepCount: 1,
+        },
+      });
+
+      const res = await fetch(`${getUrl()}/api/sessions/alias-sess/truncate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keepTurns: 0 }),
+      });
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ ok: true, kept: 0 });
+    });
+  });
+
   describe('POST /api/chat/:sessionId/truncate', () => {
     /** Seed a 3-turn state (+todoList/统计字段) on the standard tree. */
     async function seedTurns(sessionId = 'existing-session'): Promise<void> {

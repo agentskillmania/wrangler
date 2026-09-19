@@ -16,7 +16,7 @@ import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host
 import { loadMCPTools } from '@agentskillmania/wrangler/tools/mcp';
 import { createWebTools } from '@agentskillmania/wrangler/tools/web';
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import {
   AgentSession,
@@ -447,8 +447,13 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
    * busy 闩锁临界区内完成并重载内存态（防「回魂」）；冷会话在占位闩锁
    * 下纯写盘（防与首次消息的装配竞态）。
    */
-  fastify.post('/api/chat/:sessionId/truncate', async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
+  // P3 Task 9（对齐 Rust 65732f3 资源面）：sessions 资源族路径为主路径，
+  // 旧 POST /api/chat/:id/truncate 保留一个过渡周期。两条路由共享同一
+  // handler（寻址/409 分诊/闩锁全部一致），无实现漂移面。参数名不同
+  // （:id vs :sessionId）由 handler 内统一取 `sessionId ?? id`。
+  async function truncateHandler(request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
+    const params = request.params as { sessionId?: string; id?: string };
+    const sessionId = (params.sessionId ?? params.id) as string;
     const query = request.query as { sessionDir?: string };
     // Optional chaining mirrors the sibling routes' `body.message?.trim()`
     // boundary pattern: a bodyless POST is a client mistake → 400, not a
@@ -528,7 +533,11 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     } finally {
       sessionManager().cancelAgentSessionReservation(sessionId);
     }
-  });
+  }
+
+  // 两条路径同一 handler：资源面为主，旧对话面路径保留一个过渡周期。
+  fastify.post('/api/sessions/:id/truncate', truncateHandler);
+  fastify.post('/api/chat/:sessionId/truncate', truncateHandler);
 
   /**
    * POST /api/chat/:sessionId/respond — respond to AskHuman
