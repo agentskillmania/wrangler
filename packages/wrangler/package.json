@@ -34,7 +34,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc && node -e \"const fs=require('fs'),path=require('path');function copyRecursive(src,dest){if(!fs.existsSync(src))return;fs.mkdirSync(dest,{recursive:true});for(const e of fs.readdirSync(src,{withFileTypes:true})){const s=path.join(src,e.name);const d=path.join(dest,e.name);if(e.isDirectory()){copyRecursive(s,d)}else if(e.isFile()&&e.name.endsWith('.md')){fs.copyFileSync(s,d)}}}copyRecursive(path.join('src','spec-plan','skills'),path.join('dist','spec-plan','skills'))\"",
+    "build": "rm -rf dist *.tsbuildinfo && tsc && node -e \"const fs=require('fs'),path=require('path');function copyRecursive(src,dest){if(!fs.existsSync(src))return;fs.mkdirSync(dest,{recursive:true});for(const e of fs.readdirSync(src,{withFileTypes:true})){const s=path.join(src,e.name);const d=path.join(dest,e.name);if(e.isDirectory()){copyRecursive(s,d)}else if(e.isFile()&&e.name.endsWith('.md')){fs.copyFileSync(s,d)}}}copyRecursive(path.join('src','spec-plan','skills'),path.join('dist','spec-plan','skills'))\"",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:unit": "vitest run test/unit",

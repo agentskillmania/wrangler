@@ -4,6 +4,34 @@ import type { ZodTypeAny } from 'zod';
 
 import type { ToolDeps } from './workspace-deps.js';
 
+/**
+ * Python interpreter probe（P3 Task 9，对齐 Rust e531684 HostProbe::detect）：
+ * 候选顺序 python3 → python → py（py 是 Windows launcher 惯例——裸机执行
+ * 硬编码 python3 在 Windows 宿主必坏）。各 spawn 一次 `--version`，一次性
+ * 毫秒级开销，进程内缓存。探不到不注册硬命令而是返回可诊断错误。
+ */
+let cachedInterpreter: { command: string; version: string | null } | null | undefined;
+
+async function probeInterpreter(
+  deps: ToolDeps
+): Promise<{ command: string; version: string | null } | null> {
+  if (cachedInterpreter !== undefined) return cachedInterpreter;
+  for (const cmd of ['python3', 'python', 'py']) {
+    try {
+      const r = await deps.execArray(cmd, ['--version']);
+      if (r.exitCode === 0) {
+        const version = (r.stdout || r.stderr || '').split('\n')[0]?.trim() || null;
+        cachedInterpreter = { command: cmd, version };
+        return cachedInterpreter;
+      }
+    } catch {
+      /* candidate not available — try the next */
+    }
+  }
+  cachedInterpreter = null;
+  return null;
+}
+
 const PythonSchema = z.object({
   code: z.string().optional().describe('Python code to execute'),
   file: z.string().optional().describe('Python script file path to execute'),
@@ -28,6 +56,15 @@ export function createPythonTool(deps: ToolDeps): Tool<ZodTypeAny> {
         return 'Error: Provide either `code` or `file` parameter.';
       }
 
+      // sandbox 走 MicroPython 容器（无探测）；宿主按 python3→python→py 探测。
+      const interpreter =
+        deps.env === 'sandbox'
+          ? { command: 'python3', version: null }
+          : await probeInterpreter(deps);
+      if (!interpreter) {
+        return 'Error: No Python interpreter found (tried python3, python, py).';
+      }
+
       // Run via execArray (no shell) so file paths and code are passed as
       // literal argv elements. This prevents command injection from filenames
       // containing shell metacharacters (spaces, ;, $()) and removes the need
@@ -35,9 +72,9 @@ export function createPythonTool(deps: ToolDeps): Tool<ZodTypeAny> {
       let result;
       if (args.file) {
         const filePath = deps.resolvePath(args.file);
-        result = await deps.execArray('python3', [filePath]);
+        result = await deps.execArray(interpreter.command, [filePath]);
       } else {
-        result = await deps.execArray('python3', ['-c', args.code!]);
+        result = await deps.execArray(interpreter.command, ['-c', args.code!]);
       }
 
       if (result.exitCode === 0) {
