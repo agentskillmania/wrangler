@@ -4,15 +4,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![中文文档](https://img.shields.io/badge/docs-中文-blue.svg)](./README.zh_CN.md)
 
-**Wrangler** is a pnpm-based TypeScript monorepo — the abstraction layer between the [colts](https://gitee.com/agentskillmania/colts) ReAct framework and a usable agent system. It provides agent/crew configuration loading, the `EnhancedRunner` entry point, skill management, and development tooling.
+**Wrangler** is a pnpm-based TypeScript monorepo — the abstraction layer between the [colts](https://gitee.com/agentskillmania/colts) ReAct framework and a usable agent system. It provides agent/crew configuration loading, the `AgentHarness` entry point, skill management, and development tooling.
+
+> **Renamed in 0.3.0**: `EnhancedRunner` is now `AgentHarness` (and `EnhancedRunnerOptions` → `AgentHarnessOptions`). The old names are kept as `@deprecated` aliases for one minor cycle.
 
 ## Packages
 
-| Package                                                             | Description                                                                                                                            |
-| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@agentskillmania/wrangler`](./packages/wrangler/)                 | Core library — agent & crew configuration loading, `EnhancedRunner`, skill management, workspace composition, and MCP tool integration |
-| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | Development toolkit — project scaffolding, evaluation framework, and built-in skills                                                   |
-| [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/)   | HTTP API server — exposes agent sessions, skill management, and devtool endpoints via REST/SSE                                         |
+| Package                                                             | Description                                                                                                                          |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| [`@agentskillmania/wrangler`](./packages/wrangler/)                 | Core library — agent & crew configuration loading, `AgentHarness`, skill management, workspace composition, and MCP tool integration |
+| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | Development toolkit — project scaffolding, evaluation framework, and built-in skills                                                 |
+| [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/)   | HTTP API server — exposes agent sessions, skill management, and devtool endpoints via REST/SSE                                       |
 
 ## Quick Start
 
@@ -48,7 +50,7 @@ llm:
 Create an agent directory with an `AGENT.md` (YAML frontmatter for name/instructions, optional `skills/` and `mcp.json`), then:
 
 ```typescript
-import { AgentLoader, EnhancedRunner } from '@agentskillmania/wrangler';
+import { AgentLoader, AgentHarness } from '@agentskillmania/wrangler';
 import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 
@@ -56,7 +58,7 @@ import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 const agent = await AgentLoader.loadFrom('./my-agent', new NodeHostEnv());
 
 // 2. Create the runner (llmClient: any ILLMProvider, e.g. LLMClient.quickInit or your own)
-const runner = await EnhancedRunner.create({
+const runner = await AgentHarness.create({
   runtime: new NodeHostEnv(), // required
   llm: { client: llmClient, model: 'gpt-4o' },
   workspacePath: process.cwd(),
@@ -77,15 +79,15 @@ const { result } = await runner.run(state);
 
 ### Run a crew from `CREW.md`
 
-A crew is a configuration layer, not a separate runtime: `CrewLoader` parses `CREW.md` + `agents/*.md`, and `crewToRunnerOptions()` converts them into `EnhancedRunner` options. The primary agent runs as a normal agent; other agents become sub-agents invoked via the `delegate` tool (sub-agents inherit the parent's tools and skills).
+A crew is a configuration layer, not a separate runtime: `CrewLoader` parses `CREW.md` + `agents/*.md`, and `crewToRunnerOptions()` converts them into `AgentHarness` options. The primary agent runs as a normal agent; other agents become sub-agents invoked via the `delegate` tool (sub-agents inherit the parent's tools and skills).
 
 ```typescript
-import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
+import { CrewLoader, crewToRunnerOptions, AgentHarness } from '@agentskillmania/wrangler';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 
 const crew = await new CrewLoader('./my-crew', new NodeHostEnv()).load();
 
-const runner = await EnhancedRunner.create({
+const runner = await AgentHarness.create({
   ...crewToRunnerOptions(crew),
   runtime: new NodeHostEnv(), // required
   llm: { client: llmClient, model: 'gpt-4o' },
@@ -97,7 +99,7 @@ state = addUserMessage(state, '调研这个选题并写一篇报道');
 const { result } = await runner.run(state);
 ```
 
-### Key options of `EnhancedRunner.create`
+### Key options of `AgentHarness.create`
 
 | Option                                                            | Meaning                                                                                                                               |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -159,7 +161,7 @@ Wrangler sits on top of the colts framework:
 
 - **colts** provides the ReAct agent runner, execution engine, sub-agent delegation, and event primitives
 - **llm-client** provides unified LLM access with concurrency control
-- **wrangler** adds agent loading (from `AGENT.md`), crew definition (from `CREW.md`), skill composition, and `EnhancedRunner`. A crew is not a runtime orchestrator — `CrewLoader.load()` parses a crew directory and `crewToRunnerOptions()` converts it into `EnhancedRunner.create({ subAgents })` options. The `CREW.md` body is injected into the primary agent's system prompt, and non-primary agents become sub-agents reachable via colts' `delegate` tool.
+- **wrangler** adds agent loading (from `AGENT.md`), crew definition (from `CREW.md`), skill composition, and `AgentHarness`. A crew is not a runtime orchestrator — `CrewLoader.load()` parses a crew directory and `crewToRunnerOptions()` converts it into `AgentHarness.create({ subAgents })` options. The `CREW.md` body is injected into the primary agent's system prompt, and non-primary agents become sub-agents reachable via colts' `delegate` tool.
 - **wrangler-devtool** provides development tooling for building, testing, and evaluating agents
 - **wrangler-daemon** provides the HTTP API server for upper-layer applications
 

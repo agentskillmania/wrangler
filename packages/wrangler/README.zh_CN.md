@@ -6,10 +6,12 @@
 
 智能体配置与多 Agent 团队核心库 —— [colts](https://github.com/agentskillmania/colts) ReAct 框架与可用多 Agent 系统之间的抽象层。
 
+> **0.3.0 起更名**：`EnhancedRunner` 现名 `AgentHarness`（`EnhancedRunnerOptions` → `AgentHarnessOptions`）。旧名保留为 `@deprecated` 别名，一个 minor 周期后移除。
+
 ## 功能特性
 
-- **EnhancedRunner** — 在 colts `AgentRunner` 基础上扩展 workspace 组合、Skill 目录、Thinking 支持和 Markdown 上下文组装
-- **Crew 即配置** — 加载团队目录（`CREW.md` + 各 Agent 的 `AGENT.md`），转换为 `EnhancedRunner.create({ subAgents })` 选项。主 Agent 成为主 Runner，其余 Agent 成为可通过 colts `delegate` 工具调用的子代理。`CREW.md` 正文注入主 Agent 的 system prompt。
+- **AgentHarness** — 在 colts `AgentRunner` 基础上扩展 workspace 组合、Skill 目录、Thinking 支持和 Markdown 上下文组装
+- **Crew 即配置** — 加载团队目录（`CREW.md` + 各 Agent 的 `AGENT.md`），转换为 `AgentHarness.create({ subAgents })` 选项。主 Agent 成为主 Runner，其余 Agent 成为可通过 colts `delegate` 工具调用的子代理。`CREW.md` 正文注入主 Agent 的 system prompt。
 - **Agent 加载** — 解析 `AGENT.md` 文件定义 Agent 身份、指令和 Skill 目录
 - **Session 管理** — Session 存储、对话格式化和元数据管理
 - **内置工具** — 平台无关 core 工具（文件读写编辑、grep、glob、shell 等 10 个）；web 工具经 `./tools/web` 子路径由宿主注入
@@ -21,7 +23,7 @@
 
 | 层级 | 模块                    | 描述                                                   |
 | ---- | ----------------------- | ------------------------------------------------------ |
-| 2    | `runner/`、`tools/`     | EnhancedRunner、内置工具与 MCP 工具                    |
+| 2    | `runner/`、`tools/`     | AgentHarness、内置工具与 MCP 工具                      |
 | 3    | `todolist/`             | 共享 Todolist 状态                                     |
 | 4    | `spec-plan/`、`loader/` | Spec/Plan 文档、AgentLoader                            |
 | 5    | `agent/`                | AGENT.md 解析                                          |
@@ -36,7 +38,7 @@ pnpm add @agentskillmania/wrangler
 ## 快速示例
 
 ```typescript
-import { EnhancedRunner } from '@agentskillmania/wrangler';
+import { AgentHarness } from '@agentskillmania/wrangler';
 import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { LLMClient } from '@agentskillmania/llm-client';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
@@ -51,7 +53,7 @@ const llmClient = LLMClient.quickInit({
   ],
 });
 
-const runner = await EnhancedRunner.create({
+const runner = await AgentHarness.create({
   runtime: new NodeHostEnv(), // 必传——引擎 core 零 Node 依赖
   workspacePath: '/path/to/project',
   llm: { client: llmClient, model: 'gpt-4o' },
@@ -71,16 +73,16 @@ console.log('完成:', result.type);
 
 ## 加载团队
 
-团队是配置目录，而非运行时编排器。`CrewLoader.load()` 解析 `CREW.md` 和各 Agent 的 `AGENT.md`；`crewToRunnerOptions()` 将其转换为 `EnhancedRunner.create({ subAgents })` 选项。Agent 间的协作通过 `delegate` 工具完成，子代理事件以 `subagent:` 前缀冒泡到 Runner 的 EventEmitter。
+团队是配置目录，而非运行时编排器。`CrewLoader.load()` 解析 `CREW.md` 和各 Agent 的 `AGENT.md`；`crewToRunnerOptions()` 将其转换为 `AgentHarness.create({ subAgents })` 选项。Agent 间的协作通过 `delegate` 工具完成，子代理事件以 `subagent:` 前缀冒泡到 Runner 的 EventEmitter。
 
 ```typescript
-import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
+import { CrewLoader, crewToRunnerOptions, AgentHarness } from '@agentskillmania/wrangler';
 import { createAgentState } from '@agentskillmania/colts';
 
 const crew = await new CrewLoader('./my-crew', new NodeHostEnv()).load();
 const opts = crewToRunnerOptions(crew);
 
-const runner = await EnhancedRunner.create({
+const runner = await AgentHarness.create({
   runtime: new NodeHostEnv(), // 必传
   llm: { client: llmClient, model: opts.model ?? 'gpt-4o' },
   // 团队的合成 prompt（memory + 主 Agent 指令 + 子代理目录）通过
@@ -100,10 +102,10 @@ const state = createAgentState({
 
 ### 恢复团队会话
 
-`EnhancedRunner.resume()` 从持久化的 `meta.yaml` 快照重建 Runner。快照不存储 `subAgents`（属于运行时概念），因此需要通过 `ResumeOptions.subAgents` 重新传入 —— 通常的做法是用创建时写入快照的 `crewId` 重新加载团队配置：
+`AgentHarness.resume()` 从持久化的 `meta.yaml` 快照重建 Runner。快照不存储 `subAgents`（属于运行时概念），因此需要通过 `ResumeOptions.subAgents` 重新传入 —— 通常的做法是用创建时写入快照的 `crewId` 重新加载团队配置：
 
 ```typescript
-const { runner, state } = await EnhancedRunner.resume(sessionDir, {
+const { runner, state } = await AgentHarness.resume(sessionDir, {
   runtime: new NodeHostEnv(), // 必传
   llm: { client: llmClient },
   subAgents: opts.subAgents, // 由 CrewLoader + crewToRunnerOptions 重建
@@ -112,14 +114,14 @@ const { runner, state } = await EnhancedRunner.resume(sessionDir, {
 
 ## 配置
 
-`EnhancedRunner.create()` 接受结构化的配置组：
+`AgentHarness.create()` 接受结构化的配置组：
 
 ```typescript
 import { createWebTools } from '@agentskillmania/wrangler/tools/web';   // Node 专属（jsdom）
 import { loadMCPTools } from '@agentskillmania/wrangler/tools/mcp';     // Node 专属（MCP）
 import { Sandbox } from '@agentskillmania/sandbox';
 
-await EnhancedRunner.create({
+await AgentHarness.create({
   runtime: new NodeHostEnv(),           // 必传
   workspacePath: '/project',
 

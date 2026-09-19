@@ -186,7 +186,7 @@ Upper-layer applications import `BUILTIN_SKILLS_DIR` and add it to `skills.dirs`
 ```typescript
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 
-const runner = await EnhancedRunner.create({
+const runner = await AgentHarness.create({
   runtime: new NodeHostEnv(), // required
   skills: { dirs: [BUILTIN_SKILLS_DIR] },
   // ...

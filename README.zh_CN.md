@@ -3,15 +3,17 @@
 [![npm version](https://img.shields.io/npm/v/@agentskillmania/wrangler.svg)](https://www.npmjs.com/package/@agentskillmania/wrangler)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Wrangler** 是一个基于 pnpm 的 TypeScript monorepo —— 位于 [colts](https://gitee.com/agentskillmania/colts) ReAct 框架与可用智能体系统之间的抽象层。提供智能体/团队配置加载、`EnhancedRunner` 入口、技能管理和开发工具。
+**Wrangler** 是一个基于 pnpm 的 TypeScript monorepo —— 位于 [colts](https://gitee.com/agentskillmania/colts) ReAct 框架与可用智能体系统之间的抽象层。提供智能体/团队配置加载、`AgentHarness` 入口、技能管理和开发工具。
+
+> **0.3.0 起更名**：`EnhancedRunner` 现名 `AgentHarness`（`EnhancedRunnerOptions` → `AgentHarnessOptions`）。旧名保留为 `@deprecated` 别名，一个 minor 周期后移除。
 
 ## 包
 
-| 包                                                                  | 说明                                                                                    |
-| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| [`@agentskillmania/wrangler`](./packages/wrangler/)                 | 核心库 —— 智能体与团队配置加载、`EnhancedRunner`、技能管理、工作空间组合和 MCP 工具集成 |
-| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | 开发工具包 —— 项目脚手架、评估框架、内置技能                                            |
-| [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/)   | HTTP API 服务器 —— 通过 REST/SSE 暴露智能体会话、技能管理和 devtool 端点                |
+| 包                                                                  | 说明                                                                                  |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [`@agentskillmania/wrangler`](./packages/wrangler/)                 | 核心库 —— 智能体与团队配置加载、`AgentHarness`、技能管理、工作空间组合和 MCP 工具集成 |
+| [`@agentskillmania/wrangler-devtool`](./packages/wrangler-devtool/) | 开发工具包 —— 项目脚手架、评估框架、内置技能                                          |
+| [`@agentskillmania/wrangler-daemon`](./packages/wrangler-daemon/)   | HTTP API 服务器 —— 通过 REST/SSE 暴露智能体会话、技能管理和 devtool 端点              |
 
 ## 快速开始
 
@@ -47,7 +49,7 @@ llm:
 创建一个含 `AGENT.md` 的智能体目录（YAML frontmatter 定义 name/instructions，可选 `skills/` 和 `mcp.json`），然后：
 
 ```typescript
-import { AgentLoader, EnhancedRunner } from '@agentskillmania/wrangler';
+import { AgentLoader, AgentHarness } from '@agentskillmania/wrangler';
 import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 
@@ -55,7 +57,7 @@ import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 const agent = await AgentLoader.loadFrom('./my-agent', new NodeHostEnv());
 
 // 2. 创建 runner（llmClient 可以是任意 ILLMProvider，如 LLMClient.quickInit 或自定义）
-const runner = await EnhancedRunner.create({
+const runner = await AgentHarness.create({
   runtime: new NodeHostEnv(), // 必传
   llm: { client: llmClient, model: 'gpt-4o' },
   workspacePath: process.cwd(),
@@ -76,15 +78,15 @@ const { result } = await runner.run(state);
 
 ### 从 `CREW.md` 运行团队
 
-团队（crew）是配置层，不是独立运行时：`CrewLoader` 解析 `CREW.md` + `agents/*.md`，`crewToRunnerOptions()` 把它们转换成 `EnhancedRunner` 选项。主智能体作为普通智能体运行，其他智能体成为子代理，通过 `delegate` 工具调用（子代理继承父智能体的工具和技能）。
+团队（crew）是配置层，不是独立运行时：`CrewLoader` 解析 `CREW.md` + `agents/*.md`，`crewToRunnerOptions()` 把它们转换成 `AgentHarness` 选项。主智能体作为普通智能体运行，其他智能体成为子代理，通过 `delegate` 工具调用（子代理继承父智能体的工具和技能）。
 
 ```typescript
-import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
+import { CrewLoader, crewToRunnerOptions, AgentHarness } from '@agentskillmania/wrangler';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 
 const crew = await new CrewLoader('./my-crew', new NodeHostEnv()).load();
 
-const runner = await EnhancedRunner.create({
+const runner = await AgentHarness.create({
   ...crewToRunnerOptions(crew),
   runtime: new NodeHostEnv(), // 必传
   llm: { client: llmClient, model: 'gpt-4o' },
@@ -96,7 +98,7 @@ state = addUserMessage(state, '调研这个选题并写一篇报道');
 const { result } = await runner.run(state);
 ```
 
-### `EnhancedRunner.create` 关键选项
+### `AgentHarness.create` 关键选项
 
 | 选项                                                              | 含义                                                                                                        |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -158,7 +160,7 @@ Wrangler 构建在 colts 框架之上：
 
 - **colts** 提供 ReAct 智能体运行器、执行引擎、子代理委派和事件原语
 - **llm-client** 提供统一的大模型访问和并发控制
-- **wrangler** 增加智能体加载（从 `AGENT.md`）、团队定义（从 `CREW.md`）、技能组合和 `EnhancedRunner`。团队是配置层而非运行时编排器 —— `CrewLoader.load()` 解析团队目录，`crewToRunnerOptions()` 将其转换为 `EnhancedRunner.create({ subAgents })` 的选项。`CREW.md` 正文注入主智能体的 system prompt，非主智能体成为可通过 colts `delegate` 工具调用的子代理。
+- **wrangler** 增加智能体加载（从 `AGENT.md`）、团队定义（从 `CREW.md`）、技能组合和 `AgentHarness`。团队是配置层而非运行时编排器 —— `CrewLoader.load()` 解析团队目录，`crewToRunnerOptions()` 将其转换为 `AgentHarness.create({ subAgents })` 的选项。`CREW.md` 正文注入主智能体的 system prompt，非主智能体成为可通过 colts `delegate` 工具调用的子代理。
 - **wrangler-devtool** 提供构建、测试、评估智能体的开发工具
 - **wrangler-daemon** 提供上层应用使用的 HTTP API 服务器
 

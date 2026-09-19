@@ -186,7 +186,7 @@ devtool 内置五个 skill，上层智能体可通过 `load_skill` 加载：
 ```typescript
 import { BUILTIN_SKILLS_DIR } from '@agentskillmania/wrangler-devtool';
 
-const runner = await EnhancedRunner.create({
+const runner = await AgentHarness.create({
   runtime: new NodeHostEnv(), // 必传
   skills: { dirs: [BUILTIN_SKILLS_DIR] },
   // ...

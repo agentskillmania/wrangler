@@ -5,10 +5,12 @@
 
 Core library for agent configuration and multi-agent crews — the abstraction layer between the [colts](https://github.com/agentskillmania/colts) ReAct framework and a usable multi-agent system.
 
+> **Renamed in 0.3.0**: `EnhancedRunner` is now `AgentHarness` (and `EnhancedRunnerOptions` → `AgentHarnessOptions`). The old names are kept as `@deprecated` aliases for one minor cycle.
+
 ## Features
 
-- **EnhancedRunner** — extends colts `AgentRunner` with workspace composition, skill directories, thinking support, and Markdown context assembly
-- **Crew as configuration** — load a crew directory (`CREW.md` + per-agent `AGENT.md`) and convert it into `EnhancedRunner.create({ subAgents })` options. The primary agent becomes the main runner; other agents become sub-agents reachable via colts' `delegate` tool. `CREW.md` body is injected into the primary agent's system prompt.
+- **AgentHarness** — extends colts `AgentRunner` with workspace composition, skill directories, thinking support, and Markdown context assembly
+- **Crew as configuration** — load a crew directory (`CREW.md` + per-agent `AGENT.md`) and convert it into `AgentHarness.create({ subAgents })` options. The primary agent becomes the main runner; other agents become sub-agents reachable via colts' `delegate` tool. `CREW.md` body is injected into the primary agent's system prompt.
 - **Agent loading** — parse `AGENT.md` files to define agent identity, instructions, and skill directories
 - **Session management** — session store, transcript formatting, and conversation metadata
 - **Builtin tools** — calculate, ask_human, file read/write/edit, grep, glob, shell, web-fetch, web-search with workspace sandboxing
@@ -20,7 +22,7 @@ Core library for agent configuration and multi-agent crews — the abstraction l
 
 | Layer | Module                  | Description                                               |
 | ----- | ----------------------- | --------------------------------------------------------- |
-| 2     | `runner/`, `tools/`     | EnhancedRunner, builtin & MCP tools                       |
+| 2     | `runner/`, `tools/`     | AgentHarness, builtin & MCP tools                         |
 | 3     | `todolist/`             | Shared todolist state                                     |
 | 4     | `spec-plan/`, `loader/` | Spec/Plan documents, AgentLoader                          |
 | 5     | `agent/`                | AGENT.md parsing                                          |
@@ -35,7 +37,7 @@ pnpm add @agentskillmania/wrangler
 ## Quick Example
 
 ```typescript
-import { EnhancedRunner } from '@agentskillmania/wrangler';
+import { AgentHarness } from '@agentskillmania/wrangler';
 import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { LLMClient } from '@agentskillmania/llm-client';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
@@ -50,7 +52,7 @@ const llmClient = LLMClient.quickInit({
   ],
 });
 
-const runner = await EnhancedRunner.create({
+const runner = await AgentHarness.create({
   runtime: new NodeHostEnv(), // required — engine core has no Node imports
   workspacePath: '/path/to/project',
   llm: { client: llmClient, model: 'gpt-4o' },
@@ -70,16 +72,16 @@ console.log('Done:', result.type);
 
 ## Loading a Crew
 
-A crew is a directory of configuration, not a runtime orchestrator. `CrewLoader.load()` parses `CREW.md` and the per-agent `AGENT.md` files; `crewToRunnerOptions()` turns that into `EnhancedRunner.create({ subAgents })` options. Inter-agent work happens through the `delegate` tool, and sub-agent events bubble up to the runner's EventEmitter with a `subagent:` prefix.
+A crew is a directory of configuration, not a runtime orchestrator. `CrewLoader.load()` parses `CREW.md` and the per-agent `AGENT.md` files; `crewToRunnerOptions()` turns that into `AgentHarness.create({ subAgents })` options. Inter-agent work happens through the `delegate` tool, and sub-agent events bubble up to the runner's EventEmitter with a `subagent:` prefix.
 
 ```typescript
-import { CrewLoader, crewToRunnerOptions, EnhancedRunner } from '@agentskillmania/wrangler';
+import { CrewLoader, crewToRunnerOptions, AgentHarness } from '@agentskillmania/wrangler';
 import { createAgentState } from '@agentskillmania/colts';
 
 const crew = await new CrewLoader('./my-crew', new NodeHostEnv()).load();
 const opts = crewToRunnerOptions(crew);
 
-const runner = await EnhancedRunner.create({
+const runner = await AgentHarness.create({
   runtime: new NodeHostEnv(), // required
   llm: { client: llmClient, model: opts.model ?? 'gpt-4o' },
   // crew's composed prompt (memory + primary instructions + sub-agent
@@ -100,10 +102,10 @@ const state = createAgentState({
 
 ### Resuming a crew session
 
-`EnhancedRunner.resume()` reconstructs the runner from the persisted `meta.yaml` snapshot. The snapshot does not store `subAgents` (they are a runtime concept), so you must pass them back in via `ResumeOptions.subAgents` — typically by reloading the crew config with the `crewId` that was written into the snapshot at create time:
+`AgentHarness.resume()` reconstructs the runner from the persisted `meta.yaml` snapshot. The snapshot does not store `subAgents` (they are a runtime concept), so you must pass them back in via `ResumeOptions.subAgents` — typically by reloading the crew config with the `crewId` that was written into the snapshot at create time:
 
 ```typescript
-const { runner, state } = await EnhancedRunner.resume(sessionDir, {
+const { runner, state } = await AgentHarness.resume(sessionDir, {
   runtime: new NodeHostEnv(), // required
   llm: { client: llmClient },
   subAgents: opts.subAgents, // rebuilt from CrewLoader + crewToRunnerOptions
@@ -112,14 +114,14 @@ const { runner, state } = await EnhancedRunner.resume(sessionDir, {
 
 ## Configuration
 
-`EnhancedRunner.create()` accepts structured config groups:
+`AgentHarness.create()` accepts structured config groups:
 
 ```typescript
 import { createWebTools } from '@agentskillmania/wrangler/tools/web';   // Node-only (jsdom)
 import { loadMCPTools } from '@agentskillmania/wrangler/tools/mcp';     // Node-only (MCP)
 import { Sandbox } from '@agentskillmania/sandbox';
 
-await EnhancedRunner.create({
+await AgentHarness.create({
   runtime: new NodeHostEnv(),           // required
   workspacePath: '/project',
 
