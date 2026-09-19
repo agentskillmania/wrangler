@@ -382,7 +382,12 @@ describe('createDelegateTool — dual mode (R2P-141c)', () => {
     expect(sup.jobs).toHaveLength(1);
     expect(sup.jobs[0]!.subtaskId).toBe(value['subtaskId']);
     expect(sup.jobs[0]!.task).toBe('do X');
-    // subagent:start 已经经监督者 sink 发出（受理即可见）。
+    // subagent:start 不在受理时发（评审 P2 返修：对齐 Rust——发射位在
+    // run 闭包内、过闸门实际开跑才发；受理即发会把排队子女误标 started，
+    // 且排队中被 cancelAll 的子女有 start 无 end）。sink 此刻应仍空。
+    expect(sup.sinkCalls.some(([t]) => t === 'subagent:start')).toBe(false);
+    // 实际开跑后（假监督者立即调 run）start 才经 sink 发出。
+    await sup.jobs[0]!.run(new AbortController().signal);
     expect(sup.sinkCalls.some(([t]) => t === 'subagent:start')).toBe(true);
     // 同步路径的 runner.run 不曾被调用（异步分支不阻塞）。
     expect(mockCreateSubAgentRunner).toHaveBeenCalledTimes(1); // 构造发生
@@ -430,11 +435,19 @@ describe('createDelegateTool — dual mode (R2P-141c)', () => {
       supervisorSlot: slot as never,
     });
     await tool.execute!({ agent: 'helper', task: 'x' } as never, undefined as never);
-    expect(emit).toHaveBeenCalledWith(
+    // 受理时 start 不发（发射位在 run 闭包）；accept 拿到的 job.run 才发。
+    expect(emit).not.toHaveBeenCalledWith(
       'subagent:start',
       expect.objectContaining({ name: 'helper' })
     );
     expect(sup.accept).toHaveBeenCalledTimes(1);
+    await (sup.accept.mock.calls[0]![0] as { run: (s: AbortSignal) => Promise<unknown> }).run(
+      new AbortController().signal
+    );
+    expect(emit).toHaveBeenCalledWith(
+      'subagent:start',
+      expect.objectContaining({ name: 'helper' })
+    );
   });
 
   it('empty slot keeps the sync path: unknown-agent error shape unchanged', async () => {

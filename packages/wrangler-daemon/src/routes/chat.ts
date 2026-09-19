@@ -724,6 +724,18 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     // 内联子 agent（R2P-143，对齐 Rust e39477c 的 Inline 分支）：请求体
     // `agent.subAgents[]` → SubAgentConfig（与 crew 路径同一类型，wire 字段
     // 一一对应）。有名单即注册 delegate（异步受理全链路），无需建 crew 目录。
+    // name/instructions 必填校验（对齐 Rust serde 缺字段 400——静默产出
+    // undefined 会让子 agent 装配出不可诊断的空配置）。
+    if (body.agent?.subAgents) {
+      for (const [i, s] of body.agent.subAgents.entries()) {
+        if (!s?.name || !s.instructions) {
+          reply.code(400);
+          return {
+            error: `agent.subAgents[${i}] requires non-empty "name" and "instructions"`,
+          };
+        }
+      }
+    }
     const inlineSubAgents: AgentSessionOptions['subAgents'] = body.agent?.subAgents?.map((s) => ({
       name: s.name,
       description: s.description ?? '',

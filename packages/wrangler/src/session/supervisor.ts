@@ -208,6 +208,8 @@ export class SubagentSupervisor implements DelegateSupervisor {
           timedOut = true;
           entry.abort.abort();
         }, this.childTimeoutMs);
+        // 10min 长定时器不得拖住进程退出（与消费轮 timer 的 unref 对称）。
+        (timer as ReturnType<typeof setTimeout> & { unref?: () => void }).unref?.();
         let outcome: DelegateResult;
         try {
           outcome = await job.run(entry.abort.signal);

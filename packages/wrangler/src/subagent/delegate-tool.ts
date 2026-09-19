@@ -278,8 +278,11 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool<ZodTypeAny> {
         // 异步受理（对齐 Rust 受理回执形状）：handler 立即返回，子任务后台
         // 执行——驱动闭包只受配置 timeout 与监督者看门狗约束（父轮信号不
         // 级联进后台子女；用户叫停走 cancelAll 级联）。
-        emitFn('subagent:start', { name: agent, task, subtaskId, timestamp: subStartTime });
         const run = async (signal: AbortSignal): Promise<DelegateResult> => {
+          // subagent:start 在实际开跑（过闸门后进入 run 闭包）时才发——
+          // 对齐 Rust drive 闭包内的发射位。受理即发会把排队中的子女全部
+          // 误标 started，且排队中被 cancelAll 的子女有 start 无 end。
+          emitFn('subagent:start', { name: agent, task, subtaskId, timestamp: subStartTime });
           const timeoutMs = config.timeout;
           const timeoutController = new AbortController();
           const combinedSignal = AbortSignal.any([signal, timeoutController.signal]);
@@ -290,6 +293,20 @@ export function createDelegateTool(deps: DelegateToolDeps): Tool<ZodTypeAny> {
           let result: RunResult;
           try {
             ({ result } = await subRunner.run(stateWithTask, { signal: combinedSignal }));
+          } catch (err) {
+            // run 抛错路径也补 subagent:end（前端不悬块）；错误投递走
+            // supervisor 的 errorOutcome 链路。
+            emitFn('subagent:end', {
+              name: agent,
+              result: {
+                status: 'error',
+                error: String(err),
+                durationMs: Date.now() - subStartTime,
+              },
+              subtaskId,
+              timestamp: Date.now(),
+            });
+            throw err;
           } finally {
             if (timeoutId) clearTimeout(timeoutId);
           }

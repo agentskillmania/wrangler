@@ -90,6 +90,21 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
           'the session is being assembled from disk (cold start); retry the delete after it finishes',
       };
     }
+    // P2-c 评审 P1（对齐 Rust delete_session_route 的 quiet_blockers 三臂
+    // 静默闸）：有活轮/子女/邮箱时强删会孤儿化进行中的驱动——stop() 触发
+    // 的收尾钩子在孤儿对象上开消费轮真 LLM 调用（计费僵尸轮），且
+    // beforeRun/afterRun 会复活刚删的目录。blockedBy 逐项说清在等什么。
+    const session = manager().getAgentSession(id);
+    if (session) {
+      const blockers: string[] = [];
+      if (session.busy) blockers.push('a turn is in flight');
+      if (session.hasActiveChildren()) blockers.push('sub-task(s) still running');
+      if (session.hasPendingDeliveries()) blockers.push('pending delivery(ies) not yet consumed');
+      if (blockers.length > 0) {
+        reply.code(409);
+        return { error: 'Session is active; stop it before deleting', blockedBy: blockers };
+      }
+    }
     await manager().delete(id);
     return { ok: true };
   });

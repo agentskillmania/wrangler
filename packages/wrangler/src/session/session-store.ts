@@ -176,7 +176,17 @@ export class SessionStore {
       const dir = this.getSessionDir(sessionId);
       const raw = await this.runtime.fs.readFile(this.runtime.path.join(dir, 'deliveries.json'));
       const parsed = JSON.parse(raw) as unknown;
-      return Array.isArray(parsed) ? (parsed as PendingDelivery[]) : [];
+      if (!Array.isArray(parsed)) return [];
+      // 逐条形状过滤（对齐 Rust serde 整文件拒绝的防御面——TS 降级为
+      // 逐条丢弃而非整箱弃，坏条目不会流进邮箱拼进 user 消息）。
+      return parsed.filter(
+        (d): d is PendingDelivery =>
+          typeof d === 'object' &&
+          d !== null &&
+          typeof (d as PendingDelivery).subtaskId === 'string' &&
+          typeof (d as PendingDelivery).agent === 'string' &&
+          typeof (d as PendingDelivery).content === 'string'
+      );
     } catch {
       return [];
     }
