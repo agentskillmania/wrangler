@@ -1955,6 +1955,27 @@ export class AgentSession {
           const all = waiting.requests ?? (waiting.request ? [waiting.request] : []);
           data.requests = humanRequestPayloads(all);
         }
+        // Command-receipt echo (R2P-238, aligned with Rust turn_executor's
+        // Stopped branch / 0fc6fba): the colts kernel collapses a
+        // beforeAdvance completed-stop (command interception) into
+        // `StepResult.stopped` with the answer in `data`. That answer never
+        // went through the token stream, so without this frame the live view
+        // shows nothing for a command (the persisted receipt is written by
+        // command-middleware). Normal LLM completions are `success` and were
+        // already streamed token-by-token — skip to avoid duplicating them.
+        // The published colts kernel does not yet forward a `from_command`
+        // marker (that lands with `complete_from_command`, R2P-109), so the
+        // stopped shape is the TS-equivalent discriminator here.
+        if (
+          result?.type === 'stopped' &&
+          typeof result.data === 'string' &&
+          result.data.length > 0
+        ) {
+          return [
+            { event: 'token', data: { delta: result.data } },
+            { event: 'done', data },
+          ];
+        }
         return { event: 'done', data };
       }
 

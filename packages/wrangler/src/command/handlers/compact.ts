@@ -20,10 +20,21 @@ export function createCompactHandler(): CommandHandler {
 
       const result = await ctx.compressor.compress(ctx.state);
 
-      // Nothing to compress (anchor didn't move)
+      // Nothing to compress (anchor didn't move). Two different reasons, two
+      // different messages (R2P-238, aligned with Rust 196d3f7): a session that
+      // was compressed before and has no NEW compressible content → "already";
+      // a short session whose kept-recent window still covers everything →
+      // "nothing yet" (saying "already" there would wrongly imply compression
+      // had happened).
       const existingAnchor = ctx.state.context.compression?.anchor ?? 0;
       if (result.anchor <= existingAnchor) {
-        return { handled: true, response: 'Context is already compact.' };
+        return {
+          handled: true,
+          response:
+            existingAnchor > 0
+              ? 'Context is already compact.'
+              : 'Nothing to compact yet — the kept-recent window still covers the whole conversation.',
+        };
       }
 
       const newState = updateState(ctx.state, (draft) => {

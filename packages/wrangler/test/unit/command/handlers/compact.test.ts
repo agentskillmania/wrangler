@@ -119,6 +119,37 @@ describe('createCompactHandler', () => {
       expect(result.state).toBeUndefined();
     });
 
+    it('should say "nothing to compact yet" when never compressed (no prior anchor)', async () => {
+      // Short conversation: no compression meta, compressor finds no safe
+      // anchor (returns 0). "already compact" would wrongly imply a prior
+      // compression — R2P-238, aligned with Rust 196d3f7's branch split.
+      const state = createAgentState({
+        name: 'test',
+        instructions: 'test instructions',
+        tools: [],
+      });
+      const compressor = createMockCompressor({
+        compress: vi.fn().mockResolvedValue({
+          summary: '',
+          anchor: 0,
+        } as CompressResult),
+      });
+      const handler = createCompactHandler();
+      const ctx = {
+        command: { name: 'compact', body: '' },
+        state,
+        runnerOptions: mockRunnerOptions,
+        compressor,
+      };
+      const result = await handler.handle(ctx);
+
+      expect(result.handled).toBe(true);
+      expect(result.response).toBe(
+        'Nothing to compact yet — the kept-recent window still covers the whole conversation.'
+      );
+      expect(result.state).toBeUndefined();
+    });
+
     it('should not mention summary when compressor returns empty summary', async () => {
       const compressor = createMockCompressor({
         compress: vi.fn().mockResolvedValue({

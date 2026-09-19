@@ -258,6 +258,46 @@ describe('AgentSession', () => {
       expect(data.duration).toBe(5000);
     });
 
+    it('echoes a command receipt as a token frame before done (R2P-238)', () => {
+      // The colts kernel surfaces a command interception (beforeAdvance
+      // completed-stop) as `StepResult.stopped { data: answer }`; the answer
+      // never streamed, so mapEvent补发一帧 token — mirrors Rust
+      // turn_executor's Stopped branch.
+      const result = AgentSession.mapEvent({
+        type: 'complete',
+        result: {
+          type: 'stopped',
+          data: 'Session cleared.',
+          totalSteps: 0,
+          tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          duration: 12,
+        },
+        timestamp: 0,
+      } as any);
+      expect(Array.isArray(result)).toBe(true);
+      const frames = result as Array<{ event: string; data: Record<string, unknown> }>;
+      expect(frames).toHaveLength(2);
+      expect(frames[0]).toEqual({ event: 'token', data: { delta: 'Session cleared.' } });
+      expect(frames[1]!.event).toBe('done');
+      expect(frames[1]!.data.type).toBe('stopped');
+    });
+
+    it('does not echo a token for stopped completions with an empty answer', () => {
+      const result = AgentSession.mapEvent({
+        type: 'complete',
+        result: {
+          type: 'stopped',
+          data: '',
+          totalSteps: 0,
+          tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          duration: 1,
+        },
+        timestamp: 0,
+      } as any);
+      expect(Array.isArray(result)).toBe(false);
+      expect((result as { event: string }).event).toBe('done');
+    });
+
     it('maps error event', () => {
       const result = AgentSession.mapEvent({ type: 'error', error: new Error('boom') } as any);
       expect(result).toEqual({ event: 'error', data: { message: 'boom' } });

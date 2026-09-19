@@ -134,20 +134,23 @@ describe('CommandMiddleware', () => {
         },
       });
 
-      expect(result).toEqual({
-        state,
-        stop: true,
-        result: {
-          done: true,
-          state,
-          execState: {
-            startTime: expect.any(Number),
-            elapsedTokens: 0,
-            stepCount: 0,
-          },
-          phase: { type: 'completed', answer: 'Command executed successfully' },
-        },
+      expect(result?.stop).toBe(true);
+      expect(result?.result?.done).toBe(true);
+      expect(result?.result?.phase).toEqual({
+        type: 'completed',
+        answer: 'Command executed successfully',
+        // R2P-238: the completed phase marks command origin (mirrors Rust
+        // colts' Phase::Completed::from_command, aab85b4/b567704).
+        fromCommand: true,
       });
+      // Receipt persisted as an assistant row after the user row (Rust 196d3f7).
+      expect(result?.state.context.messages).toHaveLength(2);
+      expect(result?.state.context.messages[0]!.role).toBe('user');
+      expect(result?.state.context.messages[1]!.role).toBe('assistant');
+      expect(result?.state.context.messages[1]!.content).toBe('Command executed successfully');
+      // Result state and the hook state are the same object (stream + persist
+      // read the same receipt-bearing state).
+      expect(result?.result?.state).toBe(result?.state);
     });
 
     it('should return state modification when handler returns handled=false with state', async () => {
@@ -264,7 +267,11 @@ describe('CommandMiddleware', () => {
       expect(result?.result?.phase).toEqual({
         type: 'completed',
         answer: '',
+        fromCommand: true,
       });
+      // Empty answer → no blank receipt row is persisted.
+      expect(result?.state.context.messages).toHaveLength(1);
+      expect(result?.state.context.messages[0]!.role).toBe('user');
     });
   });
 
@@ -447,10 +454,12 @@ describe('CommandMiddleware', () => {
       expect(emit).not.toHaveBeenCalled();
     });
 
-    it('does not emit for /clear — fresh state carries no compression meta', async () => {
+    it('emits session-cleared (but not compressed) for /clear and persists the receipt on the cleared array', async () => {
       // /clear returns a fresh state (no compression); the anchor diff must
-      // not be misread as progress. Pins the /clear path alongside the
-      // plain-command case. (R2P-104w 返修)
+      // not be misread as progress. R2P-238: since the receipt now lands on
+      // the cleared array, the middleware itself must announce the clear
+      // (the colts runner's empty-messages heuristic no longer fires) —
+      // mirrors Rust CommandMiddleware's SessionCleared emission.
       const registry = new CommandRegistry();
       registry.register(createClearHandler());
       const emit = vi.fn();
@@ -464,6 +473,35 @@ describe('CommandMiddleware', () => {
       });
 
       expect(result?.stop).toBe(true);
+      expect(emit).toHaveBeenCalledTimes(1);
+      expect(emit).toHaveBeenCalledWith('session-cleared', { timestamp: expect.any(Number) });
+      expect(emit).not.toHaveBeenCalledWith('compressed', expect.anything());
+      // Receipt lands on the cleared messages: a resumed /clear session shows
+      // "Session cleared." instead of an opaque empty conversation.
+      expect(result?.state.context.messages).toHaveLength(1);
+      expect(result?.state.context.messages[0]!.role).toBe('assistant');
+      expect(result?.state.context.messages[0]!.content).toBe('Session cleared.');
+    });
+
+    it('does not emit session-cleared for handled commands that do not clear messages', async () => {
+      const handler: CommandHandler = {
+        name: 'greet',
+        description: 'Greet',
+        handle: vi.fn().mockResolvedValue({ handled: true, response: 'hi' }),
+      };
+      const registry = new CommandRegistry();
+      registry.register(handler);
+      const emit = vi.fn();
+      const middleware = createCommandMiddleware(registry, { emit });
+
+      await middleware.beforeAdvance!({
+        state: makeState('/greet'),
+        runnerOptions: mockRunnerOptions,
+        fromPhase: { type: 'idle' },
+        execState: { startTime: Date.now(), elapsedTokens: 0, stepCount: 0 },
+      });
+
+      expect(emit).not.toHaveBeenCalledWith('session-cleared', expect.anything());
       expect(emit).not.toHaveBeenCalled();
     });
 

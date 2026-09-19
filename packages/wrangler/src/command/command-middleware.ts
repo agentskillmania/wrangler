@@ -1,4 +1,5 @@
 import type { AgentMiddleware, IContextCompressor } from '@agentskillmania/colts';
+import { addAssistantMessage } from '@agentskillmania/colts';
 
 import { parseCommand } from './parser.js';
 import type { CommandRegistry } from './registry.js';
@@ -82,13 +83,52 @@ export function createCommandMiddleware(
         });
       }
 
+      // `/clear` wiped the conversation: notify clients to drop their local
+      // message list. The middleware is the first-hand truth (it sees the
+      // handler-returned state) — mirrors Rust CommandMiddleware's
+      // `SessionCleared` emission (command.rs). The colts runner's own
+      // messages-empty heuristic no longer fires once the receipt below lands
+      // on the cleared array, so this emission is what keeps `/clear` visible.
+      const receipt = result.response ?? '';
+      const clearedByHandler =
+        finalState.context.messages.length === 0 && ctx.state.context.messages.length > 0;
+      if (clearedByHandler && receipt.length > 0) {
+        deps?.emit?.('session-cleared', { timestamp: Date.now() });
+      }
+
+      // Receipt persistence (R2P-238, aligned with Rust 196d3f7): a command
+      // answer never goes through the LLM/token stream. Before this, live
+      // consumers saw the daemon's echoed token but a resumed session showed
+      // the user row dangling with no reply. Writing the receipt as an
+      // assistant message keeps the live view and the persisted history
+      // isomorphic (the daemon's token echo still drives live streaming, the
+      // same "stream first, then persist" shape as the LLM path). Empty
+      // answers are not persisted (no blank row). `/clear`'s receipt lands on
+      // the already-cleared array.
+      const stateWithReceipt =
+        receipt.length > 0 ? addAssistantMessage(finalState, receipt) : finalState;
+
+      // The completed phase carries `fromCommand` — the TS mirror of colts'
+      // `Phase::Completed::from_command` (aab85b4 / b567704). It tells
+      // consumers the answer was produced by command interception (no LLM
+      // call, nothing streamed), so a host can echo it as a token frame
+      // instead of inferring that from token counts (0fc6fba). The published
+      // colts kernel does not type/forward the field yet (`complete_from_command`
+      // arrives with R2P-109), so it is attached via a non-literal object —
+      // structurally assignable to `Phase` without an excess-property error.
+      const phase = {
+        type: 'completed' as const,
+        answer: receipt,
+        fromCommand: true,
+      };
+
       return {
-        state: finalState,
+        state: stateWithReceipt,
         stop: true,
         result: {
-          state: finalState,
+          state: stateWithReceipt,
           execState: ctx.execState,
-          phase: { type: 'completed' as const, answer: result.response ?? '' },
+          phase,
           done: true,
         },
       };
