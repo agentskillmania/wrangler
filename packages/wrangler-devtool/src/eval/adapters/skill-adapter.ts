@@ -1,14 +1,14 @@
 /**
  * @fileoverview Skill adapter — evaluates a SKILL.md.
  *
- * Creates an EnhancedRunner pointed at the skill's parent directory so the
+ * Creates an AgentHarness pointed at the skill's parent directory so the
  * skill is discoverable. Injects a load_skill instruction into the initial
  * state so the skill is deterministically activated (rather than relying on
  * the LLM to autonomously call load_skill).
  */
 
 import { createAgentState, addUserMessage, type AgentState } from '@agentskillmania/colts';
-import { EnhancedRunner } from '@agentskillmania/wrangler';
+import { AgentHarness } from '@agentskillmania/wrangler';
 
 import type { EvalSuite } from '../types.js';
 import { BaseAdapter } from './base-adapter.js';
@@ -24,7 +24,7 @@ export class SkillAdapter extends BaseAdapter {
   }
 
   protected async buildInitialState(
-    _runner: EnhancedRunner,
+    _runner: AgentHarness,
     suite: EvalSuite,
     _workspacePath: string
   ): Promise<AgentState> {

@@ -4,7 +4,7 @@
  * Handles:
  *   - Temporary workspace creation + fixture file copying
  *   - Env var snapshot/restore (CONC8 pattern)
- *   - Tool call collection via EnhancedRunner events
+ *   - Tool call collection via AgentHarness events
  *   - AbortController timeout
  *   - EvalTrace assembly from RunResult + collected events
  */
@@ -15,7 +15,7 @@ import { join, dirname } from 'node:path';
 import { addUserMessage, type AgentState } from '@agentskillmania/colts';
 import type { RunResult } from '@agentskillmania/colts';
 import { LLMClient } from '@agentskillmania/llm-client';
-import { EnhancedRunner } from '@agentskillmania/wrangler';
+import { AgentHarness } from '@agentskillmania/wrangler';
 import { NodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 
 import type { EvalCase, EvalTrace, EvalSuite, ToolCallRecord } from '../types.js';
@@ -33,7 +33,7 @@ export abstract class BaseAdapter implements ExecutionAdapter {
    * skill pre-loading) before the user message is injected.
    */
   protected abstract buildInitialState(
-    runner: EnhancedRunner,
+    runner: AgentHarness,
     suite: EvalSuite,
     workspacePath: string
   ): Promise<AgentState>;
@@ -101,8 +101,8 @@ export abstract class BaseAdapter implements ExecutionAdapter {
     }
   }
 
-  /** Create an EnhancedRunner configured for this eval run. */
-  protected async createRunner(suite: EvalSuite, workspacePath: string): Promise<EnhancedRunner> {
+  /** Create an AgentHarness configured for this eval run. */
+  protected async createRunner(suite: EvalSuite, workspacePath: string): Promise<AgentHarness> {
     // Load LLM config from project/global — same search as judge config
     const { loadEvalLlmConfig } = await import('../config.js');
     const llmConfig = await loadEvalLlmConfig(suite.target.path);
@@ -126,7 +126,7 @@ export abstract class BaseAdapter implements ExecutionAdapter {
       todolist: { enabled: false },
       commands: { enabled: false },
     };
-    return EnhancedRunner.create(opts as Parameters<typeof EnhancedRunner.create>[0]);
+    return AgentHarness.create(opts as Parameters<typeof AgentHarness.create>[0]);
   }
 
   /** Subclasses override to provide skillDirs (agent: project skills; skill: target skill dir). */
@@ -159,7 +159,7 @@ export abstract class BaseAdapter implements ExecutionAdapter {
   }
 
   /** Collect tool:start/tool:end (and tools:start/tools:end) events. */
-  protected collectToolCalls(runner: EnhancedRunner): ToolCallRecord[] {
+  protected collectToolCalls(runner: AgentHarness): ToolCallRecord[] {
     const calls: ToolCallRecord[] = [];
 
     // Single tool call

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'no
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-// Mock EnhancedRunner.create — we test the adapter's orchestration logic,
+// Mock AgentHarness.create — we test the adapter's orchestration logic,
 // not wrangler's actual execution.
 const { mockRun, mockOn } = vi.hoisted(() => ({
   mockRun: vi.fn(),
@@ -11,7 +11,7 @@ const { mockRun, mockOn } = vi.hoisted(() => ({
 }));
 
 vi.mock('@agentskillmania/wrangler', () => ({
-  EnhancedRunner: {
+  AgentHarness: {
     create: vi.fn().mockResolvedValue({
       run: mockRun,
       on: mockOn,

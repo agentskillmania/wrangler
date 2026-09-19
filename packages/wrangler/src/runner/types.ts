@@ -206,7 +206,7 @@ export interface LimitsConfig {
 
 // ── Main options interface ───────────────────────────────────────
 
-export interface EnhancedRunnerOptions {
+export interface AgentHarnessOptions {
   // ── Core ──
   workspacePath?: string;
 
@@ -301,10 +301,10 @@ export interface ResolvedRunnerConfig {
 }
 
 /**
- * Options for EnhancedRunner.resume() — from session directory.
+ * Options for AgentHarness.resume() — from session directory.
  */
 export interface ResumeOptions {
-  /** HostEnv（与 EnhancedRunnerOptions.runtime 一致，必传——core 不默认 Node 宿主） */
+  /** HostEnv（与 AgentHarnessOptions.runtime 一致，必传——core 不默认 Node 宿主） */
   runtime?: HostEnv;
   /** LLM config: provider injection (client) or quick-init (quickInit). */
   llm?: LLMConfig;

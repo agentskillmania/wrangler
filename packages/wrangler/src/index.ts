@@ -84,15 +84,19 @@ export type {
 } from './middleware/session-naming-middleware.js';
 
 // Runner (Layer 2)
-export { EnhancedRunner, buildTimeLine } from './runner/index.js';
+export { AgentHarness, buildTimeLine } from './runner/index.js';
+/** @deprecated 0.3.0 起更名为 AgentHarness，旧名保留一个 minor 周期后移除 */
+export { AgentHarness as EnhancedRunner } from './runner/index.js';
 export type {
-  EnhancedRunnerOptions,
+  AgentHarnessOptions,
   ResolvedRunnerConfig,
   LimitsConfig,
   BuiltinToolFilter,
   SandboxConfig,
   PolicyConfig,
 } from './runner/index.js';
+/** @deprecated 0.3.0 起更名为 AgentHarnessOptions，旧名保留一个 minor 周期后移除 */
+export type { AgentHarnessOptions as EnhancedRunnerOptions } from './runner/index.js';
 
 // Sub-agent delegation (Layer 2 — wrangler owns sub-agent mechanism)
 export type { SubAgentConfig, DelegateResult } from './subagent/index.js';

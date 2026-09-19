@@ -252,7 +252,7 @@ export interface SessionInitParams {
      */
     subAgents?: SubAgentInlineBody[];
   };
-  /** Structured runner config — mirrors `EnhancedRunnerOptions` groups
+  /** Structured runner config — mirrors `AgentHarnessOptions` groups
    * (field-level merged over the daemon config.yaml defaults; absent groups
    * fall back to runner defaults). */
   config?: {

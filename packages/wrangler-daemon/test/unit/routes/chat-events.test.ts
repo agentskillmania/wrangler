@@ -12,20 +12,20 @@ import { AgentSession } from '../../../src/core/agent-session.js';
 import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 
 // ─── Mock setup ───
-// 真路由 + 真 AgentSession + mock EnhancedRunner：常驻 events 流的 e2e
+// 真路由 + 真 AgentSession + mock AgentHarness：常驻 events 流的 e2e
 // （R2P-151/R2P-152）——seq/turnSeq 从 pushEvent 一路流到 HTTP wire，
 // 重放门控与断线补洞按 data.seq 断言。
 
-const { mockEnhancedRunnerCreate, mockEnhancedRunnerResume } = vi.hoisted(() => ({
-  mockEnhancedRunnerCreate: vi.fn(),
-  mockEnhancedRunnerResume: vi.fn(),
+const { mockAgentHarnessCreate, mockAgentHarnessResume } = vi.hoisted(() => ({
+  mockAgentHarnessCreate: vi.fn(),
+  mockAgentHarnessResume: vi.fn(),
 }));
 
 vi.mock('@agentskillmania/wrangler', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agentskillmania/wrangler')>();
   return {
     ...actual,
-    EnhancedRunner: { create: mockEnhancedRunnerCreate, resume: mockEnhancedRunnerResume },
+    AgentHarness: { create: mockAgentHarnessCreate, resume: mockAgentHarnessResume },
   };
 });
 
@@ -65,7 +65,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 /**
  * 脚本化 mock runner：run() 每被调用一次弹出一个「事件脚本」逐帧发射
  * （帧间 sleep，供断流重连测试控制节奏）后返回终态。装好后即接管
- * AgentSession.create 的 EnhancedRunner.create mock。
+ * AgentSession.create 的 AgentHarness.create mock。
  */
 function scriptedRunner(scripts: Array<Array<[string, unknown?]>>, frameDelayMs = 0) {
   const queue = [...scripts];
@@ -93,7 +93,7 @@ function scriptedRunner(scripts: Array<Array<[string, unknown?]>>, frameDelayMs 
     getSkillInfo: vi.fn().mockReturnValue([]),
     getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
   };
-  mockEnhancedRunnerCreate.mockResolvedValue(runner);
+  mockAgentHarnessCreate.mockResolvedValue(runner);
   return { runner, emit };
 }
 
@@ -523,10 +523,10 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     expect(original.historySnapshot().length).toBe(2);
     await sleep(20);
 
-    // 冷路径物化（同 resume/respond 装配）：EnhancedRunner.resume 返回带
+    // 冷路径物化（同 resume/respond 装配）：AgentHarness.resume 返回带
     // 新脚本的 runner——重建会话的历史/seq/turnSeq 全部从零起。
     const rebuiltRunner = scriptedRunner([[['token', { token: 'fresh' }], ['complete']]]);
-    mockEnhancedRunnerResume.mockResolvedValue({
+    mockAgentHarnessResume.mockResolvedValue({
       runner: rebuiltRunner.runner,
       state: FINAL_STATE,
     });
@@ -666,7 +666,7 @@ describe('POST /api/chat/:sessionId ack + persistent events (R2P-153 dual-track)
     sessionManager.registerSession('cold-ack', workspace);
 
     const rebuiltRunner = scriptedRunner([[['token', { token: 'cold' }], ['complete']]]);
-    mockEnhancedRunnerResume.mockResolvedValue({
+    mockAgentHarnessResume.mockResolvedValue({
       runner: rebuiltRunner.runner,
       state: FINAL_STATE,
     });

@@ -1,5 +1,5 @@
 /**
- * AgentSession — wraps wrangler EnhancedRunner with SSE streaming and AskHuman bridging.
+ * AgentSession — wraps wrangler AgentHarness with SSE streaming and AskHuman bridging.
  *
  * Full lifecycle: create -> handleMessage (streaming) -> stop.
  * Bridges colts AskHuman tool -> SSE -> frontend for human-in-the-loop interaction.
@@ -8,7 +8,7 @@
 // R2P-201：daemon 生产代码零 colts/llm-client 直驱——内核状态/HITL/runner
 // 词汇全部经 @agentskillmania/wrangler 定向再导出触达。
 import {
-  EnhancedRunner,
+  AgentHarness,
   SessionStore,
   SubagentSupervisor,
   createAgentState,
@@ -83,7 +83,7 @@ export interface AgentSessionResumeOptions {
   agentConfigPath?: string;
   sessionStore?: SessionStore;
   sessionManager?: SessionManagerRef;
-  /** HostEnv — injected into EnhancedRunner.resume. Node host: defaultNodeHostEnv. */
+  /** HostEnv — injected into AgentHarness.resume. Node host: defaultNodeHostEnv. */
   runtime?: HostEnv;
   /** Sub-agent configs to rebuild crew delegation on resume */
   subAgents?: SubAgentConfig[];
@@ -102,7 +102,7 @@ export interface AgentSessionResumeOptions {
 /** Options for creating an AgentSession */
 export interface AgentSessionOptions {
   sessionId?: string;
-  /** HostEnv — injected into EnhancedRunner. Browser extensions pass BrowserHostEnv; omit for Node. */
+  /** HostEnv — injected into AgentHarness. Browser extensions pass BrowserHostEnv; omit for Node. */
   runtime?: HostEnv;
   /**
    * LLM provider injection — browser extensions pass FetchLlmProvider.
@@ -121,7 +121,7 @@ export interface AgentSessionOptions {
   sessionManager?: SessionManagerRef;
   /** Agent definition file path. */
   agentConfigPath?: string;
-  // Structured EnhancedRunner option groups (see EnhancedRunnerOptions)
+  // Structured AgentHarness option groups (see AgentHarnessOptions)
   skills?: {
     dirs?: string[];
     /** External skill provider — BundledSkillProvider for extensions. */
@@ -129,11 +129,11 @@ export interface AgentSessionOptions {
   };
   tools?: {
     mcpConfigPaths?: string[];
-    /** MCP 工具加载器（透传 EnhancedRunner.tools.mcpLoader） */
+    /** MCP 工具加载器（透传 AgentHarness.tools.mcpLoader） */
     mcpLoader?: (paths: string[]) => Promise<Tool<import('zod').ZodTypeAny>[]>;
-    /** 宿主注入工具（透传 EnhancedRunner.tools.inject） */
+    /** 宿主注入工具（透传 AgentHarness.tools.inject） */
     inject?: Tool<import('zod').ZodTypeAny>[];
-    /** 宿主注入工具工厂（透传 EnhancedRunner.tools.injectFactory，引擎传解析后的 ToolDeps） */
+    /** 宿主注入工具工厂（透传 AgentHarness.tools.injectFactory，引擎传解析后的 ToolDeps） */
     injectFactory?: (
       deps: import('@agentskillmania/wrangler').ToolDeps
     ) => Tool<import('zod').ZodTypeAny>[];
@@ -153,7 +153,7 @@ export interface AgentSessionOptions {
   /**
    * Compression policy (R2P-239). The daemon merges the request-level
    * `{enabled}` with config.yaml tuning fields before handing it here;
-   * EnhancedRunner receives `false` (off) or the tuning subset
+   * AgentHarness receives `false` (off) or the tuning subset
    * (strategy/threshold/keepRecent — colts DefaultContextCompressor
    * constructor params). Legacy bare boolean still accepted.
    */
@@ -195,9 +195,9 @@ export interface SessionManagerRef {
 }
 
 /**
- * Single agent session backed by wrangler EnhancedRunner.
+ * Single agent session backed by wrangler AgentHarness.
  *
- * Wraps colts AgentRunner through wrangler's EnhancedRunner for full
+ * Wraps colts AgentRunner through wrangler's AgentHarness for full
  * tool/skill/session support. Streams SSE events to the frontend and
  * bridges AskHuman tool calls to interactive UI prompts.
  */
@@ -291,7 +291,7 @@ export function hitlResponseFromValue(
 }
 
 /**
- * Translate the daemon-level compression policy into the EnhancedRunner input
+ * Translate the daemon-level compression policy into the AgentHarness input
  * (R2P-239): `false` / `{enabled:false}` → false (off); everything else → the
  * tuning subset (strategy/threshold/keepRecent) the colts
  * DefaultContextCompressor constructor consumes; absent tuning → undefined
@@ -385,7 +385,7 @@ export class AgentSession {
   readonly workspacePath: string;
   readonly agentName: string;
   readonly model: string;
-  private runner: EnhancedRunner;
+  private runner: AgentHarness;
   private state: AgentState;
   /** LLM provider — 默认 LLMClient（pi-ai），浏览器注入 FetchLlmProvider */
   private _llmClient!: ILLMProvider;
@@ -443,7 +443,7 @@ export class AgentSession {
   private readonly deliveries: PendingDelivery[] = [];
 
   private constructor(
-    runner: EnhancedRunner,
+    runner: AgentHarness,
     state: AgentState,
     bridge: AskHumanBridge,
     options: AgentSessionOptions
@@ -482,9 +482,9 @@ export class AgentSession {
   }
 
   /**
-   * Create a new AgentSession with EnhancedRunner and LLM client.
+   * Create a new AgentSession with AgentHarness and LLM client.
    *
-   * Sets up the LLM client, AskHuman bridge, and EnhancedRunner with
+   * Sets up the LLM client, AskHuman bridge, and AgentHarness with
    * all wrangler tools (builtin, MCP, session, todolist, skills).
    *
    * @param options - Session creation options
@@ -519,7 +519,7 @@ export class AgentSession {
       options.skills?.provider ??
       (options.skills?.dirs?.length ? new FilesystemSkillProvider(options.skills.dirs) : undefined);
 
-    const runner = await EnhancedRunner.create({
+    const runner = await AgentHarness.create({
       runtime:
         options.runtime ??
         (() => {
@@ -539,7 +539,7 @@ export class AgentSession {
       session: {
         enabled: options.session?.enabled ?? true,
         baseDir: options.sessionBaseDir,
-        // Pass sessionDir so EnhancedRunner builds a dir-bound store and
+        // Pass sessionDir so AgentHarness builds a dir-bound store and
         // SessionMiddleware writes to the correct directory.
         sessionDir: options.sessionStore?.isDirBound
           ? options.sessionStore.getSessionDir(undefined)
@@ -602,7 +602,7 @@ export class AgentSession {
   /**
    * Resume an AgentSession from a persisted session directory.
    *
-   * Delegates to EnhancedRunner.resume() to reconstruct the runner and state
+   * Delegates to AgentHarness.resume() to reconstruct the runner and state
    * from the runnerConfig snapshot stored on disk.
    */
   static async resume(
@@ -625,7 +625,7 @@ export class AgentSession {
     const llmClient = options.llmClientFactory(config.llm.providers);
     const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
 
-    const { runner, state } = await EnhancedRunner.resume(sessionDir, {
+    const { runner, state } = await AgentHarness.resume(sessionDir, {
       runtime: options.runtime,
       llm: { client: llmClient, model: llmModel },
       askHumanHandler,
@@ -740,8 +740,8 @@ export class AgentSession {
   }
 
   // NOTE: saveState() was removed — persistence is now solely handled by
-  // SessionMiddleware.afterRun inside EnhancedRunner.run(). The middleware
-  // writes to the same store (dir-bound or standard) that EnhancedRunner
+  // SessionMiddleware.afterRun inside AgentHarness.run(). The middleware
+  // writes to the same store (dir-bound or standard) that AgentHarness
   // creates from the sessionDir we pass in create/resume.
 
   /**
@@ -1037,7 +1037,7 @@ export class AgentSession {
   /**
    * Stream process a user message, yielding SSE events.
    *
-   * Adds the user message to state, runs the EnhancedRunner stream,
+   * Adds the user message to state, runs the AgentHarness stream,
    * maps colts RunStreamEvents to SSEEvents, and yields them to the caller.
    * Handles abort and error cases gracefully.
    *

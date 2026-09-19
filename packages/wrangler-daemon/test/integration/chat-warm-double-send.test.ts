@@ -28,15 +28,15 @@ import { chatRoutes } from '../../src/routes/chat.js';
  * observable for the loser's check, deterministically.
  */
 
-const { mockEnhancedRunnerCreate } = vi.hoisted(() => ({
-  mockEnhancedRunnerCreate: vi.fn(),
+const { mockAgentHarnessCreate } = vi.hoisted(() => ({
+  mockAgentHarnessCreate: vi.fn(),
 }));
 
 vi.mock('@agentskillmania/wrangler', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agentskillmania/wrangler')>();
   return {
     ...actual,
-    EnhancedRunner: { create: mockEnhancedRunnerCreate, resume: vi.fn() },
+    AgentHarness: { create: mockAgentHarnessCreate, resume: vi.fn() },
   };
 });
 
@@ -125,7 +125,7 @@ describe('R2P-161b④: warm double send — HTTP-layer mutual exclusion (POST /a
     sessionManager.registerSession(SESSION_ID, wsPath);
 
     runnerHandle = createParkedRunner();
-    mockEnhancedRunnerCreate.mockResolvedValue(runnerHandle.runner);
+    mockAgentHarnessCreate.mockResolvedValue(runnerHandle.runner);
     session = await AgentSession.create(
       {
         sessionId: SESSION_ID,
@@ -149,7 +149,7 @@ describe('R2P-161b④: warm double send — HTTP-layer mutual exclusion (POST /a
   afterEach(async () => {
     await Promise.race([fastify.close(), new Promise((r) => setTimeout(r, 1500))]);
     await rm(tempDir, { recursive: true, force: true });
-    mockEnhancedRunnerCreate.mockReset();
+    mockAgentHarnessCreate.mockReset();
   });
 
   function getUrl(): string {

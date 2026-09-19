@@ -156,7 +156,7 @@ export class CrewLoader {
 
 /**
  * Runner options derived from a CrewConfig.
- * Used to create an EnhancedRunner that supports crew delegation.
+ * Used to create an AgentHarness that supports crew delegation.
  */
 export interface CrewRunnerOptions {
   /** System prompt for the primary agent (includes crew memory + agent catalog) */
@@ -181,7 +181,7 @@ export interface CrewRunnerOptions {
 }
 
 /**
- * Convert a loaded CrewConfig into EnhancedRunner-compatible options.
+ * Convert a loaded CrewConfig into AgentHarness-compatible options.
  *
  * The primary agent becomes the main runner; all other agents become
  * sub-agents accessible via the delegate tool. CREW.md body (memory)

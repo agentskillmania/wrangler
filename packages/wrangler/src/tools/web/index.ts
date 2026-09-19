@@ -3,13 +3,13 @@
  *
  * wrangler 主入口不包含本模块（web_fetch/web_search 依赖 jsdom/readability/
  * turndown，浏览器不可用）。Node 宿主（daemon 等）从本子路径组装后经
- * EnhancedRunner 的 tools.inject 注入。
+ * AgentHarness 的 tools.inject 注入。
  *
  * @example
  * ```typescript
  * import { createWebTools } from '@agentskillmania/wrangler/tools/web';
  * const webTools = createWebTools({ deps, provider: options.search?.provider });
- * await EnhancedRunner.create({ ..., tools: { inject: webTools } });
+ * await AgentHarness.create({ ..., tools: { inject: webTools } });
  * ```
  */
 

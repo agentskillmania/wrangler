@@ -92,7 +92,7 @@ describe('US1: Create Runner and execute single-turn conversation', () => {
       expect(loaded).toHaveProperty('id', sessionId);
 
       // Verify meta.yaml — workspacePath and agentName should be persisted.
-      // Note: model is only written when runnerConfigSnapshot is provided (via EnhancedRunner).
+      // Note: model is only written when runnerConfigSnapshot is provided (via AgentHarness).
       // This test uses AgentRunner directly, so model is not in meta.
       const meta = await session.store.getMeta(sessionId);
       expect(meta).toBeDefined();

@@ -27,21 +27,21 @@ import { chatRoutes } from '../../src/routes/chat.js';
  * frame arrives, and releases the gate shortly after — the second send must
  * be accepted (200 + SSE), not 409.
  *
- * Real AgentSession + real SessionManager/routes; only the EnhancedRunner is
+ * Real AgentSession + real SessionManager/routes; only the AgentHarness is
  * mocked (module-level vi.mock of '@agentskillmania/wrangler').
  */
 
-// ─── Mock setup: EnhancedRunner only; everything else stays real ───
+// ─── Mock setup: AgentHarness only; everything else stays real ───
 
-const { mockEnhancedRunnerCreate } = vi.hoisted(() => ({
-  mockEnhancedRunnerCreate: vi.fn(),
+const { mockAgentHarnessCreate } = vi.hoisted(() => ({
+  mockAgentHarnessCreate: vi.fn(),
 }));
 
 vi.mock('@agentskillmania/wrangler', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agentskillmania/wrangler')>();
   return {
     ...actual,
-    EnhancedRunner: { create: mockEnhancedRunnerCreate, resume: vi.fn() },
+    AgentHarness: { create: mockAgentHarnessCreate, resume: vi.fn() },
   };
 });
 
@@ -185,7 +185,7 @@ describe('R2P-163: immediate resend after the done frame (POST /api/chat/:sessio
 
     // Real AgentSession over the gated mock runner.
     runnerHandle = createGatedRunner();
-    mockEnhancedRunnerCreate.mockResolvedValue(runnerHandle.runner);
+    mockAgentHarnessCreate.mockResolvedValue(runnerHandle.runner);
     session = await AgentSession.create(
       {
         sessionId: SESSION_ID,
@@ -209,7 +209,7 @@ describe('R2P-163: immediate resend after the done frame (POST /api/chat/:sessio
   afterEach(async () => {
     await Promise.race([fastify.close(), new Promise((r) => setTimeout(r, 1500))]);
     await rm(tempDir, { recursive: true, force: true });
-    mockEnhancedRunnerCreate.mockReset();
+    mockAgentHarnessCreate.mockReset();
   });
 
   function getUrl(): string {

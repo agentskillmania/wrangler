@@ -1,5 +1,5 @@
 /**
- * Spec/Plan E2E Integration Tests — Real LLM + EnhancedRunner + spec-plan tools
+ * Spec/Plan E2E Integration Tests — Real LLM + AgentHarness + spec-plan tools
  *
  * Tests the full tool-driven spec/plan workflow where agents:
  * - Use save_spec/read_spec tools to create and manage spec documents
@@ -7,13 +7,13 @@
  * - Execute the complete lifecycle: write spec → review → write plan → execute
  *
  * These tests verify that the spec-plan tool chain works end-to-end
- * with a real LLM, EnhancedRunner, and spec-plan skill provider.
+ * with a real LLM, AgentHarness, and spec-plan skill provider.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { defaultNodeHostEnv } from '../../src/host-env/node-host-env.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
-import { EnhancedRunner } from '../../src/runner/enhanced-runner.js';
+import { AgentHarness } from '../../src/runner/agent-harness.js';
 import { testConfig, itif } from './config.js';
 import { LLMClient } from '@agentskillmania/llm-client';
 
@@ -27,13 +27,13 @@ describe('Spec/Plan Tool-Driven Integration', () => {
   });
 
   /**
-   * US1: save_spec tool creates spec via EnhancedRunner
+   * US1: save_spec tool creates spec via AgentHarness
    */
   describe('US1: save_spec creates spec document', () => {
     itif(testConfig.enabled)(
       'should create a spec via save_spec tool and read it back via read_spec',
       async () => {
-        const runner = await EnhancedRunner.create({
+        const runner = await AgentHarness.create({
           runtime: defaultNodeHostEnv,
           llm: {
             quickInit: {
@@ -101,7 +101,7 @@ You have access to spec-plan tools. Your task:
     itif(testConfig.enabled)(
       'should execute save spec → update status → save plan workflow',
       async () => {
-        const runner = await EnhancedRunner.create({
+        const runner = await AgentHarness.create({
           runtime: defaultNodeHostEnv,
           llm: {
             quickInit: {
@@ -186,7 +186,7 @@ Report what you did and confirm each step succeeded.
     itif(testConfig.enabled)(
       'should not expose spec-plan tools when enableSpecPlan is false',
       async () => {
-        const runner = await EnhancedRunner.create({
+        const runner = await AgentHarness.create({
           runtime: defaultNodeHostEnv,
           llm: {
             quickInit: {

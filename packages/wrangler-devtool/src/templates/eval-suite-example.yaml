@@ -2,13 +2,13 @@ name: example-eval
 description: An example evaluation suite demonstrating the YAML format
 
 target:
-  type: agent              # agent | skill | crew
-  path: ./                 # agent definition directory (for skill: skill parent dir; for crew: crew directory containing CREW.md)
-  skill: null              # when type=skill, the skill name to load
+  type: agent # agent | skill | crew
+  path: ./ # agent definition directory (for skill: skill parent dir; for crew: crew directory containing CREW.md)
+  skill: null # when type=skill, the skill name to load
 
 sampling:
-  runs: 1                  # number of times to run each case
-  passThreshold: 1         # pass ratio (0–1); 1 = all runs must pass
+  runs: 1 # number of times to run each case
+  passThreshold: 1 # pass ratio (0–1); 1 = all runs must pass
   # temperature: 0         # uncomment for deterministic single-run mode
   # maxSteps: 20           # max agent steps per run
 
@@ -34,7 +34,7 @@ cases:
 
 # ─── Crew example (uncomment to evaluate a crew) ─────────────────────
 # A crew target points at a directory containing CREW.md + agents/*.md.
-# CrewAdapter loads the crew via CrewLoader, constructs an EnhancedRunner
+# CrewAdapter loads the crew via CrewLoader, constructs an AgentHarness
 # with subAgents enabled, and runs the case. Use tool_called / tool_called_with
 # on 'delegate' to assert the primary agent delegated to the right sub-agent.
 #

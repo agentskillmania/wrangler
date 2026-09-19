@@ -12,7 +12,7 @@ import type { DaemonConfig } from '../../src/types.js';
 import type { SSEEvent } from '../../src/types.js';
 
 /**
- * HITL daemon-layer integration (R2P-165): real EnhancedRunner + real colts
+ * HITL daemon-layer integration (R2P-165): real AgentHarness + real colts
  * kernel + scripted LLM provider — no module mocks. Pins:
  *
  * 1. Parallel double-ask (one assistant message, two ask_human calls):

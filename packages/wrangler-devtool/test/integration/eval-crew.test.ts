@@ -3,7 +3,7 @@
  *
  * Verifies that target.type='crew' routes through CrewAdapter, which loads
  * the crew config via CrewLoader + crewToRunnerOptions, constructs an
- * EnhancedRunner with subAgents enabled, runs a delegation scenario, and
+ * AgentHarness with subAgents enabled, runs a delegation scenario, and
  * surfaces the delegate tool call to evaluators.
  *
  * Prerequisites:

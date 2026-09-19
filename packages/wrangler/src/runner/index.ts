@@ -1,8 +1,8 @@
-export { EnhancedRunner } from './enhanced-runner.js';
+export { AgentHarness } from './agent-harness.js';
 export { buildTimeLine } from './system-prompt.js';
 export { SessionNotFoundError } from '../session/errors.js';
 export type {
-  EnhancedRunnerOptions,
+  AgentHarnessOptions,
   ResolvedRunnerConfig,
   ToolType,
   ToolMetadata,

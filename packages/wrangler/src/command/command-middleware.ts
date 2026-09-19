@@ -6,7 +6,7 @@ import type { CommandRegistry } from './registry.js';
 export interface CommandMiddlewareDeps {
   compressor?: IContextCompressor;
   /**
-   * Event sink for command side effects, wired by EnhancedRunner to the
+   * Event sink for command side effects, wired by AgentHarness to the
    * runner's EventEmitter (same channel stream consumers subscribe to).
    *
    * When a handled command advances the compression anchor — `/compact` via

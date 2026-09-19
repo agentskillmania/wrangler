@@ -345,7 +345,7 @@ export class ResourceManager {
 
   /**
    * Load the full CrewConfig for execution. Uses wrangler's CrewLoader so the
-   * result is identical to what EnhancedRunner.create needs via
+   * result is identical to what AgentHarness.create needs via
    * crewToRunnerOptions(). Throws on missing/invalid crew (caller maps to 404).
    */
   async loadCrewConfig(id: string): Promise<CrewConfig> {

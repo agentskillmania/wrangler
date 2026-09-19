@@ -21,7 +21,7 @@ import type { ZodTypeAny } from 'zod';
 
 import { MarkdownMessageAssembler } from './markdown-assembler.js';
 import type {
-  EnhancedRunnerOptions,
+  AgentHarnessOptions,
   ResolvedRunnerConfig,
   ToolMetadata,
   SkillMetadata,
@@ -66,7 +66,7 @@ import { createSpecPlanTools } from '../tools/spec-plan/index.js';
  * built-in wrangler spec-plan skills (resolved via runtime.resources).
  * Returns a fresh array the caller may extend.
  */
-function collectSkillDirs(options: EnhancedRunnerOptions, runtime: HostEnv): string[] {
+function collectSkillDirs(options: AgentHarnessOptions, runtime: HostEnv): string[] {
   const dirs = [...(options.skills?.dirs ?? [])];
   const builtinDirs = runtime.resources.builtinSkillDirs();
   dirs.push(...builtinDirs);
@@ -98,7 +98,7 @@ function resolveLLMClient(options: { llm?: LLMConfig }): ILLMProvider {
 }
 
 /**
- * EnhancedRunner — Pre-wired AgentRunner with all wrangler runtime mechanisms
+ * AgentHarness — Pre-wired AgentRunner with all wrangler runtime mechanisms
  *
  * Wraps colts AgentRunner and pre-configures:
  * - Builtin tools (file operations, shell, web search/fetch)
@@ -114,7 +114,7 @@ function resolveLLMClient(options: { llm?: LLMConfig }): ILLMProvider {
  *
  * @example
  * ```typescript
- * const runner = await EnhancedRunner.create({
+ * const runner = await AgentHarness.create({
  *   llmClient,
  *   model: 'gpt-4',
  *   workspacePath: '/my/project',
@@ -123,7 +123,7 @@ function resolveLLMClient(options: { llm?: LLMConfig }): ILLMProvider {
  * const result = await runner.run(initialState);
  * ```
  */
-export class EnhancedRunner {
+export class AgentHarness {
   private readonly innerRunner: AgentRunner;
   private readonly resolvedConfig: ResolvedRunnerConfig;
   /** Tool metadata map: tool name → enriched info with type and enabled state. */
@@ -227,17 +227,17 @@ export class EnhancedRunner {
   }
 
   /**
-   * Create an EnhancedRunner with all tools and middleware pre-wired
+   * Create an AgentHarness with all tools and middleware pre-wired
    *
    * @param options - Configuration options
-   * @returns Configured EnhancedRunner instance
+   * @returns Configured AgentHarness instance
    */
-  static async create(options: EnhancedRunnerOptions): Promise<EnhancedRunner> {
+  static async create(options: AgentHarnessOptions): Promise<AgentHarness> {
     // runtime 必传：宿主注入（Node 用 NodeHostEnv、浏览器用 BrowserHostEnv）
     // ——引擎 core 不 import NodeHostEnv（保持零 node: 依赖）
     if (!options.runtime) {
       throw new Error(
-        'EnhancedRunnerOptions.runtime is required — Node host: new NodeHostEnv() from @agentskillmania/wrangler/host-env/node-host-env'
+        'AgentHarnessOptions.runtime is required — Node host: new NodeHostEnv() from @agentskillmania/wrangler/host-env/node-host-env'
       );
     }
     const runtime = options.runtime;
@@ -682,7 +682,7 @@ export class EnhancedRunner {
       contextWindow,
     };
 
-    return new EnhancedRunner(
+    return new AgentHarness(
       runner,
       resolvedConfig,
       toolMeta,
@@ -703,7 +703,7 @@ export class EnhancedRunner {
   static async resume(
     sessionDir: string,
     options: ResumeOptions
-  ): Promise<{ runner: EnhancedRunner; state: AgentState }> {
+  ): Promise<{ runner: AgentHarness; state: AgentState }> {
     const runtime = options.runtime;
     if (!runtime) throw new Error('ResumeOptions.runtime is required');
     const store = SessionStore.fromDir(sessionDir, runtime);
@@ -722,7 +722,7 @@ export class EnhancedRunner {
     }
 
     const rc = meta.runnerConfig;
-    const runner = await EnhancedRunner.create({
+    const runner = await AgentHarness.create({
       runtime,
       llm: {
         client: resolveLLMClient(options),

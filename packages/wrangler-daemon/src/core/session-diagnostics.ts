@@ -76,7 +76,7 @@ export interface SessionDiagnostics {
 
 // ---- Runner diagnostics ----
 
-/** Runner feature flags — boolean switches from EnhancedRunner config. */
+/** Runner feature flags — boolean switches from AgentHarness config. */
 export interface RunnerFeatureFlags {
   sandbox: boolean;
   thinkingEnabled: boolean;

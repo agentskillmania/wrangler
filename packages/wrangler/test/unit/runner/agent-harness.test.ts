@@ -7,8 +7,8 @@ vi.mock('@agentskillmania/sandbox', () => ({
   Sandbox: vi.fn().mockImplementation(() => ({})),
 }));
 
-import { EnhancedRunner } from '../../../src/runner/enhanced-runner.js';
-import type { EnhancedRunnerOptions } from '../../../src/runner/types.js';
+import { AgentHarness } from '../../../src/runner/agent-harness.js';
+import type { AgentHarnessOptions } from '../../../src/runner/types.js';
 import type { ILLMProvider, Tool } from '@agentskillmania/colts';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { SessionStore } from '../../../src/session/session-store.js';
@@ -91,13 +91,13 @@ vi.mock('../../../src/tools/spec-plan/index.js', () => ({
   createSpecPlanTools: vi.fn().mockReturnValue([]),
 }));
 
-describe('EnhancedRunner', () => {
+describe('AgentHarness', () => {
   let testBaseDir: string;
   const mockLLMClient: ILLMProvider = {} as any;
   const mockExtraTools: Tool<any>[] = [{ name: 'mock-tool', schema: {} as any, execute: vi.fn() }];
 
   beforeEach(async () => {
-    testBaseDir = join(tmpdir(), `wrangler-test-enhanced-runner-${Date.now()}`);
+    testBaseDir = join(tmpdir(), `wrangler-test-agent-harness-${Date.now()}`);
     await mkdir(testBaseDir, { recursive: true });
     mockRun.mockReset();
     mockRunStream.mockReset();
@@ -115,8 +115,8 @@ describe('EnhancedRunner', () => {
     await rm(testBaseDir, { recursive: true, force: true });
   });
 
-  function makeOptions(overrides?: Partial<EnhancedRunnerOptions>): EnhancedRunnerOptions {
-    const base: EnhancedRunnerOptions = {
+  function makeOptions(overrides?: Partial<AgentHarnessOptions>): AgentHarnessOptions {
+    const base: AgentHarnessOptions = {
       runtime: new NodeHostEnv(),
       workspacePath: '/test/workspace',
       llm: { client: mockLLMClient, model: 'gpt-4' },
@@ -129,18 +129,18 @@ describe('EnhancedRunner', () => {
     };
     // Deep-merge structured groups so overrides like { llm: { model: 'x' } }
     // keep the base group's other fields (e.g. client).
-    const mergeGroup = <T extends object>(key: keyof EnhancedRunnerOptions) =>
+    const mergeGroup = <T extends object>(key: keyof AgentHarnessOptions) =>
       ({ ...(base[key] as T), ...(overrides?.[key] as T | undefined) }) as T;
     return {
       ...base,
       ...overrides,
-      llm: mergeGroup<NonNullable<EnhancedRunnerOptions['llm']>>('llm'),
-      tools: mergeGroup<NonNullable<EnhancedRunnerOptions['tools']>>('tools'),
-      search: mergeGroup<NonNullable<EnhancedRunnerOptions['search']>>('search'),
-      sandbox: mergeGroup<NonNullable<EnhancedRunnerOptions['sandbox']>>('sandbox'),
-      session: mergeGroup<NonNullable<EnhancedRunnerOptions['session']>>('session'),
-      skills: mergeGroup<NonNullable<EnhancedRunnerOptions['skills']>>('skills'),
-      thinking: mergeGroup<NonNullable<EnhancedRunnerOptions['thinking']>>('thinking'),
+      llm: mergeGroup<NonNullable<AgentHarnessOptions['llm']>>('llm'),
+      tools: mergeGroup<NonNullable<AgentHarnessOptions['tools']>>('tools'),
+      search: mergeGroup<NonNullable<AgentHarnessOptions['search']>>('search'),
+      sandbox: mergeGroup<NonNullable<AgentHarnessOptions['sandbox']>>('sandbox'),
+      session: mergeGroup<NonNullable<AgentHarnessOptions['session']>>('session'),
+      skills: mergeGroup<NonNullable<AgentHarnessOptions['skills']>>('skills'),
+      thinking: mergeGroup<NonNullable<AgentHarnessOptions['thinking']>>('thinking'),
     };
   }
 
@@ -149,20 +149,20 @@ describe('EnhancedRunner', () => {
     return (AgentRunner as any).mock.calls;
   }
 
-  it('should create() return EnhancedRunner instance', async () => {
-    const runner = await EnhancedRunner.create(makeOptions());
-    expect(runner).toBeInstanceOf(EnhancedRunner);
+  it('should create() return AgentHarness instance', async () => {
+    const runner = await AgentHarness.create(makeOptions());
+    expect(runner).toBeInstanceOf(AgentHarness);
   });
 
   it('should create() pass correct model to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ llm: { model: 'claude-3' } }));
+    await AgentHarness.create(makeOptions({ llm: { model: 'claude-3' } }));
 
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ model: 'claude-3' }));
   });
 
   it('should create() defaults model to glm-5.1', async () => {
-    await EnhancedRunner.create(makeOptions({ llm: { model: undefined } }));
+    await AgentHarness.create(makeOptions({ llm: { model: undefined } }));
 
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ model: 'glm-5.1' }));
@@ -170,7 +170,7 @@ describe('EnhancedRunner', () => {
 
   it('should create() call injected mcpLoader with mcpConfigPaths', async () => {
     const mcpLoader = vi.fn().mockResolvedValue([]);
-    await EnhancedRunner.create(
+    await AgentHarness.create(
       makeOptions({ tools: { mcpConfigPaths: ['/custom/mcp.json'], mcpLoader } })
     );
     expect(mcpLoader).toHaveBeenCalledWith(['/custom/mcp.json']);
@@ -178,14 +178,14 @@ describe('EnhancedRunner', () => {
 
   it('should create() throw when mcpConfigPaths given without mcpLoader', async () => {
     await expect(
-      EnhancedRunner.create(makeOptions({ tools: { mcpConfigPaths: ['/custom/mcp.json'] } }))
+      AgentHarness.create(makeOptions({ tools: { mcpConfigPaths: ['/custom/mcp.json'] } }))
     ).rejects.toThrow('requires tools.mcpLoader');
   });
 
   it('should create() includes extraTools in tool list', async () => {
     const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
 
-    await EnhancedRunner.create(makeOptions());
+    await AgentHarness.create(makeOptions());
 
     const calls = createCoreTools.mock.calls;
     // createCoreTools 接收宿主注入的 ToolDeps（core 不构造 Node 实现）
@@ -199,7 +199,7 @@ describe('EnhancedRunner', () => {
   });
 
   it('should create() pass systemPrompt through with NO header time context', async () => {
-    await EnhancedRunner.create(makeOptions({ systemPrompt: 'You are a crew agent.' }));
+    await AgentHarness.create(makeOptions({ systemPrompt: 'You are a crew agent.' }));
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
@@ -212,7 +212,7 @@ describe('EnhancedRunner', () => {
   });
 
   it('should create() leave systemPrompt undefined when the caller gives none', async () => {
-    await EnhancedRunner.create(makeOptions());
+    await AgentHarness.create(makeOptions());
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
@@ -228,7 +228,7 @@ describe('EnhancedRunner', () => {
       loadResource: async () => '',
       refresh: async () => {},
     };
-    await EnhancedRunner.create(makeOptions({ skills: { provider: mockProvider as any } }));
+    await AgentHarness.create(makeOptions({ skills: { provider: mockProvider as any } }));
 
     const calls = await getAgentRunnerCalls();
     const opts = calls[calls.length - 1][0];
@@ -236,26 +236,26 @@ describe('EnhancedRunner', () => {
   });
 
   it('should create() passes thinkingEnabled to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ thinking: { enabled: true } }));
+    await AgentHarness.create(makeOptions({ thinking: { enabled: true } }));
 
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ thinkingEnabled: true }));
   });
 
   it('should pass requestTimeout to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ llm: { requestTimeout: 60000 } }));
+    await AgentHarness.create(makeOptions({ llm: { requestTimeout: 60000 } }));
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ requestTimeout: 60000 }));
   });
 
   it('should pass maxSteps to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ limits: { maxSteps: 30 } }));
+    await AgentHarness.create(makeOptions({ limits: { maxSteps: 30 } }));
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ maxSteps: 30 }));
   });
 
   it('should pass enablePromptThinking to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ thinking: { promptLevel: true } }));
+    await AgentHarness.create(makeOptions({ thinking: { promptLevel: true } }));
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(
       expect.objectContaining({ enablePromptThinking: true })
@@ -263,13 +263,13 @@ describe('EnhancedRunner', () => {
   });
 
   it('should pass temperature to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions({ llm: { temperature: 0.7 } }));
+    await AgentHarness.create(makeOptions({ llm: { temperature: 0.7 } }));
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ temperature: 0.7 }));
   });
 
   it('should not hardcode thinkingEnabled to true', async () => {
-    await EnhancedRunner.create(makeOptions({ thinking: { enabled: false } }));
+    await AgentHarness.create(makeOptions({ thinking: { enabled: false } }));
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ thinkingEnabled: false }));
   });
@@ -277,13 +277,13 @@ describe('EnhancedRunner', () => {
   it('should pass undefined thinkingEnabled when not set', async () => {
     const opts = makeOptions();
     delete opts.thinking;
-    await EnhancedRunner.create(opts);
+    await AgentHarness.create(opts);
     const calls = await getAgentRunnerCalls();
     expect(calls[calls.length - 1][0].thinkingEnabled).toBeUndefined();
   });
 
   it('should create() passes middleware array (length 2: session + todolist) to AgentRunner', async () => {
-    await EnhancedRunner.create(makeOptions());
+    await AgentHarness.create(makeOptions());
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
@@ -295,7 +295,7 @@ describe('EnhancedRunner', () => {
   });
 
   it('should wire command middleware emission to the inner runner EventEmitter (/compact → compressed)', async () => {
-    // The command middleware created inside EnhancedRunner.create must emit
+    // The command middleware created inside AgentHarness.create must emit
     // command side-effect events on the runner's EventEmitter — the daemon
     // subscribes there (runner.on('compressed')) to drive SSE. (R2P-104w)
     const mockCompressor = {
@@ -308,9 +308,9 @@ describe('EnhancedRunner', () => {
         compressedAt: 1234567890,
       }),
     };
-    await EnhancedRunner.create(
+    await AgentHarness.create(
       makeOptions({
-        compression: mockCompressor as unknown as EnhancedRunnerOptions['compression'],
+        compression: mockCompressor as unknown as AgentHarnessOptions['compression'],
       })
     );
 
@@ -349,7 +349,7 @@ describe('EnhancedRunner', () => {
     const mockState = { messages: [], steps: [] };
     const mockOptions = { maxSteps: 10 };
 
-    const runner = await EnhancedRunner.create(makeOptions());
+    const runner = await AgentHarness.create(makeOptions());
     mockRun.mockResolvedValue({
       state: mockState,
       result: { type: 'success', answer: 'test', totalSteps: 1 },
@@ -364,7 +364,7 @@ describe('EnhancedRunner', () => {
     const mockState = { messages: [], steps: [] };
     const mockOptions = { maxSteps: 10, signal: new AbortController().signal };
 
-    const runner = await EnhancedRunner.create(makeOptions());
+    const runner = await AgentHarness.create(makeOptions());
     mockRun.mockResolvedValue({
       state: mockState,
       result: { type: 'success', answer: 'test', totalSteps: 1 },
@@ -384,7 +384,7 @@ describe('EnhancedRunner', () => {
       signal: new AbortController().signal,
     };
 
-    const runner = await EnhancedRunner.create(makeOptions());
+    const runner = await AgentHarness.create(makeOptions());
     mockRun.mockResolvedValue({
       state: mockState,
       result: { type: 'success', answer: 'test', totalSteps: 1 },
@@ -405,7 +405,7 @@ describe('EnhancedRunner', () => {
       { name: 'shell' },
     ]);
 
-    await EnhancedRunner.create(makeOptions());
+    await AgentHarness.create(makeOptions());
 
     const calls = await getAgentRunnerCalls();
     const tools = calls[calls.length - 1][0].tools;
@@ -421,7 +421,7 @@ describe('EnhancedRunner', () => {
       { name: 'web_search' },
     ]);
 
-    await EnhancedRunner.create(makeOptions({ tools: { builtinFilter: {} } }));
+    await AgentHarness.create(makeOptions({ tools: { builtinFilter: {} } }));
 
     const calls = await getAgentRunnerCalls();
     const tools = calls[calls.length - 1][0].tools;
@@ -440,7 +440,7 @@ describe('EnhancedRunner', () => {
       { name: 'grep' },
     ]);
 
-    await EnhancedRunner.create(
+    await AgentHarness.create(
       makeOptions({
         tools: { builtinFilter: { fileRead: true, fileWrite: true } },
       })
@@ -460,7 +460,7 @@ describe('EnhancedRunner', () => {
     vi.mocked(createCoreTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
 
     // shell: false → excluded; file_read not listed → also excluded
-    await EnhancedRunner.create(makeOptions({ tools: { builtinFilter: { shell: false } } }));
+    await AgentHarness.create(makeOptions({ tools: { builtinFilter: { shell: false } } }));
 
     const calls = await getAgentRunnerCalls();
     const tools = calls[calls.length - 1][0].tools;
@@ -473,7 +473,7 @@ describe('EnhancedRunner', () => {
     const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
     vi.mocked(createCoreTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
 
-    await EnhancedRunner.create(makeOptions({ tools: { builtinFilter: { fileRead: true } } }));
+    await AgentHarness.create(makeOptions({ tools: { builtinFilter: { fileRead: true } } }));
 
     const calls = await getAgentRunnerCalls();
     const tools = calls[calls.length - 1][0].tools;
@@ -488,13 +488,13 @@ describe('EnhancedRunner', () => {
     const { createSessionSupport } = await import('../../../src/session/support.js');
     vi.mocked(createSessionSupport).mockClear();
 
-    await EnhancedRunner.create(makeOptions({ session: { enabled: false } }));
+    await AgentHarness.create(makeOptions({ session: { enabled: false } }));
 
     expect(createSessionSupport).not.toHaveBeenCalled();
   });
 
   it('should skip session tools and middleware when enableSession is false', async () => {
-    await EnhancedRunner.create(makeOptions({ session: { enabled: false } }));
+    await AgentHarness.create(makeOptions({ session: { enabled: false } }));
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
@@ -506,7 +506,7 @@ describe('EnhancedRunner', () => {
     const { createSessionSupport } = await import('../../../src/session/support.js');
     vi.mocked(createSessionSupport).mockClear();
 
-    await EnhancedRunner.create(makeOptions());
+    await AgentHarness.create(makeOptions());
 
     expect(createSessionSupport).toHaveBeenCalled();
   });
@@ -515,13 +515,13 @@ describe('EnhancedRunner', () => {
     const { createTodolistSupport } = await import('../../../src/todolist/support.js');
     vi.mocked(createTodolistSupport).mockClear();
 
-    await EnhancedRunner.create(makeOptions({ todolist: { enabled: false } }));
+    await AgentHarness.create(makeOptions({ todolist: { enabled: false } }));
 
     expect(createTodolistSupport).not.toHaveBeenCalled();
   });
 
   it('should skip todolist middleware when enableTodolist is false', async () => {
-    await EnhancedRunner.create(makeOptions({ todolist: { enabled: false } }));
+    await AgentHarness.create(makeOptions({ todolist: { enabled: false } }));
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
@@ -533,7 +533,7 @@ describe('EnhancedRunner', () => {
     const { createSpecPlanTools } = await import('../../../src/tools/spec-plan/index.js');
     vi.mocked(createSpecPlanTools).mockClear();
 
-    await EnhancedRunner.create(makeOptions({ specPlan: { enabled: false } }));
+    await AgentHarness.create(makeOptions({ specPlan: { enabled: false } }));
 
     expect(createSpecPlanTools).not.toHaveBeenCalled();
   });
@@ -542,7 +542,7 @@ describe('EnhancedRunner', () => {
     const { createSpecPlanTools } = await import('../../../src/tools/spec-plan/index.js');
     vi.mocked(createSpecPlanTools).mockClear();
 
-    await EnhancedRunner.create(makeOptions({ specPlan: { enabled: true } }));
+    await AgentHarness.create(makeOptions({ specPlan: { enabled: true } }));
 
     expect(createSpecPlanTools).toHaveBeenCalled();
   });
@@ -551,7 +551,7 @@ describe('EnhancedRunner', () => {
     const { createSpecPlanTools } = await import('../../../src/tools/spec-plan/index.js');
     vi.mocked(createSpecPlanTools).mockClear();
 
-    await EnhancedRunner.create(makeOptions());
+    await AgentHarness.create(makeOptions());
 
     expect(createSpecPlanTools).toHaveBeenCalled();
   });
@@ -567,7 +567,7 @@ describe('EnhancedRunner', () => {
 
       // Even with an explicit session base dir the spec-plan stores stay at
       // {appDir}/spec-plan — the two concerns are fully decoupled.
-      await EnhancedRunner.create(makeOptions({ session: { baseDir: join(appRoot, 'sessions') } }));
+      await AgentHarness.create(makeOptions({ session: { baseDir: join(appRoot, 'sessions') } }));
 
       expect(SpecStore).toHaveBeenCalledWith(
         join(appRoot, 'spec-plan', 'specs'),
@@ -584,7 +584,7 @@ describe('EnhancedRunner', () => {
   });
 
   it('should skip command middleware when enableCommands is false', async () => {
-    await EnhancedRunner.create(makeOptions({ commands: { enabled: false } }));
+    await AgentHarness.create(makeOptions({ commands: { enabled: false } }));
 
     const calls = await getAgentRunnerCalls();
     const callArgs = calls[calls.length - 1][0];
@@ -593,7 +593,7 @@ describe('EnhancedRunner', () => {
   });
 
   it('should have only todolist middleware when session and commands are disabled', async () => {
-    await EnhancedRunner.create(
+    await AgentHarness.create(
       makeOptions({ session: { enabled: false }, commands: { enabled: false } })
     );
 
@@ -608,7 +608,7 @@ describe('EnhancedRunner', () => {
   describe('negative paths', () => {
     it('should propagate error when AgentRunner.run throws', async () => {
       mockRun.mockRejectedValue(new Error('LLM provider timeout'));
-      const runner = await EnhancedRunner.create(makeOptions());
+      const runner = await AgentHarness.create(makeOptions());
 
       await expect(runner.run({} as any)).rejects.toThrow('LLM provider timeout');
     });
@@ -618,15 +618,15 @@ describe('EnhancedRunner', () => {
         state: {},
         result: { type: 'error', error: new Error('policy hard stop'), totalSteps: 500 },
       });
-      const runner = await EnhancedRunner.create(makeOptions());
+      const runner = await AgentHarness.create(makeOptions());
 
       const { result } = await runner.run({} as any);
       expect(result.type).toBe('error');
     });
 
     it('should handle create with no extraTools', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ tools: { extra: undefined } }));
-      expect(runner).toBeInstanceOf(EnhancedRunner);
+      const runner = await AgentHarness.create(makeOptions({ tools: { extra: undefined } }));
+      expect(runner).toBeInstanceOf(AgentHarness);
 
       const calls = await getAgentRunnerCalls();
       const tools = calls[calls.length - 1][0].tools;
@@ -637,7 +637,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('should return same config snapshot on repeated calls', async () => {
-      const runner = await EnhancedRunner.create(makeOptions());
+      const runner = await AgentHarness.create(makeOptions());
       const config1 = runner.getConfig();
       const config2 = runner.getConfig();
       // Same object reference — config is a stable snapshot built at create() time
@@ -651,7 +651,7 @@ describe('EnhancedRunner', () => {
         { name: 'file_write' },
       ]);
 
-      const runner = await EnhancedRunner.create(makeOptions());
+      const runner = await AgentHarness.create(makeOptions());
       const config = runner.getConfig();
 
       // After filter (no builtinTools toggle → all included)
@@ -661,8 +661,8 @@ describe('EnhancedRunner', () => {
     });
 
     it('should handle create with empty workspacePath (falls back to cwd)', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ workspacePath: undefined }));
-      expect(runner).toBeInstanceOf(EnhancedRunner);
+      const runner = await AgentHarness.create(makeOptions({ workspacePath: undefined }));
+      expect(runner).toBeInstanceOf(AgentHarness);
 
       const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
       const calls = createCoreTools.mock.calls;
@@ -671,7 +671,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('should not include session/todolist middleware when both disabled', async () => {
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           session: { enabled: false },
           todolist: { enabled: false },
@@ -690,7 +690,7 @@ describe('EnhancedRunner', () => {
   describe('branch coverage', () => {
     it('should wrap tools with ConfirmableRegistry when confirmHandler is provided', async () => {
       const confirmHandler = vi.fn().mockResolvedValue({ allowed: true });
-      await EnhancedRunner.create(
+      await AgentHarness.create(
         makeOptions({
           tools: { confirmHandler, confirmTools: ['shell'], extra: [] },
           session: { enabled: false },
@@ -706,7 +706,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('should include a2ui display tools when a2ui.enabled is true (no middleware)', async () => {
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           a2ui: { enabled: true },
           tools: { extra: [] },
@@ -726,7 +726,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('should not include a2ui tools when a2ui is disabled', async () => {
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           a2ui: { enabled: false },
           tools: { extra: [] },
@@ -741,7 +741,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('should not include a2ui tools when a2ui is omitted', async () => {
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           tools: { extra: [] },
           session: { enabled: false },
@@ -758,7 +758,7 @@ describe('EnhancedRunner', () => {
       const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
       vi.mocked(createCoreTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
 
-      await EnhancedRunner.create(
+      await AgentHarness.create(
         makeOptions({
           tools: { builtinFilter: { fileRead: true, shell: false }, extra: [] },
           session: { enabled: false },
@@ -775,7 +775,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('should keep command middleware when enableCommands is true', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ commands: { enabled: true } }));
+      const runner = await AgentHarness.create(makeOptions({ commands: { enabled: true } }));
       expect(runner.getConfig().middlewareNames).toContain('command');
       expect(runner.getConfig().enableCommands).toBe(true);
     });
@@ -785,18 +785,18 @@ describe('EnhancedRunner', () => {
 
   describe('getConfig()', () => {
     it('returns model from options', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ llm: { model: 'test-model-42' } }));
+      const runner = await AgentHarness.create(makeOptions({ llm: { model: 'test-model-42' } }));
       expect(runner.getConfig().model).toBe('test-model-42');
     });
 
     it('returns sandbox=false when not configured', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ sandbox: { enabled: false } }));
+      const runner = await AgentHarness.create(makeOptions({ sandbox: { enabled: false } }));
       expect(runner.getConfig().sandbox).toBe(false);
     });
 
     it('returns sandbox=true when configured', async () => {
       const mockSandbox = {} as unknown as import('@agentskillmania/sandbox').Sandbox;
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({ sandbox: { enabled: true, instance: mockSandbox } })
       );
       expect(runner.getConfig().sandbox).toBe(true);
@@ -804,12 +804,12 @@ describe('EnhancedRunner', () => {
 
     it('throws when sandbox enabled without instance', async () => {
       await expect(
-        EnhancedRunner.create(makeOptions({ sandbox: { enabled: true } }))
+        AgentHarness.create(makeOptions({ sandbox: { enabled: true } }))
       ).rejects.toThrow('requires sandbox.instance');
     });
 
     it('reports tool counts', async () => {
-      const runner = await EnhancedRunner.create(makeOptions());
+      const runner = await AgentHarness.create(makeOptions());
       const config = runner.getConfig();
       expect(config.builtinToolCount).toBeGreaterThanOrEqual(0);
       expect(config.mcpToolCount).toBe(0);
@@ -818,56 +818,56 @@ describe('EnhancedRunner', () => {
     });
 
     it('includes middleware names', async () => {
-      const runner = await EnhancedRunner.create(makeOptions());
+      const runner = await AgentHarness.create(makeOptions());
       const config = runner.getConfig();
       expect(config.middlewareNames).toContain('session');
       expect(config.middlewareNames).toContain('todolist');
     });
 
     it('returns enableSession=false and excludes session from middlewareNames', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ session: { enabled: false } }));
+      const runner = await AgentHarness.create(makeOptions({ session: { enabled: false } }));
       const config = runner.getConfig();
       expect(config.enableSession).toBe(false);
       expect(config.middlewareNames).not.toContain('session');
     });
 
     it('returns enableTodolist=false and excludes todolist from middlewareNames', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ todolist: { enabled: false } }));
+      const runner = await AgentHarness.create(makeOptions({ todolist: { enabled: false } }));
       const config = runner.getConfig();
       expect(config.enableTodolist).toBe(false);
       expect(config.middlewareNames).not.toContain('todolist');
     });
 
     it('returns enableSpecPlan reflecting the option', async () => {
-      const runner1 = await EnhancedRunner.create(makeOptions({ specPlan: { enabled: true } }));
+      const runner1 = await AgentHarness.create(makeOptions({ specPlan: { enabled: true } }));
       expect(runner1.getConfig().enableSpecPlan).toBe(true);
 
-      const runner2 = await EnhancedRunner.create(makeOptions({ specPlan: { enabled: false } }));
+      const runner2 = await AgentHarness.create(makeOptions({ specPlan: { enabled: false } }));
       expect(runner2.getConfig().enableSpecPlan).toBe(false);
     });
 
     it('returns thinkingEnabled reflecting the option (true)', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ thinking: { enabled: true } }));
+      const runner = await AgentHarness.create(makeOptions({ thinking: { enabled: true } }));
       expect(runner.getConfig().thinkingEnabled).toBe(true);
     });
 
     it('returns thinkingEnabled reflecting the option (false)', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ thinking: { enabled: false } }));
+      const runner = await AgentHarness.create(makeOptions({ thinking: { enabled: false } }));
       expect(runner.getConfig().thinkingEnabled).toBe(false);
     });
 
     it('returns compressorEnabled=true by default (compression auto-enabled)', async () => {
-      const runner = await EnhancedRunner.create(makeOptions());
+      const runner = await AgentHarness.create(makeOptions());
       expect(runner.getConfig().compressorEnabled).toBe(true);
     });
 
     it('returns compressorEnabled=false when compression explicitly disabled', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ compression: false }));
+      const runner = await AgentHarness.create(makeOptions({ compression: false }));
       expect(runner.getConfig().compressorEnabled).toBe(false);
     });
 
     it('returns frozen snapshot (same object reference on repeated calls)', async () => {
-      const runner = await EnhancedRunner.create(makeOptions());
+      const runner = await AgentHarness.create(makeOptions());
       const first = runner.getConfig();
       const second = runner.getConfig();
       expect(first).toBe(second);
@@ -880,7 +880,7 @@ describe('EnhancedRunner', () => {
     it('returns empty array when no tools loaded', async () => {
       const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
       vi.mocked(createCoreTools).mockReturnValueOnce([]);
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           tools: { extra: [] },
           session: { enabled: false },
@@ -902,7 +902,7 @@ describe('EnhancedRunner', () => {
         { name: 'file_read', description: 'Read files' },
         { name: 'file_write', description: 'Write files' },
       ]);
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           tools: { extra: [] },
           session: { enabled: false },
@@ -924,7 +924,7 @@ describe('EnhancedRunner', () => {
         { name: 'file_write', description: 'Write files' },
         { name: 'shell', description: 'Run shell commands' },
       ]);
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           tools: { builtinFilter: { fileRead: true }, extra: [] },
           session: { enabled: false },
@@ -947,7 +947,7 @@ describe('EnhancedRunner', () => {
       const extraTools = [
         { name: 'custom_tool', description: 'Custom tool', schema: {}, execute: vi.fn() },
       ];
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           tools: { extra: extraTools },
           session: { enabled: false },
@@ -972,7 +972,7 @@ describe('EnhancedRunner', () => {
       vi.mocked(createCoreTools).mockReturnValueOnce([
         { name: 'ask_human', description: 'Ask human' },
       ]);
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           session: { enabled: true },
           tools: { extra: [] },
@@ -994,7 +994,7 @@ describe('EnhancedRunner', () => {
       });
       const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
       vi.mocked(createCoreTools).mockReturnValueOnce([]);
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           session: { enabled: false },
           todolist: { enabled: true },
@@ -1016,7 +1016,7 @@ describe('EnhancedRunner', () => {
       ] as any);
       const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
       vi.mocked(createCoreTools).mockReturnValueOnce([]);
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           tools: { extra: [] },
           session: { enabled: false },
@@ -1032,7 +1032,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('returns consistent content across repeated calls', async () => {
-      const runner = await EnhancedRunner.create(makeOptions());
+      const runner = await AgentHarness.create(makeOptions());
       const first = runner.getToolInfo();
       const second = runner.getToolInfo();
       expect(first).toEqual(second);
@@ -1043,7 +1043,7 @@ describe('EnhancedRunner', () => {
 
   describe('getSkillInfo()', () => {
     it('returns empty array when no skill dirs configured', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ skills: { dirs: undefined } }));
+      const runner = await AgentHarness.create(makeOptions({ skills: { dirs: undefined } }));
       const skills = runner.getSkillInfo();
       // May have built-in spec-plan skills if resolved, but should not error
       expect(Array.isArray(skills)).toBe(true);
@@ -1060,7 +1060,7 @@ describe('EnhancedRunner', () => {
         loadResource: async () => '',
         refresh: async () => {},
       };
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({ skills: { provider: mockProvider as any } })
       );
       const skills = runner.getSkillInfo();
@@ -1074,7 +1074,7 @@ describe('EnhancedRunner', () => {
     });
 
     it('returns consistent content across repeated calls', async () => {
-      const runner = await EnhancedRunner.create(makeOptions());
+      const runner = await AgentHarness.create(makeOptions());
       const first = runner.getSkillInfo();
       const second = runner.getSkillInfo();
       expect(first).toEqual(second);
@@ -1083,7 +1083,7 @@ describe('EnhancedRunner', () => {
 
   describe('LLM configuration', () => {
     it('create() with llm quick init succeeds', async () => {
-      const runner = await EnhancedRunner.create(
+      const runner = await AgentHarness.create(
         makeOptions({
           llmClient: undefined,
           llm: {
@@ -1091,23 +1091,23 @@ describe('EnhancedRunner', () => {
           },
         })
       );
-      expect(runner).toBeInstanceOf(EnhancedRunner);
+      expect(runner).toBeInstanceOf(AgentHarness);
     });
 
     it('create() with llmClient still succeeds', async () => {
-      const runner = await EnhancedRunner.create(makeOptions());
-      expect(runner).toBeInstanceOf(EnhancedRunner);
+      const runner = await AgentHarness.create(makeOptions());
+      expect(runner).toBeInstanceOf(AgentHarness);
     });
 
     it('create() without llmClient or llm throws', async () => {
       await expect(
-        EnhancedRunner.create(makeOptions({ llm: { client: undefined } }))
+        AgentHarness.create(makeOptions({ llm: { client: undefined } }))
       ).rejects.toThrow('Must specify either llm.client or llm.quickInit.');
     });
 
     it('create() with both llm.client and llm.quickInit throws', async () => {
       await expect(
-        EnhancedRunner.create(
+        AgentHarness.create(
           makeOptions({
             llm: {
               quickInit: {
@@ -1120,8 +1120,8 @@ describe('EnhancedRunner', () => {
     });
 
     it('create() with empty skillDirs still succeeds', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ skills: { dirs: [] } }));
-      expect(runner).toBeInstanceOf(EnhancedRunner);
+      const runner = await AgentHarness.create(makeOptions({ skills: { dirs: [] } }));
+      expect(runner).toBeInstanceOf(AgentHarness);
       expect(runner.getConfig().skillDirs).toEqual([]);
     });
 
@@ -1129,7 +1129,7 @@ describe('EnhancedRunner', () => {
       const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
       vi.mocked(createCoreTools).mockReturnValueOnce([{ name: 'file_read' }, { name: 'shell' }]);
 
-      await EnhancedRunner.create(
+      await AgentHarness.create(
         makeOptions({
           tools: { builtinFilter: { fileRead: true, unknownToggle: true } as any, extra: [] },
           session: { enabled: false },
@@ -1150,14 +1150,14 @@ describe('EnhancedRunner', () => {
 
   describe('limits configuration', () => {
     it('passes limits.maxSteps to AgentRunner', async () => {
-      await EnhancedRunner.create(makeOptions({ limits: { maxSteps: 42 } }));
+      await AgentHarness.create(makeOptions({ limits: { maxSteps: 42 } }));
       const calls = await getAgentRunnerCalls();
       expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ maxSteps: 42 }));
     });
 
     it('passes limits.maxToolOutput and toolTimeout to createBuiltinTools', async () => {
       const { createCoreTools } = await import('../../../src/tools/builtin/index.js');
-      await EnhancedRunner.create(
+      await AgentHarness.create(
         makeOptions({ limits: { maxToolOutput: 50000, toolTimeout: 300000 } })
       );
       const opts = createCoreTools.mock.calls.at(-1)?.[0];
@@ -1165,13 +1165,13 @@ describe('EnhancedRunner', () => {
     });
 
     it('migrates deprecated maxSteps flat field to limits', async () => {
-      await EnhancedRunner.create(makeOptions({ limits: { maxSteps: 99 } }));
+      await AgentHarness.create(makeOptions({ limits: { maxSteps: 99 } }));
       const calls = await getAgentRunnerCalls();
       expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ maxSteps: 99 }));
     });
 
     it('structured limits.maxSteps takes precedence over deprecated maxSteps', async () => {
-      await EnhancedRunner.create(makeOptions({ maxSteps: 99, limits: { maxSteps: 7 } }));
+      await AgentHarness.create(makeOptions({ maxSteps: 99, limits: { maxSteps: 7 } }));
       const calls = await getAgentRunnerCalls();
       expect(calls[calls.length - 1][0]).toEqual(expect.objectContaining({ maxSteps: 7 }));
     });
@@ -1179,17 +1179,17 @@ describe('EnhancedRunner', () => {
 
   describe('compression migration', () => {
     it('enables compression by default (undefined)', async () => {
-      const runner = await EnhancedRunner.create(makeOptions());
+      const runner = await AgentHarness.create(makeOptions());
       expect(runner.getConfig().compressorEnabled).toBe(true);
     });
 
     it('disables compression when explicitly false', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ compression: false }));
+      const runner = await AgentHarness.create(makeOptions({ compression: false }));
       expect(runner.getConfig().compressorEnabled).toBe(false);
     });
 
     it('enables compression when a config object is provided', async () => {
-      const runner = await EnhancedRunner.create(makeOptions({ compression: { threshold: 20 } }));
+      const runner = await AgentHarness.create(makeOptions({ compression: { threshold: 20 } }));
       expect(runner.getConfig().compressorEnabled).toBe(true);
     });
   });
@@ -1201,7 +1201,7 @@ describe('EnhancedRunner', () => {
       const { createSessionSupport } = await import('../../../src/session/support.js');
       vi.mocked(createSessionSupport).mockClear();
 
-      await EnhancedRunner.create(makeOptions());
+      await AgentHarness.create(makeOptions());
 
       const snapshot = createSessionSupport.mock.calls.at(-1)?.[0]?.runnerConfigSnapshot;
       expect(snapshot).toBeDefined();
@@ -1212,7 +1212,7 @@ describe('EnhancedRunner', () => {
       const { createSessionSupport } = await import('../../../src/session/support.js');
       vi.mocked(createSessionSupport).mockClear();
 
-      await EnhancedRunner.create(makeOptions({ crewId: 'my-crew' }));
+      await AgentHarness.create(makeOptions({ crewId: 'my-crew' }));
 
       const snapshot = createSessionSupport.mock.calls.at(-1)?.[0]?.runnerConfigSnapshot;
       expect(snapshot?.crewId).toBe('my-crew');
@@ -1229,7 +1229,7 @@ describe('EnhancedRunner', () => {
       await store.saveState(sessionId, agentState);
 
       const dir = store.getSessionDir(sessionId);
-      const { runner, state } = await EnhancedRunner.resume(dir, {
+      const { runner, state } = await AgentHarness.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
           quickInit: {
@@ -1241,7 +1241,7 @@ describe('EnhancedRunner', () => {
         },
       });
 
-      expect(runner).toBeInstanceOf(EnhancedRunner);
+      expect(runner).toBeInstanceOf(AgentHarness);
       expect(state).toBeDefined();
       expect(state.config.name).toBe('test-agent');
     });
@@ -1255,7 +1255,7 @@ describe('EnhancedRunner', () => {
       await store.saveState(sessionId, agentState);
 
       const dir = store.getSessionDir(sessionId);
-      const { runner, state } = await EnhancedRunner.resume(dir, {
+      const { runner, state } = await AgentHarness.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
           quickInit: {
@@ -1283,7 +1283,7 @@ describe('EnhancedRunner', () => {
       await store.saveState(sessionId, agentState);
 
       const dir = store.getSessionDir(sessionId);
-      const { state } = await EnhancedRunner.resume(dir, {
+      const { state } = await AgentHarness.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
           quickInit: {
@@ -1308,7 +1308,7 @@ describe('EnhancedRunner', () => {
       await store.saveState(sessionId, agentState);
 
       const dir = store.getSessionDir(sessionId);
-      const { runner } = await EnhancedRunner.resume(dir, {
+      const { runner } = await AgentHarness.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
           quickInit: {
@@ -1333,7 +1333,7 @@ describe('EnhancedRunner', () => {
       await store.saveState(sessionId, agentState);
 
       const dir = store.getSessionDir(sessionId);
-      await expect(EnhancedRunner.resume(dir, { runtime: new NodeHostEnv() })).rejects.toThrow(
+      await expect(AgentHarness.resume(dir, { runtime: new NodeHostEnv() })).rejects.toThrow(
         'Must specify either llm.client or llm.quickInit'
       );
     });
@@ -1341,7 +1341,7 @@ describe('EnhancedRunner', () => {
     it('resume throws for non-existent session directory', async () => {
       const badDir = join(testBaseDir, 'nonexistent');
       await expect(
-        EnhancedRunner.resume(badDir, {
+        AgentHarness.resume(badDir, {
           runtime: new NodeHostEnv(),
           llm: {
             providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
@@ -1365,7 +1365,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       await expect(
-        EnhancedRunner.resume(dir, {
+        AgentHarness.resume(dir, {
           runtime: new NodeHostEnv(),
           llm: {
             providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
@@ -1383,7 +1383,7 @@ describe('EnhancedRunner', () => {
 
       const dir = store.getSessionDir(sessionId);
       await expect(
-        EnhancedRunner.resume(dir, {
+        AgentHarness.resume(dir, {
           runtime: new NodeHostEnv(),
           llm: {
             providers: [{ name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'gpt-4' }] }],
@@ -1411,7 +1411,7 @@ describe('EnhancedRunner', () => {
         },
       ];
 
-      const { runner } = await EnhancedRunner.resume(dir, {
+      const { runner } = await AgentHarness.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
           quickInit: {
@@ -1430,7 +1430,7 @@ describe('EnhancedRunner', () => {
       const calls = await getAgentRunnerCalls();
       const resumeCall = calls[calls.length - 1][0];
       expect(resumeCall.subAgents).toBeUndefined();
-      expect(runner).toBeInstanceOf(EnhancedRunner);
+      expect(runner).toBeInstanceOf(AgentHarness);
     });
 
     it('resume creates runner without delegate tool when subAgents not provided', async () => {
@@ -1442,7 +1442,7 @@ describe('EnhancedRunner', () => {
       await store.saveState(sessionId, agentState);
 
       const dir = store.getSessionDir(sessionId);
-      await EnhancedRunner.resume(dir, {
+      await AgentHarness.resume(dir, {
         runtime: new NodeHostEnv(),
         llm: {
           quickInit: {
@@ -1470,7 +1470,7 @@ describe('EnhancedRunner', () => {
           config: { name: 'researcher', instructions: 'be helpful', tools: [] },
         },
       ];
-      const runner = await EnhancedRunner.create(makeOptions({ delegation: { subAgents } }));
+      const runner = await AgentHarness.create(makeOptions({ delegation: { subAgents } }));
 
       // 从 AgentRunner mock 的返回实例上取 registerTool 的收单记录，
       // 找到 delegate 工具。

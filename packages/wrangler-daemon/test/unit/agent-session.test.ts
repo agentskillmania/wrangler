@@ -72,7 +72,7 @@ function createMockRunner(
 /**
  * Convenience: build a mock runner whose run() emits a sequence of events
  * (defaulting to just `complete`) before resolving with the given finalState.
- * The runner is wired into mockEnhancedRunnerCreate.
+ * The runner is wired into mockAgentHarnessCreate.
  *
  * @param eventsToEmit - array of [type, payload?] tuples to emit before resolving
  * @param finalState   - the `state` returned by run(); defaults to a minimal state
@@ -111,13 +111,13 @@ function mockRunnerWithEvents(
     getSkillInfo: overrides.getSkillInfo,
     getConfig: overrides.getConfig,
   });
-  mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+  mockAgentHarnessCreate.mockResolvedValue(mock.runner);
   return mock;
 }
 
-const { mockEnhancedRunnerCreate, mockEnhancedRunnerResume } = vi.hoisted(() => ({
-  mockEnhancedRunnerCreate: vi.fn(),
-  mockEnhancedRunnerResume: vi.fn().mockResolvedValue({
+const { mockAgentHarnessCreate, mockAgentHarnessResume } = vi.hoisted(() => ({
+  mockAgentHarnessCreate: vi.fn(),
+  mockAgentHarnessResume: vi.fn().mockResolvedValue({
     runner: {
       run: vi.fn(),
       on: vi.fn(),
@@ -147,7 +147,7 @@ vi.mock('@agentskillmania/wrangler', async (importOriginal) => {
     updateState: colts.updateState,
     addUserMessage: colts.addUserMessage,
     FilesystemSkillProvider: colts.FilesystemSkillProvider,
-    EnhancedRunner: { create: mockEnhancedRunnerCreate, resume: mockEnhancedRunnerResume },
+    AgentHarness: { create: mockAgentHarnessCreate, resume: mockAgentHarnessResume },
     SessionStore: vi.fn(),
   };
 });
@@ -870,8 +870,8 @@ describe('AgentSession', () => {
         testConfig
       );
 
-      // The AskHuman handler the session wired into EnhancedRunner.create.
-      const createOptions = mockEnhancedRunnerCreate.mock.calls.at(-1)![0] as {
+      // The AskHuman handler the session wired into AgentHarness.create.
+      const createOptions = mockAgentHarnessCreate.mock.calls.at(-1)![0] as {
         tools: {
           askHumanHandler: (p: {
             questions: Array<{ id: string; question: string; type: string }>;
@@ -1361,7 +1361,7 @@ describe('AgentSession', () => {
   });
 
   describe('AgentSessionOptions', () => {
-    it('accepts new EnhancedRunner parameters', () => {
+    it('accepts new AgentHarness parameters', () => {
       const options: AgentSessionOptions = {
         workspacePath: '/tmp/test',
         agentName: 'test',
@@ -1406,7 +1406,7 @@ describe('AgentSession', () => {
         }),
       });
       runnerEmit = mock.emit;
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
       session = await AgentSession.create(
         {
           workspacePath: '/tmp/test',
@@ -1470,7 +1470,7 @@ describe('AgentSession', () => {
           };
         }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
 
       const testSession = await AgentSession.create(
         {
@@ -1516,7 +1516,7 @@ describe('AgentSession', () => {
           };
         }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
 
       const testSession = await AgentSession.create(
         {
@@ -1676,32 +1676,32 @@ describe('AgentSession', () => {
     };
 
     beforeEach(() => {
-      mockEnhancedRunnerCreate.mockClear();
+      mockAgentHarnessCreate.mockClear();
     });
 
-    it('passes default sandbox={enabled:true} to EnhancedRunner', async () => {
+    it('passes default sandbox={enabled:true} to AgentHarness', async () => {
       await AgentSession.create(baseOptions, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(
         expect.objectContaining({ sandbox: { enabled: true } })
       );
     });
 
     it('passes sandbox={enabled:false} when explicitly set', async () => {
       await AgentSession.create({ ...baseOptions, sandbox: false }, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(
         expect.objectContaining({ sandbox: { enabled: false } })
       );
     });
 
-    it('passes builtinTools whitelist to EnhancedRunner via tools.builtinFilter', async () => {
+    it('passes builtinTools whitelist to AgentHarness via tools.builtinFilter', async () => {
       const builtinFilter = { shell: false, fileRead: true };
       await AgentSession.create({ ...baseOptions, tools: { builtinFilter } }, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(
         expect.objectContaining({ tools: expect.objectContaining({ builtinFilter }) })
       );
     });
 
-    it('passes session/todolist/commands enabled=false to EnhancedRunner', async () => {
+    it('passes session/todolist/commands enabled=false to AgentHarness', async () => {
       await AgentSession.create(
         {
           ...baseOptions,
@@ -1711,7 +1711,7 @@ describe('AgentSession', () => {
         },
         testConfig
       );
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           session: expect.objectContaining({ enabled: false }),
           todolist: { enabled: false },
@@ -1722,7 +1722,7 @@ describe('AgentSession', () => {
 
     it('defaults session/todolist/commands enabled to true', async () => {
       await AgentSession.create(baseOptions, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           session: expect.objectContaining({ enabled: true }),
           todolist: { enabled: true },
@@ -1734,25 +1734,25 @@ describe('AgentSession', () => {
 
     it('passes thinking.enabled=false when explicitly set', async () => {
       await AgentSession.create({ ...baseOptions, thinking: { enabled: false } }, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(
         expect.objectContaining({ thinking: { enabled: false } })
       );
     });
 
-    it('passes a2ui option to EnhancedRunner', async () => {
+    it('passes a2ui option to AgentHarness', async () => {
       const a2ui = { enabled: true };
       await AgentSession.create({ ...baseOptions, a2ui }, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(expect.objectContaining({ a2ui }));
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(expect.objectContaining({ a2ui }));
     });
 
-    it('passes workspacePath and skills/tools groups to EnhancedRunner', async () => {
+    it('passes workspacePath and skills/tools groups to AgentHarness', async () => {
       const skillDirs = ['/tmp/skills'];
       const mcpConfigPaths = ['/tmp/mcp.json'];
       await AgentSession.create(
         { ...baseOptions, skills: { dirs: skillDirs }, tools: { mcpConfigPaths } },
         testConfig
       );
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           workspacePath: '/tmp/test-workspace',
           // provider is also passed through; assert only the dirs passthrough
@@ -1764,12 +1764,12 @@ describe('AgentSession', () => {
 
     it('passes empty tools.mcpConfigPaths when unset', async () => {
       await AgentSession.create(baseOptions, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(
         expect.objectContaining({ tools: expect.objectContaining({ mcpConfigPaths: [] }) })
       );
     });
 
-    it('passes subAgents to EnhancedRunner when provided (crew session)', async () => {
+    it('passes subAgents to AgentHarness when provided (crew session)', async () => {
       const subAgents = [
         {
           name: 'researcher',
@@ -1778,33 +1778,33 @@ describe('AgentSession', () => {
         },
       ];
       await AgentSession.create({ ...baseOptions, subAgents }, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(
         expect.objectContaining({ delegation: { subAgents } })
       );
     });
 
-    it('passes crewId to EnhancedRunner when provided (crew session)', async () => {
+    it('passes crewId to AgentHarness when provided (crew session)', async () => {
       await AgentSession.create({ ...baseOptions, crewId: 'demo-crew' }, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(
         expect.objectContaining({ crewId: 'demo-crew' })
       );
     });
 
-    it('passes limits to EnhancedRunner when provided', async () => {
+    it('passes limits to AgentHarness when provided', async () => {
       const limits = { maxInputLength: 50000, maxSteps: 20, toolTimeout: 30000 };
       await AgentSession.create({ ...baseOptions, limits }, testConfig);
-      expect(mockEnhancedRunnerCreate).toHaveBeenCalledWith(expect.objectContaining({ limits }));
+      expect(mockAgentHarnessCreate).toHaveBeenCalledWith(expect.objectContaining({ limits }));
     });
 
     it('omits limits when not provided', async () => {
       await AgentSession.create(baseOptions, testConfig);
-      const call = mockEnhancedRunnerCreate.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      const call = mockAgentHarnessCreate.mock.calls.at(-1)?.[0] as Record<string, unknown>;
       expect(call.limits).toBeUndefined();
     });
 
     it('omits subAgents and crewId for non-crew session (backward compat)', async () => {
       await AgentSession.create(baseOptions, testConfig);
-      const call = mockEnhancedRunnerCreate.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      const call = mockAgentHarnessCreate.mock.calls.at(-1)?.[0] as Record<string, unknown>;
       expect(call.subAgents).toBeUndefined();
       expect(call.crewId).toBeUndefined();
     });
@@ -1824,7 +1824,7 @@ describe('AgentSession', () => {
           result: { type: 'success', answer: '', totalSteps: 0, tokens: { input: 0, output: 0 } },
         }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
 
       const session = await AgentSession.create(
         {
@@ -1870,7 +1870,7 @@ describe('AgentSession', () => {
           };
         }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
 
       const session = await AgentSession.create(
         {
@@ -1907,7 +1907,7 @@ describe('AgentSession', () => {
           };
         }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
 
       const session = await AgentSession.create(
         {
@@ -1956,7 +1956,7 @@ describe('AgentSession', () => {
           };
         }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
 
       session = await AgentSession.create(
         {
@@ -2013,7 +2013,7 @@ describe('AgentSession', () => {
           };
         }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
 
       session = await AgentSession.create(
         {
@@ -2058,7 +2058,7 @@ describe('AgentSession', () => {
           };
         }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
 
       session = await AgentSession.create(
         {
@@ -2414,7 +2414,7 @@ describe('AgentSession', () => {
   });
 
   describe('AgentSession.resume()', () => {
-    it('returns an AgentSession with runner and state from EnhancedRunner.resume()', async () => {
+    it('returns an AgentSession with runner and state from AgentHarness.resume()', async () => {
       const session = await AgentSession.resume(
         '/tmp/session-123',
         {
@@ -2431,7 +2431,7 @@ describe('AgentSession', () => {
       expect(session.sessionId).toBe('session-123');
       expect(session.agentName).toBe('resumed-agent');
       expect(session.getState().id).toBe('resumed-state-id');
-      expect(mockEnhancedRunnerResume).toHaveBeenCalledWith(
+      expect(mockAgentHarnessResume).toHaveBeenCalledWith(
         '/tmp/session-123',
         expect.objectContaining({
           llm: expect.objectContaining({ client: expect.any(Object) }),
@@ -2440,8 +2440,8 @@ describe('AgentSession', () => {
       );
     });
 
-    it('re-throws errors from EnhancedRunner.resume()', async () => {
-      mockEnhancedRunnerResume.mockRejectedValueOnce(new Error('Session not found'));
+    it('re-throws errors from AgentHarness.resume()', async () => {
+      mockAgentHarnessResume.mockRejectedValueOnce(new Error('Session not found'));
 
       await expect(
         AgentSession.resume(
@@ -2458,8 +2458,8 @@ describe('AgentSession', () => {
       ).rejects.toThrow('Session not found');
     });
 
-    it('passes subAgents through to EnhancedRunner.resume() when provided', async () => {
-      mockEnhancedRunnerResume.mockClear();
+    it('passes subAgents through to AgentHarness.resume() when provided', async () => {
+      mockAgentHarnessResume.mockClear();
       const subAgents = [
         {
           name: 'researcher',
@@ -2481,14 +2481,14 @@ describe('AgentSession', () => {
         testConfig
       );
 
-      expect(mockEnhancedRunnerResume).toHaveBeenCalledWith(
+      expect(mockAgentHarnessResume).toHaveBeenCalledWith(
         '/tmp/crew-session',
         expect.objectContaining({ subAgents })
       );
     });
 
     it('omits subAgents on resume when not provided (non-crew session)', async () => {
-      mockEnhancedRunnerResume.mockClear();
+      mockAgentHarnessResume.mockClear();
 
       await AgentSession.resume(
         '/tmp/plain-session',
@@ -2502,7 +2502,7 @@ describe('AgentSession', () => {
         testConfig
       );
 
-      const call = mockEnhancedRunnerResume.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+      const call = mockAgentHarnessResume.mock.calls.at(-1)?.[1] as Record<string, unknown>;
       expect(call.subAgents).toBeUndefined();
     });
   });
@@ -2539,7 +2539,7 @@ describe('AgentSession', () => {
           };
         }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
       return mock;
     }
 
@@ -2867,7 +2867,7 @@ describe('AgentSession', () => {
           };
         }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
       return mock;
     }
 
@@ -2949,7 +2949,7 @@ describe('AgentSession', () => {
           };
         }),
       });
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
       const session = await createMailboxSession();
 
       const iterator = session.handleMessage('hello')[Symbol.asyncIterator]();
@@ -3060,7 +3060,7 @@ describe('AgentSession', () => {
       const mock = createMockRunner();
       (mock.runner as unknown as Record<string, unknown>).setDelegateSupervisor =
         setDelegateSupervisor;
-      mockEnhancedRunnerCreate.mockResolvedValue(mock.runner);
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
       await AgentSession.create(
         {
           workspacePath: '/tmp/test',

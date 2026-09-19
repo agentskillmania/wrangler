@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  AgentHarness,
   EnhancedRunner,
   AgentLoader,
   CrewLoader,
@@ -15,10 +16,10 @@ import {
 
 describe('@agentskillmania/wrangler exports', () => {
   it('exports key APIs that can be imported and called', () => {
-    // EnhancedRunner is a class with static create method
-    expect(EnhancedRunner).toBeInstanceOf(Function);
-    expect(EnhancedRunner.name).toBe('EnhancedRunner');
-    expect(EnhancedRunner.create).toBeInstanceOf(Function);
+    // AgentHarness is a class with static create method
+    expect(AgentHarness).toBeInstanceOf(Function);
+    expect(AgentHarness.name).toBe('AgentHarness');
+    expect(AgentHarness.create).toBeInstanceOf(Function);
 
     // AgentLoader is a class
     expect(AgentLoader).toBeInstanceOf(Function);
@@ -46,6 +47,19 @@ describe('@agentskillmania/wrangler exports', () => {
     expect(createLLMClient.name).toBe('createLLMClient');
     expect(resolveDefaultModel).toBeInstanceOf(Function);
     expect(resolveDefaultModel.name).toBe('resolveDefaultModel');
+  });
+
+  // ── Deprecated alias compatibility (T9 rename, D3: alias for one minor) ──
+  it('keeps deprecated EnhancedRunner alias identical to AgentHarness', () => {
+    expect(EnhancedRunner).toBe(AgentHarness);
+  });
+
+  it('deprecated EnhancedRunner alias is still constructible and has create()', () => {
+    expect(EnhancedRunner.create).toBeInstanceOf(Function);
+    // Runtime `new` via the old name dispatches to the AgentHarness constructor.
+    const viaOldName = Reflect.construct(EnhancedRunner, [null, null, new Map(), []]);
+    expect(viaOldName).toBeInstanceOf(AgentHarness);
+    expect(viaOldName).toBeInstanceOf(EnhancedRunner);
   });
 
   it('parseCommand parses slash commands correctly', () => {

@@ -248,7 +248,7 @@ describe('createSkillHandler', () => {
     });
 
     function makeRunnerProvider(): InventorySkillProvider {
-      // The same provider shape EnhancedRunner injects (colts provider +
+      // The same provider shape AgentHarness injects (colts provider +
       // inventory alignment layer).
       return new InventorySkillProvider(new FilesystemSkillProvider([skillsDir]));
     }

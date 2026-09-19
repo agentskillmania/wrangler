@@ -3,7 +3,7 @@
  *
  * Creates the 'delegate' tool that allows the parent agent to delegate tasks
  * to specialized sub-agents. Each delegation spins up a fresh SubAgentRunner
- * (a trimmed EnhancedRunner) via {@link createSubAgentRunner}.
+ * (a trimmed AgentHarness) via {@link createSubAgentRunner}.
  *
  * Migrated from colts — the key difference is that sub-agent creation now uses
  * wrangler's SubAgentRunner (with MarkdownMessageAssembler (tail time/todo reminder),
@@ -137,7 +137,7 @@ export interface DelegateToolDeps {
   subAgentRunnerFactory?: SubAgentRunnerFactory;
   /**
    * 异步委派监督者槽（R2P-141c，对齐 Rust DelegateDeps.supervisor）：
-   * EnhancedRunner 构建时创建（空 = 同步模式默认），会话物化后由宿主
+   * AgentHarness 构建时创建（空 = 同步模式默认），会话物化后由宿主
    * 晚绑定（setDelegateSupervisor）。handler 每次调用时读槽——有活监督者
    * 即「受理即返回」，空槽/失活回落同步（零变化）。
    */

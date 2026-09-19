@@ -3,7 +3,7 @@
  *
  * Exports sub-agent type definitions and the delegate tool factory.
  * Sub-agent delegation is a wrangler concern: the delegate tool creates
- * fresh SubAgentRunner instances (trimmed EnhancedRunner) per delegation.
+ * fresh SubAgentRunner instances (trimmed AgentHarness) per delegation.
  */
 
 export type { SubAgentConfig, DelegateResult } from './types.js';

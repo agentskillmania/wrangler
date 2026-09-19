@@ -2,14 +2,14 @@
  * @fileoverview Crew adapter — evaluates a CREW.md + agents/*.md crew.
  *
  * Loads the crew via CrewLoader, converts to runner options via
- * crewToRunnerOptions, then constructs EnhancedRunner with subAgents
+ * crewToRunnerOptions, then constructs AgentHarness with subAgents
  * enabled. Mirrors the daemon's /api/crews/:id/chat flow.
  */
 
 import { createAgentState, type AgentState } from '@agentskillmania/colts';
 import { LLMClient } from '@agentskillmania/llm-client';
 import {
-  EnhancedRunner,
+  AgentHarness,
   CrewLoader,
   crewToRunnerOptions,
   type CrewRunnerOptions,
@@ -42,7 +42,7 @@ export class CrewAdapter extends BaseAdapter {
   }
 
   /** Override createRunner to inject subAgents + crew model + sandbox. */
-  protected async createRunner(suite: EvalSuite, workspacePath: string): Promise<EnhancedRunner> {
+  protected async createRunner(suite: EvalSuite, workspacePath: string): Promise<AgentHarness> {
     const opts = await this.ensureLoaded(suite);
 
     // Load LLM config the same way BaseAdapter does
@@ -79,7 +79,7 @@ export class CrewAdapter extends BaseAdapter {
       runnerOpts.llm = { ...(runnerOpts.llm as object), model: opts.model };
     }
 
-    return EnhancedRunner.create(runnerOpts as Parameters<typeof EnhancedRunner.create>[0]);
+    return AgentHarness.create(runnerOpts as Parameters<typeof AgentHarness.create>[0]);
   }
 
   /**
@@ -88,7 +88,7 @@ export class CrewAdapter extends BaseAdapter {
    * instructions. Mirrors daemon's crew chat route wiring.
    */
   protected async buildInitialState(
-    runner: EnhancedRunner,
+    runner: AgentHarness,
     suite: EvalSuite,
     _workspacePath: string
   ): Promise<AgentState> {

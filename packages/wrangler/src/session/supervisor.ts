@@ -8,7 +8,7 @@
  * 不投递）。子女计数进冷却资格（daemon 侧 sweepIdleAgentSessions 的
  * hasActiveChildren 臂）。
  *
- * 槽语义（对齐 Rust SupervisorSlot）：监督者经 EnhancedRunner 的
+ * 槽语义（对齐 Rust SupervisorSlot）：监督者经 AgentHarness 的
  * delegateSupervisorSlot 晚绑定——槽空 = delegate 同步阻塞到完成
  * （devtool/裸 runner 的默认，零变化）；槽内有活监督者（daemon 会话
  * 物化时绑定）= 受理即返回 accepted 回执。

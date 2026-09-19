@@ -1,8 +1,8 @@
 /**
- * US1: Load agent from AGENT.md and run with EnhancedRunner
+ * US1: Load agent from AGENT.md and run with AgentHarness
  *
  * As a developer, I use AgentLoader.loadFrom() to parse an AGENT.md directory,
- * then create an EnhancedRunner to run the agent with all wrangler mechanisms.
+ * then create an AgentHarness to run the agent with all wrangler mechanisms.
  *
  * Prerequisites:
  * - Set ENABLE_INTEGRATION_TESTS=true in .env
@@ -17,11 +17,11 @@ import { tmpdir } from 'node:os';
 import { LLMClient } from '@agentskillmania/llm-client';
 import { parseAgentMd } from '../../src/agent/agent-parser.js';
 import { AgentLoader } from '../../src/loader/agent-loader.js';
-import { EnhancedRunner } from '../../src/runner/enhanced-runner.js';
+import { AgentHarness } from '../../src/runner/agent-harness.js';
 import { createAgentState, addUserMessage } from '@agentskillmania/colts';
 import { testConfig, itif } from './config.js';
 
-describe('US1: Load agent from AGENT.md and run with EnhancedRunner', () => {
+describe('US1: Load agent from AGENT.md and run with AgentHarness', () => {
   let testBaseDir: string;
 
   beforeAll(() => {
@@ -133,7 +133,7 @@ You are a code reviewer.`
   });
 
   itif(testConfig.enabled)(
-    'EnhancedRunner runs with AgentLoader result',
+    'AgentHarness runs with AgentLoader result',
     async () => {
       const agentDir = join(testBaseDir, 'test-agent');
       await mkdir(agentDir, { recursive: true });
@@ -159,7 +159,7 @@ You are a helpful assistant. Answer in one short sentence.`
         models: [{ modelId: testConfig.testModel, maxConcurrency: 5 }],
       });
 
-      const runner = await EnhancedRunner.create({
+      const runner = await AgentHarness.create({
         runtime: defaultNodeHostEnv,
         llm: { client: llmClient, model: testConfig.testModel },
         workspacePath: testBaseDir,

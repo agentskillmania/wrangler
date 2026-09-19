@@ -679,7 +679,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /api/agents/:name/chat — NEW conversation
    *
-   * Loads agent config, creates fresh AgentState, runs EnhancedRunner.
+   * Loads agent config, creates fresh AgentState, runs AgentHarness.
    * Wrangler session middleware auto-creates the session during run.
    * Returns SSE stream. The 'done' event includes sessionId.
    */
@@ -770,7 +770,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       model: agentDetail.model,
       // skills.dirs: body > agent 私有(空则 config.runner 全局) > devtool 脚手架技能集
       // （BUILTIN_SKILLS_DIR 来自 wrangler-devtool，恒 append；引擎级 spec-plan 技能
-      //  由 EnhancedRunner.collectSkillDirs 另行注入，两者不同源）
+      //  由 AgentHarness.collectSkillDirs 另行注入，两者不同源）
       // spec-plan skills（引擎自带，恒在）。
       skills: {
         dirs: [...(body.config?.skills?.dirs ?? skillDirsFallback), BUILTIN_SKILLS_DIR],
@@ -850,7 +850,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
    *   拼 URL，且与 events 端点既有的 lastSeq query 风格一致。
    *
    * Loads existing state from SessionStore, appends user message,
-   * runs EnhancedRunner.
+   * runs AgentHarness.
    */
   fastify.post('/api/chat/:sessionId', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };

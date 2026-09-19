@@ -14,7 +14,7 @@
  *   ❌ ask_human            (sub-agents cannot do human-in-the-loop)
  *   ❌ crewId               (sub-agents are not crew members)
  *
- * Capability matrix vs EnhancedRunner:
+ * Capability matrix vs AgentHarness:
  *   tail time/todo reminder    ✅ (via MarkdownMessageAssembler)
  *   MarkdownMessageAssembler  ✅
  *   tool inheritance          ✅ (from parent runner, minus delegate/load_skill)

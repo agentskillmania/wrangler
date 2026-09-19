@@ -1,7 +1,7 @@
 /**
  * User Story: Command System Integration Tests
  *
- * These tests exercise the FULL stack: user input → EnhancedRunner → AgentRunner →
+ * These tests exercise the FULL stack: user input → AgentHarness → AgentRunner →
  * middleware → handlers → result, with a real LLM.
  *
  * Prerequisites:
@@ -11,7 +11,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { defaultNodeHostEnv } from '../../src/host-env/node-host-env.js';
-import { EnhancedRunner } from '../../src/runner/index.js';
+import { AgentHarness } from '../../src/runner/index.js';
 import { createAgentState, addUserMessage, FilesystemSkillProvider } from '@agentskillmania/colts';
 import { nodeFsOps } from '@agentskillmania/colts/skills/node-fs-ops';
 import type { AgentState } from '@agentskillmania/colts';
@@ -69,7 +69,7 @@ describe('Command System Integration Tests', () => {
   itif(testConfig.enabled)(
     'should execute /clear command and stop with success message',
     async () => {
-      const runner = await EnhancedRunner.create({
+      const runner = await AgentHarness.create({
         runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
@@ -102,7 +102,7 @@ describe('Command System Integration Tests', () => {
       const skillDir = createTempSkillDir();
       tempDirs.push(skillDir);
 
-      const runner = await EnhancedRunner.create({
+      const runner = await AgentHarness.create({
         runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
@@ -139,7 +139,7 @@ describe('Command System Integration Tests', () => {
       const skillDir = createTempSkillDir();
       tempDirs.push(skillDir);
 
-      const runner = await EnhancedRunner.create({
+      const runner = await AgentHarness.create({
         runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
@@ -183,7 +183,7 @@ describe('Command System Integration Tests', () => {
         }),
       };
 
-      const runner = await EnhancedRunner.create({
+      const runner = await AgentHarness.create({
         runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
@@ -233,7 +233,7 @@ describe('Command System Integration Tests', () => {
   itif(testConfig.enabled)(
     'should treat unknown command as normal message and continue to LLM',
     async () => {
-      const runner = await EnhancedRunner.create({
+      const runner = await AgentHarness.create({
         runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
@@ -275,7 +275,7 @@ describe('Command System Integration Tests', () => {
         },
       };
 
-      const runner = await EnhancedRunner.create({
+      const runner = await AgentHarness.create({
         runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
@@ -307,7 +307,7 @@ describe('Command System Integration Tests', () => {
       const skillDir = createTempSkillDir();
       tempDirs.push(skillDir);
 
-      const runner = await EnhancedRunner.create({
+      const runner = await AgentHarness.create({
         runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
@@ -340,7 +340,7 @@ describe('Command System Integration Tests', () => {
   itif(testConfig.enabled)(
     'should pass normal message to LLM without command processing',
     async () => {
-      const runner = await EnhancedRunner.create({
+      const runner = await AgentHarness.create({
         runtime: defaultNodeHostEnv,
         llm: { client: makeLLMClient() as any, model: testConfig.testModel },
         workspacePath: '/tmp/test-workspace',
