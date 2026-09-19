@@ -44,8 +44,8 @@
     "directory": "packages/wrangler-devtool"
   },
   "dependencies": {
-    "@agentskillmania/colts": "0.5.0-alpha.1",
-    "@agentskillmania/llm-client": "0.5.0-alpha.1",
+    "@agentskillmania/colts": "0.5.0-alpha.2",
+    "@agentskillmania/llm-client": "0.5.0-alpha.2",
     "@agentskillmania/wrangler": "workspace:*",
     "isomorphic-git": "^1.38.1",
     "js-yaml": "^4.1.0",

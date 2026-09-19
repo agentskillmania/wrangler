@@ -29,12 +29,23 @@ vi.mock('@agentskillmania/wrangler', async (importOriginal) => {
   };
 });
 
-vi.mock('@agentskillmania/llm-client', () => ({
-  LLMClient: vi.fn().mockReturnValue({
+vi.mock('@agentskillmania/llm-client', () => {
+  // 保留隔离但补全静态面：宿主工厂（wrangler 的 createLLMClient）调
+  // `LLMClient.quickInit(...)`，裸 vi.fn() 会让冷装配路径 500
+  // （alpha.2 依赖解析变化后本 mock 开始生效，暴露了这个缺口）。
+  const client = {
     registerProvider: vi.fn(),
     registerApiKey: vi.fn(),
-  }),
-}));
+    call: vi.fn(),
+    stream: vi.fn(),
+    getModelMeta: vi.fn(),
+  };
+  return {
+    LLMClient: Object.assign(vi.fn().mockReturnValue(client), {
+      quickInit: vi.fn().mockReturnValue(client),
+    }),
+  };
+});
 
 /** 注入 factory 使用的 mock LLM 客户端（daemon core 不捆绑内置 LLM）。 */
 const mockLLMClient = { call: vi.fn(), stream: vi.fn(), getModelMeta: vi.fn() };

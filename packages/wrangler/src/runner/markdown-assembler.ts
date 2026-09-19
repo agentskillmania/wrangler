@@ -24,7 +24,12 @@
  * - Same-turn thoughts (after last user message) included; cross-turn skipped.
  */
 
-import type { AgentState, BuildMessagesOptions, IMessageAssembler } from '@agentskillmania/colts';
+import {
+  compareByCodeUnit,
+  type AgentState,
+  type BuildMessagesOptions,
+  type IMessageAssembler,
+} from '@agentskillmania/colts';
 import type { Message as PiAIMessage, TextContent, ToolCall } from '@mariozechner/pi-ai';
 
 import { shiftHeadings } from './shift-headings.js';
@@ -38,22 +43,11 @@ const STATUS_CHECK: Record<string, string> = {
   completed: '[x]',
 };
 
-/**
- * Compare two strings by UTF-16 code unit (the `<` / `>` operator order) —
- * deliberately NOT `localeCompare`.
- *
- * Same semantics as colts' internal `compareByCodeUnit` (not barrel-exported;
- * duplicated here one-to-one). Once colts barrel-exports it, switch this
- * replica back to importing the real export. The sub-agent catalog feeds the
- * provider prefix cache, and `localeCompare` collation is host/locale-dependent
- * — two machines could enumerate the same set differently and invalidate the
- * cache wholesale. Code-unit order is host-independent and matches Rust's byte
- * ordering for the ASCII slugs used as agent names. (R2P-101w, aligned with
- * Rust 5e238bc.)
- */
-function compareByCodeUnit(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
+// compareByCodeUnit now comes from colts' barrel (0.5.0-alpha.2): the
+// sub-agent catalog feeds the provider prefix cache, and `localeCompare`
+// collation is host/locale-dependent — two machines could enumerate the same
+// set differently and invalidate the cache wholesale. The engine comparator is
+// host-independent code-unit order. (R2P-101w / E-表 barrel 补口.)
 
 /**
  * MarkdownMessageAssembler -- structured markdown system prompt
