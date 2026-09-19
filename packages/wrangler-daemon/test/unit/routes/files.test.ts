@@ -15,6 +15,7 @@ import type { DecoratedFastifyInstance } from '../../../src/types.js';
  * Tests the following endpoints:
  * - GET  /api/files/:sessionId/tree              — recursive file tree
  * - GET  /api/files/:sessionId/content?path=xxx  — read file content
+ * - GET  /api/files/:sessionId/raw?path=xxx      — raw bytes (binary preview)
  * - PUT  /api/files/:sessionId/content           — write file (body: {path, content})
  * - POST /api/files/:sessionId                   — create file with nested dirs (body: {path, content?})
  * - DELETE /api/files/:sessionId                 — delete file (body: {path})
@@ -41,6 +42,12 @@ describe('workspace file routes', () => {
 
     // Seed workspace with test files
     await writeFile(join(workspacePath, 'hello.txt'), 'hello world', 'utf-8');
+    // Minimal PNG header — content is arbitrary; the raw endpoint only has to
+    // return the exact bytes (binary safety) and a png Content-Type.
+    await writeFile(
+      join(workspacePath, 'pic.png'),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4])
+    );
     await mkdir(join(workspacePath, 'subdir'), { recursive: true });
     await writeFile(join(workspacePath, 'subdir', 'nested.txt'), 'nested content', 'utf-8');
 
@@ -164,6 +171,79 @@ describe('workspace file routes', () => {
       const res = await fetch(`${baseUrl()}/api/files/missing-session/content?path=hello.txt`);
       expect(res.ok).toBe(true);
       expect((await res.json()).error).toBe('Session not found');
+    });
+  });
+
+  // ------------------------------------------------------------------ Raw bytes
+
+  describe('GET /api/files/:sessionId/raw (R2P-235, aligned with Rust d7dbde2)', () => {
+    it('serves image bytes verbatim with a png Content-Type', async () => {
+      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=pic.png`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/png');
+
+      const bytes = Buffer.from(await res.arrayBuffer());
+      expect(bytes).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]));
+    });
+
+    it('serves text files with text/plain', async () => {
+      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=hello.txt`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('text/plain');
+      expect(await res.text()).toBe('hello world');
+    });
+
+    it('returns bytes consistent with a prior PUT (round-trip)', async () => {
+      const put = await fetch(`${baseUrl()}/api/files/test-session/content`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'hello.txt', content: 'updated via put' }),
+      });
+      expect(put.ok).toBe(true);
+
+      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=hello.txt`);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe('updated via put');
+    });
+
+    it('returns 404 for a missing file', async () => {
+      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=gone.png`);
+      expect(res.status).toBe(404);
+      expect((await res.json()).error).toBe('File not found');
+    });
+
+    it('returns 400 when the path query parameter is missing', async () => {
+      const res = await fetch(`${baseUrl()}/api/files/test-session/raw`);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('path is required');
+    });
+
+    it('returns 404 for an unknown session', async () => {
+      const res = await fetch(`${baseUrl()}/api/files/no-such-session/raw?path=pic.png`);
+      expect(res.status).toBe(404);
+      expect((await res.json()).error).toBe('Session not found');
+    });
+
+    it('rejects path traversal with 500 (never reads outside the root)', async () => {
+      const res = await fetch(
+        `${baseUrl()}/api/files/test-session/raw?path=${encodeURIComponent('../../../etc/hosts')}`
+      );
+      // resolveWithinRoot throws before any read — same 500 the content PUT
+      // path produces; the escape never reaches the filesystem.
+      expect(res.status).toBe(500);
+    });
+
+    it('returns 404 for a directory', async () => {
+      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=subdir`);
+      expect(res.status).toBe(404);
+    });
+
+    it('resolves unknown extensions to application/octet-stream', async () => {
+      await writeFile(join(workspacePath, 'blob.bin'), Buffer.from([1, 2, 3]));
+      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=blob.bin`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/octet-stream');
+      expect(Buffer.from(await res.arrayBuffer())).toEqual(Buffer.from([1, 2, 3]));
     });
   });
 

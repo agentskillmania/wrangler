@@ -9,6 +9,54 @@ import type { DecoratedFastifyInstance } from '../types.js';
 import { resolveWithinRoot } from '../utils.js';
 
 /**
+ * MIME type by file extension for the raw bytes endpoint.
+ *
+ * Mirrors Rust `static_assets::mime_type_for` (d7dbde2): the static-asset
+ * helper was widened with common image/document types so `/api/files/:id/raw`
+ * can serve previews, falling back to `application/octet-stream`. The
+ * extension is lower-cased so `PIC.PNG` resolves too.
+ */
+function mimeTypeFor(filePath: string): string {
+  const dot = filePath.lastIndexOf('.');
+  const ext = dot === -1 ? '' : filePath.slice(dot + 1).toLowerCase();
+  switch (ext) {
+    case 'html':
+      return 'text/html';
+    case 'css':
+      return 'text/css';
+    case 'js':
+      return 'application/javascript';
+    case 'json':
+      return 'application/json';
+    case 'svg':
+      return 'image/svg+xml';
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'gif':
+      return 'image/gif';
+    case 'webp':
+      return 'image/webp';
+    case 'bmp':
+      return 'image/bmp';
+    case 'ico':
+      return 'image/x-icon';
+    case 'pdf':
+      return 'application/pdf';
+    case 'txt':
+    case 'md':
+    case 'markdown':
+      return 'text/plain';
+    case 'woff2':
+      return 'font/woff2';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+/**
  * Recursively build a file tree from a directory.
  *
  * Filters out hidden files (dot-prefixed) and node_modules directories.
@@ -113,6 +161,48 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
     } catch {
       return { error: 'File not found' };
     }
+  });
+
+  /**
+   * GET /api/files/:sessionId/raw?path=<relativePath>&sessionDir=<dir>
+   *
+   * Serves a workspace file's raw bytes — the binary preview channel the
+   * text-only `content` endpoint cannot carry (images, PDFs). Addressing and
+   * traversal protection are identical to `content` (`resolveWorkspace` +
+   * `resolveWithinRoot`); the response is NOT JSON-wrapped.
+   *
+   * Status: 404 unknown session / missing file / directory (a traversal path
+   * is clamped and lands here too, never leaking outside the root), 400
+   * missing path. Mirrors Rust `file_raw` (d7dbde2) with the TS error shape.
+   */
+  fastify.get('/api/files/:sessionId/raw', async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string };
+    const query = request.query as { path?: string; sessionDir?: string };
+    const workspacePath = await resolveWorkspace(sessionId, query.sessionDir);
+    if (!workspacePath) {
+      reply.code(404);
+      return { error: 'Session not found' };
+    }
+    if (!query.path) {
+      reply.code(400);
+      return { error: 'path is required' };
+    }
+
+    // resolveWithinRoot throwing (escape attempt) propagates as 500, matching
+    // the content PUT path — the raw channel must never fall back to reading
+    // outside the workspace.
+    const fullPath = resolveWithinRoot(workspacePath, query.path);
+    let data: Buffer;
+    try {
+      // No encoding: bytes are returned verbatim (binary-safe). Directories
+      // make readFile throw EISDIR → 404, like a missing file.
+      data = await readFile(fullPath);
+    } catch {
+      reply.code(404);
+      return { error: 'File not found' };
+    }
+    reply.type(mimeTypeFor(query.path));
+    return reply.send(data);
   });
 
   /**
