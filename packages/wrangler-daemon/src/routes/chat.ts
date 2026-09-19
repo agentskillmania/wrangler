@@ -721,6 +721,14 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const config = configManager().get();
     const rc = config.runner;
 
+    // agent 会话的资源兜底策略：私有非空用私有，为空落 config.yaml 全局
+    // 默认（对齐 Rust eef05a1——装配机制层不再兜底全局，策略上移到会话
+    // 路由；crew 会话不拼全局，见 /api/crews/:id/chat）。
+    const skillDirsFallback =
+      agentDetail.skillDirs.length > 0 ? agentDetail.skillDirs : (rc?.skillDirs ?? []);
+    const mcpPathsFallback =
+      agentDetail.mcpPaths.length > 0 ? agentDetail.mcpPaths : (rc?.mcpConfigPaths ?? []);
+
     // 内联子 agent（R2P-143，对齐 Rust e39477c 的 Inline 分支）：请求体
     // `agent.subAgents[]` → SubAgentConfig（与 crew 路径同一类型，wire 字段
     // 一一对应）。有名单即注册 delegate（异步受理全链路），无需建 crew 目录。
@@ -760,21 +768,16 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       agentName: agentDetail.name,
       agentInstructions: agentDetail.instructions,
       model: agentDetail.model,
-      // skills.dirs: body > agent.skillDirs > config.runner.skillDirs > []
+      // skills.dirs: body > agent 私有(空则 config.runner 全局) > 内置
+      // spec-plan skills（引擎自带，恒在）。
       skills: {
-        dirs: [
-          ...(body.config?.skills?.dirs ?? agentDetail.skillDirs ?? rc?.skillDirs ?? []),
-          BUILTIN_SKILLS_DIR,
-        ],
+        dirs: [...(body.config?.skills?.dirs ?? skillDirsFallback), BUILTIN_SKILLS_DIR],
       },
       tools: {
         // 替换语义:内联 mcpServers 给了 → 路径轴(agent/config.runner 回退)整体旁路
         mcpConfigPaths: body.config?.tools?.mcpServers
           ? []
-          : (body.config?.tools?.mcpConfigPaths ??
-            agentDetail.mcpPaths ??
-            rc?.mcpConfigPaths ??
-            []),
+          : (body.config?.tools?.mcpConfigPaths ?? mcpPathsFallback),
         builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
         // Node 专属 web 工具（jsdom 爬虫）——引擎 core 不含，由 daemon 组装注入
         injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),
@@ -1008,7 +1011,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const runnerOpts = crewToRunnerOptions(crewConfig);
     const workspacePath = body.workspacePath;
 
-    // Daemon-level runner defaults (three-tier: body > crew > config.runner).
+    // Daemon-level runner defaults (body > config.runner)。注意 skills/MCP
+    // 两轴不在此列：crew 目录即全世界，只认私有声明（见下）。
     const config = configManager().get();
     const rc = config.runner;
 
@@ -1030,17 +1034,17 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       model: body.model ?? runnerOpts.model,
       // Node 专属：合并 sandbox 配置并构造实例（引擎 core 不捆绑 sandbox 运行时）
       sandbox: withSandboxInstance(config.sandbox, body.config?.sandbox ?? true, workspacePath),
+      // crew 目录即全世界：skills/MCP 只认 <crew>/ 私有声明（body.config
+      // 明说的最高），不落 config.yaml 全局默认——agent 会话才兜底全局
+      // （对齐 Rust eef05a1）。skillDirs 是容器目录（<crew>/skills 本身）。
       skills: {
-        dirs: [
-          ...(body.config?.skills?.dirs ?? runnerOpts.skillDirs ?? rc?.skillDirs ?? []),
-          BUILTIN_SKILLS_DIR,
-        ],
+        dirs: [...(body.config?.skills?.dirs ?? runnerOpts.skillDirs), BUILTIN_SKILLS_DIR],
       },
       tools: {
         // 替换语义:内联 mcpServers 给了 → 路径轴旁路(镜像 Rust 契约)
         mcpConfigPaths: body.config?.tools?.mcpServers
           ? []
-          : (body.config?.tools?.mcpConfigPaths ?? rc?.mcpConfigPaths ?? []),
+          : (body.config?.tools?.mcpConfigPaths ?? runnerOpts.mcpPaths),
         builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
         // Node 专属 web 工具（jsdom 爬虫）——引擎 core 不含，由 daemon 组装注入
         injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),

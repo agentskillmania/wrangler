@@ -299,9 +299,11 @@ describe('ResourceManager', () => {
       await manager.init();
 
       const detail = await manager.getAgent('agent-with-skills');
+      // 容器语义（对齐 Rust eef05a1 resources.rs）：skillDirs 是 skills/
+      // 容器目录本身，不是其下条目——provider 按容器扫描。
       expect(detail!.skillCount).toBe(1);
       expect(detail!.skillDirs).toHaveLength(1);
-      expect(detail!.skillDirs[0]).toContain('agent-with-skills/skills/search');
+      expect(detail!.skillDirs[0]).toBe(join(agentDir, 'skills'));
     });
 
     it('discovers agent mcp.json', async () => {

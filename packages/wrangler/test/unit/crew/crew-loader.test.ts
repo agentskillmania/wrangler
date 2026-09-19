@@ -161,7 +161,7 @@ describe('CrewLoader', () => {
     }
   });
 
-  it('handles empty skills directory', async () => {
+  it('handles empty skills directory — container dir itself is the entry', async () => {
     const tmpDir = join(__dirname, '../../fixtures/crew-empty-skills');
     try {
       await mkdir(tmpDir, { recursive: true });
@@ -172,13 +172,33 @@ describe('CrewLoader', () => {
       );
       const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       const config = await loader.load();
-      expect(config.skillDirs).toEqual([]);
+      // 容器语义（对齐 Rust eef05a1）：skills/ 存在即推它本身，即便为空。
+      expect(config.skillDirs).toEqual([join(tmpDir, 'skills')]);
     } finally {
       await rm(tmpDir, { recursive: true });
     }
   });
 
-  it('handles skills directory with non-directory entries', async () => {
+  it('resolves skills container relative to the crew dir (not its entries)', async () => {
+    const tmpDir = join(__dirname, '../../fixtures/crew-skills-entries');
+    try {
+      await mkdir(join(tmpDir, 'skills', 'my-skill'), { recursive: true });
+      await writeFile(join(tmpDir, 'skills', 'my-skill', 'SKILL.md'), '# My Skill');
+      await writeFile(
+        join(tmpDir, 'CREW.md'),
+        '---\nname: test-crew\nprimary-agent: primary\n---\nMemory'
+      );
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
+      const config = await loader.load();
+      // provider 按容器扫描：推条目（my-skill 目录本身）永远发现不了。
+      expect(config.skillDirs).toHaveLength(1);
+      expect(config.skillDirs[0]).toBe(join(tmpDir, 'skills'));
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('handles skills directory with non-directory entries — container wins', async () => {
     const tmpDir = join(__dirname, '../../fixtures/crew-skills-files');
     try {
       await mkdir(tmpDir, { recursive: true });
@@ -192,11 +212,45 @@ describe('CrewLoader', () => {
       );
       const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
       const config = await loader.load();
-      // Current implementation adds all entries (files and dirs) — verify the behavior
-      expect(config.skillDirs).toHaveLength(1);
-      expect(config.skillDirs[0]).toContain('README.md');
+      // 容器语义：只推 skills/ 本身，不再枚举其下条目。
+      expect(config.skillDirs).toEqual([skillsDir]);
     } finally {
       await rm(tmpDir, { recursive: true });
+    }
+  });
+
+  it('collects crew-private mcp.json path when present', async () => {
+    const tmpDir = join(__dirname, '../../fixtures/crew-mcp');
+    try {
+      await mkdir(tmpDir, { recursive: true });
+      await writeFile(
+        join(tmpDir, 'CREW.md'),
+        '---\nname: test-crew\nprimary-agent: primary\n---\nMemory'
+      );
+      await writeFile(join(tmpDir, 'mcp.json'), '{"mcpServers":{}}');
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
+      const config = await loader.load();
+      expect(config.mcpPaths).toEqual([join(tmpDir, 'mcp.json')]);
+      // 透传进 runner 选项。
+      expect(crewToRunnerOptions(config).mcpPaths).toEqual(config.mcpPaths);
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns empty mcpPaths when mcp.json absent (no global fallback)', async () => {
+    const tmpDir = join(__dirname, '../../fixtures/crew-no-mcp');
+    try {
+      await mkdir(tmpDir, { recursive: true });
+      await writeFile(
+        join(tmpDir, 'CREW.md'),
+        '---\nname: test-crew\nprimary-agent: primary\n---\nMemory'
+      );
+      const loader = new CrewLoader(tmpDir, defaultNodeHostEnv);
+      const config = await loader.load();
+      expect(config.mcpPaths).toEqual([]);
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
     }
   });
 
@@ -252,6 +306,7 @@ describe('crewToRunnerOptions', () => {
         },
       },
       skillDirs: [],
+      mcpPaths: [],
     };
 
     const opts = crewToRunnerOptions(crewConfig as never);
@@ -277,7 +332,8 @@ describe('crewToRunnerOptions', () => {
           instructions: 'work',
         },
       },
-      skillDirs: [],
+      skillDirs: ['/crew/skills'],
+      mcpPaths: ['/crew/mcp.json'],
     };
 
     const opts = crewToRunnerOptions(crewConfig as never);
@@ -286,5 +342,8 @@ describe('crewToRunnerOptions', () => {
     expect(opts.systemPrompt).toContain('LEAD INSTRUCTIONS');
     expect(opts.systemPrompt).toContain('Available Sub-Agents');
     expect(opts.systemPrompt).toContain('**worker**: WORKER DESC');
+    // crew 私有资源透传（容器目录 + MCP 路径），无全局回落。
+    expect(opts.skillDirs).toEqual(['/crew/skills']);
+    expect(opts.mcpPaths).toEqual(['/crew/mcp.json']);
   });
 });

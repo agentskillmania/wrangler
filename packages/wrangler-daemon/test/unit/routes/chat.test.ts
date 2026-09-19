@@ -1862,4 +1862,152 @@ describe('Chat API', () => {
       unblock();
     });
   });
+
+  // ─── skill/MCP 自包含策略（T7 PORT，对齐 Rust eef05a1）───
+  //
+  // 装配机制层不再兜底全局 config.yaml（末级 or_else 砍掉），"要不要落
+  // 全局"下沉为会话路由策略：
+  //   - crew 会话：目录即全世界——私有存在即全部，不存在则为空；
+  //   - agent 会话：私有非空用私有，为空落全局。
+  // 请求体 body.config 明说的永远最高。
+  describe('skill/MCP self-containment policy (aligned Rust eef05a1)', () => {
+    let app: FastifyInstance;
+    let policyDir: string;
+    let agentsDir: string;
+    let crewsDir: string;
+    const GLOBAL_SKILLS = '/global/skills';
+    const GLOBAL_MCP = '/global/mcp.json';
+
+    async function bootApp(): Promise<void> {
+      policyDir = await mkdtemp(join(tmpdir(), 'daemon-chat-policy-'));
+      const configPath = join(policyDir, 'config.yaml');
+      // config.yaml 带全局 skillDirs / mcpConfigPaths 默认值——正是要钉的
+      // 那根"全局兜底"轴：crew 不得落它，agent 空私有才落它。
+      await writeFile(
+        configPath,
+        `llm:\n  providers:\n    - name: openai\n      apiKey: sk-test\n      baseUrl: 'https://api.example.com'\n      models:\n        - modelId: test-model\nserver:\n  port: 3100\n  host: localhost\nrunner:\n  skillDirs:\n    - ${GLOBAL_SKILLS}\n  mcpConfigPaths:\n    - ${GLOBAL_MCP}\n`
+      );
+      const configManager = new ConfigManager(configPath);
+      await configManager.init();
+
+      agentsDir = join(policyDir, 'agents');
+      crewsDir = join(policyDir, 'crews');
+      const resourceManager = new ResourceManager(agentsDir, join(policyDir, 'skills'), crewsDir);
+      await resourceManager.init();
+
+      // 裸 agent：无 skills/、无 mcp.json。
+      await resourceManager.createAgent({ name: 'bare-agent', instructions: 'bare' });
+      // 富 agent：私有 skills/ 容器 + mcp.json。
+      await resourceManager.createAgent({ name: 'rich-agent', instructions: 'rich' });
+      await mkdir(join(agentsDir, 'rich-agent', 'skills', 'search'), { recursive: true });
+      await writeFile(
+        join(agentsDir, 'rich-agent', 'skills', 'search', 'SKILL.md'),
+        '---\nname: search\n---\n'
+      );
+      await writeFile(join(agentsDir, 'rich-agent', 'mcp.json'), '{"mcpServers":{}}');
+
+      const sessionManager = new SessionManager(join(policyDir, 'sessions'));
+      await sessionManager.init();
+
+      app = Fastify();
+      app.decorate('configManager', configManager);
+      app.decorate('resourceManager', resourceManager);
+      app.decorate('sessionManager', sessionManager);
+      await app.register(chatRoutes);
+      await app.listen({ port: 0, host: '127.0.0.1' });
+    }
+
+    async function writeCrew(id: string, withPrivate: boolean): Promise<void> {
+      const crewDir = join(crewsDir, id);
+      await mkdir(join(crewDir, 'agents'), { recursive: true });
+      await writeFile(
+        join(crewDir, 'CREW.md'),
+        `---\nname: ${id}\nprimary-agent: primary\n---\n\nMemory.\n`
+      );
+      await writeFile(join(crewDir, 'agents', 'primary.md'), '---\nname: primary\n---\n\nLead.\n');
+      if (withPrivate) {
+        await mkdir(join(crewDir, 'skills', 'marker-skill'), { recursive: true });
+        await writeFile(
+          join(crewDir, 'skills', 'marker-skill', 'SKILL.md'),
+          '---\nname: marker-skill\n---\n'
+        );
+        await writeFile(join(crewDir, 'mcp.json'), '{"mcpServers":{}}');
+      }
+    }
+
+    function appUrl(): string {
+      const addr = app.addresses()[0];
+      return typeof addr === 'string' ? addr : `http://127.0.0.1:${addr.port}`;
+    }
+
+    async function postChat(path: string): Promise<Record<string, unknown>> {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+      const res = await fetch(`${appUrl()}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
+      });
+      expect(res.status).toBe(200);
+      await res.text();
+      expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
+      return mockAgentSessionCreate.mock.calls[0][0] as Record<string, unknown>;
+    }
+
+    beforeEach(async () => {
+      await bootApp();
+      await writeCrew('bare-crew', false);
+      await writeCrew('rich-crew', true);
+      // mock 实例跨用例复用——逐用例清理残留调用。
+      mockAgentSessionCreate.mockReset();
+    });
+
+    afterEach(async () => {
+      await Promise.race([app.close(), new Promise((r) => setTimeout(r, 1500))]);
+      await rm(policyDir, { recursive: true, force: true });
+    });
+
+    it('crew without skills/ or mcp.json inherits nothing (no global fallback)', async () => {
+      const callArg = await postChat('/api/crews/bare-crew/chat');
+      // 只剩内置 spec-plan skills（引擎自带，恒在）；全局 config.yaml 轴
+      // 不得落进 crew 会话。
+      expect(callArg.skills).toEqual({ dirs: [expect.any(String)] });
+      expect((callArg.skills as { dirs: string[] }).dirs).not.toContain(GLOBAL_SKILLS);
+      // MCP 同理：空私有 → 空路径轴，不落 /global/mcp.json。
+      expect(callArg.tools).toEqual(expect.objectContaining({ mcpConfigPaths: [] }));
+    });
+
+    it('crew with private skills/ and mcp.json resolves both relative to the crew dir', async () => {
+      const callArg = await postChat('/api/crews/rich-crew/chat');
+      const crewDir = join(crewsDir, 'rich-crew');
+      expect(callArg.skills).toEqual({
+        dirs: [join(crewDir, 'skills'), expect.any(String)],
+      });
+      expect(callArg.tools).toEqual(
+        expect.objectContaining({ mcpConfigPaths: [join(crewDir, 'mcp.json')] })
+      );
+      // 私有即全部：全局轴不参与。
+      expect((callArg.skills as { dirs: string[] }).dirs).not.toContain(GLOBAL_SKILLS);
+    });
+
+    it('agent with empty private resources falls back to global config.yaml', async () => {
+      const callArg = await postChat('/api/agents/bare-agent/chat');
+      expect(callArg.skills).toEqual({ dirs: [GLOBAL_SKILLS, expect.any(String)] });
+      expect(callArg.tools).toEqual(expect.objectContaining({ mcpConfigPaths: [GLOBAL_MCP] }));
+    });
+
+    it('agent with private resources replaces (not merges) the global axis', async () => {
+      const callArg = await postChat('/api/agents/rich-agent/chat');
+      const agentDir = join(agentsDir, 'rich-agent');
+      expect(callArg.skills).toEqual({
+        dirs: [join(agentDir, 'skills'), expect.any(String)],
+      });
+      expect((callArg.skills as { dirs: string[] }).dirs).not.toContain(GLOBAL_SKILLS);
+      expect(callArg.tools).toEqual(
+        expect.objectContaining({ mcpConfigPaths: [join(agentDir, 'mcp.json')] })
+      );
+    });
+  });
 });

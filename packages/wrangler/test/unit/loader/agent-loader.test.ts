@@ -31,7 +31,7 @@ You are a senior developer.`;
     }
   });
 
-  it('scans skills/ directory and returns skillDirs', async () => {
+  it('scans skills/ container and returns the dir itself', async () => {
     const tempDir = await mkdtemp('agent-loader-test-');
     try {
       await writeFile(join(tempDir, 'AGENT.md'), 'name: test\n---\nInstructions', 'utf-8');
@@ -41,9 +41,9 @@ You are a senior developer.`;
 
       const result = await AgentLoader.loadFrom(tempDir, defaultNodeHostEnv);
 
-      expect(result.skillDirs).toHaveLength(2);
-      expect(result.skillDirs).toContain(resolve(tempDir, 'skills', 'skill1.md'));
-      expect(result.skillDirs).toContain(resolve(tempDir, 'skills', 'skill2.md'));
+      // 容器语义（对齐 Rust eef05a1 的 resources.rs）：推 skills/ 本身，
+      // 不再推其下条目——provider 按容器扫描。
+      expect(result.skillDirs).toEqual([resolve(tempDir, 'skills')]);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -109,7 +109,7 @@ You are a senior developer.`;
     }
   });
 
-  it('handles skills directory with subdirectories', async () => {
+  it('handles skills directory with subdirectories — still one container entry', async () => {
     const tempDir = await mkdtemp('agent-loader-test-');
     try {
       await writeFile(join(tempDir, 'AGENT.md'), 'name: test\n---\nInstructions', 'utf-8');
@@ -119,9 +119,21 @@ You are a senior developer.`;
 
       const result = await AgentLoader.loadFrom(tempDir, defaultNodeHostEnv);
 
-      expect(result.skillDirs).toHaveLength(2);
-      expect(result.skillDirs).toContain(resolve(tempDir, 'skills', 'skill.md'));
-      expect(result.skillDirs).toContain(resolve(tempDir, 'skills', 'subdir'));
+      expect(result.skillDirs).toEqual([resolve(tempDir, 'skills')]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns empty skillDirs when skills/ is a file, not a directory', async () => {
+    const tempDir = await mkdtemp('agent-loader-test-');
+    try {
+      await writeFile(join(tempDir, 'AGENT.md'), 'name: test\n---\nInstructions', 'utf-8');
+      await writeFile(join(tempDir, 'skills'), 'not a directory', 'utf-8');
+
+      const result = await AgentLoader.loadFrom(tempDir, defaultNodeHostEnv);
+
+      expect(result.skillDirs).toEqual([]);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

@@ -155,8 +155,9 @@ export function CrewsPage() {
       <div class="page-header">
         <div class="page-title">Crews</div>
         <div class="page-desc">
-          Manage crew definitions. Each crew is a directory with a CREW.md file containing agents
-          and skills.
+          Manage crew definitions. Each crew is a self-contained directory (目录即全世界): agents/
+          即成员，skills/ 即技能，mcp.json 即 MCP 声明——存在即全部，不存在则为空， 不回落全局
+          skillDirs / mcpConfigPaths。
         </div>
       </div>
 

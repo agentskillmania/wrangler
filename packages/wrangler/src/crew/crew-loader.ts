@@ -18,7 +18,11 @@ interface CrewMeta {
  * Expected directory structure:
  * - CREW.md (YAML frontmatter for meta, body as memory)
  * - agents/*.md (Layer 5 agent definitions)
- * - skills/ (skill directories)
+ * - skills/ (skill container directory — the dir itself is the skillDirs
+ *   entry, mirroring config.yaml's global skillDirs convention)
+ * - mcp.json (single-file MCP declaration, same convention as an agent dir)
+ *
+ * 目录即全世界：crew 私有声明存在即全部，不存在则为空——不回落全局。
  */
 export class CrewLoader {
   constructor(
@@ -51,8 +55,9 @@ export class CrewLoader {
     // 2. Parse agents/*.md
     const agentDefs = await this.loadAgents(absDir, rt);
 
-    // 3. Scan skills/
+    // 3. Scan skills/ (container) and mcp.json
     const skillDirs = await this.loadSkillDirs(absDir, rt);
+    const mcpPaths = await this.loadMcpPaths(absDir, rt);
 
     return {
       meta: {
@@ -63,6 +68,7 @@ export class CrewLoader {
       memory,
       agentDefs,
       skillDirs: skillDirs,
+      mcpPaths,
     };
   }
 
@@ -109,20 +115,40 @@ export class CrewLoader {
     return agentDefs;
   }
 
+  /**
+   * crew 私有技能容器：`<crew>/skills` 本身。
+   *
+   * skillDirs 的语义是"容器目录"（里面装着若干 skill 子目录，每个含
+   * SKILL.md）——与 config.yaml 的全局 skillDirs（~/.agents/skills 等）
+   * 同一约定。此前误推 skills/ 下的条目（skill 目录本身），provider 按
+   * 容器扫描永远发现不了（对齐 Rust eef05a1）。
+   *
+   * 目录不存在 → 空数组（不回落全局；"目录即全世界"）。
+   */
   private async loadSkillDirs(absDir: string, rt: HostEnv): Promise<string[]> {
     const skillsDir = rt.path.join(absDir, 'skills');
-    const skillDirs: string[] = [];
-
     try {
-      const entries = await rt.fs.readdir(skillsDir);
-      for (const entry of entries) {
-        skillDirs.push(rt.path.join(skillsDir, entry.name));
-      }
+      const st = await rt.fs.stat(skillsDir);
+      if (!st.isDirectory) return [];
     } catch {
-      // skills/ directory doesn't exist — empty array is fine
+      return [];
     }
+    return [skillsDir];
+  }
 
-    return skillDirs;
+  /**
+   * crew 私有 MCP 声明：`<crew>/mcp.json`（单文件，与 agent 目录同一约定，
+   * 内容 `{ "mcpServers": {...} }`）。存在则返回其路径，缺失返回空。
+   */
+  private async loadMcpPaths(absDir: string, rt: HostEnv): Promise<string[]> {
+    const mcp = rt.path.join(absDir, 'mcp.json');
+    try {
+      const st = await rt.fs.stat(mcp);
+      if (!st.isFile) return [];
+    } catch {
+      return [];
+    }
+    return [mcp];
   }
 }
 
@@ -141,8 +167,17 @@ export interface CrewRunnerOptions {
   primaryAgent: string;
   /** Model override from primary agent definition */
   model?: string;
-  /** Skill directories */
+  /**
+   * Skill container directories (crew-private `<crew>/skills` when present,
+   * else empty). Held as container dirs — the provider scans the container,
+   * not its entries (对齐 Rust eef05a1).
+   */
   skillDirs: string[];
+  /**
+   * Crew-private MCP config paths (`<crew>/mcp.json` when present, else
+   * empty). 目录即全世界：不回落 config.yaml 全局 mcpConfigPaths。
+   */
+  mcpPaths: string[];
 }
 
 /**
@@ -190,5 +225,6 @@ export function crewToRunnerOptions(crew: CrewConfig): CrewRunnerOptions {
     primaryAgent: primaryName,
     model: primaryDef?.model,
     skillDirs: [...crew.skillDirs],
+    mcpPaths: [...crew.mcpPaths],
   };
 }
