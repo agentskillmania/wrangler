@@ -45,6 +45,7 @@ import type {
 
 import type { SSEEvent, DaemonConfig } from '../types.js';
 import { truncateStateFile } from '../utils.js';
+import { providersForRunner } from './config-manager.js';
 import { mergeSandboxConfig } from './sandbox-config.js';
 import type { SessionOverview, SessionInfo, SessionStatus } from './session-diagnostics.js';
 import type { RunnerFeatureFlags } from './session-diagnostics.js';
@@ -493,12 +494,17 @@ export class AgentSession {
    */
   static async create(options: AgentSessionOptions, config: DaemonConfig): Promise<AgentSession> {
     const bridge = AgentSession._createBridge();
-    const defaultModel = resolveDefaultModel(config.llm.providers);
+    // Explicit config → registration mapping (R2P-241, mirrors Rust
+    // `providers_for_runner`): model metadata — including the `input` modality
+    // list — is forwarded so the multimodal gate sees the declared
+    // capabilities instead of a hard-coded default.
+    const providers = providersForRunner(config);
+    const defaultModel = resolveDefaultModel(providers);
     const llmModel = options.model ?? defaultModel;
     // 注入的 llmClient（浏览器 FetchLlmProvider）优先；否则要求宿主提供工厂
     const llmClient =
       options.llmClient ??
-      options.llmClientFactory?.(config.llm.providers) ??
+      options.llmClientFactory?.(providers) ??
       (() => {
         throw new Error(
           'AgentSession requires llmClient or llmClientFactory (e.g. (providers) => LLMClient.quickInit({ providers }))'
@@ -611,7 +617,9 @@ export class AgentSession {
     config: DaemonConfig
   ): Promise<AgentSession> {
     const bridge = AgentSession._createBridge();
-    const llmModel = resolveDefaultModel(config.llm.providers);
+    // Explicit config → registration mapping (R2P-241) — same as create().
+    const providers = providersForRunner(config);
+    const llmModel = resolveDefaultModel(providers);
     if (!options.llmClientFactory) {
       throw new Error(
         'AgentSession.resume requires llmClientFactory (e.g. (providers) => LLMClient.quickInit({ providers }))'
@@ -622,7 +630,7 @@ export class AgentSession {
         'AgentSession.resume requires options.runtime — Node host: defaultNodeHostEnv from @agentskillmania/wrangler/host-env/node-host-env'
       );
     }
-    const llmClient = options.llmClientFactory(config.llm.providers);
+    const llmClient = options.llmClientFactory(providers);
     const askHumanHandler = AgentSession._createAskHumanHandler(bridge);
 
     const { runner, state } = await AgentHarness.resume(sessionDir, {

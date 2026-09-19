@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ConfigManager } from '../../src/core/config-manager.js';
+import { ConfigManager, providersForRunner } from '../../src/core/config-manager.js';
 import type { DaemonConfig } from '../../src/types.js';
 import { DEFAULT_CONFIG } from '../../src/types.js';
+import { createLLMClient } from '@agentskillmania/wrangler';
 
 describe('ConfigManager', () => {
   let tempDir: string;
@@ -175,5 +176,84 @@ describe('ConfigManager', () => {
     await manager.init();
 
     expect(() => manager.get()).toThrow('deprecated flat LLM format');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ModelYaml input modality chain (R2P-241, aligned with Rust 9abd9d2)
+// ═══════════════════════════════════════════════════════════════════════════
+describe('providersForRunner input modality chain', () => {
+  it('forwards a declared input list from config.yaml into the registration constraint', async () => {
+    const cfg: DaemonConfig = {
+      llm: {
+        providers: [
+          {
+            name: 'openai',
+            apiKey: 'sk-test',
+            models: [
+              { modelId: 'vision-test-model', contextWindow: 200000, input: ['text', 'image'] },
+            ],
+          },
+        ],
+      },
+      server: { port: 3100, host: 'localhost' },
+    };
+
+    const providers = providersForRunner(cfg);
+    expect(providers[0]!.models[0]!.input).toEqual(['text', 'image']);
+
+    // End-to-end through the real llm-client registration: the multimodal
+    // gate reads this constraint, so a declared image modality must be
+    // visible via getModelCapabilities (no LLM call, no network).
+    const client = createLLMClient(providers);
+    expect(client.getModelCapabilities('vision-test-model').input).toEqual(['text', 'image']);
+  });
+
+  it('leaves input undefined when not declared (no hard-coded text-only)', () => {
+    const cfg: DaemonConfig = {
+      llm: {
+        providers: [
+          { name: 'openai', apiKey: 'sk-test', models: [{ modelId: 'text-test-model' }] },
+        ],
+      },
+      server: { port: 3100, host: 'localhost' },
+    };
+
+    const providers = providersForRunner(cfg);
+    // Absent stays undefined (adapter default ['text']) — mirrors Rust's
+    // `input: m.input.clone()` after 9abd9d2 (was hard-coded `None`).
+    expect(providers[0]!.models[0]!.input).toBeUndefined();
+
+    const client = createLLMClient(providers);
+    expect(client.getModelCapabilities('text-test-model').input).toEqual(['text']);
+  });
+
+  it('reads a declared input list through the ConfigManager (YAML → providers)', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'daemon-config-input-'));
+    try {
+      const configPath = join(tempDir, 'config.yaml');
+      await writeFile(
+        configPath,
+        'llm:\n' +
+          '  providers:\n' +
+          '    - name: openai\n' +
+          '      apiKey: sk-test\n' +
+          '      models:\n' +
+          '        - modelId: vision-test-model\n' +
+          '          contextWindow: 200000\n' +
+          '          input:\n' +
+          '            - text\n' +
+          '            - image\n'
+      );
+
+      const manager = new ConfigManager(configPath);
+      await manager.init();
+
+      const providers = providersForRunner(manager.get());
+      expect(providers[0]!.models[0]!.contextWindow).toBe(200000);
+      expect(providers[0]!.models[0]!.input).toEqual(['text', 'image']);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 });

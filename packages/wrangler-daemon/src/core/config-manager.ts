@@ -2,9 +2,61 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { Settings } from '@agentskillmania/settings-yaml';
+import type { LLMProviderEntry } from '@agentskillmania/wrangler';
 import { parse as parseYaml } from 'yaml';
 
 import type { DaemonConfig } from '../types.js';
+
+/**
+ * config.yaml model entry (mirrors Rust `ModelYaml`, config.rs).
+ *
+ * Structurally identical to the llm-client `ModelEntry` the daemon forwards;
+ * declared here so the config → registration mapping is explicit and
+ * documented rather than relying on the index signature. `input` is the
+ * multimodal declaration (e.g. `['text', 'image']`), keyed to match
+ * llm-client's `ModelMeta.input`.
+ */
+export interface ModelYaml {
+  modelId: string;
+  maxConcurrency?: number;
+  contextWindow?: number;
+  maxTokens?: number;
+  reasoning?: boolean;
+  /**
+   * Supported input modalities (e.g. `[text, image]`); absent = text-only
+   * model (the multimodal gate rejects image requests).
+   */
+  input?: string[];
+}
+
+/**
+ * Map daemon config → runner provider entries (mirrors Rust
+ * `providers_for_runner`, config.rs).
+ *
+ * Model metadata is forwarded verbatim into the registration constraint —
+ * notably `input`: before Rust 9abd9d2 the daemon hard-coded `input: None`,
+ * so config.yaml could not declare a multimodal model and the gate rejected
+ * image requests even for vision models. The TS config type already carries
+ * the field through, but this explicit seam pins the pass-through (and its
+ * absence semantics) under test: an undeclared `input` stays `undefined`
+ * (the adapter then defaults to `['text']`) — never a hard-coded value.
+ */
+export function providersForRunner(cfg: DaemonConfig): LLMProviderEntry[] {
+  return cfg.llm.providers.map((provider) => ({
+    name: provider.name,
+    baseUrl: provider.baseUrl,
+    apiKey: provider.apiKey,
+    maxConcurrency: provider.maxConcurrency,
+    models: provider.models.map((model: ModelYaml) => ({
+      modelId: model.modelId,
+      maxConcurrency: model.maxConcurrency,
+      contextWindow: model.contextWindow,
+      maxTokens: model.maxTokens,
+      reasoning: model.reasoning,
+      input: model.input,
+    })),
+  }));
+}
 
 /** Default config as YAML string for settings-yaml initialization */
 const DEFAULT_YAML = `llm:
