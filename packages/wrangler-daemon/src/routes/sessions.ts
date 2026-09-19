@@ -98,8 +98,10 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
     if (session) {
       const blockers: string[] = [];
       if (session.busy) blockers.push('a turn is in flight');
-      if (session.hasActiveChildren()) blockers.push('sub-task(s) still running');
-      if (session.hasPendingDeliveries()) blockers.push('pending delivery(ies) not yet consumed');
+      // 可选链：旧宿主桩（测试的 fake session / 迁移期的窄接口注入）没有
+      // 这两个查询——缺席即视为「无此臂」，不能因此把 DELETE 打成 500。
+      if (session.hasActiveChildren?.()) blockers.push('sub-task(s) still running');
+      if (session.hasPendingDeliveries?.()) blockers.push('pending delivery(ies) not yet consumed');
       if (blockers.length > 0) {
         reply.code(409);
         return { error: 'Session is active; stop it before deleting', blockedBy: blockers };

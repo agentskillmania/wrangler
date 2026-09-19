@@ -189,6 +189,48 @@ describe('Unit: Session Routes', () => {
     expect(info).toBeNull();
   });
 
+  // Test 8b: DELETE quiet-blockers gate (P2-c 评审 P1) — 有在飞轮/子女/邮箱
+  // 时拒绝强删（对齐 Rust delete_session_route 的 quiet_blockers），逐一列明
+  it('DELETE refuses while a turn / children / mailbox pin the session (blockedBy detail)', async () => {
+    const wsPath = join(tempDir, 'workspace');
+    const busy = {
+      sessionId: 'pinned-busy',
+      busy: true,
+      stop: vi.fn(),
+      handleMessage: async function* () {},
+      hasActiveChildren: () => false,
+      hasPendingDeliveries: () => false,
+    };
+    const children = {
+      ...busy,
+      sessionId: 'pinned-children',
+      busy: false,
+      hasActiveChildren: () => true,
+    };
+    const mailbox = {
+      ...busy,
+      sessionId: 'pinned-mailbox',
+      busy: false,
+      hasPendingDeliveries: () => true,
+    };
+    for (const [id, fake] of [
+      ['pinned-busy', busy],
+      ['pinned-children', children],
+      ['pinned-mailbox', mailbox],
+    ] as const) {
+      sessionManager.registerSession(id, wsPath);
+      await sessionManager.getSessionStore(wsPath).createWithId(id, 'test-agent');
+      sessionManager.setAgentSession(id, fake as never);
+      const res = await fetch(`${getUrl()}/api/sessions/${id}`, { method: 'DELETE' });
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error).toBe('Session is active; stop it before deleting');
+      expect(body.blockedBy.length).toBeGreaterThanOrEqual(1);
+      // 盘目录未被删（拒绝是整体性的）。
+      expect(await sessionManager.getInfo(id)).not.toBeNull();
+    }
+  });
+
   // Test 9: GET /api/sessions filters by workspacePath
   it('GET /api/sessions filters by workspacePath', async () => {
     const ws1 = join(tempDir, 'ws-filter-1');
