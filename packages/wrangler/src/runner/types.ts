@@ -330,4 +330,14 @@ export interface ResumeOptions {
    * re-reads config.yaml fresh on every resume).
    */
   compression?: CompressionConfig | false;
+  /**
+   * Host-provided MCP loader (Node host: loadMCPTools from
+   * '@agentskillmania/wrangler/tools/mcp'). The snapshot's rc.mcpConfigPaths
+   * is always restored — a non-empty snapshot without a loader is rejected
+   * by create(), so Node hosts resuming sessions that had MCP tools must
+   * always pass one (R2P-161b②: cold resume of MCP sessions 500'ed before).
+   */
+  mcpLoader?: (
+    paths: string[]
+  ) => Promise<import('@agentskillmania/colts').Tool<import('zod').ZodTypeAny>[]>;
 }

@@ -743,6 +743,9 @@ export class AgentHarness {
       skills: { dirs: rc.skillDirs },
       tools: {
         mcpConfigPaths: rc.mcpConfigPaths,
+        // 宿主 MCP 加载器必须随会话恢复——否则带 MCP 工具的会话冷恢复直接
+        // 500（R2P-161b②）：非空快照无 loader 会被 create() 拒绝。
+        mcpLoader: options.mcpLoader,
         builtinFilter: rc.builtinTools as Record<string, boolean> | undefined,
         // HITL 桥接必须随会话恢复——否则恢复后的会话静默失去 ask_human 工具
         askHumanHandler: options.askHumanHandler,

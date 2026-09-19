@@ -96,6 +96,8 @@ export interface AgentSessionResumeOptions {
    * config on every resume). Wins over the meta snapshot's enabled flag.
    */
   compression?: AgentSessionOptions['compression'];
+  /** Host MCP loader（Node 宿主职责，镜像 create 路径——R2P-161b②：带 MCP 会话冷恢复 500 的根修） */
+  mcpLoader?: NonNullable<AgentSessionOptions['tools']>['mcpLoader'];
   /** quickInit 创建器（Node 宿主传 wrangler createLLMClient）——daemon core 不捆绑内置 LLM */
   llmClientFactory?: (providers: LLMProviderEntry[]) => ILLMProvider;
 }
@@ -639,6 +641,7 @@ export class AgentSession {
       askHumanHandler,
       subAgents: options.subAgents,
       sandbox: options.sandbox,
+      mcpLoader: options.mcpLoader,
       // R2P-239：config.yaml 现读的压缩策略随 resume 注入（宿主提供的
       // 优先于 meta 快照——Rust merge_opt_opt 同序）。
       compression: toRunnerCompression(options.compression),

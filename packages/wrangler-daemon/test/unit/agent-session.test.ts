@@ -2480,6 +2480,26 @@ describe('AgentSession', () => {
       );
     });
 
+    it('forwards the host mcpLoader to AgentHarness.resume (R2P-161b② — MCP cold resume)', async () => {
+      const mcpLoader = vi.fn();
+      await AgentSession.resume(
+        '/tmp/mcp-session',
+        {
+          sessionId: 'mcp-session',
+          workspacePath: '/tmp/workspace',
+          agentName: 'mcp-agent',
+          runtime: defaultNodeHostEnv,
+          mcpLoader,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+      expect(mockAgentHarnessResume).toHaveBeenCalledWith(
+        '/tmp/mcp-session',
+        expect.objectContaining({ mcpLoader })
+      );
+    });
+
     it('re-throws errors from AgentHarness.resume()', async () => {
       mockAgentHarnessResume.mockRejectedValueOnce(new Error('Session not found'));
 

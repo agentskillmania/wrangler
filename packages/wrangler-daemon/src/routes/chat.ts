@@ -1271,6 +1271,9 @@ async function assembleResumeSession(
         info.workspacePath
       ),
       llmClientFactory: createLLMClient,
+      // R2P-161b②：宿主 MCP 加载器随 resume 注入——非空 rc.mcpConfigPaths
+      // 无 loader 会被引擎 create() 拒绝（此前带 MCP 会话冷恢复 500）。
+      mcpLoader: (paths) => loadMCPTools({ configPaths: paths }),
     },
     config
   );
