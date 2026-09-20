@@ -5,6 +5,7 @@
  */
 
 const BASE = location.origin;
+export { BASE };
 
 /**
  * Generic fetch wrapper with JSON/text auto-detection.

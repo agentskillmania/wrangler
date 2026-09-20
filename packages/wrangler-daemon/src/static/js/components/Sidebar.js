@@ -11,6 +11,7 @@ export function Sidebar(props) {
   var _sGr = useState({
       resources: true,
       conversation: true,
+      observe: true,
       devtools: true,
     }),
     groups = _sGr[0],
@@ -41,6 +42,15 @@ export function Sidebar(props) {
         { id: 'chat', label: 'Chat' },
         { id: 'crew-chat', label: 'Crew Chat' },
         { id: 'sessions', label: 'Sessions' },
+      ],
+    },
+    {
+      key: 'observe',
+      label: 'Observe',
+      items: [
+        { id: 'runlab', label: 'RunLab' },
+        { id: 'crewlab', label: 'CrewLab' },
+        { id: 'state', label: 'State' },
       ],
     },
     {

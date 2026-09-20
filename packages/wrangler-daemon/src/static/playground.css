@@ -1508,3 +1508,188 @@ body {
   margin-bottom: 8px;
   text-align: center;
 }
+
+
+/* ── RunLab/CrewLab/StatePage 移植样式（照抄 Rust playground.css，变量名映射到本表）── */
+.console-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.console-form .field { flex: 1; min-width: 160px; margin-bottom: 0; }
+.console-form + .console-form, .console-form + .field, .field + .console-form { margin-top: 10px; }
+.runlab-layout { display: flex; gap: 14px; align-items: flex-start; }
+.runlab-config { width: 330px; flex-shrink: 0; }
+.runlab-config .panel { max-height: calc(100vh - 160px); overflow-y: auto; }
+.runlab-main { flex: 1; min-width: 0; }
+.view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.view-toggle button {
+  background: var(--bg-tertiary);
+  border: none;
+  color: var(--text-secondary);
+  padding: 4px 12px;
+  font-size: 11.5px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.view-toggle button.active { background: var(--bg-hover); color: var(--accent); }
+.phase-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  margin-bottom: 10px;
+}
+.phase-chip {
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+.phase-chip.current { color: var(--accent); background: rgba(108, 178, 255, 0.12); }
+.phase-arrow { color: var(--text-muted); }
+.event-stream {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--bg-primary);
+}
+.ev-row { border-bottom: 1px solid var(--border); padding: 4px 10px; cursor: pointer; }
+.ev-row:hover { background: var(--bg-tertiary); }
+.ev-row.open { background: var(--bg-tertiary); }
+.ev-head { display: flex; gap: 8px; align-items: baseline; }
+.ev-name { font-weight: 700; flex-shrink: 0; }
+.ev-time { color: var(--text-muted); font-size: 10px; flex-shrink: 0; }
+.ev-summary {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.ev-detail { margin-top: 6px; max-height: 300px; overflow-y: auto; border-top: 1px dashed var(--border); padding-top: 6px; }
+.ev-token .ev-name { color: #4bd07a; }
+.ev-thinking .ev-name { color: #b78cf2; }
+.ev-tool .ev-name { color: #e3b341; }
+.ev-step .ev-name { color: #6cb2ff; }
+.ev-llm .ev-name { color: #d7dee9; }
+.ev-error .ev-name, .ev-abort .ev-name { color: #ff6b5e; }
+.ev-session .ev-name { color: #6cb2ff; }
+.ev-human .ev-name { color: #e3795e; }
+.ev-subagent .ev-name { color: #56d4c8; }
+.ev-todo .ev-name { color: #e3b341; }
+.ev-phase .ev-name { color: #8b96a8; }
+.ev-done .ev-name { color: #4bd07a; }
+.event-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+.event-filter .tag { cursor: pointer; user-select: none; }
+.event-filter .tag.on { color: var(--accent); border-color: var(--accent-hover); }
+.chat-view { display: flex; flex-direction: column; gap: 8px; }
+.msg {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  max-width: 92%;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12.5px;
+}
+.msg-user { align-self: flex-end; background: rgba(108, 178, 255, 0.08); border-color: rgba(108, 178, 255, 0.25); }
+.msg-assistant { align-self: flex-start; background: var(--bg-secondary); }
+.msg-thinking { align-self: flex-start; background: rgba(183, 140, 242, 0.06); border-color: rgba(183, 140, 242, 0.25); color: var(--text-secondary); font-style: italic; font-size: 12px; }
+.msg-tool {
+  align-self: flex-start;
+  background: rgba(227, 179, 65, 0.05);
+  border-color: rgba(227, 179, 65, 0.2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  max-width: 100%;
+}
+.msg-error { align-self: stretch; background: rgba(255, 107, 94, 0.08); border-color: rgba(255, 107, 94, 0.35); color: var(--error); }
+.msg-sub { align-self: flex-start; background: rgba(86, 212, 200, 0.05); border-color: rgba(86, 212, 200, 0.25); font-size: 12px; }
+.msg-meta { color: var(--text-muted); font-size: 10.5px; font-style: normal; font-family: var(--font-mono); margin-bottom: 4px; }
+.msg-body { font-family: inherit; white-space: pre-wrap; }
+.msg-tool .msg-body { font-family: var(--font-mono); font-size: 11px; max-height: 220px; overflow-y: auto; }
+.hitl-card {
+  align-self: stretch;
+  border: 1px solid rgba(227, 121, 94, 0.4);
+  background: rgba(227, 121, 94, 0.06);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.hitl-q { margin: 6px 0; }
+.hitl-q-label { color: var(--text-secondary); font-size: 11.5px; margin-bottom: 4px; }
+.chat-input-row { display: flex; gap: 8px; margin-top: 10px; align-items: flex-start; }
+.chat-input-row textarea { flex: 1; min-height: 52px; }
+.run-status-line {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.run-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+.run-dot.running { background: var(--success); animation: pulse 1.2s infinite; }
+.run-dot.waiting { background: var(--warning); animation: pulse 1.2s infinite; }
+.run-dot.error { background: var(--error); }
+.state-layout { display: flex; gap: 14px; align-items: flex-start; }
+.state-main { flex: 1; min-width: 0; }
+.state-side { width: 360px; flex-shrink: 0; }
+  .console-nav, .runlab-config, .state-side { width: 100%; }
+.crew-structure { text-align: center; }
+.crew-node {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  background: var(--bg-tertiary);
+}
+.crew-node-role { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+.crew-node-name { font-weight: 700; font-size: 13px; }
+.crew-structure-links { color: var(--text-muted); font-size: 11px; margin: 4px 0; }
+.crew-structure-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.handoff { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 8px 0 12px; font-family: var(--font-mono); font-size: 11px; }
+.handoff-chip { padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); }
+.handoff-arrow { color: var(--text-muted); }
+.ho-primary { color: var(--accent); border-color: var(--accent-hover); }
+.ho-worker { color: var(--success); border-color: rgba(75, 208, 122, 0.4); }
+.ho-user { color: var(#b78cf2); border-color: rgba(183, 140, 242, 0.4); }
+.ho-hitl { color: var(--warning); }
+.crew-lanes { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; }
+.crew-lane { flex: 1; min-width: 220px; }
+.crew-lane.wide { flex: 1.4; min-width: 300px; }
+.crew-lane-title {
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+}
+.lane-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  background: var(--bg-tertiary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.lane-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.lane-card-body { font-size: 11.5px; margin-top: 2px; max-height: 140px; overflow-y: auto; }
+.lc-user { border-color: rgba(183, 140, 242, 0.35); }
+.lc-answer { border-color: rgba(108, 178, 255, 0.3); }
+.lc-think { color: var(--text-secondary); font-size: 11.5px; }
+.lc-delegate { border-color: rgba(75, 208, 122, 0.35); font-family: var(--font-mono); font-size: 11.5px; }
+.lc-tool { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-secondary); }
+.lc-hitl { border-color: rgba(227, 179, 65, 0.4); }
+.lc-error { border-color: rgba(255, 107, 94, 0.45); color: var(--error); }
+.lc-worker.running { border-color: var(--success); }
+.lane-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }

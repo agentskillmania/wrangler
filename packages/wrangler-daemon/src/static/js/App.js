@@ -9,6 +9,8 @@ import { SkillsPage } from './pages/SkillsPage.js';
 import { CrewsPage } from './pages/CrewsPage.js';
 import { SessionsPage } from './pages/SessionsPage.js';
 import { AgentStatePage } from './pages/AgentStatePage.js';
+import { RunLabPage } from './pages/RunLabPage.js';
+import { CrewLabPage } from './pages/CrewLabPage.js';
 import { FilesPage } from './pages/FilesPage.js';
 import { SpecsPage } from './pages/SpecsPage.js';
 import { PlansPage } from './pages/PlansPage.js';
@@ -71,6 +73,10 @@ function App() {
         return html`<${SessionsPage} />`;
       case 'state':
         return html`<${AgentStatePage} />`;
+      case 'runlab':
+        return html`<${RunLabPage} />`;
+      case 'crewlab':
+        return html`<${CrewLabPage} />`;
       case 'files':
         return html`<${FilesPage} />`;
       case 'crews':
