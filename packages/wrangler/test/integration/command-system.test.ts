@@ -87,8 +87,18 @@ describe('Command System Integration Tests', () => {
 
       expect(result.type).toBe('stopped');
       expect(result.data).toBe('Session cleared.');
+      // fromCommand 标记真传播（R2P-109）：命令拦截的 stopped 带标记。
+      expect((result as { fromCommand?: true }).fromCommand).toBe(true);
       expect(result.totalSteps).toBe(1);
-      expect(finalState.context.messages).toHaveLength(0);
+      // R2P-238 收据落盘：/clear 的答复作为 assistant 行落在已清空的数组上
+      //（intg 当时顺延没随契约更新——单测 command-middleware 已钉 length 1）。
+      expect(finalState.context.messages).toHaveLength(1);
+      expect((finalState.context.messages[0] as { role: string; content: string }).role).toBe(
+        'assistant'
+      );
+      expect((finalState.context.messages[0] as { role: string; content: string }).content).toBe(
+        'Session cleared.'
+      );
     },
     120000
   );
