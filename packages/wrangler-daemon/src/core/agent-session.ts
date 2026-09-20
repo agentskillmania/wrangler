@@ -1167,6 +1167,44 @@ export class AgentSession {
   }
 
   /**
+   * Background variant of continueRun（P3 Task 9 respond 全 ack 化）：
+   * synchronously opens the turn (busy check + turnSeq, zero-await atomic —
+   * same contract as sendMessageInBackground), returns the turnSeq the caller
+   * waits for on the events stream, and drives the continuation with no
+   * request-scoped consumer — the session channel is the only frame sink.
+   * HITL leading frames (human-input-resolved / run-resumed) are pushed
+   * before the run frames. Busy → 409 result instead of a thrown error.
+   */
+  continueRunInBackground(
+    hitl?: { requestId?: string },
+    options?: { thinkingEnabled?: boolean; model?: string }
+  ):
+    | { ok: true; turnSeq: number; completion: Promise<{ hadError: boolean }> }
+    | { ok: false; code: 409; error: string } {
+    if (this._busy) {
+      return { ok: false, code: 409, error: 'Session is busy processing a message' };
+    }
+    const turnSeq = this.turnSeq + 1;
+    if (hitl?.requestId !== undefined) {
+      this.pushEvent({ event: 'human-input-resolved', data: { requestId: hitl.requestId } });
+      this.pushEvent({ event: 'run-resumed', data: { sessionId: this.sessionId } });
+    }
+    const iterator = this.continueRun(options)[Symbol.asyncIterator]();
+    const completion = (async (): Promise<{ hadError: boolean }> => {
+      try {
+        for (;;) {
+          const r = await iterator.next();
+          if (r.done) return { hadError: false };
+        }
+      } catch (err) {
+        this.pushEvent({ event: 'error', data: { message: `drive failed: ${String(err)}` } });
+        return { hadError: true };
+      }
+    })();
+    return { ok: true, turnSeq, completion };
+  }
+
+  /**
    * Shared turn machinery for handleMessage (seed = append user message) and
    * continueRun (seed = identity): busy flag, abort controller, event-queue
    * lifecycle, runner event wiring, and the runner.run() drive loop.

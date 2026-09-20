@@ -53,6 +53,7 @@ const mockSession = {
   busy: false,
   handleMessage: mockHandleMessage,
   continueRun: vi.fn(),
+  continueRunInBackground: vi.fn(),
   respondViaState: vi.fn(),
   stop: vi.fn(),
   respondHumanInput: vi.fn(),
@@ -804,14 +805,15 @@ describe('Chat API', () => {
       expect(body.error).toContain("question 'q1'");
     });
 
-    it('tier 2 — warm state emptied → respond response becomes the continuation SSE stream', async () => {
+    it('tier 2 — warm state emptied → respond returns ack; continuation runs in background (P3 Task 9 全 ack 化)', async () => {
       const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
       sm.setAgentSession('existing-session', mockSession as never);
       mockSession.respondHumanInput.mockReturnValue(false);
       mockSession.respondViaState.mockResolvedValue({ status: 'answered', remaining: [] });
-      mockSession.continueRun.mockImplementation(async function* () {
-        yield { event: 'token', data: { delta: 'thanks' } };
-        yield { event: 'done', data: { type: 'success' } };
+      mockSession.continueRunInBackground.mockReturnValue({
+        ok: true,
+        turnSeq: 2,
+        completion: Promise.resolve({ hadError: false }),
       });
 
       const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
@@ -819,20 +821,14 @@ describe('Chat API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId: 'q1', response: { q1: 'A' } }),
       });
-      expect(res.headers.get('content-type')).toBe('text/event-stream');
-      const events = parseSSE(await res.text());
-      // Pinned wire sequence: resolved → run-resumed → continuation → done.
-      expect(events[0]).toEqual({
-        event: 'human-input-resolved',
-        data: { requestId: 'q1', response: { q1: 'A' } },
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      await expect(res.json()).resolves.toEqual({
+        ok: true,
+        sessionId: 'existing-session',
+        turnSeq: 2,
       });
-      expect(events[1]).toEqual({ event: 'run-resumed', data: {} });
-      expect(events.map((e) => e.event)).toContain('token');
-      expect(events.at(-1)!.event).toBe('done');
-      // Continuation frames also reach the cockpit/history channel.
-      expect(mockSession.emitCockpitEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ event: 'run-resumed' })
-      );
+      // 续跑是后台驱动（经会话事件通道到达 events 常驻流），leading 帧由此传入。
+      expect(mockSession.continueRunInBackground).toHaveBeenCalledWith({ requestId: 'q1' });
     });
 
     it('tier 3 — cold recovery from persisted pendingInterrupts: one answer of two stays waiting', async () => {
@@ -920,9 +916,10 @@ describe('Chat API', () => {
         },
       });
       mockAgentSessionResume.mockResolvedValue(mockSession);
-      mockSession.continueRun.mockImplementation(async function* () {
-        yield { event: 'token', data: { delta: 'resumed' } };
-        yield { event: 'done', data: { type: 'success' } };
+      mockSession.continueRunInBackground.mockReturnValue({
+        ok: true,
+        turnSeq: 1,
+        completion: Promise.resolve({ hadError: false }),
       });
 
       const res = await fetch(`${getUrl()}/api/chat/existing-session/respond`, {
@@ -933,14 +930,13 @@ describe('Chat API', () => {
           response: { q1: { type: 'direct', value: 'A' } },
         }),
       });
-      expect(res.headers.get('content-type')).toBe('text/event-stream');
-      const events = parseSSE(await res.text());
-      expect(events[0]).toEqual({
-        event: 'human-input-resolved',
-        data: { requestId: 'call-1', response: { q1: { type: 'direct', value: 'A' } } },
+      // 全 ack 化（P3 Task 9）：不再劫持为续跑 SSE——ack 同 send 形状，
+      // 续跑后台驱动经 events 常驻流。
+      await expect(res.json()).resolves.toEqual({
+        ok: true,
+        sessionId: 'existing-session',
+        turnSeq: 1,
       });
-      expect(events[1]).toEqual({ event: 'run-resumed', data: {} });
-      expect(events.at(-1)!.event).toBe('done');
 
       // Rebuild went through AgentSession.resume with the resolved sessionDir
       // and the rebuilt session is registered as the active one.

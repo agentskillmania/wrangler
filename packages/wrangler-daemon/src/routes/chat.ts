@@ -591,12 +591,15 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
               interrupts: humanRequestPayloads(outcome.remaining),
             };
           }
-          return streamRespondContinuation(reply, agentSession, {
-            requestId: body.requestId,
-            response: body.response,
-            sessionId,
-            sessionManager: sessionManager(),
-          });
+          // P3 Task 9（对齐 Rust HEAD 的 respond 全 ack 化）：清空后不再
+          // 劫持本响应为续跑 SSE——续跑改为后台驱动，帧经会话事件通道到达
+          // events 常驻流；ack 携带要等的 turnSeq（与 send ack 同形）。
+          const ack = agentSession.continueRunInBackground({ requestId: body.requestId });
+          if (!ack.ok) {
+            reply.code(409);
+            return busyConflict('a run is still finishing on this session; retry shortly');
+          }
+          return { ok: true, sessionId, turnSeq: ack.turnSeq };
         }
       }
       return { error: 'Request not found or already answered' };
@@ -677,12 +680,13 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         sessionManager().cancelAgentSessionReservation(sessionId);
       }
     }
-    return streamRespondContinuation(reply, rebuilt, {
-      requestId: body.requestId,
-      response: body.response,
-      sessionId,
-      sessionManager: sessionManager(),
-    });
+    // 全 ack 化（同上）：冷重建后的续跑也走后台驱动 + JSON ack。
+    const ack = rebuilt.continueRunInBackground({ requestId: body.requestId });
+    if (!ack.ok) {
+      reply.code(409);
+      return busyConflict('a run is still finishing on this session; retry shortly');
+    }
+    return { ok: true, sessionId, turnSeq: ack.turnSeq };
   });
 
   /**
@@ -1329,67 +1333,4 @@ async function assembleResumeSession(
     },
     config
   );
-}
-
-/**
- * Stream the post-respond continuation as THIS response (R2P-165②, aligned
- * with Rust 9995668's "响应即续跑 SSE 流"): the waiting run's original chat
- * stream already closed (waiting-human is a run terminal), so the resolved
- * acknowledgement and the resumed turn both live on the respond response.
- *
- * Wire sequence (matches skill-ui's pinned reducer contract):
- *   human-input-resolved → run-resumed → continuation frames → done.
- * CON5 disconnect handling mirrors streamAgentSession.
- */
-async function streamRespondContinuation(
-  reply: FastifyReply,
-  agentSession: AgentSession,
-  opts: {
-    requestId: string;
-    response: unknown;
-    sessionId: string;
-    sessionManager: DecoratedFastifyInstance['sessionManager'];
-  }
-): Promise<void> {
-  reply.hijack();
-  reply.raw.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-  });
-
-  let clientGone = false;
-  let settled = false;
-  const onDisconnect = () => {
-    if (!settled && !clientGone) {
-      clientGone = true;
-      agentSession.stop();
-    }
-  };
-  reply.raw.on('close', onDisconnect);
-
-  const resolvedData = { requestId: opts.requestId, response: opts.response };
-  writeSSE(reply, 'human-input-resolved', resolvedData);
-  agentSession.emitCockpitEvent({ event: 'human-input-resolved', data: resolvedData });
-  // Host-synthesized latch reopener: the waiting done closed the turn on the
-  // client — continuation tokens must not be dropped as out-of-turn noise.
-  writeSSE(reply, 'run-resumed', {});
-  agentSession.emitCockpitEvent({ event: 'run-resumed', data: {} });
-
-  opts.sessionManager.updateStatus(opts.sessionId, 'running');
-  try {
-    for await (const sse of agentSession.continueRun()) {
-      if (clientGone) break;
-      writeSSE(reply, sse.event, sse.data);
-    }
-    if (!clientGone) opts.sessionManager.updateStatus(opts.sessionId, 'idle');
-  } catch {
-    if (!clientGone) {
-      writeSSE(reply, 'error', { message: 'Internal server error' });
-      opts.sessionManager.updateStatus(opts.sessionId, 'error');
-    }
-  } finally {
-    settled = true;
-    if (!clientGone) reply.raw.end();
-  }
 }
