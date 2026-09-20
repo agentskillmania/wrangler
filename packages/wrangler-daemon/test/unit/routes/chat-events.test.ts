@@ -798,10 +798,11 @@ describe('POST /api/chat/:sessionId ack + persistent events (R2P-153 dual-track)
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: 'hi' }),
     });
-    // 旧轨全形状：SSE 响应 + Deprecation 提示头。
+    // 旧轨全形状：SSE 响应 + Deprecation 提示头 + Sunset 移除时间表（RFC 8594）。
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('text/event-stream');
     expect(res.headers.get('deprecation')).toBe('true');
+    expect(res.headers.get('sunset')).toBe('Sun, 01 Mar 2026 00:00:00 GMT');
 
     const gen = sseFrames(res);
     const frames = await collectUntil(gen, (f) => f.event === 'done');

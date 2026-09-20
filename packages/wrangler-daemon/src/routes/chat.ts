@@ -968,6 +968,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       sessionManager().updateStatus(sessionId, 'running');
       await streamAgentSession(reply, agentSession, body.message, streamOpts, {
         Deprecation: 'true',
+        // RFC 8594 移除时间表：旧轨在 wrangler 0.4 移除。
+        Sunset: 'Sun, 01 Mar 2026 00:00:00 GMT',
       });
       return;
     }
