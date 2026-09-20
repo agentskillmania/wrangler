@@ -205,7 +205,12 @@ export class AgentHarness {
    * 未知时返回 undefined——此时收到 `file:` 引用会在 wire 物化时报错。
    */
   resolveAttachmentDir(sessionId?: string): string | undefined {
-    return this.sessionStoreRef?.getSessionDir(sessionId);
+    if (!this.sessionStoreRef) return undefined;
+    // 守卫：目录绑定 store 不接受 sessionId（resume 路径 AgentSession 的
+    // 外层 store 与 harness 内层 store 绑定形态可能不一致——外层 workspace
+    // 态/内层 dir-bound 时，绑定的目录本身就是锚，忽略传入 id）。
+    if (this.sessionStoreRef.isDirBound) return this.sessionStoreRef.getSessionDir(undefined);
+    return sessionId ? this.sessionStoreRef.getSessionDir(sessionId) : undefined;
   }
 
   /**

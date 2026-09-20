@@ -1,10 +1,12 @@
 /**
- * US-C10: Agent State Monitoring — integration tests.
+ * US-C10: 会话诊断快照 — integration tests（原 agent-state SSE 流退役，
+ * 迁移到 GET /api/chat/:sessionId 一次性 JSON——对齐 Rust 65732f3 的
+ * chat_diagnostics）。
  *
- * As a developer, I want to monitor an agent's runtime state via SSE
+ * As a developer, I want to inspect a session's state snapshot
  * so that I can see status, model, tokens in real-time.
  *
- * Route: src/routes/agent-state.ts (agentStateRoutes)
+ * Route: src/routes/chat.ts（GET /api/chat/:sessionId）
  * Decorations: sessionManager (SessionManager)
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -15,9 +17,9 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { SessionStore } from '@agentskillmania/wrangler';
 import { defaultNodeHostEnv } from '@agentskillmania/wrangler/host-env/node-host-env';
 import { SessionManager } from '../../src/core/session-manager.js';
-import { agentStateRoutes } from '../../src/routes/agent-state.js';
+import { chatRoutes } from '../../src/routes/chat.js';
 
-describe('US-C10: Agent State Monitoring', () => {
+describe('US-C10: Agent State Monitoring（GET /api/chat/:id 诊断快照）', () => {
   let fastify: FastifyInstance;
   let tempDir: string;
   let sessionsDir: string;
@@ -30,7 +32,7 @@ describe('US-C10: Agent State Monitoring', () => {
 
     fastify = Fastify();
     fastify.decorate('sessionManager', sessionManager);
-    fastify.register(agentStateRoutes);
+    fastify.register(chatRoutes);
     await fastify.listen({ port: 0, host: '127.0.0.1' });
   });
 
@@ -55,7 +57,7 @@ describe('US-C10: Agent State Monitoring', () => {
     const store = new SessionStore(sessionsDir, workspacePath, defaultNodeHostEnv);
     await store.createWithId(sessionId, agentName);
     // createWithId doesn't accept model — persist it via updateMeta so the
-    // degraded SSE path can surface it in session.overview.model.
+    // degraded snapshot path can surface it in session.overview.model.
     if (model) {
       await store.updateMeta(sessionId, {
         runnerConfig: { model },
@@ -64,61 +66,36 @@ describe('US-C10: Agent State Monitoring', () => {
     manager.registerSession(sessionId, workspacePath);
   }
 
-  /** Parse the first data payload from an SSE response */
-  async function readFirstPayload(res: Response): Promise<Record<string, unknown>> {
-    const text = await readFirstChunk(res);
-    const dataLine = text.split('\n').find((line) => line.startsWith('data: '));
-    if (!dataLine) throw new Error(`No data line in SSE: ${text}`);
-    return JSON.parse(dataLine.slice(6));
-  }
-
-  /** Read first SSE chunk from a response stream */
-  async function readFirstChunk(res: Response): Promise<string> {
-    const reader = res.body!.getReader();
-    const { value } = await reader.read();
-    await reader.cancel();
-    return new TextDecoder().decode(value);
+  async function getDiag(sessionId: string): Promise<Record<string, unknown>> {
+    const res = await fetch(`${getUrl()}/api/chat/${sessionId}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    return (await res.json()) as Record<string, unknown>;
   }
 
   /**
-   * AC1: GET /api/agent/:sessionId/state returns 404 for unknown session.
+   * AC1: 404 for a session that is neither warm nor on disk.
    */
   it('returns 404 for unknown session', async () => {
-    const res = await fetch(`${getUrl()}/api/agent/nonexistent-session/state`);
+    const res = await fetch(`${getUrl()}/api/chat/nonexistent-session`);
     expect(res.status).toBe(404);
-
     const body = await res.json();
     expect(body.error).toBe('Session not found');
   });
 
   /**
-   * AC2: Returns SSE stream for valid session with agent-diagnostics events.
+   * AC3: Snapshot includes runner/agent/llm/session sections.
    */
-  it('returns SSE stream for valid session with agent-diagnostics events', async () => {
-    await createTestSession(join(tempDir, 'ws'), 'stream-id', 'stream-agent');
-
-    const res = await fetch(`${getUrl()}/api/agent/stream-id/state`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/event-stream');
-
-    const text = await readFirstChunk(res);
-    expect(text).toContain('event: agent-diagnostics');
-  });
-
-  /**
-   * AC3: Initial state snapshot includes runner/agent/llm/session sections.
-   *      session.overview carries agentName, model, tokens, stepCount.
-   */
-  it('initial state snapshot includes all required fields', async () => {
+  it('snapshot includes all required fields', async () => {
     await createTestSession(join(tempDir, 'ws'), 'fields-id', 'field-check-agent', 'gpt-4o');
 
-    const res = await fetch(`${getUrl()}/api/agent/fields-id/state`);
-    const payload = await readFirstPayload(res);
+    const payload = await getDiag('fields-id');
 
-    // Three-segment structure (runner / agent / llm) + session metadata
     expect(payload).toHaveProperty('runner');
     expect(payload).toHaveProperty('agent');
     expect(payload).toHaveProperty('llm');
+    expect(payload).toHaveProperty('quiet');
+    expect(payload).toHaveProperty('quietBlockers');
 
     const overview = (payload.session as Record<string, unknown>)?.overview as Record<
       string,
@@ -136,7 +113,7 @@ describe('US-C10: Agent State Monitoring', () => {
   });
 
   /**
-   * AC4: Status comes from runtime tracking (updateStatus), surfaced in session.overview.status.
+   * AC4: Status comes from runtime tracking (updateStatus).
    */
   it('status reflects runtime tracking via updateStatus', async () => {
     const manager = (fastify as any).sessionManager as SessionManager;
@@ -144,34 +121,30 @@ describe('US-C10: Agent State Monitoring', () => {
 
     manager.updateStatus('status-id', 'running');
 
-    const res = await fetch(`${getUrl()}/api/agent/status-id/state`);
-    const payload = await readFirstPayload(res);
+    const payload = await getDiag('status-id');
     const overview = (payload.session as Record<string, unknown>)?.overview as Record<
       string,
       unknown
     >;
-
     expect(overview.status).toBe('running');
   });
 
   /**
-   * AC4: Default status is "idle" when updateStatus has not been called.
+   * AC4: Default status is "idle".
    */
   it('status defaults to idle when updateStatus has not been called', async () => {
     await createTestSession(join(tempDir, 'ws'), 'default-status-id', 'default-agent');
 
-    const res = await fetch(`${getUrl()}/api/agent/default-status-id/state`);
-    const payload = await readFirstPayload(res);
+    const payload = await getDiag('default-status-id');
     const overview = (payload.session as Record<string, unknown>)?.overview as Record<
       string,
       unknown
     >;
-
     expect(overview.status).toBe('idle');
   });
 
   /**
-   * AC5: Model comes from session metadata (session.overview.model).
+   * AC5: Model comes from session metadata.
    */
   it('model comes from session metadata', async () => {
     await createTestSession(
@@ -181,98 +154,63 @@ describe('US-C10: Agent State Monitoring', () => {
       'claude-sonnet-4-20250514'
     );
 
-    const res = await fetch(`${getUrl()}/api/agent/model-id/state`);
-    const payload = await readFirstPayload(res);
+    const payload = await getDiag('model-id');
     const overview = (payload.session as Record<string, unknown>)?.overview as Record<
       string,
       unknown
     >;
-
     expect(overview.model).toBe('claude-sonnet-4-20250514');
   });
 
   /**
-   * AC3: Token fields are undefined for a fresh session with no LLM calls yet.
+   * AC3: Token fields are undefined for a fresh session.
    */
   it('token counts are undefined in the initial snapshot', async () => {
     await createTestSession(join(tempDir, 'ws'), 'token-id', 'token-agent');
 
-    const res = await fetch(`${getUrl()}/api/agent/token-id/state`);
-    const payload = await readFirstPayload(res);
+    const payload = await getDiag('token-id');
     const overview = (payload.session as Record<string, unknown>)?.overview as Record<
       string,
       unknown
     >;
-
-    // Fresh session has no persisted context → tokens are undefined (not 0).
     expect(overview.tokensIn).toBeUndefined();
     expect(overview.tokensOut).toBeUndefined();
     expect(overview.tokensTotal).toBeUndefined();
   });
 
   /**
-   * AC3: Skills and tools arrays are empty in the initial snapshot (runner section).
+   * AC3: Cold snapshot carries empty skills/tools + no LLM trace.
    */
-  it('skills and tools arrays are empty in the initial snapshot', async () => {
+  it('cold snapshot has empty skills/tools and null llm trace', async () => {
     await createTestSession(join(tempDir, 'ws'), 'empty-arr-id', 'empty-agent');
 
-    const res = await fetch(`${getUrl()}/api/agent/empty-arr-id/state`);
-    const payload = await readFirstPayload(res);
+    const payload = await getDiag('empty-arr-id');
     const runner = payload.runner as Record<string, unknown>;
-
     expect(runner.skills).toEqual([]);
     expect(runner.tools).toEqual([]);
+    expect(payload.llm).toBeNull();
+    expect(payload.systemPrompt).toBeNull();
+    expect(payload.quiet).toBe(true);
   });
 
   /**
-   * AC2: Multiple concurrent SSE connections for different sessions.
+   * AC2: Multiple concurrent snapshots for different sessions.
    */
-  it('supports SSE streams for multiple sessions simultaneously', async () => {
+  it('supports snapshots for multiple sessions simultaneously', async () => {
     await createTestSession(join(tempDir, 'ws1'), 'multi-a', 'agent-a');
     await createTestSession(join(tempDir, 'ws2'), 'multi-b', 'agent-b');
 
-    const [resA, resB] = await Promise.all([
-      fetch(`${getUrl()}/api/agent/multi-a/state`),
-      fetch(`${getUrl()}/api/agent/multi-b/state`),
-    ]);
+    const [payloadA, payloadB] = await Promise.all([getDiag('multi-a'), getDiag('multi-b')]);
 
-    expect(resA.status).toBe(200);
-    expect(resB.status).toBe(200);
-
-    const payloadA = await readFirstPayload(resA);
-    const payloadB = await readFirstPayload(resB);
-    const overviewA = (payloadA.session as Record<string, unknown>)?.overview as Record<
+    const overviewA = ((payloadA.session as Record<string, unknown>)?.overview ?? {}) as Record<
       string,
       unknown
     >;
-    const overviewB = (payloadB.session as Record<string, unknown>)?.overview as Record<
+    const overviewB = ((payloadB.session as Record<string, unknown>)?.overview ?? {}) as Record<
       string,
       unknown
     >;
-
     expect(overviewA.agentName).toBe('agent-a');
     expect(overviewB.agentName).toBe('agent-b');
-  });
-
-  /**
-   * AC1: Returns 404 after a session has been deleted.
-   */
-  it('returns 404 after session is deleted', async () => {
-    await createTestSession(join(tempDir, 'ws'), 'delete-id', 'delete-agent');
-
-    // Verify session works first
-    const before = await fetch(`${getUrl()}/api/agent/delete-id/state`);
-    expect(before.status).toBe(200);
-    const reader = before.body!.getReader();
-    await reader.read();
-    await reader.cancel();
-
-    // Delete the session
-    const manager = (fastify as any).sessionManager as SessionManager;
-    await manager.delete('delete-id');
-
-    // Now expect 404
-    const after = await fetch(`${getUrl()}/api/agent/delete-id/state`);
-    expect(after.status).toBe(404);
   });
 });

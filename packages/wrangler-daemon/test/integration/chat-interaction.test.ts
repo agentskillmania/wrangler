@@ -19,7 +19,7 @@ import { chatRoutes } from '../../src/routes/chat.js';
  *   agent via SSE streaming so that I can interact with agents in real-time.
  *
  * Acceptance Criteria:
- *   1. POST /api/agents/:name/chat — starts a new conversation with SSE events
+ *   1. POST /api/agents/:name/onetake — starts a new conversation with SSE events
  *      (400 without message/workspacePath, 404 for unknown agent)
  *   2. POST /api/chat/:sessionId — resumes an existing conversation
  *      (400 without message, 404 for unknown session)
@@ -78,12 +78,12 @@ describe('US-C4: Agent Chat Interaction', () => {
   }
 
   // ──────────────────────────────────────────────────────────────────────
-  // AC-1: POST /api/agents/:name/chat — new conversation
+  // AC-1: POST /api/agents/:name/onetake — new conversation
   // ──────────────────────────────────────────────────────────────────────
 
-  describe('AC-1: Start new conversation (POST /api/agents/:name/chat)', () => {
+  describe('AC-1: Start new conversation (POST /api/agents/:name/onetake)', () => {
     it('returns 400 when message is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/some-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/some-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspacePath: '/tmp/workspace' }),
@@ -94,7 +94,7 @@ describe('US-C4: Agent Chat Interaction', () => {
     });
 
     it('returns 400 when message is whitespace-only', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/some-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/some-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,30 +107,19 @@ describe('US-C4: Agent Chat Interaction', () => {
       expect(body.error).toBe('message is required');
     });
 
-    it('returns 400 when workspacePath is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/some-agent/chat`, {
+    it('defaults workspacePath to the process cwd（对齐 Rust create_session 兜底）', async () => {
+      const res = await fetch(`${getUrl()}/api/agents/some-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'hello' }),
+        body: JSON.stringify({ message: 'hi' }),
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error).toBe('workspacePath is required');
-    });
-
-    it('returns 400 when workspacePath is whitespace-only', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/some-agent/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'hello', workspacePath: '   ' }),
-      });
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('workspacePath is required');
+      expect(body.error).toBe('Agent not found');
     });
 
     it('returns 404 for unknown agent', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/nonexistent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/nonexistent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -171,15 +160,15 @@ describe('US-C4: Agent Chat Interaction', () => {
       expect(body.error).toBe('message is required');
     });
 
-    it('returns 404 for unknown session', async () => {
+    it('returns 410 for unknown session（首次即建契约）', async () => {
       const res = await fetch(`${getUrl()}/api/chat/nonexistent-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello' }),
       });
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(410);
       const body = await res.json();
-      expect(body.error).toBe('Session not found');
+      expect(body.error).toBe('Session expired, please start a new conversation');
     });
   });
 

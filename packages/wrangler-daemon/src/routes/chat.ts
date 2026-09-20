@@ -1299,7 +1299,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       session: {
         overview: {
           title: meta?.title,
-          agentName: state?.config?.name ?? '',
+          agentName: state?.config?.name ?? meta?.agentName ?? '',
           model: rc?.model ?? '',
           stepCount: ctx?.stepCount ?? 0,
           messageCount: ctx?.messages?.length ?? 0,
@@ -1308,13 +1308,15 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
           tokensTotal: tokensIn != null && tokensOut != null ? tokensIn + tokensOut : undefined,
           estimatedContextSize: ctx?.estimatedContextSize,
           contextWindow: rc?.contextWindow,
-          status: 'idle',
+          // 运行时状态跟踪（updateStatus 写的内存面——冷快照同样透出，
+          // 对齐原 agent-state 降级路径的契约）。
+          status: (sessionManager().getStatus(sessionId) as string) || 'idle',
           createdAt: meta?.createdAt ?? '',
           updatedAt: meta?.updatedAt ?? '',
         },
         info: {
           sessionId,
-          agentName: state?.config?.name ?? '',
+          agentName: state?.config?.name ?? meta?.agentName ?? '',
           model: rc?.model ?? '',
           workspacePath: (meta as { workspacePath?: string } | null)?.workspacePath ?? '',
         },

@@ -6,7 +6,7 @@
  * So that I can dynamically control LLM behavior without recreating sessions
  *
  * Acceptance Criteria:
- * 1. POST /api/agents/:name/chat accepts top-level model and thinkingEnabled
+ * 1. POST /api/agents/:name/onetake accepts top-level model and thinkingEnabled
  * 2. POST /api/chat/:sessionId accepts per-request model and thinkingEnabled
  * 3. GET /api/models/:modelId/metadata returns YAML config metadata
  * 4. GET /api/models/:modelId/metadata returns 404 for unknown model
@@ -131,9 +131,9 @@ describe('Integration: Per-Request Configuration', () => {
 
   // ─── Chat API validation (no LLM needed) ────────────────────
 
-  describe('POST /api/agents/:name/chat — validation', () => {
+  describe('POST /api/agents/:name/onetake — validation', () => {
     it('returns 400 when message is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspacePath: '/tmp' }),
@@ -144,20 +144,21 @@ describe('Integration: Per-Request Configuration', () => {
       expect(body.error).toBe('message is required');
     });
 
-    it('returns 400 when workspacePath is missing', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+    it('defaults workspacePath to the process cwd（对齐 Rust 兜底）', async () => {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello' }),
       });
 
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('workspacePath is required');
+      // fixture 里 test-agent 存在：cwd 兜底后请求直接走通（200 SSE）——
+      // 端到端证明缺省 workspacePath 不再被拒。
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('text/event-stream');
     });
 
     it('returns 404 for unknown agent', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/nonexistent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/nonexistent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello', workspacePath: '/tmp' }),
@@ -182,29 +183,29 @@ describe('Integration: Per-Request Configuration', () => {
       expect(body.error).toBe('message is required');
     });
 
-    it('returns 404 when session not found', async () => {
+    it('returns 410 when session not found（首次即建契约）', async () => {
       const res = await fetch(`${getUrl()}/api/chat/nonexistent-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello' }),
       });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(410);
       const body = await res.json();
-      expect(body.error).toBe('Session not found');
+      expect(body.error).toBe('Session expired, please start a new conversation');
     });
   });
 
   // ─── End-to-end chat flow (needs real LLM) ──────────────────
 
-  describe('POST /api/agents/:name/chat — end-to-end', () => {
+  describe('POST /api/agents/:name/onetake — end-to-end', () => {
     itif(testConfig.enabled)(
       'creates session and streams SSE with per-request params',
       async () => {
         const workspaceDir = join(tempDir, 'workspace');
         await mkdir(workspaceDir, { recursive: true });
 
-        const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -245,7 +246,7 @@ describe('Integration: Per-Request Configuration', () => {
         await mkdir(workspaceDir, { recursive: true });
 
         // Step 1: Create a session via new chat
-        const createRes = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        const createRes = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

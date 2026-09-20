@@ -488,9 +488,7 @@ export class AgentSession {
     // 绑定会话已在 harness 构建时锚定；标准会话的目录在 session id 存在
     // 后才能派生——这里晚绑定。会话未启用时 resolve 返回 undefined，
     // 不绑（`file:` 引用会在 wire 物化时报具名错误，同 Rust (None,None)）。
-    const attachmentAnchor = this.runner.resolveAttachmentDir?.(
-      this.sessionStore?.isDirBound ? undefined : this.sessionId
-    );
+    const attachmentAnchor = this.runner.resolveAttachmentDir?.(this.sessionId);
     if (attachmentAnchor) this.runner.setAttachmentDir?.(attachmentAnchor);
   }
 
