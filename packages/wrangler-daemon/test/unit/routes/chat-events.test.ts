@@ -615,7 +615,8 @@ describe('POST /api/chat/:sessionId ack + persistent events (R2P-153 dual-track)
     expect(post.status).toBe(200);
     expect(post.headers.get('content-type')).toContain('application/json');
     const ack = (await post.json()) as { ok: boolean; sessionId: string; turnSeq: number };
-    expect(ack).toEqual({ ok: true, sessionId: 'ack-chain', turnSeq: 1 });
+    // ack 体对齐 Rust send.rs：{sessionId, turnSeq}（不带 ok）。
+    expect(ack).toEqual({ sessionId: 'ack-chain', turnSeq: 1 });
 
     // 全链路：token → done 都在 events 流上到达，done 的 turnSeq 与 ack 匹配。
     const frames = await collectUntil(gen, (f) => f.event === 'done');
@@ -698,8 +699,8 @@ describe('POST /api/chat/:sessionId ack + persistent events (R2P-153 dual-track)
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: 'hi' }),
     });
-    const ack = (await post.json()) as { ok: boolean; turnSeq: number };
-    expect(ack.ok).toBe(true);
+    const ack = (await post.json()) as { sessionId: string; turnSeq: number };
+    expect(ack.sessionId).toBe('cold-ack');
 
     // 建连重放（无 lastSeq）补齐 ack 与挂流之间已发生的帧。
     const res = await fetch(`${getUrl()}/api/chat/cold-ack/events`);

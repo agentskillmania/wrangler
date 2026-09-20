@@ -2,8 +2,9 @@
 // ── Hook: useCrewChatState ──
 // Manages all state and business logic for the CrewChatPage.
 //
-// Mirrors useChatState but talks to /api/crews/:id/chat for new sessions
-// (resume path stays on /api/chat/:sessionId, shared with agent sessions).
+// Mirrors useChatState; crew 新会话经统一发送端点创建（POST /api/chat/:id
+// 带 crew 字段 + client 生成的 sessionId——/api/crews/:id/chat 已并入，
+// 对齐 Rust 65732f3/c48fda0）。
 // Extends handleStreamEvent to surface sub-agent tokens/thinking/tools
 // in the main chat column — agent chat silently discards these.
 
@@ -65,6 +66,8 @@ export function useCrewChatState() {
   // ── 常驻 events 流（R2P-153 迁移，与 useChatState 同款）──
   var eventsRef = useRef(null);
   var lastSeqRef = useRef(0);
+  // sessionId 的 ref 镜像：常驻流回调跨渲染周期读现值。
+  var sessionIdRef = useRef(null);
   // 重挂兜底的判活/节流状态（返修 P2-1）：streamingRef 是 streaming 的 ref
   // 镜像——定时器回调若读渲染期闭包里的 streaming，拿到的是创建该函数实例
   // 那一帧的快照（主冷路径上恒为 false，兜底重试成死代码）；mountedRef 拦
@@ -263,6 +266,23 @@ export function useCrewChatState() {
 
   useEffect(
     function () {
+      sessionIdRef.current = sessionId;
+    },
+    [sessionId]
+  );
+
+  /** 诊断快照拉取：GET /api/chat/:id 一次性 JSON（温/冷两态，404 静默）。 */
+  function refreshDiagnostics(sid) {
+    api
+      .get('/api/chat/' + encodeURIComponent(sid))
+      .then(setDiagnosticsData)
+      .catch(function () {
+        setDiagnosticsData(null);
+      });
+  }
+
+  useEffect(
+    function () {
       if (cockpitEsRef.current) {
         cockpitEsRef.current.close();
         cockpitEsRef.current = null;
@@ -278,40 +298,13 @@ export function useCrewChatState() {
         return;
       }
 
-      // 常驻 events 流（R2P-153）：会话确定即挂；创建路径的轮 1 帧仍经
-      // POST 流到达（重放被 lastSeq 门控），后续轮 send 走 ack 全从此流进。
+      // 常驻 events 流（R2P-153）：会话确定即挂；crew 创建轮帧从此流进
+      // （统一端点 ack 化）。session-title 等轮外帧同流到达（agent-state
+      // 专用流已退役）。
       ensureEvents(sessionId, 'live');
 
-      var es = new EventSource(BASE + '/api/agent/' + sessionId + '/state');
-      es.addEventListener('agent-diagnostics', function (e) {
-        try {
-          setDiagnosticsData(JSON.parse(e.data));
-        } catch (_) {}
-      });
-      es.onmessage = function (e) {
-        try {
-          var parsed = JSON.parse(e.data);
-          var evtType = parsed.event || parsed.type || 'message';
-          var data = parsed.data || parsed;
-          var tag = eventToTag(evtType);
-          var text = formatEventData(evtType, data);
-          appendCockpitEvent(evtType, tag, text, data);
-        } catch (_) {
-          setCockpitEvents(function (prev) {
-            return prev.concat([
-              {
-                type: 'raw',
-                tag: 'step',
-                text: e.data,
-                data: { raw: e.data },
-                id: Date.now() + Math.random(),
-              },
-            ]);
-          });
-        }
-      };
-      es.onerror = function () {};
-      cockpitEsRef.current = es;
+      // 诊断快照（对齐 Rust StatePage）：建连即拉一次，done 帧自动刷新。
+      refreshDiagnostics(sessionId);
 
       api
         .get('/api/files/' + sessionId + '/tree')
@@ -373,6 +366,18 @@ export function useCrewChatState() {
     });
   }
 
+  // 经会话通道到达的轮外观测帧（原 agent-state 专用流退役后与轮帧同流）。
+  var COCKPIT_EVENTS = [
+    'session-title',
+    'session-cleared',
+    'subagent-start',
+    'subagent-end',
+    'subagent-delivery',
+    'compressed',
+    'run-resumed',
+    'human-input-resolved',
+  ];
+
   function handleStreamEvent(ev, data) {
     try {
       var p = typeof data === 'string' ? JSON.parse(data) : data;
@@ -381,6 +386,8 @@ export function useCrewChatState() {
       }
       if (ev === 'done') {
         updateStreaming(false);
+        // done 帧到达自动刷新诊断快照（对齐 Rust StatePage）。
+        if (sessionIdRef.current) refreshDiagnostics(sessionIdRef.current);
       } else if (ev === 'error') {
         updateStreaming(false);
       }
@@ -393,6 +400,8 @@ export function useCrewChatState() {
         appendLine('think', text);
       } else if (ev === 'error') {
         appendLine('error', text);
+      } else if (COCKPIT_EVENTS.indexOf(ev) !== -1) {
+        appendCockpitEvent(ev, tag, text, p);
       } else if (ev === 'subagent-token') {
         // Namespace per sub-agent name so each worker gets its own bubble.
         // Falls back to 'subagent' when name missing (shouldn't happen).
@@ -716,12 +725,21 @@ export function useCrewChatState() {
         model: perRequestModel,
       });
     } else if (selectedCrew && workspacePath) {
-      // New crew session
+      // New crew session：统一发送端点首次即建（POST /api/chat/:id 带
+      // crew 字段 + client 生成的 sessionId，ack 语义——对齐 Rust
+      // 65732f3/c48fda0 的 startCrewChat；/api/crews/:id/chat 已并入）。
+      var crewSid =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : 'crew-' + Date.now() + '-' + Math.random().toString(36).slice(2);
       setCockpitEvents([]);
       appendLine('user', msg);
-      doStream('/api/crews/' + selectedCrew + '/chat', {
+      setSessionId(crewSid);
+      sendAck(crewSid, {
         message: msg,
         workspacePath: workspacePath,
+        crew: selectedCrew,
+        sessionId: crewSid,
         thinkingEnabled: msgThinking,
         model: perRequestModel,
         config: buildRunnerConfig(),

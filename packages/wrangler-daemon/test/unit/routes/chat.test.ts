@@ -52,6 +52,11 @@ const mockSession = {
   sessionId: 'mock-session-123',
   busy: false,
   handleMessage: mockHandleMessage,
+  sendMessageInBackground: vi.fn().mockReturnValue({
+    ok: true,
+    turnSeq: 1,
+    completion: Promise.resolve({ hadError: false }),
+  }),
   continueRun: vi.fn(),
   continueRunInBackground: vi.fn(),
   respondViaState: vi.fn(),
@@ -988,11 +993,11 @@ describe('Chat API', () => {
     });
   });
 
-  // ─── POST /api/agents/:name/chat (NEW conversation) ───
+  // ─── POST /api/agents/:name/onetake（一次性调用，原 chat 换名——对齐 Rust 65732f3） ───
 
-  describe('POST /api/agents/:name/chat', () => {
+  describe('POST /api/agents/:name/onetake', () => {
     it('returns 400 when message missing', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspacePath: '/tmp' }),
@@ -1002,19 +1007,25 @@ describe('Chat API', () => {
       expect(body.error).toBe('message is required');
     });
 
-    it('returns 400 when workspacePath missing', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+    it('defaults workspacePath to the process cwd (对齐 Rust create_session 兜底)', async () => {
+      mockAgentSessionCreate.mockResolvedValue(mockSession);
+      mockHandleMessage.mockImplementation(async function* () {
+        yield { event: 'done', data: {} };
+      });
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello' }),
       });
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('workspacePath is required');
+      expect(res.status).toBe(200);
+      const callArg = mockAgentSessionCreate.mock.calls[0][0] as {
+        workspacePath: string;
+      };
+      expect(callArg.workspacePath).toBe(process.cwd());
     });
 
     it('returns 404 when agent not found', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/nonexistent-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/nonexistent-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello', workspacePath: '/tmp' }),
@@ -1027,7 +1038,7 @@ describe('Chat API', () => {
     // ─── 多模态附件校验（R2P-107，对齐 Rust df699fa）───
 
     it('rejects invalid attachments with 400 before any session work', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1044,7 +1055,7 @@ describe('Chat API', () => {
     it('empty text + attachments = legal pure-image message (passes the message gate)', async () => {
       // 附件在场即越过 message 必填闸——错误推进到 agent 解析（404 而非
       // 400 'message is required'），证明纯图消息被放行。
-      const res = await fetch(`${getUrl()}/api/agents/nonexistent-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/nonexistent-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1058,7 +1069,7 @@ describe('Chat API', () => {
     });
 
     it('empty text + empty attachments still 400 (both-empty rejected)', async () => {
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: '  ', workspacePath: '/tmp', attachments: [] }),
@@ -1075,7 +1086,7 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
@@ -1107,7 +1118,7 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1163,7 +1174,7 @@ describe('Chat API', () => {
 
       // 统一对象形状 {enabled: false} → policy 对象 {enabled: false}
       // (AgentSession.create 再译成 runner 的 false;不再在路由层塌缩布尔)
-      let res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      let res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1179,7 +1190,7 @@ describe('Chat API', () => {
 
       mockAgentSessionCreate.mockClear();
       // 旧式裸布尔 true → policy 对象 {enabled: true}
-      res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1195,7 +1206,7 @@ describe('Chat API', () => {
 
       mockAgentSessionCreate.mockClear();
       // 空对象 {} = enabled 未给且无 config.yaml 调优 → 未配置(undefined)
-      res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1245,7 +1256,7 @@ describe('Chat API', () => {
 
       try {
         // ① 请求未给 compression → config.yaml 调优字段整体透传。
-        let res = await fetch(`${appUrl}/api/agents/test-agent/chat`, {
+        let res = await fetch(`${appUrl}/api/agents/test-agent/onetake`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
@@ -1261,7 +1272,7 @@ describe('Chat API', () => {
 
         // ② 请求级 enabled 覆盖开关,调优字段仍来自 config.yaml(字段级合并)。
         mockAgentSessionCreate.mockClear();
-        res = await fetch(`${appUrl}/api/agents/test-agent/chat`, {
+        res = await fetch(`${appUrl}/api/agents/test-agent/onetake`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1290,7 +1301,7 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1321,7 +1332,7 @@ describe('Chat API', () => {
       });
 
       // agent 文件不存在的名字 + 内联块 → 不 404,人设用内联值
-      const res = await fetch(`${getUrl()}/api/agents/no-such-agent-file/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/no-such-agent-file/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1343,7 +1354,7 @@ describe('Chat API', () => {
       });
 
       // 请求体 `agent.subAgents[]` 直传 delegation：不建 crew 也能 delegate。
-      const res = await fetch(`${getUrl()}/api/agents/no-such-agent-file/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/no-such-agent-file/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1399,7 +1410,7 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1420,7 +1431,7 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1467,7 +1478,7 @@ describe('Chat API', () => {
       });
 
       const controller = new AbortController();
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
@@ -1503,7 +1514,7 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/onetake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
@@ -1543,8 +1554,9 @@ describe('Chat API', () => {
       expect(body.error).toContain('empty path');
     });
 
-    it('empty text + attachments = legal pure-image resume (passes the gate to 404)', async () => {
-      // resume 不再静默丢附件：纯图消息越过 message 闸，推进到会话解析。
+    it('empty text + attachments = legal pure-image resume (passes the gate to 410)', async () => {
+      // resume 不再静默丢附件：纯图消息越过 message 闸，推进到会话解析
+      //（无创建字段 → 410，对齐 Rust send.rs）。
       const res = await fetch(`${getUrl()}/api/chat/no-such-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1552,20 +1564,20 @@ describe('Chat API', () => {
           attachments: [{ kind: 'image', url: 'data:image/png;base64,QUJD' }],
         }),
       });
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(410);
       const body = await res.json();
-      expect(body.error).toBe('Session not found');
+      expect(body.error).toBe('Session expired, please start a new conversation');
     });
 
-    it('returns 404 when session not found', async () => {
+    it('returns 410 when session not found and no creation fields (R2P-153 首次即建)', async () => {
       const res = await fetch(`${getUrl()}/api/chat/nonexistent-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello' }),
       });
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(410);
       const body = await res.json();
-      expect(body.error).toBe('Session not found');
+      expect(body.error).toBe('Session expired, please start a new conversation');
     });
 
     it('streams SSE events for valid resume', async () => {
@@ -1766,7 +1778,7 @@ describe('Chat API', () => {
       expect(opts.agentName).toBe('test-agent');
     });
 
-    it('returns 404 when explicit sessionDir has no meta.yaml', async () => {
+    it('returns 410 when explicit sessionDir has no meta.yaml (no creation fields)', async () => {
       const res = await fetch(`${getUrl()}/api/chat/some-key`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1776,9 +1788,9 @@ describe('Chat API', () => {
         }),
       });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(410);
       const body = await res.json();
-      expect(body.error).toBe('Session not found');
+      expect(body.error).toBe('Session expired, please start a new conversation');
     });
 
     it('reloads crew subAgents on resume when meta.runnerConfig.crewId is set', async () => {
@@ -1837,9 +1849,10 @@ describe('Chat API', () => {
     });
   });
 
-  // ─── POST /api/crews/:id/chat (NEW crew conversation) ───
+  // ─── crew 经统一发送端点创建（POST /api/chat/:id 带 crew 字段——
+  // 原 /api/crews/:id/chat 已并入，对齐 Rust 65732f3）───
 
-  describe('POST /api/crews/:id/chat', () => {
+  describe('POST /api/chat/:sessionId {crew} 首次即建', () => {
     beforeEach(async () => {
       // Seed a demo crew with primary (orchestrator) + worker (researcher)
       const crewsDir = join(tempDir, 'crews');
@@ -1861,10 +1874,10 @@ describe('Chat API', () => {
     });
 
     it('returns 400 when message missing', async () => {
-      const res = await fetch(`${getUrl()}/api/crews/demo-crew/chat`, {
+      const res = await fetch(`${getUrl()}/api/chat/crew-new-1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspacePath: '/tmp' }),
+        body: JSON.stringify({ workspacePath: '/tmp', crew: 'demo-crew' }),
       });
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -1872,50 +1885,62 @@ describe('Chat API', () => {
     });
 
     it('returns 400 when workspacePath missing', async () => {
-      const res = await fetch(`${getUrl()}/api/crews/demo-crew/chat`, {
+      const res = await fetch(`${getUrl()}/api/chat/crew-new-2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hello', crew: 'demo-crew' }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('workspacePath is required to create a session');
+    });
+
+    it('returns 410 when the id is unknown and no creation fields are given', async () => {
+      const res = await fetch(`${getUrl()}/api/chat/never-existed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: 'hello' }),
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(410);
       const body = await res.json();
-      expect(body.error).toBe('workspacePath is required');
+      expect(body.error).toBe('Session expired, please start a new conversation');
     });
 
     it('returns 404 when crew not found', async () => {
-      const res = await fetch(`${getUrl()}/api/crews/nonexistent-crew/chat`, {
+      const res = await fetch(`${getUrl()}/api/chat/crew-new-3`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp' }),
+        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp', crew: 'nonexistent-crew' }),
       });
       expect(res.status).toBe(404);
       const body = await res.json();
       expect(body.error).toBe('Crew not found');
     });
 
-    it('streams SSE events for valid crew chat', async () => {
+    it('creates via the unified endpoint and acks {sessionId, turnSeq}', async () => {
       mockAgentSessionCreate.mockResolvedValue(mockSession);
       mockHandleMessage.mockImplementation(async function* () {
         yield { event: 'token', data: { delta: 'crew reply' } };
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/crews/demo-crew/chat`, {
+      const res = await fetch(`${getUrl()}/api/chat/crew-ack-1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp/test-ws',
+          crew: 'demo-crew',
+        }),
       });
 
       expect(res.status).toBe(200);
-      expect(res.headers.get('content-type')).toBe('text/event-stream');
-
-      const raw = await res.text();
-      const events = parseSSE(raw);
-      const eventTypes = events.map((e) => e.event);
-
-      expect(eventTypes).toContain('session-start');
-      expect(eventTypes).toContain('token');
-      expect(eventTypes).toContain('done');
+      // ack 语义（对齐 Rust send.rs）：JSON、{sessionId, turnSeq}——不带流。
+      expect(res.headers.get('content-type')).toContain('application/json');
+      const body = await res.json();
+      expect(body.sessionId).toBe('crew-ack-1');
+      expect(typeof body.turnSeq).toBe('number');
+      expect('ok' in body).toBe(false);
 
       expect(mockAgentSessionCreate).toHaveBeenCalledTimes(1);
     });
@@ -1926,10 +1951,14 @@ describe('Chat API', () => {
         yield { event: 'done', data: {} };
       });
 
-      const res = await fetch(`${getUrl()}/api/crews/demo-crew/chat`, {
+      const res = await fetch(`${getUrl()}/api/chat/crew-ack-2`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp/test-ws',
+          crew: 'demo-crew',
+        }),
       });
 
       expect(res.status).toBe(200);
@@ -1953,38 +1982,10 @@ describe('Chat API', () => {
       expect(callArg.skills).toEqual({ dirs: [expect.any(String)] });
     });
 
-    it('emits session-start, forwards client disconnect to agentSession.stop()', async () => {
-      mockAgentSessionCreate.mockResolvedValue(mockSession);
-      let unblock: () => void = () => {};
-      mockHandleMessage.mockImplementation(async function* () {
-        yield { event: 'token', data: { delta: 'partial' } };
-        await new Promise<void>((resolve) => {
-          unblock = resolve;
-        });
-        yield { event: 'done', data: {} };
-      });
-
-      const controller = new AbortController();
-      const res = await fetch(`${getUrl()}/api/crews/demo-crew/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
-        signal: controller.signal,
-      });
-
-      const reader = res.body!.getReader();
-      await reader.read();
-      controller.abort();
-      try {
-        await reader.read();
-      } catch {
-        // expected
-      }
-
-      await new Promise((r) => setTimeout(r, 100));
-      expect(mockSession.stop).toHaveBeenCalledTimes(1);
-      unblock();
-    });
+    // CONC5（客户端断连转发 stop）随 crew 创建 ack 化退役——ack 路径没有
+    // 请求级流可断；一次性调用的断连语义由 onetake 侧的同款用例覆盖
+    //（见 onetake describe 的 'calls agentSession.stop() when client
+    // disconnects mid-stream'）。
   });
 
   // ─── skill/MCP 自包含策略（T7 PORT，对齐 Rust eef05a1）───
@@ -2064,7 +2065,10 @@ describe('Chat API', () => {
       return typeof addr === 'string' ? addr : `http://127.0.0.1:${addr.port}`;
     }
 
-    async function postChat(path: string): Promise<Record<string, unknown>> {
+    async function postChat(
+      path: string,
+      extra: Record<string, unknown> = {}
+    ): Promise<Record<string, unknown>> {
       mockAgentSessionCreate.mockResolvedValue(mockSession);
       mockHandleMessage.mockImplementation(async function* () {
         yield { event: 'done', data: {} };
@@ -2072,7 +2076,7 @@ describe('Chat API', () => {
       const res = await fetch(`${appUrl()}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws' }),
+        body: JSON.stringify({ message: 'hello', workspacePath: '/tmp/test-ws', ...extra }),
       });
       expect(res.status).toBe(200);
       await res.text();
@@ -2094,7 +2098,7 @@ describe('Chat API', () => {
     });
 
     it('crew without skills/ or mcp.json inherits nothing (no global fallback)', async () => {
-      const callArg = await postChat('/api/crews/bare-crew/chat');
+      const callArg = await postChat('/api/chat/policy-crew-bare', { crew: 'bare-crew' });
       // 只剩内置 spec-plan skills（引擎自带，恒在）；全局 config.yaml 轴
       // 不得落进 crew 会话。
       expect(callArg.skills).toEqual({ dirs: [expect.any(String)] });
@@ -2104,7 +2108,7 @@ describe('Chat API', () => {
     });
 
     it('crew with private skills/ and mcp.json resolves both relative to the crew dir', async () => {
-      const callArg = await postChat('/api/crews/rich-crew/chat');
+      const callArg = await postChat('/api/chat/policy-crew-rich', { crew: 'rich-crew' });
       const crewDir = join(crewsDir, 'rich-crew');
       expect(callArg.skills).toEqual({
         dirs: [join(crewDir, 'skills'), expect.any(String)],
@@ -2117,13 +2121,13 @@ describe('Chat API', () => {
     });
 
     it('agent with empty private resources falls back to global config.yaml', async () => {
-      const callArg = await postChat('/api/agents/bare-agent/chat');
+      const callArg = await postChat('/api/agents/bare-agent/onetake');
       expect(callArg.skills).toEqual({ dirs: [GLOBAL_SKILLS, expect.any(String)] });
       expect(callArg.tools).toEqual(expect.objectContaining({ mcpConfigPaths: [GLOBAL_MCP] }));
     });
 
     it('agent with private resources replaces (not merges) the global axis', async () => {
-      const callArg = await postChat('/api/agents/rich-agent/chat');
+      const callArg = await postChat('/api/agents/rich-agent/onetake');
       const agentDir = join(agentsDir, 'rich-agent');
       expect(callArg.skills).toEqual({
         dirs: [join(agentDir, 'skills'), expect.any(String)],

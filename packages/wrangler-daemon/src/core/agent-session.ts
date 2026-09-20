@@ -608,6 +608,14 @@ export class AgentSession {
         instructions: options.agentInstructions ?? DEFAULT_INSTRUCTIONS,
       });
     }
+    // 首次即建（onetake 带 sessionId / POST /api/chat/:id 创建分支，对齐
+    // Rust 65732f3 的 client-chosen id）：新建 state 的 id 覆写为调用方
+    // 指定的 id——标准树的落盘目录（baseDir/hash/&lt;state.id&gt;）随之锚定。
+    if (options.sessionId && state.id !== options.sessionId) {
+      state = updateState(state, (draft) => {
+        draft.id = options.sessionId!;
+      });
+    }
 
     const session = new AgentSession(runner, state, bridge, options);
     session._llmClient = llmClient;
@@ -787,6 +795,12 @@ export class AgentSession {
       enableCommands: config.enableCommands,
     };
 
+    // 收工判定信号顶层直达（对齐 Rust chat_diagnostics 的 quiet/
+    // quiet_blockers——客户端不该去嵌套里翻）。三臂与 DELETE 静默闸同源。
+    const quietBlockers: string[] = [];
+    if (this._busy) quietBlockers.push('a turn is in flight');
+    if (this.hasActiveChildren()) quietBlockers.push('sub-task(s) still running');
+    if (this.hasPendingDeliveries()) quietBlockers.push('pending delivery(ies) not yet consumed');
     return {
       runner: {
         features,
@@ -796,11 +810,18 @@ export class AgentSession {
       agent: this.state,
       llm: this.lastLLMRequest,
       systemPrompt: this.lastSystemPrompt,
+      quiet: quietBlockers.length === 0,
+      quietBlockers,
       session: {
         overview: sessionOverview,
         info: sessionInfo,
       },
     };
+  }
+
+  /** 公开诊断快照（GET /api/chat/:id 温路径；对齐 Rust 65732f3 收编）。 */
+  async getDiagnostics(): Promise<Record<string, unknown>> {
+    return this.buildDiagnostics();
   }
 
   /**
@@ -874,6 +895,10 @@ export class AgentSession {
    * @param event - SSE event to emit
    */
   emitCockpitEvent(event: SSEEvent): void {
+    // 会话通道 emit（对齐 Rust：session-title 等轮外帧经会话通道——
+    // 落滚动史 + 分序号 + 常驻 events 流广播；原 cockpit 专用广播随
+    // /api/agent/:id/state 退役，R2P-153 onetake 家族）。
+    this.pushEvent(event);
     this._broadcastToCockpit(event);
     this.eventHistory.push(event);
     if (this.eventHistory.length > this.MAX_HISTORY) {

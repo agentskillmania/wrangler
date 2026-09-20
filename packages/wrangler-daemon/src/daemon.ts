@@ -14,7 +14,6 @@ import { ConfigManager } from './core/config-manager.js';
 import { ResourceManager } from './core/resource-manager.js';
 import { SessionManager } from './core/session-manager.js';
 import { agentFileRoutes } from './routes/agent-files.js';
-import { agentStateRoutes } from './routes/agent-state.js';
 import { agentRoutes } from './routes/agents.js';
 import { chatRoutes } from './routes/chat.js';
 import { configRoutes } from './routes/config.js';
@@ -165,7 +164,6 @@ export class Daemon {
     this.fastify.register(launcherRoutes);
     this.fastify.register(chatRoutes);
     this.fastify.register(fileRoutes);
-    this.fastify.register(agentStateRoutes);
     this.fastify.register(skillFileRoutes);
     this.fastify.register(agentFileRoutes);
     this.fastify.register(crewRoutes);

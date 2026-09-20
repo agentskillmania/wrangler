@@ -702,14 +702,252 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     return { ok: true, sessionId, turnSeq: ack.turnSeq };
   });
 
+  // ─── 创建装配共享（对齐 Rust 65732f3 的 routes/chat/create.rs：onetake
+  // 与 POST /api/chat/:id 的首次即建共用。装配 runner → seed 初始 state →
+  // 物化温会话；驱动与响应塑形（SSE / ack）留给调用方）──────────────
+
+  type CreateSource =
+    | { kind: 'named'; name: string }
+    | {
+        kind: 'inline';
+        name: string;
+        body: NonNullable<CreateAndChatRequest['agent']>;
+      }
+    | { kind: 'crew'; id: string };
+
+  /** 解析创建来源：内联 agent > crew > agentName（对齐 Rust resolve_source）。 */
+  function resolveCreateSource(body: CreateAndChatRequest): CreateSource | undefined {
+    if (body.agent) {
+      return {
+        kind: 'inline',
+        name: body.agent.name ?? body.agentName ?? 'agent',
+        body: body.agent,
+      };
+    }
+    if (body.crew?.trim()) return { kind: 'crew', id: body.crew };
+    if (body.agentName?.trim()) return { kind: 'named', name: body.agentName };
+    return undefined;
+  }
+
   /**
-   * POST /api/agents/:name/chat — NEW conversation
-   *
-   * Loads agent config, creates fresh AgentState, runs AgentHarness.
-   * Wrangler session middleware auto-creates the session during run.
-   * Returns SSE stream. The 'done' event includes sessionId.
+   * 装配一条新会话（agent 具名/内联或 crew）。workspacePath 由调用方先校验。
+   * sessionId 可选（client-chosen id：POST /api/chat/:id 创建分支与 onetake
+   * 的 body.sessionId）；缺省则内核生成。
    */
-  fastify.post('/api/agents/:name/chat', async (request, reply) => {
+  async function assembleCreatedSession(
+    source: CreateSource,
+    body: CreateAndChatRequest,
+    sessionId?: string
+  ): Promise<
+    | { ok: true; agentSession: AgentSession; workspacePath: string }
+    | { ok: false; code: number; error: string }
+  > {
+    const config = configManager().get();
+    const rc = config.runner;
+    // workspacePath 缺省兜底当前目录（对齐 Rust create_session；chat-send
+    // 创建分支的 400 校验在调用方）。
+    const workspacePath = body.workspacePath?.trim() || process.cwd();
+
+    if (source.kind === 'crew') {
+      // crew 目录即全世界：skills/MCP 只认 <crew>/ 私有声明，不落全局
+      // 兜底（对齐 Rust eef05a1；原 /api/crews/:id/chat 的装配原样迁入）。
+      let crewConfig;
+      try {
+        crewConfig = await resourceManager().loadCrewConfig(source.id);
+      } catch {
+        return { ok: false, code: 404, error: 'Crew not found' };
+      }
+      const runnerOpts = crewToRunnerOptions(crewConfig);
+      const searchConfig =
+        body.config?.search ??
+        (config.search?.defaultProvider
+          ? { provider: config.search.defaultProvider as 'sogou' | 'bing' }
+          : undefined);
+      const agentSession = await AgentSession.create(
+        {
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: createLLMClient,
+          workspacePath,
+          agentName: runnerOpts.primaryAgent,
+          agentInstructions: runnerOpts.systemPrompt,
+          subAgents: runnerOpts.subAgents,
+          crewId: source.id,
+          model: body.model ?? runnerOpts.model,
+          sandbox: withSandboxInstance(config.sandbox, body.config?.sandbox ?? true, workspacePath),
+          skills: {
+            dirs: [...(body.config?.skills?.dirs ?? runnerOpts.skillDirs), BUILTIN_SKILLS_DIR],
+          },
+          tools: {
+            mcpConfigPaths: body.config?.tools?.mcpServers
+              ? []
+              : (body.config?.tools?.mcpConfigPaths ?? runnerOpts.mcpPaths),
+            builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
+            injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),
+            mcpLoader: (paths) =>
+              loadMCPTools(
+                body.config?.tools?.mcpServers
+                  ? { servers: body.config.tools.mcpServers }
+                  : { configPaths: paths }
+              ),
+          },
+          sessionStore: body.sessionDir
+            ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)
+            : undefined,
+          sessionManager: sessionManager(),
+          sessionBaseDir: sessionManager().baseDir,
+          thinking: body.config?.thinking ?? rc?.thinking,
+          session: body.config?.session ?? rc?.session,
+          todolist: body.config?.todolist ?? rc?.todolist,
+          specPlan: body.config?.specPlan ?? rc?.specPlan,
+          commands: body.config?.commands ?? rc?.commands,
+          a2ui: body.config?.a2ui ?? rc?.a2ui,
+          search: searchConfig,
+          compression: resolveCompression(
+            normalizeCompression(body.config?.compression),
+            rc?.compression
+          ),
+          limits: body.config?.limits ?? rc?.limits,
+          ...(sessionId ? { sessionId } : {}),
+        },
+        config
+      );
+      return { ok: true, agentSession, workspacePath };
+    }
+
+    // agent（具名/内联）：内联定义替换 agent 文件（宿主人设；agents/*.md
+    // 只是独立 daemon 的装配源）。
+    const agentDetail: AgentDetail | null =
+      source.kind === 'inline'
+        ? {
+            id: source.name,
+            name: source.name,
+            instructions: source.body.instructions,
+            path: '',
+            skillDirs: [],
+            mcpPaths: [],
+            skillCount: 0,
+          }
+        : await resourceManager().getAgent(source.name);
+    if (!agentDetail) {
+      return { ok: false, code: 404, error: 'Agent not found' };
+    }
+
+    // agent 会话的资源兜底策略：私有非空用私有，为空落 config.yaml 全局
+    // 默认（对齐 Rust eef05a1——装配机制层不再兜底全局，策略上移到会话
+    // 路由；crew 会话不拼全局）。
+    const skillDirsFallback =
+      agentDetail.skillDirs.length > 0 ? agentDetail.skillDirs : (rc?.skillDirs ?? []);
+    const mcpPathsFallback =
+      agentDetail.mcpPaths.length > 0 ? agentDetail.mcpPaths : (rc?.mcpConfigPaths ?? []);
+
+    // 内联子 agent（R2P-143，对齐 Rust e39477c 的 Inline 分支）：请求体
+    // `agent.subAgents[]` → SubAgentConfig。name/instructions 必填校验
+    // （对齐 Rust serde 缺字段 400——静默产出 undefined 会让子 agent
+    // 装配出不可诊断的空配置）。
+    const inlineAgent = source.kind === 'inline' ? source.body : body.agent;
+    if (inlineAgent?.subAgents) {
+      for (const [i, sub] of inlineAgent.subAgents.entries()) {
+        if (!sub?.name || !sub.instructions) {
+          return {
+            ok: false,
+            code: 400,
+            error: `agent.subAgents[${i}] requires non-empty "name" and "instructions"`,
+          };
+        }
+      }
+    }
+    const inlineSubAgents: AgentSessionOptions['subAgents'] = inlineAgent?.subAgents?.map(
+      (sub) => ({
+        name: sub.name,
+        description: sub.description ?? '',
+        config: { name: sub.name, instructions: sub.instructions, tools: [] },
+        maxSteps: sub.maxSteps,
+        timeout: sub.timeout,
+        inheritParentTools: sub.inheritParentTools,
+        inheritParentSkills: sub.inheritParentSkills,
+      })
+    );
+
+    // 搜索配置解析（供 search 字段与 web 工具注入工厂共用）
+    const searchConfig =
+      body.config?.search ??
+      (config.search?.defaultProvider
+        ? { provider: config.search.defaultProvider as 'sogou' | 'bing' }
+        : undefined);
+
+    const agentSession = await AgentSession.create(
+      {
+        runtime: defaultNodeHostEnv,
+        llmClientFactory: createLLMClient,
+        workspacePath,
+        agentName: agentDetail.name,
+        agentInstructions: agentDetail.instructions,
+        model: agentDetail.model,
+        // skills.dirs: body > agent 私有(空则 config.runner 全局) > devtool 脚手架技能集
+        // （BUILTIN_SKILLS_DIR 来自 wrangler-devtool，恒 append；引擎级 spec-plan 技能
+        //  由 AgentHarness.collectSkillDirs 另行注入，两者不同源）
+        skills: {
+          dirs: [...(body.config?.skills?.dirs ?? skillDirsFallback), BUILTIN_SKILLS_DIR],
+        },
+        tools: {
+          // 替换语义:内联 mcpServers 给了 → 路径轴(agent/config.runner 回退)整体旁路
+          mcpConfigPaths: body.config?.tools?.mcpServers
+            ? []
+            : (body.config?.tools?.mcpConfigPaths ?? mcpPathsFallback),
+          builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
+          // Node 专属 web 工具（jsdom 爬虫）——引擎 core 不含，由 daemon 组装注入
+          injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),
+          // MCP 加载器（引擎 core 不捆绑 MCP 加载）
+          mcpLoader: (paths) =>
+            loadMCPTools(
+              body.config?.tools?.mcpServers
+                ? { servers: body.config.tools.mcpServers }
+                : { configPaths: paths }
+            ),
+        },
+        sessionStore: body.sessionDir
+          ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)
+          : undefined,
+        sessionManager: sessionManager(),
+        sessionBaseDir: sessionManager().baseDir,
+        agentConfigPath: agentDetail.path,
+        // Feature toggles + groups: body > config.runner (two-tier for toggles)
+        thinking: body.config?.thinking ?? rc?.thinking,
+        session: body.config?.session ?? rc?.session,
+        todolist: body.config?.todolist ?? rc?.todolist,
+        specPlan: body.config?.specPlan ?? rc?.specPlan,
+        commands: body.config?.commands ?? rc?.commands,
+        // Node 专属：合并 sandbox 配置并构造实例（引擎 core 不捆绑 sandbox 运行时）
+        sandbox: withSandboxInstance(config.sandbox, body.config?.sandbox, workspacePath),
+        a2ui: body.config?.a2ui ?? rc?.a2ui,
+        search: searchConfig,
+        compression: resolveCompression(
+          normalizeCompression(body.config?.compression),
+          rc?.compression
+        ),
+        limits: body.config?.limits ?? rc?.limits,
+        // 内联子 agent 名单（R2P-143）：直传 delegation——与 crew 路径共用
+        // 委派管道，唯一差异是定义存哪（请求体 vs 磁盘目录）。
+        subAgents: inlineSubAgents,
+        ...(sessionId ? { sessionId } : {}),
+      },
+      config
+    );
+    return { ok: true, agentSession, workspacePath };
+  }
+
+  /**
+   * POST /api/agents/:name/onetake — 一次性调用（对齐 Rust 65732f3 换名：
+   * 原 /api/agents/:name/chat 的本轮 SSE、done 即关——「one take」是它
+   * 语义的诚实名字）。
+   *
+   * 建会话（可选持久：body.sessionId 指定 client-chosen id，重复即 409）
+   * + 发消息 + 出【这一轮】的 SSE 回答流。函数式用法：调用方要的就是
+   * 这一轮的答案（无头总结/一次性问答）。会话照常持久化，事后可按
+   * sessionId 继续（chat 族/events）；要看全生命周期（子任务/投递/
+   * 消费轮）请挂 GET /api/chat/:id/events。
+   */
+  fastify.post('/api/agents/:name/onetake', async (request, reply) => {
     const { name } = request.params as { name: string };
     const body = request.body as CreateAndChatRequest;
 
@@ -729,132 +967,30 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       return;
     }
 
-    if (!body.workspacePath?.trim()) {
-      reply.code(400).send({ error: 'workspacePath is required' });
+    // workspacePath 缺省 = 进程当前目录（对齐 Rust create_session 的
+    // current_dir 兜底；chat-send 的创建分支才显式 400）。
+
+    // client-chosen id（可选）：重复 id（温注册表已有同 id 会话）明确
+    // 409——旧版静默覆盖会让两条会话互相踩盘（对齐 Rust try_insert）。
+    const chosenId = body.sessionId?.trim() || undefined;
+    if (chosenId && sessionManager().getAgentSession(chosenId)) {
+      reply.code(409).send({
+        error:
+          'Session already exists; resume it via POST /api/chat/:id or choose another sessionId',
+      });
       return;
     }
 
-    // Inline agent block replaces the agent file (host-owned persona;
-    // agents/*.md is only the standalone-daemon assembly source).
-    const agentDetail: AgentDetail | null = body.agent
-      ? {
-          id: name,
-          name: body.agent.name ?? name,
-          instructions: body.agent.instructions,
-          path: '',
-          skillDirs: [],
-          mcpPaths: [],
-          skillCount: 0,
-        }
-      : await resourceManager().getAgent(name);
-    if (!agentDetail) {
-      reply.code(404).send({ error: 'Agent not found' });
+    // onetake 的 agent 来源：内联 > 具名（无 crew——对齐 Rust agent_onetake）
+    const source: CreateSource = body.agent
+      ? { kind: 'inline', name: body.agent.name ?? name, body: body.agent }
+      : { kind: 'named', name };
+    const outcome = await assembleCreatedSession(source, body, chosenId);
+    if (!outcome.ok) {
+      reply.code(outcome.code).send({ error: outcome.error });
       return;
     }
-
-    const workspacePath = body.workspacePath;
-
-    // Daemon-level runner defaults (three-tier merge: body > agent > config.runner).
-    const config = configManager().get();
-    const rc = config.runner;
-
-    // agent 会话的资源兜底策略：私有非空用私有，为空落 config.yaml 全局
-    // 默认（对齐 Rust eef05a1——装配机制层不再兜底全局，策略上移到会话
-    // 路由；crew 会话不拼全局，见 /api/crews/:id/chat）。
-    const skillDirsFallback =
-      agentDetail.skillDirs.length > 0 ? agentDetail.skillDirs : (rc?.skillDirs ?? []);
-    const mcpPathsFallback =
-      agentDetail.mcpPaths.length > 0 ? agentDetail.mcpPaths : (rc?.mcpConfigPaths ?? []);
-
-    // 内联子 agent（R2P-143，对齐 Rust e39477c 的 Inline 分支）：请求体
-    // `agent.subAgents[]` → SubAgentConfig（与 crew 路径同一类型，wire 字段
-    // 一一对应）。有名单即注册 delegate（异步受理全链路），无需建 crew 目录。
-    // name/instructions 必填校验（对齐 Rust serde 缺字段 400——静默产出
-    // undefined 会让子 agent 装配出不可诊断的空配置）。
-    if (body.agent?.subAgents) {
-      for (const [i, s] of body.agent.subAgents.entries()) {
-        if (!s?.name || !s.instructions) {
-          reply.code(400);
-          return {
-            error: `agent.subAgents[${i}] requires non-empty "name" and "instructions"`,
-          };
-        }
-      }
-    }
-    const inlineSubAgents: AgentSessionOptions['subAgents'] = body.agent?.subAgents?.map((s) => ({
-      name: s.name,
-      description: s.description ?? '',
-      config: { name: s.name, instructions: s.instructions, tools: [] },
-      maxSteps: s.maxSteps,
-      timeout: s.timeout,
-      inheritParentTools: s.inheritParentTools,
-      inheritParentSkills: s.inheritParentSkills,
-    }));
-
-    // 搜索配置解析（供 search 字段与 web 工具注入工厂共用）
-    const searchConfig =
-      body.config?.search ??
-      (config.search?.defaultProvider
-        ? { provider: config.search.defaultProvider as 'sogou' | 'bing' }
-        : undefined);
-
-    const sessionOptions: AgentSessionOptions = {
-      runtime: defaultNodeHostEnv,
-      llmClientFactory: createLLMClient,
-      workspacePath,
-      agentName: agentDetail.name,
-      agentInstructions: agentDetail.instructions,
-      model: agentDetail.model,
-      // skills.dirs: body > agent 私有(空则 config.runner 全局) > devtool 脚手架技能集
-      // （BUILTIN_SKILLS_DIR 来自 wrangler-devtool，恒 append；引擎级 spec-plan 技能
-      //  由 AgentHarness.collectSkillDirs 另行注入，两者不同源）
-      // spec-plan skills（引擎自带，恒在）。
-      skills: {
-        dirs: [...(body.config?.skills?.dirs ?? skillDirsFallback), BUILTIN_SKILLS_DIR],
-      },
-      tools: {
-        // 替换语义:内联 mcpServers 给了 → 路径轴(agent/config.runner 回退)整体旁路
-        mcpConfigPaths: body.config?.tools?.mcpServers
-          ? []
-          : (body.config?.tools?.mcpConfigPaths ?? mcpPathsFallback),
-        builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
-        // Node 专属 web 工具（jsdom 爬虫）——引擎 core 不含，由 daemon 组装注入
-        injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),
-        // MCP 加载器（引擎 core 不捆绑 MCP 加载）
-        mcpLoader: (paths) =>
-          loadMCPTools(
-            body.config?.tools?.mcpServers
-              ? { servers: body.config.tools.mcpServers }
-              : { configPaths: paths }
-          ),
-      },
-      sessionStore: body.sessionDir
-        ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)
-        : undefined,
-      sessionManager: sessionManager(),
-      sessionBaseDir: sessionManager().baseDir,
-      agentConfigPath: agentDetail.path,
-      // Feature toggles + groups: body > config.runner (two-tier for toggles)
-      thinking: body.config?.thinking ?? rc?.thinking,
-      session: body.config?.session ?? rc?.session,
-      todolist: body.config?.todolist ?? rc?.todolist,
-      specPlan: body.config?.specPlan ?? rc?.specPlan,
-      commands: body.config?.commands ?? rc?.commands,
-      // Node 专属：合并 sandbox 配置并构造实例（引擎 core 不捆绑 sandbox 运行时）
-      sandbox: withSandboxInstance(config.sandbox, body.config?.sandbox, workspacePath),
-      a2ui: body.config?.a2ui ?? rc?.a2ui,
-      search: searchConfig,
-      compression: resolveCompression(
-        normalizeCompression(body.config?.compression),
-        rc?.compression
-      ),
-      limits: body.config?.limits ?? rc?.limits,
-      // 内联子 agent 名单（R2P-143）：直传 delegation——与 crew 路径共用
-      // 委派管道，唯一差异是定义存哪（请求体 vs 磁盘目录）。
-      subAgents: inlineSubAgents,
-    };
-
-    const agentSession = await AgentSession.create(sessionOptions, config);
+    const { agentSession, workspacePath } = outcome;
     const sessionId = agentSession.sessionId;
 
     // Register session so wrangler's auto-created session is discoverable
@@ -925,8 +1061,61 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       throw err;
     }
     if (!ctx) {
-      reply.code(404).send({ error: 'Session not found' });
-      return;
+      // 首次即建（对齐 Rust 65732f3 send.rs 的 (None,None) 分支）：带创建
+      // 字段（内联 agent > crew > agentName）+ workspacePath 就以 URL 的
+      // sessionId 建会话；都没有 → 410（会话不存在且未请求创建）。
+      const source = resolveCreateSource(body);
+      if (!source) {
+        reply.code(410).send({ error: 'Session expired, please start a new conversation' });
+        return;
+      }
+      if (!body.workspacePath?.trim()) {
+        reply.code(400).send({ error: 'workspacePath is required to create a session' });
+        return;
+      }
+      // 冷装配占位闸（R2P-161 的同款互斥）：并发同 id 首建只赢一个；
+      // 输者 409 starting——重试即落 resume 路径（Rust 是输者透明退
+      // resume_with_session；TS 沿用本文件既有的冷装配竞态语义）。
+      if (!sessionManager().tryReserveAgentSession(sessionId)) {
+        reply
+          .code(409)
+          .send(
+            startingConflict('the session is being assembled from disk (cold start); retry shortly')
+          );
+        return;
+      }
+      let agentSession: AgentSession | undefined;
+      try {
+        const outcome = await assembleCreatedSession(source, body, sessionId);
+        if (!outcome.ok) {
+          reply.code(outcome.code).send({ error: outcome.error });
+          return;
+        }
+        agentSession = outcome.agentSession;
+        sessionManager().registerSession(sessionId, outcome.workspacePath);
+      } finally {
+        // 成功：setAgentSession 结算占位并发布真身；失败：清除占位不卡死。
+        if (agentSession) {
+          sessionManager().setAgentSession(sessionId, agentSession);
+        } else {
+          sessionManager().cancelAgentSessionReservation(sessionId);
+        }
+      }
+
+      // 创建成功即驱动首轮（ack 语义；对齐 Rust 输者退化的同一形状）
+      const ack = agentSession.sendMessageInBackground(userContent, {
+        thinkingEnabled: body.thinkingEnabled,
+        model: body.model,
+      });
+      if (!ack.ok) {
+        reply.code(ack.code === 409 ? 409 : 400);
+        return { error: ack.error };
+      }
+      sessionManager().updateStatus(sessionId, 'running');
+      ack.completion.then((outcome) =>
+        sessionManager().updateStatus(sessionId, outcome.hadError ? 'error' : 'idle')
+      );
+      return { sessionId, turnSeq: ack.turnSeq };
     }
     const { info, store, sessionDir } = ctx;
 
@@ -1034,132 +1223,103 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     ack.completion.then((outcome) =>
       sessionManager().updateStatus(sessionId, outcome.hadError ? 'error' : 'idle')
     );
-    return { ok: true, sessionId, turnSeq: ack.turnSeq };
+    // ack 体对齐 Rust send.rs：{sessionId, turnSeq}（不带 ok——respond 的
+    // ack 带 ok 是 Rust 自身的形状差异，保持各自原样）。
+    return { sessionId, turnSeq: ack.turnSeq };
   });
 
   /**
-   * POST /api/crews/:id/chat — NEW conversation driven by a crew config
+   * GET /api/chat/:sessionId — 会话诊断快照（一次性 JSON，对齐 Rust
+   * 65732f3 的 chat_diagnostics；原 /api/agent/:id/state 常驻流退役）。
    *
-   * Loads CREW.md + agents/*.md via CrewLoader, converts to runner options
-   * via crewToRunnerOptions (system prompt = crew memory + primary
-   * instructions + sub-agent catalog; subAgents = non-primary agents;
-   * enables the delegate tool), then constructs AgentSession the same way
-   * the single-agent route does. crewId is persisted into runnerConfig so
-   * the resume path can reload crew config.
+   * 温会话：运行时实时快照（runner 配置/工具/技能 + state + 最近一次
+   * LLM 请求 + systemPrompt + quiet 收工信号 + 会话概览）；冷会话：从
+   * state.json + meta.yaml 拼降级快照；两者都没有 → 404。长流式的事件
+   * 订阅走 GET /api/chat/:id/events，这里只回答「这条会话现在什么样」。
    */
-  fastify.post('/api/crews/:id/chat', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const body = request.body as CreateAndChatRequest;
+  fastify.get('/api/chat/:sessionId', async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string };
+    const query = request.query as { sessionDir?: string };
 
-    // 空文本可以，但不能文本与附件都空（纯图消息合法，R2P-107）。
-    let userContent: MultimodalContent;
-    try {
-      userContent = buildUserContent(body.message ?? '', body.attachments ?? []);
-    } catch (err) {
-      reply.code(400).send({
-        error: err instanceof AttachmentParseError ? err.message : 'invalid attachments',
-      });
-      return;
-    }
-    if (!body.message?.trim() && !(body.attachments ?? []).length) {
-      reply.code(400).send({ error: 'message is required' });
-      return;
+    const agentSession = sessionManager().getAgentSession(sessionId);
+    if (agentSession) {
+      return agentSession.getDiagnostics();
     }
 
-    if (!body.workspacePath?.trim()) {
-      reply.code(400).send({ error: 'workspacePath is required' });
+    // 冷会话降级快照：显式 sessionDir 优先，否则标准树寻址。
+    let dir: string | undefined;
+    if (query.sessionDir?.trim()) {
+      dir = query.sessionDir;
+    } else {
+      const info = await sessionManager().getInfo(sessionId);
+      dir = info
+        ? sessionManager().getSessionStore(info.workspacePath).getSessionDir(sessionId)
+        : undefined;
+    }
+    const store = dir ? SessionStore.fromDir(dir, defaultNodeHostEnv) : undefined;
+    const meta = store ? await store.getMeta(store.isDirBound ? undefined : sessionId) : null;
+    const state = store ? await store.loadState(store.isDirBound ? undefined : sessionId) : null;
+    if (!meta && !state) {
+      reply.code(404).send({ error: 'Session not found' });
       return;
     }
-
-    let crewConfig;
-    try {
-      crewConfig = await resourceManager().loadCrewConfig(id);
-    } catch {
-      reply.code(404).send({ error: 'Crew not found' });
-      return;
-    }
-
-    const runnerOpts = crewToRunnerOptions(crewConfig);
-    const workspacePath = body.workspacePath;
-
-    // Daemon-level runner defaults (body > config.runner)。注意 skills/MCP
-    // 两轴不在此列：crew 目录即全世界，只认私有声明（见下）。
-    const config = configManager().get();
-    const rc = config.runner;
-
-    // 搜索配置解析（供 search 字段与 web 工具注入工厂共用）
-    const searchConfig =
-      body.config?.search ??
-      (config.search?.defaultProvider
-        ? { provider: config.search.defaultProvider as 'sogou' | 'bing' }
-        : undefined);
-
-    const sessionOptions: AgentSessionOptions = {
-      runtime: defaultNodeHostEnv,
-      llmClientFactory: createLLMClient,
-      workspacePath,
-      agentName: runnerOpts.primaryAgent,
-      agentInstructions: runnerOpts.systemPrompt,
-      subAgents: runnerOpts.subAgents,
-      crewId: id,
-      model: body.model ?? runnerOpts.model,
-      // Node 专属：合并 sandbox 配置并构造实例（引擎 core 不捆绑 sandbox 运行时）
-      sandbox: withSandboxInstance(config.sandbox, body.config?.sandbox ?? true, workspacePath),
-      // crew 目录即全世界：skills/MCP 只认 <crew>/ 私有声明（body.config
-      // 明说的最高），不落 config.yaml 全局默认——agent 会话才兜底全局
-      // （对齐 Rust eef05a1）。skillDirs 是容器目录（<crew>/skills 本身）。
-      skills: {
-        dirs: [...(body.config?.skills?.dirs ?? runnerOpts.skillDirs), BUILTIN_SKILLS_DIR],
+    const ctx = state?.context;
+    const rc = meta?.runnerConfig as
+      | {
+          model?: string;
+          contextWindow?: number;
+          sandbox?: boolean;
+          thinkingEnabled?: boolean;
+          enableSession?: boolean;
+          enableTodolist?: boolean;
+          enableCommands?: boolean;
+          compressorEnabled?: boolean;
+        }
+      | undefined;
+    const tokensIn = ctx?.totalTokens?.input;
+    const tokensOut = ctx?.totalTokens?.output;
+    return {
+      runner: {
+        features: {
+          sandbox: rc?.sandbox ?? false,
+          thinkingEnabled: rc?.thinkingEnabled ?? false,
+          compressorEnabled: rc?.compressorEnabled ?? false,
+          enableSession: rc?.enableSession ?? true,
+          enableTodolist: rc?.enableTodolist ?? true,
+          enableCommands: rc?.enableCommands ?? true,
+        },
+        tools: [],
+        skills: [],
       },
-      tools: {
-        // 替换语义:内联 mcpServers 给了 → 路径轴旁路(镜像 Rust 契约)
-        mcpConfigPaths: body.config?.tools?.mcpServers
-          ? []
-          : (body.config?.tools?.mcpConfigPaths ?? runnerOpts.mcpPaths),
-        builtinFilter: body.config?.tools?.builtinFilter ?? rc?.tools?.builtinTools,
-        // Node 专属 web 工具（jsdom 爬虫）——引擎 core 不含，由 daemon 组装注入
-        injectFactory: (deps) => createWebTools({ deps, provider: searchConfig?.provider }),
-        // MCP 加载器（引擎 core 不捆绑 MCP 加载）
-        mcpLoader: (paths) =>
-          loadMCPTools(
-            body.config?.tools?.mcpServers
-              ? { servers: body.config.tools.mcpServers }
-              : { configPaths: paths }
-          ),
+      agent: state ?? { status: 'no-state' },
+      llm: null,
+      systemPrompt: null,
+      quiet: true,
+      quietBlockers: [],
+      session: {
+        overview: {
+          title: meta?.title,
+          agentName: state?.config?.name ?? '',
+          model: rc?.model ?? '',
+          stepCount: ctx?.stepCount ?? 0,
+          messageCount: ctx?.messages?.length ?? 0,
+          tokensIn,
+          tokensOut,
+          tokensTotal: tokensIn != null && tokensOut != null ? tokensIn + tokensOut : undefined,
+          estimatedContextSize: ctx?.estimatedContextSize,
+          contextWindow: rc?.contextWindow,
+          status: 'idle',
+          createdAt: meta?.createdAt ?? '',
+          updatedAt: meta?.updatedAt ?? '',
+        },
+        info: {
+          sessionId,
+          agentName: state?.config?.name ?? '',
+          model: rc?.model ?? '',
+          workspacePath: (meta as { workspacePath?: string } | null)?.workspacePath ?? '',
+        },
       },
-      sessionStore: body.sessionDir
-        ? SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv)
-        : undefined,
-      sessionManager: sessionManager(),
-      sessionBaseDir: sessionManager().baseDir,
-      thinking: body.config?.thinking ?? rc?.thinking,
-      session: body.config?.session ?? rc?.session,
-      todolist: body.config?.todolist ?? rc?.todolist,
-      specPlan: body.config?.specPlan ?? rc?.specPlan,
-      commands: body.config?.commands ?? rc?.commands,
-      a2ui: body.config?.a2ui ?? rc?.a2ui,
-      search: searchConfig,
-      compression: resolveCompression(
-        normalizeCompression(body.config?.compression),
-        rc?.compression
-      ),
-      limits: body.config?.limits ?? rc?.limits,
     };
-
-    const agentSession = await AgentSession.create(sessionOptions, config);
-    const sessionId = agentSession.sessionId;
-
-    sessionManager().registerSession(sessionId, workspacePath);
-    sessionManager().setAgentSession(sessionId, agentSession);
-    sessionManager().updateStatus(sessionId, 'running');
-
-    await streamAgentSession(reply, agentSession, userContent, {
-      thinkingEnabled: body.thinkingEnabled,
-      model: body.model,
-      sessionId,
-      sessionManager: sessionManager(),
-      emitSessionStart: true,
-    });
   });
 }
 

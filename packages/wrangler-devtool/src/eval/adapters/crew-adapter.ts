@@ -3,7 +3,7 @@
  *
  * Loads the crew via CrewLoader, converts to runner options via
  * crewToRunnerOptions, then constructs AgentHarness with subAgents
- * enabled. Mirrors the daemon's /api/crews/:id/chat flow.
+ * enabled. Mirrors the daemon's crew-create assembly (POST /api/chat/:id with a crew field — the old /api/crews/:id/chat endpoint was merged there).
  */
 
 import { createAgentState, type AgentState } from '@agentskillmania/colts';

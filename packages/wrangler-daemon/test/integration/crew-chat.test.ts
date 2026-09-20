@@ -7,7 +7,8 @@
  * and I see the delegation events stream through SSE in real time
  *
  * Acceptance Criteria:
- * 1. POST /api/crews/:id/chat creates a session and streams SSE
+ * 1. POST /api/chat/:id {crew} 首次即建（统一发送端点，ack 语义——原
+ *    /api/crews/:id/chat 已并入，对齐 Rust 65732f3）
  * 2. The SSE stream contains subagent-* events proving the primary agent
  *    delegated to the worker sub-agent (subagent-start, subagent-token,
  *    subagent-end)
@@ -210,18 +211,23 @@ describe('Integration: Crew chat', () => {
   }
 
   itif(testConfig.enabled)(
-    'POST /api/crews/:id/chat streams subagent-* events for a delegation round',
+    'POST /api/chat/:id {crew} 首次即建——subagent-* events for a delegation round',
     { timeout: 320_000 } as never,
     async () => {
       const workspaceDir = join(tempDir, 'workspace');
       await mkdir(workspaceDir, { recursive: true });
 
-      const res = await fetch(`${getUrl()}/api/crews/delegate-crew/chat`, {
+      // 统一发送端点创建（client-chosen id + crew 字段）→ ack；轮帧全在
+      // 常驻 events 流上收。
+      const sessionId = 'crew-intg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      const res = await fetch(`${getUrl()}/api/chat/${sessionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: 'What is 2+2? Delegate this to the researcher.',
           workspacePath: workspaceDir,
+          crew: 'delegate-crew',
+          sessionId,
           thinkingEnabled: false,
           model: testConfig.testModel,
         }),
@@ -231,19 +237,13 @@ describe('Integration: Crew chat', () => {
         console.log('[crew-chat] non-200 body:', (await res.text()).slice(0, 500));
       }
       expect(res.status).toBe(200);
-      expect(res.headers.get('content-type')).toBe('text/event-stream');
+      expect(res.headers.get('content-type')).toContain('application/json');
+      const ack = (await res.json()) as { sessionId: string; turnSeq: number };
+      expect(ack.sessionId).toBe(sessionId);
+      expect(typeof ack.turnSeq).toBe('number');
 
-      const raw = await res.text();
-      const events = parseSSE(raw);
-      const eventTypes = events.map((e) => e.event);
-
-      // Session lifecycle
-      expect(eventTypes).toContain('session-start');
-      const startEvent = events.find((e) => e.event === 'session-start');
-      const sessionId = (startEvent!.data as { sessionId: string }).sessionId;
-      expect(sessionId).toBeTruthy();
-
-      expect(eventTypes).toContain('done');
+      const events: Array<{ event: string; data: unknown }> = [];
+      const eventTypes: string[] = [];
 
       // 异步委派（R2P-141 起）：子任务后台执行，帧与投递在会话通道上——
       // 请求级流关闭后经常驻 events 流补齐观察窗，直到全链路收敛。
@@ -325,23 +325,23 @@ describe('Integration: Crew chat', () => {
       const workspaceDir = join(tempDir, 'workspace');
       await mkdir(workspaceDir, { recursive: true });
 
-      // Step 1: open a new crew chat to create the session.
-      const firstRes = await fetch(`${getUrl()}/api/crews/delegate-crew/chat`, {
+      // Step 1: 统一发送端点创建会话（ack；client-chosen id + crew 字段）。
+      const sessionId = 'crew-resume-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      const firstRes = await fetch(`${getUrl()}/api/chat/${sessionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: 'Say hello. Delegate this to the researcher.',
           workspacePath: workspaceDir,
+          crew: 'delegate-crew',
+          sessionId,
           thinkingEnabled: false,
           model: testConfig.testModel,
         }),
       });
       expect(firstRes.status).toBe(200);
-      const firstRaw = await firstRes.text();
-      const firstEvents = parseSSE(firstRaw);
-      const startEvent = firstEvents.find((e) => e.event === 'session-start');
-      const sessionId = (startEvent!.data as { sessionId: string }).sessionId;
-      expect(sessionId).toBeTruthy();
+      const firstAck = (await firstRes.json()) as { sessionId: string };
+      expect(firstAck.sessionId).toBe(sessionId);
 
       // Evict the in-memory AgentSession so the next /api/chat/:sessionId
       // call is forced down the AgentSession.resume path (which is what
