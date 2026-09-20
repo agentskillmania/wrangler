@@ -79,8 +79,11 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
     const { id } = request.params as { id: string };
     // R2P-161b①（对齐 Rust 098adbd 的先查注册表再删盘）：冷装配占位中的
     // id 不可删——delete() 会清掉占位并删盘，而在飞装配的 finally 随后
-    // setAgentSession 注册一个盘上已删的僵尸会话（下一轮 afterRun 落盘
-    // 还会把目录"复活"）。409 starting 分诊让客户端等装配落定后重试。
+    // setAgentSession 注册一个盘上已删的僵尸会话；其下一轮起 beforeRun
+    // 的 createWithId 会重建目录、afterRun 再落状态——目录就此"复活"
+    // （R2P-163b②：复活入口是 beforeRun 建目录，非 afterRun 落盘本身）。
+    // 409 starting 分诊让客户端等装配落定后重试。（delete() 自身的盘删
+    // await 窗另由 163b① 的删除中墓碑拦停迟到发布/re-reserve。）
     if (manager().isReservedAgentSession(id)) {
       reply.code(409);
       return {

@@ -579,8 +579,18 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       // session's pre-run snapshot would be rolled back by that run's
       // afterRun persistence. Busy at first sight may be the done-frame
       // clearance window (R2P-163, align Rust 91c8ae5) — wait it out before
-      // falling through; a genuinely running turn stays busy past the grace.
-      if (!agentSession.busy || (await busyCleared(agentSession))) {
+      // deciding; a genuinely running turn stays busy past the grace.
+      const stillBusy = agentSession.busy && !(await busyCleared(agentSession));
+      if (stillBusy) {
+        // 真忙 409 分诊（R2P-163b③，对齐 Rust）：旧落点是共享的 200
+        // "Request not found"——真忙被误报成没这个请求，调用方无从区分
+        // 「等一会儿重试」与「请求已答」。
+        reply.code(409);
+        return busyConflict(
+          'a run is in progress on this session; wait for it to finish before answering'
+        );
+      }
+      {
         const outcome = await agentSession.respondViaState(body.requestId, body.response);
         if (outcome.status === 'invalid') {
           reply.code(400);

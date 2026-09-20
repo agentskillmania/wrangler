@@ -51,6 +51,9 @@ export class SessionManager {
    * other (orphaned runner + double persistence).
    */
   private readonly reservedAgentSessions = new Set<string>();
+  /** 删除中墓碑（R2P-163b①）：delete() 的盘删 await 期间拦截迟到冷装配
+   * 的 re-reserve/迟到发布——复活出的温会话会盖在已删目录上变僵尸。 */
+  private readonly deletingAgentSessions = new Set<string>();
   /**
    * 温会话的最后活动时刻（毫秒，this.now() 域）——闲置 TTL 驱逐判定用，
    * 对齐 Rust `Session::last_active`。触碰点（对齐 Rust Session::touch 只在
@@ -166,23 +169,37 @@ export class SessionManager {
     return all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  /** Delete session from disk and clear runtime state */
+  /**
+   * Delete session from disk and clear runtime state.
+   *
+   * 全程持删除中墓碑（R2P-163b①）：盘删 await 期间迟到的冷首消息
+   * re-reserve（tryReserve 拒绝）与迟到发布（setAgentSession 停轮丢弃）
+   * 都被拦停——复活出的温会话/占位会盖在已删目录上变僵尸。幂等：并发
+   * DELETE 对同一 id 的二次入直接返回。
+   */
   async delete(id: string): Promise<void> {
-    const session = this.activeSessions.get(id);
-    if (session) {
-      session.stop();
-      this.activeSessions.delete(id);
+    if (this.deletingAgentSessions.has(id)) return;
+    this.deletingAgentSessions.add(id);
+    try {
+      const session = this.activeSessions.get(id);
+      if (session) {
+        session.stop();
+        this.activeSessions.delete(id);
+      }
+      // Also drop a pending cold-start reservation — deleting mid-assembly
+      // must not leave the slot stuck.（DELETE 路由对占位中已 409，这里
+      // 是防御性清理。）
+      this.reservedAgentSessions.delete(id);
+      this.lastActiveAt.delete(id);
+      const store = this.getStoreForSession(id);
+      if (store) {
+        await store.deleteSession(id);
+      }
+      this.sessionWorkspaces.delete(id);
+      this.runtimeStatus.delete(id);
+    } finally {
+      this.deletingAgentSessions.delete(id);
     }
-    // Also drop a pending cold-start reservation — deleting mid-assembly
-    // must not leave the slot stuck.
-    this.reservedAgentSessions.delete(id);
-    this.lastActiveAt.delete(id);
-    const store = this.getStoreForSession(id);
-    if (store) {
-      await store.deleteSession(id);
-    }
-    this.sessionWorkspaces.delete(id);
-    this.runtimeStatus.delete(id);
   }
 
   /** Get runtime status (in-memory, defaults to 'idle') */
@@ -215,6 +232,9 @@ export class SessionManager {
   tryReserveAgentSession(id: string): boolean {
     if (this.activeSessions.has(id)) return false;
     if (this.reservedAgentSessions.has(id)) return false;
+    // 删除中不受理冷装配（R2P-163b①）：调用方 409 稍后重试，删除落地后
+    // 自然落到 404——比复活出僵尸会话诚实。
+    if (this.deletingAgentSessions.has(id)) return false;
     this.reservedAgentSessions.add(id);
     return true;
   }
@@ -248,6 +268,12 @@ export class SessionManager {
    * `last_active: Instant::now()`——物化即温）。
    */
   setAgentSession(id: string, session: AgentSession): void {
+    // 迟到发布遇上删除中（R2P-163b①）：装配在 delete() 的盘删 await 期间
+    // 完成——停轮丢弃，不注册（注册即僵尸温会话盖已删目录）。
+    if (this.deletingAgentSessions.has(id)) {
+      session.stop();
+      return;
+    }
     this.sweepIdleAgentSessions();
     this.reservedAgentSessions.delete(id);
     this.activeSessions.set(id, session);

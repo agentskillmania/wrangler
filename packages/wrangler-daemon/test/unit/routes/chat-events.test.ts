@@ -647,12 +647,23 @@ describe('POST /api/chat/:sessionId ack + persistent events (R2P-153 dual-track)
     const t1 = await collectUntil(gen, (f) => f.event === 'done');
     expect(t1.at(-1)!.data.turnSeq).toBe(ack1.turnSeq);
 
-    // 第二轮：同一连接（不重连），done 归属第二轮号。
-    const post2 = await fetch(`${getUrl()}/api/chat/multi-turn`, {
+    // 第二轮：同一连接（不重连），done 归属第二轮号。fast resend 的清障
+    // 窗 = done 帧到闩锁释放之间的落盘时长（stream-first-then-persist）；
+    // 慢机上可能超过 busyCleared 的 100ms 宽限 → 409（R2P-163b④）：有界
+    // 重试保留快发语义（每次重试仍走清障路径），不再对计时敏感。
+    let post2 = await fetch(`${getUrl()}/api/chat/multi-turn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: 'second' }),
     });
+    for (let i = 0; i < 50 && post2.status === 409; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      post2 = await fetch(`${getUrl()}/api/chat/multi-turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'second' }),
+      });
+    }
     const ack2 = (await post2.json()) as { turnSeq: number };
     expect(ack2.turnSeq).toBe(ack1.turnSeq + 1);
     const t2 = await collectUntil(

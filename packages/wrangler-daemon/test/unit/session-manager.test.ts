@@ -95,6 +95,52 @@ describe('SessionManager', () => {
     expect(manager.getAgentSession('del-id')).toBeNull();
   });
 
+  it('delete() tombstone blocks re-reserve and late publish during the disk await (R2P-163b①)', async () => {
+    const manager = new SessionManager(sessionsDir);
+    await manager.init();
+    const wsPath = join(tempDir, 'workspace');
+    manager.registerSession('tomb-id', wsPath);
+    const store = manager.getSessionStore(wsPath);
+    await store.createWithId('tomb-id', 'test');
+
+    // Stretch the disk-delete await so the interleaving is deterministic:
+    // wrap the session store's deleteSession with a controlled gate.
+    const gated = new Promise<void>((resolve) => setTimeout(resolve, 25));
+    const original = store.deleteSession.bind(store);
+    const spy = vi.spyOn(store, 'deleteSession').mockImplementation(async (id: string) => {
+      await gated;
+      return original(id);
+    });
+
+    const deleting = manager.delete('tomb-id');
+
+    // During the disk await: a new cold first-message cannot re-reserve…
+    expect(manager.tryReserveAgentSession('tomb-id')).toBe(false);
+    // …and an in-flight assembly's late publish is stopped and dropped.
+    const lateSession = { stop: vi.fn() } as any;
+    manager.setAgentSession('tomb-id', lateSession);
+    expect(lateSession.stop).toHaveBeenCalled();
+
+    await deleting;
+    spy.mockRestore();
+    expect(manager.getAgentSession('tomb-id')).toBeNull();
+    expect(await manager.getInfo('tomb-id')).toBeNull();
+    // Tombstone removed after completion: normal reservation works again.
+    expect(manager.tryReserveAgentSession('tomb-id')).toBe(true);
+  });
+
+  it('delete() is idempotent for concurrent calls (tombstone second entry returns)', async () => {
+    const manager = new SessionManager(sessionsDir);
+    await manager.init();
+    const wsPath = join(tempDir, 'workspace');
+    manager.registerSession('idem-id', wsPath);
+    const store = manager.getSessionStore(wsPath);
+    await store.createWithId('idem-id', 'test');
+
+    await Promise.all([manager.delete('idem-id'), manager.delete('idem-id')]);
+    expect(manager.getAgentSession('idem-id')).toBeNull();
+  });
+
   it('runtime status is in-memory', async () => {
     const manager = new SessionManager(sessionsDir);
     await manager.init();

@@ -775,9 +775,12 @@ describe('Chat API', () => {
             response: { q1: { type: 'direct', value: 'A' } },
           }),
         });
-        expect(res.ok).toBe(true);
+        // R2P-163b③（对齐 Rust 409 分诊）：真忙不再误报 200 "not found"
+        // ——调用方无从区分「稍后重试」与「请求已答」。
+        expect(res.status).toBe(409);
         const body = await res.json();
-        expect(body.error).toBe('Request not found or already answered');
+        expect(body.error).toBe('Session is busy');
+        expect(body.reason).toBe('busy');
         // The state tier must not run: injecting into a busy session's
         // pre-run snapshot would be rolled back by that run's afterRun.
         expect(mockSession.respondViaState).not.toHaveBeenCalled();
