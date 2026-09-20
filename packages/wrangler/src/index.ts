@@ -43,6 +43,8 @@ export type {
   AskHumanHandler,
 } from '@agentskillmania/colts';
 export { respond, removePendingInterrupt } from '@agentskillmania/colts';
+// 意图构造器（R2P-109）：middleware 钩子声明意图，内核落成引擎结构。
+export { completeFromCommand, waitHuman, runComplete } from '@agentskillmania/colts';
 // 多模态 content 契约（R2P-107）：daemon 经门面消费，不越层引 llm-client。
 export { contentToPlainText } from '@agentskillmania/llm-client';
 export type { MultimodalContent } from '@agentskillmania/llm-client';

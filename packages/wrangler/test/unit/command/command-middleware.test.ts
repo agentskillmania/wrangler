@@ -144,13 +144,13 @@ describe('CommandMiddleware', () => {
         fromCommand: true,
       });
       // Receipt persisted as an assistant row after the user row (Rust 196d3f7).
-      expect(result?.state.context.messages).toHaveLength(2);
-      expect(result?.state.context.messages[0]!.role).toBe('user');
-      expect(result?.state.context.messages[1]!.role).toBe('assistant');
-      expect(result?.state.context.messages[1]!.content).toBe('Command executed successfully');
-      // Result state and the hook state are the same object (stream + persist
-      // read the same receipt-bearing state).
-      expect(result?.result?.state).toBe(result?.state);
+      // R2P-109 意图构造器：钩子层不另带 state——引擎消费 result 内的状态
+      //（链合并 chain.state ?? stopResult.state，与旧手搓双层等价）。
+      const resultState = (result as { result?: { state?: typeof result.state } }).result?.state;
+      expect(resultState?.context.messages).toHaveLength(2);
+      expect(resultState?.context.messages[0]!.role).toBe('user');
+      expect(resultState?.context.messages[1]!.role).toBe('assistant');
+      expect(resultState?.context.messages[1]!.content).toBe('Command executed successfully');
     });
 
     it('should return state modification when handler returns handled=false with state', async () => {
@@ -269,9 +269,11 @@ describe('CommandMiddleware', () => {
         answer: '',
         fromCommand: true,
       });
-      // Empty answer → no blank receipt row is persisted.
-      expect(result?.state.context.messages).toHaveLength(1);
-      expect(result?.state.context.messages[0]!.role).toBe('user');
+      // Empty answer → no blank receipt row is persisted.（R2P-109：state
+      // 在 result 内——钩子层不另带。）
+      const resultState = (result as { result?: { state?: typeof result.state } }).result?.state;
+      expect(resultState?.context.messages).toHaveLength(1);
+      expect(resultState?.context.messages[0]!.role).toBe('user');
     });
   });
 
@@ -478,9 +480,10 @@ describe('CommandMiddleware', () => {
       expect(emit).not.toHaveBeenCalledWith('compressed', expect.anything());
       // Receipt lands on the cleared messages: a resumed /clear session shows
       // "Session cleared." instead of an opaque empty conversation.
-      expect(result?.state.context.messages).toHaveLength(1);
-      expect(result?.state.context.messages[0]!.role).toBe('assistant');
-      expect(result?.state.context.messages[0]!.content).toBe('Session cleared.');
+      const resultState = (result as { result?: { state?: typeof result.state } }).result?.state;
+      expect(resultState?.context.messages).toHaveLength(1);
+      expect(resultState?.context.messages[0]!.role).toBe('assistant');
+      expect(resultState?.context.messages[0]!.content).toBe('Session cleared.');
     });
 
     it('does not emit session-cleared for handled commands that do not clear messages', async () => {

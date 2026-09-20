@@ -63,8 +63,8 @@ importers:
   packages/wrangler:
     dependencies:
       '@agentskillmania/colts':
-        specifier: 0.5.0-alpha.4
-        version: 0.5.0-alpha.4(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)
+        specifier: 0.5.0-alpha.5
+        version: 0.5.0-alpha.5(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)
       '@agentskillmania/genui':
         specifier: ^0.1.1
         version: 0.1.1(@ant-design/icons@6.3.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@types/react@19.2.18)(antd@6.6.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(echarts@5.6.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -161,11 +161,11 @@ importers:
         version: 4.1.1
     devDependencies:
       '@agentskillmania/colts':
-        specifier: 0.5.0-alpha.4
-        version: 0.5.0-alpha.4(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)
+        specifier: 0.5.0-alpha.5
+        version: 0.5.0-alpha.5
       '@agentskillmania/llm-client':
         specifier: 0.5.0-alpha.3
-        version: 0.5.0-alpha.3(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@4.4.3)
+        version: 0.5.0-alpha.3
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
@@ -230,8 +230,8 @@ packages:
   '@agentskillmania/colts@0.5.0-alpha.2':
     resolution: {integrity: sha512-09qoCHtOvY+ejhvMlREEtc4DzPQu+yXVBgRyRPF48/hPSofzTU0sZ3NU0cqkkbCY2HcS5qxS6MCkbPcI8XrJew==}
 
-  '@agentskillmania/colts@0.5.0-alpha.4':
-    resolution: {integrity: sha512-2+cPbyNqk5Kr8c7rNsHpRHJD+wIxHDQwxc+Mclkn0xTgKR+VNC0kJejQvJp39HQJ9pAS939qgOWWlmrpHT4+/g==}
+  '@agentskillmania/colts@0.5.0-alpha.5':
+    resolution: {integrity: sha512-ODXTDplsUSbWSFeFo40eiS94OZXWQlNb4zdrITezorCd2Mi91B22GK7xKocpjtVbhV9SXhnzBgnRduONPHOGOQ==}
 
   '@agentskillmania/genui@0.1.1':
     resolution: {integrity: sha512-IHgho3aZAOY4+F8MXJr7c8j/yTNUA3lgvxhwvkdDbJO/+qMmoF4PDUf5ciFlUa62PknJ6LZh7b55VY2erCLEFw==}
@@ -4493,9 +4493,9 @@ snapshots:
       - utf-8-validate
       - ws
 
-  '@agentskillmania/colts@0.5.0-alpha.4(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)':
+  '@agentskillmania/colts@0.5.0-alpha.5':
     dependencies:
-      '@agentskillmania/llm-client': 0.5.0-alpha.3(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)
+      '@agentskillmania/llm-client': 0.5.0-alpha.3(zod@3.25.76)
       eventemitter3: 5.0.4
       immer: 11.1.7
       js-tiktoken: 1.0.21
@@ -4509,9 +4509,9 @@ snapshots:
       - utf-8-validate
       - ws
 
-  '@agentskillmania/colts@0.5.0-alpha.4(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)':
+  '@agentskillmania/colts@0.5.0-alpha.5(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)':
     dependencies:
-      '@agentskillmania/llm-client': 0.5.0-alpha.3(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@3.25.76)
+      '@agentskillmania/llm-client': 0.5.0-alpha.3(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)
       eventemitter3: 5.0.4
       immer: 11.1.7
       js-tiktoken: 1.0.21
@@ -4555,6 +4555,20 @@ snapshots:
       - ws
       - zod
 
+  '@agentskillmania/llm-client@0.5.0-alpha.3':
+    dependencies:
+      '@mariozechner/pi-ai': 0.73.1
+      eventemitter3: 5.0.4
+      p-retry: 6.2.1
+      p-timeout: 6.1.4
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+      - zod
+
   '@agentskillmania/llm-client@0.5.0-alpha.3(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)':
     dependencies:
       '@mariozechner/pi-ai': 0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)
@@ -4569,23 +4583,9 @@ snapshots:
       - ws
       - zod
 
-  '@agentskillmania/llm-client@0.5.0-alpha.3(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@3.25.76)':
+  '@agentskillmania/llm-client@0.5.0-alpha.3(zod@3.25.76)':
     dependencies:
-      '@mariozechner/pi-ai': 0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@3.25.76)
-      eventemitter3: 5.0.4
-      p-retry: 6.2.1
-      p-timeout: 6.1.4
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
-  '@agentskillmania/llm-client@0.5.0-alpha.3(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@4.4.3)':
-    dependencies:
-      '@mariozechner/pi-ai': 0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@4.4.3)
+      '@mariozechner/pi-ai': 0.73.1(zod@3.25.76)
       eventemitter3: 5.0.4
       p-retry: 6.2.1
       p-timeout: 6.1.4
@@ -4669,12 +4669,6 @@ snapshots:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
       zod: 3.25.76
-
-  '@anthropic-ai/sdk@0.91.1(zod@4.4.3)':
-    dependencies:
-      json-schema-to-ts: 3.1.1
-    optionalDependencies:
-      zod: 4.4.3
 
   '@asamuzakjp/css-color@5.1.11':
     dependencies:
@@ -5183,17 +5177,6 @@ snapshots:
       '@fastify/forwarded': 3.0.1
       ipaddr.js: 2.4.0
 
-  '@google/genai@1.52.0':
-    dependencies:
-      google-auth-library: 10.6.2
-      p-retry: 4.6.2
-      protobufjs: 7.6.1
-      ws: 8.20.1
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
   '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))':
     dependencies:
       google-auth-library: 10.6.2
@@ -5202,19 +5185,6 @@ snapshots:
       ws: 8.20.1
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.29.0(zod@3.25.76)
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
-  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))':
-    dependencies:
-      google-auth-library: 10.6.2
-      p-retry: 4.6.2
-      protobufjs: 7.6.1
-      ws: 8.20.1
-    optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.3)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -5263,6 +5233,27 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@mariozechner/pi-ai@0.73.1':
+    dependencies:
+      '@anthropic-ai/sdk': 0.91.1(zod@3.25.76)
+      '@aws-sdk/client-bedrock-runtime': 3.1057.0
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))
+      '@mistralai/mistralai': 2.2.5
+      chalk: 5.6.2
+      openai: 6.26.0(ws@8.20.1)(zod@3.25.76)
+      partial-json: 0.1.7
+      proxy-agent: 6.5.0
+      typebox: 1.1.39
+      undici: 7.25.0
+      zod-to-json-schema: 3.25.2(zod@4.4.3)
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+      - zod
+
   '@mariozechner/pi-ai@0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.1)(zod@3.25.76)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@3.25.76)
@@ -5284,56 +5275,14 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-ai@0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@3.25.76)':
-    dependencies:
-      '@anthropic-ai/sdk': 0.91.1(zod@3.25.76)
-      '@aws-sdk/client-bedrock-runtime': 3.1057.0
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))
-      '@mistralai/mistralai': 2.2.5
-      chalk: 5.6.2
-      openai: 6.26.0(ws@8.20.1)(zod@3.25.76)
-      partial-json: 0.1.7
-      proxy-agent: 6.5.0
-      typebox: 1.1.39
-      undici: 7.25.0
-      zod-to-json-schema: 3.25.2(zod@3.25.76)
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
-  '@mariozechner/pi-ai@0.73.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.20.1)(zod@4.4.3)':
-    dependencies:
-      '@anthropic-ai/sdk': 0.91.1(zod@4.4.3)
-      '@aws-sdk/client-bedrock-runtime': 3.1057.0
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))
-      '@mistralai/mistralai': 2.2.5
-      chalk: 5.6.2
-      openai: 6.26.0(ws@8.20.1)(zod@4.4.3)
-      partial-json: 0.1.7
-      proxy-agent: 6.5.0
-      typebox: 1.1.39
-      undici: 7.25.0
-      zod-to-json-schema: 3.25.2(zod@4.4.3)
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
   '@mariozechner/pi-ai@0.73.1(zod@3.25.76)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@3.25.76)
       '@aws-sdk/client-bedrock-runtime': 3.1057.0
-      '@google/genai': 1.52.0
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))
       '@mistralai/mistralai': 2.2.5
       chalk: 5.6.2
-      openai: 6.26.0(zod@3.25.76)
+      openai: 6.26.0(ws@8.20.1)(zod@3.25.76)
       partial-json: 0.1.7
       proxy-agent: 6.5.0
       typebox: 1.1.39
@@ -8387,15 +8336,6 @@ snapshots:
   openai@6.26.0(ws@8.20.1)(zod@3.25.76):
     optionalDependencies:
       ws: 8.20.1
-      zod: 3.25.76
-
-  openai@6.26.0(ws@8.20.1)(zod@4.4.3):
-    optionalDependencies:
-      ws: 8.20.1
-      zod: 4.4.3
-
-  openai@6.26.0(zod@3.25.76):
-    optionalDependencies:
       zod: 3.25.76
 
   optionator@0.9.4:

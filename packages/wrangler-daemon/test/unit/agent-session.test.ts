@@ -264,15 +264,16 @@ describe('AgentSession', () => {
     });
 
     it('echoes a command receipt as a token frame before done (R2P-238)', () => {
-      // The colts kernel surfaces a command interception (beforeAdvance
-      // completed-stop) as `StepResult.stopped { data: answer }`; the answer
-      // never streamed, so mapEvent补发一帧 token — mirrors Rust
-      // turn_executor's Stopped branch.
+      // R2P-109 起 colts 真传播 fromCommand 标记：命令拦截（beforeAdvance
+      // completed-stop）折叠为 `StepResult.stopped { data, fromCommand }`；
+      // 答案从未流经 token 流，mapEvent 据标记补发一帧 token — mirrors
+      // Rust turn_executor's Stopped branch（标记判别，非形状启发）。
       const result = AgentSession.mapEvent({
         type: 'complete',
         result: {
           type: 'stopped',
           data: 'Session cleared.',
+          fromCommand: true,
           totalSteps: 0,
           tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
           duration: 12,
@@ -296,6 +297,24 @@ describe('AgentSession', () => {
           totalSteps: 0,
           tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
           duration: 1,
+        },
+        timestamp: 0,
+      } as any);
+      expect(Array.isArray(result)).toBe(false);
+      expect((result as { event: string }).event).toBe('done');
+    });
+
+    it('does not echo stopped data without the fromCommand marker (R2P-109)', () => {
+      // 非命令的自定义 stop（middleware 自带 data）不补发 token——标记
+      // 判别取代 stopped+data 形状启发（旧启发会误回声这类数据）。
+      const result = AgentSession.mapEvent({
+        type: 'complete',
+        result: {
+          type: 'stopped',
+          data: 'custom middleware payload',
+          totalSteps: 0,
+          tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          duration: 5,
         },
         timestamp: 0,
       } as any);

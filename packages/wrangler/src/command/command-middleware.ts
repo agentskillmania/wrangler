@@ -1,5 +1,5 @@
 import type { AgentMiddleware, IContextCompressor } from '@agentskillmania/colts';
-import { addAssistantMessage } from '@agentskillmania/colts';
+import { completeFromCommand, addAssistantMessage } from '@agentskillmania/colts';
 import { contentToPlainText } from '@agentskillmania/llm-client';
 
 import { parseCommand } from './parser.js';
@@ -110,30 +110,10 @@ export function createCommandMiddleware(
       const stateWithReceipt =
         receipt.length > 0 ? addAssistantMessage(finalState, receipt) : finalState;
 
-      // The completed phase carries `fromCommand` — the TS mirror of colts'
-      // `Phase::Completed::from_command` (aab85b4 / b567704). It tells
-      // consumers the answer was produced by command interception (no LLM
-      // call, nothing streamed), so a host can echo it as a token frame
-      // instead of inferring that from token counts (0fc6fba). The published
-      // colts kernel does not type/forward the field yet (`complete_from_command`
-      // arrives with R2P-109), so it is attached via a non-literal object —
-      // structurally assignable to `Phase` without an excess-property error.
-      const phase = {
-        type: 'completed' as const,
-        answer: receipt,
-        fromCommand: true,
-      };
-
-      return {
-        state: stateWithReceipt,
-        stop: true,
-        result: {
-          state: stateWithReceipt,
-          execState: ctx.execState,
-          phase,
-          done: true,
-        },
-      };
+      // 意图构造器（R2P-109，对齐 Rust 216f9c5 的 C3 迁移）：内核落成
+      // Completed 相位 + fromCommand 标记（答案没走过 token 流，消费方
+      // 据此补发，0fc6fba/b567704），钩子层不再手搓字段拼装。
+      return completeFromCommand(stateWithReceipt, ctx.execState, receipt);
     },
   };
 }

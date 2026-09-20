@@ -2026,13 +2026,18 @@ export class AgentSession {
         // shows nothing for a command (the persisted receipt is written by
         // command-middleware). Normal LLM completions are `success` and were
         // already streamed token-by-token — skip to avoid duplicating them.
-        // The published colts kernel does not yet forward a `from_command`
-        // marker (that lands with `complete_from_command`, R2P-109), so the
-        // stopped shape is the TS-equivalent discriminator here.
+        // R2P-109 起 colts 真传播 fromCommand 标记（completeFromCommand →
+        // stopped 折叠透传）。wrangler 精确锁 colts 版本——命令停止必带
+        // 标记，判别收敛为标记本身，不再依赖 stopped+data 形状启发（非
+        // 命令的自定义 stop 数据不再被误回声）。
+        const stoppedMarker = result as
+          | { type: 'stopped'; data?: string; fromCommand?: true }
+          | undefined;
         if (
-          result?.type === 'stopped' &&
-          typeof result.data === 'string' &&
-          result.data.length > 0
+          stoppedMarker?.type === 'stopped' &&
+          stoppedMarker.fromCommand === true &&
+          typeof stoppedMarker.data === 'string' &&
+          stoppedMarker.data.length > 0
         ) {
           return [
             { event: 'token', data: { delta: result.data } },
