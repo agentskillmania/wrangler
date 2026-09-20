@@ -873,9 +873,18 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     // Explicit sessionDir ("notebook dir is the session") bypasses the
     // standard {root}/sessions tree: identity comes from the persisted
     // meta.yaml in that directory.
-    const ctx = await resolveSessionContext(sessionId, body.sessionDir, {
-      sessionManager: sessionManager(),
-    });
+    let ctx;
+    try {
+      ctx = await resolveSessionContext(sessionId, body.sessionDir, {
+        sessionManager: sessionManager(),
+      });
+    } catch (err) {
+      if (err instanceof DirBindingMismatchError) {
+        reply.code(400).send({ error: err.message });
+        return;
+      }
+      throw err;
+    }
     if (!ctx) {
       reply.code(404).send({ error: 'Session not found' });
       return;
@@ -1212,12 +1221,44 @@ async function resolveSessionContext(
   if (sessionDir) {
     const meta = await readMeta(sessionDir, defaultNodeHostEnv);
     if (!meta) return null;
+    // Dir-binding check（R2P-161b③，对齐 Rust send.rs 的 dir 不符 400）：
+    // 显式 sessionDir 指向的会话若已用另一个 sessionId 注册在温会话表里，
+    // 两个 id 会绕开互斥（占位/忙碌闸都按 URL sessionId 键控）——拒绝。
+    const warm = deps.sessionManager.getAgentSession(sessionId);
+    if (!warm) {
+      // 反向核验：该目录是否有别的 id 的温会话（扫注册表）
+      for (const [registeredId, session] of deps.sessionManager.getAllAgentSessions()) {
+        if (registeredId !== sessionId) {
+          const otherCtx = await deps.sessionManager.getInfo(registeredId);
+          const otherStore = otherCtx
+            ? deps.sessionManager.getSessionStore(otherCtx.workspacePath)
+            : undefined;
+          if (otherStore && otherStore.getSessionDir(registeredId) === sessionDir) {
+            throw new DirBindingMismatchError(sessionId, registeredId);
+          }
+        }
+        void session;
+      }
+    }
     return { info: meta, store: SessionStore.fromDir(sessionDir, defaultNodeHostEnv), sessionDir };
   }
   const meta = await deps.sessionManager.getInfo(sessionId);
   if (!meta) return null;
   const store = deps.sessionManager.getSessionStore(meta.workspacePath);
   return { info: meta, store, sessionDir: store.getSessionDir(sessionId) };
+}
+
+/** 显式 sessionDir 与温会话目录绑定不符（400 而非 404——目录存在但 id 错配）。 */
+class DirBindingMismatchError extends Error {
+  constructor(
+    readonly requestedId: string,
+    readonly boundId: string
+  ) {
+    super(
+      `sessionDir is bound to sessionId '${boundId}' but addressed as '${requestedId}' — use the bound id or drop the sessionDir param`
+    );
+    this.name = 'DirBindingMismatchError';
+  }
 }
 
 /**

@@ -308,6 +308,31 @@ describe('Chat API', () => {
 
   // ─── POST /api/chat/:sessionId/truncate（R2P-154a，对齐 Rust 0a2cc4e）───
 
+  describe('explicit sessionDir bound to a different warm sessionId → 400 (R2P-161b③)', () => {
+    it('rejects the mismatched id instead of bypassing the session mutex', async () => {
+      const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
+      sm.registerSession('real-id', join(tempDir, 'workspace'));
+      const store = sm.getSessionStore(join(tempDir, 'workspace'));
+      await store.createWithId('real-id', 'test-agent');
+      // 温会话：dir-binding 检查只扫温会话注册表（getAllAgentSessions）
+      sm.setAgentSession('real-id', {
+        busy: false,
+        stop: () => {},
+        handleMessage: async function* () {},
+      } as never);
+      const boundDir = store.getSessionDir('real-id');
+
+      const res = await fetch(`${getUrl()}/api/chat/wrong-id`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hi', sessionDir: boundDir }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(String(body.error)).toContain("bound to sessionId 'real-id'");
+    });
+  });
+
   describe('POST /api/sessions/:id/truncate (resource-face alias, P3 Task 9)', () => {
     it('serves the same handler as the chat-face path', async () => {
       const sm = (fastify as unknown as { sessionManager: SessionManager }).sessionManager;
