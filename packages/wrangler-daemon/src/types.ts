@@ -1,4 +1,4 @@
-import type { LLMQuickInit, SandboxConfig } from '@agentskillmania/wrangler';
+import type { ChatAttachment, LLMQuickInit, SandboxConfig } from '@agentskillmania/wrangler';
 
 import type { ConfigManager } from './core/config-manager.js';
 import type { ResourceManager } from './core/resource-manager.js';
@@ -199,6 +199,13 @@ export interface DecoratedFastifyInstance {
 /** Per-request parameters — both chat endpoints accept these */
 export interface PerRequestParams {
   message: string;
+  /**
+   * 请求附件（多模态输入，R2P-107 对齐 Rust df699fa）。当前仅支持图片；
+   * url 可为 `data:` base64 或 `file:<相对路径>` 引用（锚定会话目录，
+   * 存档只存引用，发 LLM 前由内核物化）。空文本 + 非空附件 = 纯图消息，
+   * 合法。http(s) URL 不支持（TS 侧适配器仅发 data URL——与 Rust 分歧）。
+   */
+  attachments?: ChatAttachment[];
   thinkingEnabled?: boolean;
   model?: string;
 }

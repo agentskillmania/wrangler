@@ -19,8 +19,10 @@ import {
   removePendingInterrupt,
   resolveDefaultModel,
   respond as hitlRespond,
+  contentToPlainText,
 } from '@agentskillmania/wrangler';
 import type {
+  MultimodalContent,
   AgentState,
   RunStreamEvent,
   RunOptions,
@@ -482,6 +484,14 @@ export class AgentSession {
     // harness 监督者槽）：delegate 工具自此「受理即返回」。可选调用兜底
     // 无该口的 runner 装配（旧 mock/无 delegation）——槽空 = 同步模式。
     this.runner.setDelegateSupervisor?.(this.subagentSupervisor);
+    // `file:` 附件锚定（R2P-107，对齐 Rust build.rs 的同源派生）：目录
+    // 绑定会话已在 harness 构建时锚定；标准会话的目录在 session id 存在
+    // 后才能派生——这里晚绑定。会话未启用时 resolve 返回 undefined，
+    // 不绑（`file:` 引用会在 wire 物化时报具名错误，同 Rust (None,None)）。
+    const attachmentAnchor = this.runner.resolveAttachmentDir?.(
+      this.sessionStore?.isDirBound ? undefined : this.sessionId
+    );
+    if (attachmentAnchor) this.runner.setAttachmentDir?.(attachmentAnchor);
   }
 
   /**
@@ -1059,7 +1069,7 @@ export class AgentSession {
    * @yields SSEEvent for each event in the agent execution stream
    */
   async *handleMessage(
-    message: string,
+    message: string | MultimodalContent,
     options?: { thinkingEnabled?: boolean; model?: string }
   ): AsyncIterable<SSEEvent> {
     if (this._busy) {
@@ -1070,12 +1080,14 @@ export class AgentSession {
     // Enforce maxInputLength before appending — throws if message exceeds limit.
     // The error propagates out of the async generator, surfaced to the client
     // as an SSE error event by the caller (chat route streamAgentSession).
+    // 多模态 parts 按降级纯文本计长（图片 → [image]，R2P-107）。
+    const plainLength = contentToPlainText(message).length;
     if (this.maxInputLength !== undefined) {
-      if (message.length > this.maxInputLength) {
+      if (plainLength > this.maxInputLength) {
         yield {
           event: 'error',
           data: {
-            message: `Input exceeds maximum length of ${this.maxInputLength} characters (got ${message.length})`,
+            message: `Input exceeds maximum length of ${this.maxInputLength} characters (got ${plainLength})`,
           },
         };
         return;
@@ -1108,7 +1120,7 @@ export class AgentSession {
    *   映射 SessionManager 状态）；busy/超限带 HTTP 语义码由路由包响应。
    */
   sendMessageInBackground(
-    message: string,
+    message: string | MultimodalContent,
     options?: { thinkingEnabled?: boolean; model?: string }
   ):
     | { ok: true; turnSeq: number; completion: Promise<{ hadError: boolean }> }
@@ -1116,11 +1128,13 @@ export class AgentSession {
     if (this._busy) {
       return { ok: false, code: 409, error: 'Session is busy processing a message' };
     }
-    if (this.maxInputLength !== undefined && message.length > this.maxInputLength) {
+    // 多模态 parts 按降级纯文本计长（图片 → [image]，R2P-107）。
+    const plainLength = contentToPlainText(message).length;
+    if (this.maxInputLength !== undefined && plainLength > this.maxInputLength) {
       return {
         ok: false,
         code: 400,
-        error: `Input exceeds maximum length of ${this.maxInputLength} characters (got ${message.length})`,
+        error: `Input exceeds maximum length of ${this.maxInputLength} characters (got ${plainLength})`,
       };
     }
     // turnSeq+1 是 driveTurn 即将分配的轮号：busy 复检到此零 await（见上），

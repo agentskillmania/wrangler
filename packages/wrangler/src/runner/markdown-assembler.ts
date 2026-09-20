@@ -30,6 +30,7 @@ import {
   type BuildMessagesOptions,
   type IMessageAssembler,
 } from '@agentskillmania/colts';
+import { contentToPlainText } from '@agentskillmania/llm-client';
 import type { Message as PiAIMessage, TextContent, ToolCall } from '@mariozechner/pi-ai';
 
 import { shiftHeadings } from './shift-headings.js';
@@ -128,13 +129,20 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
         case 'user':
           messages.push({
             role: 'user',
-            content: msg.content,
+            // R2P-107：多模态 parts 原样透传（file: 引用形态也放行——
+            // calling-llm 发 LLM 前才物化为内联 base64）。pi-ai 的类型
+            // 不建模 ref 形态，这里是刻意的边界 cast：物化器保证 ref
+            // 不会真的到达 wire。
+            content: msg.content as Extract<PiAIMessage, { role: 'user' }>['content'],
             timestamp: msg.timestamp ?? Date.now(),
           });
           break;
 
         case 'assistant': {
-          const content: (TextContent | ToolCall)[] = [{ type: 'text', text: msg.content }];
+          // 多模态 parts 按降级纯文本（assistant 行实际恒为 string——防御性）
+          const content: (TextContent | ToolCall)[] = [
+            { type: 'text', text: contentToPlainText(msg.content) },
+          ];
           if (msg.toolCalls && msg.toolCalls.length > 0) {
             for (const tc of msg.toolCalls) {
               content.push({
@@ -176,8 +184,8 @@ export class MarkdownMessageAssembler implements IMessageAssembler {
             role: 'toolResult',
             toolCallId: msg.toolCallId ?? 'unknown',
             toolName: msg.toolName ?? 'unknown',
-            content: [{ type: 'text', text: msg.content }],
-            isError: msg.content.startsWith('Error:'),
+            content: [{ type: 'text', text: contentToPlainText(msg.content) }],
+            isError: contentToPlainText(msg.content).startsWith('Error:'),
             timestamp: msg.timestamp ?? Date.now(),
           });
           break;

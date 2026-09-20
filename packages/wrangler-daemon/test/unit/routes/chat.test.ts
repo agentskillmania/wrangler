@@ -1021,6 +1021,50 @@ describe('Chat API', () => {
       expect(body.error).toBe('Agent not found');
     });
 
+    // ─── 多模态附件校验（R2P-107，对齐 Rust df699fa）───
+
+    it('rejects invalid attachments with 400 before any session work', async () => {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          workspacePath: '/tmp',
+          attachments: [{ kind: 'image', url: 'https://example.com/a.png' }],
+        }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain('not supported');
+    });
+
+    it('empty text + attachments = legal pure-image message (passes the message gate)', async () => {
+      // 附件在场即越过 message 必填闸——错误推进到 agent 解析（404 而非
+      // 400 'message is required'），证明纯图消息被放行。
+      const res = await fetch(`${getUrl()}/api/agents/nonexistent-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspacePath: '/tmp',
+          attachments: [{ kind: 'image', url: 'file:img-1.png' }],
+        }),
+      });
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('Agent not found');
+    });
+
+    it('empty text + empty attachments still 400 (both-empty rejected)', async () => {
+      const res = await fetch(`${getUrl()}/api/agents/test-agent/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: '  ', workspacePath: '/tmp', attachments: [] }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('message is required');
+    });
+
     it('streams SSE events for valid new chat', async () => {
       mockAgentSessionCreate.mockResolvedValue(mockSession);
       mockHandleMessage.mockImplementation(async function* () {
@@ -1480,6 +1524,34 @@ describe('Chat API', () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toBe('message is required');
+    });
+
+    it('rejects invalid attachments with 400 (resume)', async () => {
+      const res = await fetch(`${getUrl()}/api/chat/existing-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'hello',
+          attachments: [{ kind: 'image', url: 'file:' }],
+        }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain('empty path');
+    });
+
+    it('empty text + attachments = legal pure-image resume (passes the gate to 404)', async () => {
+      // resume 不再静默丢附件：纯图消息越过 message 闸，推进到会话解析。
+      const res = await fetch(`${getUrl()}/api/chat/no-such-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          attachments: [{ kind: 'image', url: 'data:image/png;base64,QUJD' }],
+        }),
+      });
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('Session not found');
     });
 
     it('returns 404 when session not found', async () => {

@@ -43,6 +43,9 @@ export type {
   AskHumanHandler,
 } from '@agentskillmania/colts';
 export { respond, removePendingInterrupt } from '@agentskillmania/colts';
+// 多模态 content 契约（R2P-107）：daemon 经门面消费，不越层引 llm-client。
+export { contentToPlainText } from '@agentskillmania/llm-client';
+export type { MultimodalContent } from '@agentskillmania/llm-client';
 
 // skill provider（Rust: wrangler::skills::fs::FilesystemSkillProvider——
 // 与运行时/清单端点同一套 provider）。
@@ -85,6 +88,8 @@ export type {
 
 // Runner (Layer 2)
 export { AgentHarness, buildTimeLine } from './runner/index.js';
+export { buildUserContent, AttachmentParseError } from './runner/index.js';
+export type { ChatAttachment } from './runner/index.js';
 /** @deprecated 0.3.0 起更名为 AgentHarness，旧名保留一个 minor 周期后移除 */
 export { AgentHarness as EnhancedRunner } from './runner/index.js';
 export type {

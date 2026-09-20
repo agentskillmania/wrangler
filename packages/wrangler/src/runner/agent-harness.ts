@@ -145,6 +145,13 @@ export class AgentHarness {
    * ——绑定一个没有 delegate 工具的 runner 无害（无处可读）。
    */
   private readonly delegateSupervisorSlot: SupervisorSlot;
+  /**
+   * 会话存储引用（会话启用时恒有）：`file:` 附件引用锚定目录的同源
+   * 派生来源（R2P-107）。目录绑定会话在构建时即可锚定；标准会话的
+   * 目录在 session id 生成后才存在，由宿主经
+   * {@link resolveAttachmentDir} + {@link setAttachmentDir} 晚绑定。
+   */
+  private readonly sessionStoreRef?: SessionStore;
 
   private constructor(
     runner: AgentRunner,
@@ -153,7 +160,8 @@ export class AgentHarness {
     skillMetadataList: SkillMetadata[],
     commandRegistry: CommandRegistry | null = null,
     titleEventSlot?: SessionTitleSlot,
-    delegateSupervisorSlot: SupervisorSlot = emptySupervisorSlot()
+    delegateSupervisorSlot: SupervisorSlot = emptySupervisorSlot(),
+    sessionStoreRef?: SessionStore
   ) {
     this.innerRunner = runner;
     this.resolvedConfig = config;
@@ -162,6 +170,7 @@ export class AgentHarness {
     this.skillMetadataList = skillMetadataList;
     this.titleEventSlot = titleEventSlot;
     this.delegateSupervisorSlot = delegateSupervisorSlot;
+    this.sessionStoreRef = sessionStoreRef;
   }
 
   /**
@@ -187,6 +196,24 @@ export class AgentHarness {
     if (this.titleEventSlot) {
       this.titleEventSlot.sink = sink;
     }
+  }
+
+  /**
+   * 派生 `file:` 附件引用的锚定目录（R2P-107，对齐 Rust build.rs 的
+   * attachment_dir 同源派生）：目录绑定会话不传 sessionId；标准会话传
+   * session id（baseDir/hash(workspace)/<id>）。会话未启用或会话 id
+   * 未知时返回 undefined——此时收到 `file:` 引用会在 wire 物化时报错。
+   */
+  resolveAttachmentDir(sessionId?: string): string | undefined {
+    return this.sessionStoreRef?.getSessionDir(sessionId);
+  }
+
+  /**
+   * 晚绑定附件锚定目录到内核 runner（透传 colts
+   * AgentRunner.setAttachmentDir）。
+   */
+  setAttachmentDir(dir: string | undefined): void {
+    this.innerRunner.setAttachmentDir(dir);
   }
 
   /**
@@ -631,6 +658,9 @@ export class AgentHarness {
       maxSteps: options.limits?.maxSteps,
       compressor: compressorInstance,
       messageAssembler: new MarkdownMessageAssembler(subAgentConfigs),
+      // `file:` 附件锚定（R2P-107）：目录绑定会话在构建时即可锚定；
+      // 标准会话由宿主晚绑定（session id 尚不存在）。
+      attachmentDir: options.session?.sessionDir,
     });
 
     // Register the delegate tool after construction so it can close over the
@@ -689,7 +719,8 @@ export class AgentHarness {
       skillMeta,
       registeredCommands,
       titleEventSlot,
-      delegateSupervisorSlot
+      delegateSupervisorSlot,
+      'store' in sessionSupport ? sessionSupport.store : undefined
     );
   }
 

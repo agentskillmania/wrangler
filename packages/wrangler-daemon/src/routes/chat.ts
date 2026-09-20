@@ -4,8 +4,11 @@ import { join } from 'node:path';
 import { Sandbox } from '@agentskillmania/sandbox';
 import type { SessionMeta } from '@agentskillmania/wrangler';
 import {
+  type MultimodalContent,
+  AttachmentParseError,
   SessionNotFoundError,
   SessionStore,
+  buildUserContent,
   createLLMClient,
   crewToRunnerOptions,
   readMeta,
@@ -700,7 +703,18 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const { name } = request.params as { name: string };
     const body = request.body as CreateAndChatRequest;
 
-    if (!body.message?.trim()) {
+    // 空文本可以，但不能文本与附件都空（纯图消息合法，R2P-107 对齐
+    // Rust df699fa 的 create/resume 同一规则）。
+    let userContent: MultimodalContent;
+    try {
+      userContent = buildUserContent(body.message ?? '', body.attachments ?? []);
+    } catch (err) {
+      reply.code(400).send({
+        error: err instanceof AttachmentParseError ? err.message : 'invalid attachments',
+      });
+      return;
+    }
+    if (!body.message?.trim() && !(body.attachments ?? []).length) {
       reply.code(400).send({ error: 'message is required' });
       return;
     }
@@ -838,7 +852,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     sessionManager().setAgentSession(sessionId, agentSession);
     sessionManager().updateStatus(sessionId, 'running');
 
-    await streamAgentSession(reply, agentSession, body.message, {
+    await streamAgentSession(reply, agentSession, userContent, {
       thinkingEnabled: body.thinkingEnabled,
       model: body.model,
       sessionId,
@@ -869,7 +883,18 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const { sessionId } = request.params as { sessionId: string };
     const body = request.body as ResumeChatRequest;
 
-    if (!body.message?.trim()) {
+    // 与 create 路径同一规则（R2P-107，对齐 Rust resume.rs）：空文本可以，
+    // 但不能文本与附件都空（纯图消息合法）；resume 不再静默丢附件。
+    let userContent: MultimodalContent;
+    try {
+      userContent = buildUserContent(body.message ?? '', body.attachments ?? []);
+    } catch (err) {
+      reply.code(400).send({
+        error: err instanceof AttachmentParseError ? err.message : 'invalid attachments',
+      });
+      return;
+    }
+    if (!body.message?.trim() && !(body.attachments ?? []).length) {
       reply.code(400).send({ error: 'message is required' });
       return;
     }
@@ -970,7 +995,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
     if ((request.query as { stream?: string }).stream === '1') {
       sessionManager().updateStatus(sessionId, 'running');
-      await streamAgentSession(reply, agentSession, body.message, streamOpts, {
+      await streamAgentSession(reply, agentSession, userContent, streamOpts, {
         Deprecation: 'true',
         // RFC 8594 移除时间表：旧轨在 wrangler 0.4 移除。
         Sunset: 'Sun, 01 Mar 2026 00:00:00 GMT',
@@ -978,7 +1003,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       return;
     }
 
-    const ack = agentSession.sendMessageInBackground(body.message, {
+    const ack = agentSession.sendMessageInBackground(userContent, {
       thinkingEnabled: body.thinkingEnabled,
       model: body.model,
     });
@@ -1016,7 +1041,17 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     const { id } = request.params as { id: string };
     const body = request.body as CreateAndChatRequest;
 
-    if (!body.message?.trim()) {
+    // 空文本可以，但不能文本与附件都空（纯图消息合法，R2P-107）。
+    let userContent: MultimodalContent;
+    try {
+      userContent = buildUserContent(body.message ?? '', body.attachments ?? []);
+    } catch (err) {
+      reply.code(400).send({
+        error: err instanceof AttachmentParseError ? err.message : 'invalid attachments',
+      });
+      return;
+    }
+    if (!body.message?.trim() && !(body.attachments ?? []).length) {
       reply.code(400).send({ error: 'message is required' });
       return;
     }
@@ -1108,7 +1143,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     sessionManager().setAgentSession(sessionId, agentSession);
     sessionManager().updateStatus(sessionId, 'running');
 
-    await streamAgentSession(reply, agentSession, body.message, {
+    await streamAgentSession(reply, agentSession, userContent, {
       thinkingEnabled: body.thinkingEnabled,
       model: body.model,
       sessionId,
@@ -1136,7 +1171,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 async function streamAgentSession(
   reply: FastifyReply,
   agentSession: AgentSession,
-  message: string,
+  message: MultimodalContent,
   opts: {
     thinkingEnabled?: boolean;
     model?: string;

@@ -1,5 +1,6 @@
 import type { AgentMiddleware, IContextCompressor } from '@agentskillmania/colts';
 import { addAssistantMessage } from '@agentskillmania/colts';
+import { contentToPlainText } from '@agentskillmania/llm-client';
 
 import { parseCommand } from './parser.js';
 import type { CommandRegistry } from './registry.js';
@@ -42,7 +43,8 @@ export function createCommandMiddleware(
       const lastMsg = messages[messages.length - 1];
       if (lastMsg.role !== 'user') return;
 
-      const parsed = parseCommand(lastMsg.content);
+      // 多模态 parts 按降级纯文本判命令（纯图消息不是命令，R2P-107）。
+      const parsed = parseCommand(contentToPlainText(lastMsg.content));
       if (!parsed) return;
 
       const handler = registry.resolve(parsed.name);

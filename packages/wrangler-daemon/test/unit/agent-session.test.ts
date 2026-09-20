@@ -43,6 +43,9 @@ function createMockRunner(
   });
   const emit = (type: string, ...args: unknown[]) => eventHandlers[type]?.(...args);
   const setSessionTitleListener = vi.fn();
+  // R2P-107：附件锚定晚绑定点（真实 AgentHarness 上的同构方法）。
+  const resolveAttachmentDir = vi.fn().mockReturnValue(undefined);
+  const setAttachmentDir = vi.fn();
   const runner = {
     run:
       overrides.run ??
@@ -62,6 +65,8 @@ function createMockRunner(
     on,
     off,
     setSessionTitleListener,
+    resolveAttachmentDir,
+    setAttachmentDir,
     getToolInfo: overrides.getToolInfo ?? vi.fn().mockReturnValue([]),
     getSkillInfo: overrides.getSkillInfo ?? vi.fn().mockReturnValue([]),
     getConfig: overrides.getConfig ?? vi.fn().mockReturnValue({ model: 'test-model' }),
@@ -3157,6 +3162,100 @@ describe('AgentSession', () => {
         testConfig
       );
       expect(session.hasActiveChildren()).toBe(false, 'no slot = sync mode; registry stays empty');
+    });
+  });
+  // ─── 多模态附件（R2P-107，对齐 Rust df699fa）───
+
+  describe('multimodal attachments (R2P-107)', () => {
+    it('binds the attachment anchor dir after construction (standard session)', async () => {
+      const mock = createMockRunner();
+      (mock.runner.resolveAttachmentDir as ReturnType<typeof vi.fn>).mockReturnValue(
+        '/sessions/hash/test-state'
+      );
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+      // 标准会话：sessionId 存在后晚绑定（构造函数内）。
+      expect(mock.runner.resolveAttachmentDir).toHaveBeenCalledWith(session.sessionId);
+      expect(mock.runner.setAttachmentDir).toHaveBeenCalledWith('/sessions/hash/test-state');
+    });
+
+    it('does not bind when sessions yield no anchor (undefined)', async () => {
+      const mock = createMockRunner();
+      mockAgentHarnessCreate.mockResolvedValue(mock.runner);
+      await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+      expect(mock.runner.setAttachmentDir).not.toHaveBeenCalled();
+    });
+
+    it('passes multimodal parts through to addUserMessage', async () => {
+      mockRunnerWithEvents([['complete']]);
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+      const parts = [
+        { type: 'text', text: '看这张图' },
+        { type: 'image', ref: 'file:img-1.png' },
+      ] as never;
+      const events: SSEEvent[] = [];
+      for await (const event of session.handleMessage(parts)) {
+        events.push(event);
+      }
+      // colts addUserMessage（经 wrangler 门面 mock 转发）收到 parts 原样。
+      const { addUserMessage } = await import('@agentskillmania/colts');
+      expect(addUserMessage).toHaveBeenCalledWith(expect.anything(), parts, undefined);
+      expect(events[events.length - 1].event).toBe('done');
+    });
+
+    it('measures maxInputLength on the plain-text form (image → [image])', async () => {
+      mockRunnerWithEvents([['complete']]);
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+          limits: { maxInputLength: 10 },
+        },
+        testConfig
+      );
+      // 图片降级为 '[image]'（7 字符）不超限；文本部分超限才拒。
+      const ok: SSEEvent[] = [];
+      for await (const e of session.handleMessage([
+        { type: 'image', ref: 'file:a.png' },
+      ] as never)) {
+        ok.push(e);
+      }
+      expect(ok[ok.length - 1].event).toBe('done');
+
+      const rejected: SSEEvent[] = [];
+      for await (const e of session.handleMessage([
+        { type: 'text', text: 'a'.repeat(11) },
+      ] as never)) {
+        rejected.push(e);
+      }
+      expect(rejected[0].event).toBe('error');
+      expect(rejected[0].data.message).toContain('maximum length of 10');
     });
   });
 });
