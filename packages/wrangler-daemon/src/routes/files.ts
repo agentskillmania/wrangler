@@ -133,7 +133,7 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
     return info?.workspacePath ?? null;
   }
 
-  fastify.get('/api/files/:sessionId/tree', async (request) => {
+  fastify.get('/api/sessions/:sessionId/files/tree', async (request) => {
     const { sessionId } = request.params as { sessionId: string };
     const query = request.query as { sessionDir?: string };
     const workspacePath = await resolveWorkspace(sessionId, query.sessionDir);
@@ -147,7 +147,7 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
    * Returns the text content of a file in the session's workspace.
    * Query parameter `path` is required.
    */
-  fastify.get('/api/files/:sessionId/content', async (request) => {
+  fastify.get('/api/sessions/:sessionId/files/content', async (request) => {
     const { sessionId } = request.params as { sessionId: string };
     const query = request.query as { path?: string; sessionDir?: string };
     const workspacePath = await resolveWorkspace(sessionId, query.sessionDir);
@@ -175,7 +175,7 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
    * is clamped and lands here too, never leaking outside the root), 400
    * missing path. Mirrors Rust `file_raw` (d7dbde2) with the TS error shape.
    */
-  fastify.get('/api/files/:sessionId/raw', async (request, reply) => {
+  fastify.get('/api/sessions/:sessionId/files/raw', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
     const query = request.query as { path?: string; sessionDir?: string };
     const workspacePath = await resolveWorkspace(sessionId, query.sessionDir);
@@ -211,7 +211,7 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
    * Writes content to an existing file in the session's workspace.
    * Body must contain `path` and `content` fields.
    */
-  fastify.put('/api/files/:sessionId/content', async (request) => {
+  fastify.put('/api/sessions/:sessionId/files/content', async (request) => {
     const { sessionId } = request.params as { sessionId: string };
     const query = request.query as { sessionDir?: string };
     const body = request.body as { path?: string; content?: string };
@@ -233,7 +233,7 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
    * Creates a new file (and any missing parent directories) in the workspace.
    * Body must contain `path`. `content` defaults to empty string.
    */
-  fastify.post('/api/files/:sessionId', async (request) => {
+  fastify.post('/api/sessions/:sessionId/files', async (request) => {
     const { sessionId } = request.params as { sessionId: string };
     const query = request.query as { sessionDir?: string };
     const body = request.body as { path?: string; content?: string };
@@ -253,7 +253,7 @@ export async function fileRoutes(fastify: FastifyInstance): Promise<void> {
    * Deletes a file from the session's workspace.
    * Body must contain `path`.
    */
-  fastify.delete('/api/files/:sessionId', async (request) => {
+  fastify.delete('/api/sessions/:sessionId/files', async (request) => {
     const { sessionId } = request.params as { sessionId: string };
     const query = request.query as { sessionDir?: string };
     const body = request.body as { path?: string };

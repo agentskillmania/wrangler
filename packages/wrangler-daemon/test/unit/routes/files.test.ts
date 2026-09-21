@@ -13,12 +13,12 @@ import type { DecoratedFastifyInstance } from '../../../src/types.js';
  * Unit tests for workspace file CRUD routes.
  *
  * Tests the following endpoints:
- * - GET  /api/files/:sessionId/tree              — recursive file tree
- * - GET  /api/files/:sessionId/content?path=xxx  — read file content
- * - GET  /api/files/:sessionId/raw?path=xxx      — raw bytes (binary preview)
- * - PUT  /api/files/:sessionId/content           — write file (body: {path, content})
- * - POST /api/files/:sessionId                   — create file with nested dirs (body: {path, content?})
- * - DELETE /api/files/:sessionId                 — delete file (body: {path})
+ * - GET  /api/sessions/:sessionId/files/tree              — recursive file tree
+ * - GET  /api/sessions/:sessionId/files/content?path=xxx  — read file content
+ * - GET  /api/sessions/:sessionId/files/raw?path=xxx      — raw bytes (binary preview)
+ * - PUT  /api/sessions/:sessionId/files/content           — write file (body: {path, content})
+ * - POST /api/sessions/:sessionId/files                   — create file with nested dirs (body: {path, content?})
+ * - DELETE /api/sessions/:sessionId/files                 — delete file (body: {path})
  */
 describe('workspace file routes', () => {
   let fastify: FastifyInstance;
@@ -71,9 +71,9 @@ describe('workspace file routes', () => {
 
   // ------------------------------------------------------------------ File tree
 
-  describe('GET /api/files/:sessionId/tree', () => {
+  describe('GET /api/sessions/:sessionId/files/tree', () => {
     it('returns recursive file tree for session workspace', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session/tree`);
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/tree`);
       expect(res.ok).toBe(true);
       const body = await res.json();
 
@@ -100,7 +100,7 @@ describe('workspace file routes', () => {
     });
 
     it('returns error for non-existent session', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/nonexistent/tree`);
+      const res = await fetch(`${baseUrl()}/api/sessions/nonexistent/files/tree`);
       expect(res.ok).toBe(true);
       expect((await res.json()).error).toBe('Session not found');
     });
@@ -108,7 +108,7 @@ describe('workspace file routes', () => {
 
   describe('path traversal protection', () => {
     it('returns 500 when path escapes workspace on write', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session/content`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: '../outside.txt', content: 'x' }),
@@ -119,7 +119,7 @@ describe('workspace file routes', () => {
 
     it('returns error when path escapes workspace on read', async () => {
       const res = await fetch(
-        `${baseUrl()}/api/files/test-session/content?path=${encodeURIComponent('../outside.txt')}`
+        `${baseUrl()}/api/sessions/test-session/files/content?path=${encodeURIComponent('../outside.txt')}`
       );
 
       expect(res.ok).toBe(true);
@@ -135,7 +135,7 @@ describe('workspace file routes', () => {
       await writeFile(join(tempDir, 'workspace-evil', 'stolen.txt'), 'STOLEN');
 
       const res = await fetch(
-        `${baseUrl()}/api/files/test-session/content?path=${encodeURIComponent('../workspace-evil/stolen.txt')}`
+        `${baseUrl()}/api/sessions/test-session/files/content?path=${encodeURIComponent('../workspace-evil/stolen.txt')}`
       );
 
       const body = await res.json();
@@ -146,9 +146,11 @@ describe('workspace file routes', () => {
 
   // ------------------------------------------------------------------ Read file
 
-  describe('GET /api/files/:sessionId/content', () => {
+  describe('GET /api/sessions/:sessionId/files/content', () => {
     it('reads file content', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session/content?path=hello.txt`);
+      const res = await fetch(
+        `${baseUrl()}/api/sessions/test-session/files/content?path=hello.txt`
+      );
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.content).toBe('hello world');
@@ -156,19 +158,21 @@ describe('workspace file routes', () => {
     });
 
     it('returns error when path query parameter is missing', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session/content`);
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/content`);
       expect(res.ok).toBe(true);
       expect((await res.json()).error).toBe('path is required');
     });
 
     it('returns error for non-existent file', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session/content?path=nope.txt`);
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/content?path=nope.txt`);
       expect(res.ok).toBe(true);
       expect((await res.json()).error).toBe('File not found');
     });
 
     it('returns error for non-existent session', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/missing-session/content?path=hello.txt`);
+      const res = await fetch(
+        `${baseUrl()}/api/sessions/missing-session/files/content?path=hello.txt`
+      );
       expect(res.ok).toBe(true);
       expect((await res.json()).error).toBe('Session not found');
     });
@@ -176,9 +180,9 @@ describe('workspace file routes', () => {
 
   // ------------------------------------------------------------------ Raw bytes
 
-  describe('GET /api/files/:sessionId/raw (R2P-235, aligned with Rust d7dbde2)', () => {
+  describe('GET /api/sessions/:sessionId/files/raw (R2P-235, aligned with Rust d7dbde2)', () => {
     it('serves image bytes verbatim with a png Content-Type', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=pic.png`);
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/raw?path=pic.png`);
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toBe('image/png');
 
@@ -187,46 +191,46 @@ describe('workspace file routes', () => {
     });
 
     it('serves text files with text/plain', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=hello.txt`);
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/raw?path=hello.txt`);
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toBe('text/plain');
       expect(await res.text()).toBe('hello world');
     });
 
     it('returns bytes consistent with a prior PUT (round-trip)', async () => {
-      const put = await fetch(`${baseUrl()}/api/files/test-session/content`, {
+      const put = await fetch(`${baseUrl()}/api/sessions/test-session/files/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'hello.txt', content: 'updated via put' }),
       });
       expect(put.ok).toBe(true);
 
-      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=hello.txt`);
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/raw?path=hello.txt`);
       expect(res.status).toBe(200);
       expect(await res.text()).toBe('updated via put');
     });
 
     it('returns 404 for a missing file', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=gone.png`);
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/raw?path=gone.png`);
       expect(res.status).toBe(404);
       expect((await res.json()).error).toBe('File not found');
     });
 
     it('returns 400 when the path query parameter is missing', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session/raw`);
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/raw`);
       expect(res.status).toBe(400);
       expect((await res.json()).error).toBe('path is required');
     });
 
     it('returns 404 for an unknown session', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/no-such-session/raw?path=pic.png`);
+      const res = await fetch(`${baseUrl()}/api/sessions/no-such-session/files/raw?path=pic.png`);
       expect(res.status).toBe(404);
       expect((await res.json()).error).toBe('Session not found');
     });
 
     it('rejects path traversal with 500 (never reads outside the root)', async () => {
       const res = await fetch(
-        `${baseUrl()}/api/files/test-session/raw?path=${encodeURIComponent('../../../etc/hosts')}`
+        `${baseUrl()}/api/sessions/test-session/files/raw?path=${encodeURIComponent('../../../etc/hosts')}`
       );
       // resolveWithinRoot throws before any read — same 500 the content PUT
       // path produces; the escape never reaches the filesystem.
@@ -234,13 +238,13 @@ describe('workspace file routes', () => {
     });
 
     it('returns 404 for a directory', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=subdir`);
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/raw?path=subdir`);
       expect(res.status).toBe(404);
     });
 
     it('resolves unknown extensions to application/octet-stream', async () => {
       await writeFile(join(workspacePath, 'blob.bin'), Buffer.from([1, 2, 3]));
-      const res = await fetch(`${baseUrl()}/api/files/test-session/raw?path=blob.bin`);
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/raw?path=blob.bin`);
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toBe('application/octet-stream');
       expect(Buffer.from(await res.arrayBuffer())).toEqual(Buffer.from([1, 2, 3]));
@@ -249,9 +253,9 @@ describe('workspace file routes', () => {
 
   // ------------------------------------------------------------------ Write file
 
-  describe('PUT /api/files/:sessionId/content', () => {
+  describe('PUT /api/sessions/:sessionId/files/content', () => {
     it('updates existing file content', async () => {
-      const writeRes = await fetch(`${baseUrl()}/api/files/test-session/content`, {
+      const writeRes = await fetch(`${baseUrl()}/api/sessions/test-session/files/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'hello.txt', content: 'updated' }),
@@ -260,12 +264,14 @@ describe('workspace file routes', () => {
       expect((await writeRes.json()).ok).toBe(true);
 
       // Read back to verify persistence
-      const readRes = await fetch(`${baseUrl()}/api/files/test-session/content?path=hello.txt`);
+      const readRes = await fetch(
+        `${baseUrl()}/api/sessions/test-session/files/content?path=hello.txt`
+      );
       expect((await readRes.json()).content).toBe('updated');
     });
 
     it('returns error when path or content is missing', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session/content`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'hello.txt' }),
@@ -275,7 +281,7 @@ describe('workspace file routes', () => {
     });
 
     it('returns error for non-existent session', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/ghost-session/content`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/ghost-session/files/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'hello.txt', content: 'x' }),
@@ -289,7 +295,7 @@ describe('workspace file routes', () => {
 
   describe('POST /api/files/:sessionId', () => {
     it('creates new file with nested directories', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -308,7 +314,7 @@ describe('workspace file routes', () => {
     });
 
     it('creates file with empty content when content is omitted', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'empty.txt' }),
@@ -321,7 +327,7 @@ describe('workspace file routes', () => {
     });
 
     it('returns error when path is missing', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: 'orphan' }),
@@ -335,7 +341,7 @@ describe('workspace file routes', () => {
 
   describe('DELETE /api/files/:sessionId', () => {
     it('deletes file and confirms it is gone', async () => {
-      const delRes = await fetch(`${baseUrl()}/api/files/test-session`, {
+      const delRes = await fetch(`${baseUrl()}/api/sessions/test-session/files`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'hello.txt' }),
@@ -348,7 +354,7 @@ describe('workspace file routes', () => {
     });
 
     it('returns error when path is missing', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -358,7 +364,7 @@ describe('workspace file routes', () => {
     });
 
     it('returns error for non-existent file', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/test-session`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/test-session/files`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'ghost.txt' }),
@@ -395,7 +401,7 @@ describe('workspace file routes', () => {
 
     it('PUT writes through explicit sessionDir', async () => {
       const res = await fetch(
-        `${baseUrl()}/api/files/notebook-note/content?sessionDir=${encodeURIComponent(notebookDir)}`,
+        `${baseUrl()}/api/sessions/notebook-note/files/content?sessionDir=${encodeURIComponent(notebookDir)}`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -412,7 +418,7 @@ describe('workspace file routes', () => {
 
     it('POST creates through explicit sessionDir', async () => {
       const res = await fetch(
-        `${baseUrl()}/api/files/notebook-note?sessionDir=${encodeURIComponent(notebookDir)}`,
+        `${baseUrl()}/api/sessions/notebook-note/files?sessionDir=${encodeURIComponent(notebookDir)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -432,7 +438,7 @@ describe('workspace file routes', () => {
       await writeFile(join(workspacePath, 'note.txt'), 'gone soon', 'utf-8');
 
       const res = await fetch(
-        `${baseUrl()}/api/files/notebook-note?sessionDir=${encodeURIComponent(notebookDir)}`,
+        `${baseUrl()}/api/sessions/notebook-note/files?sessionDir=${encodeURIComponent(notebookDir)}`,
         {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
@@ -450,7 +456,7 @@ describe('workspace file routes', () => {
       await mkdir(emptyDir, { recursive: true });
 
       const res = await fetch(
-        `${baseUrl()}/api/files/notebook-note/content?sessionDir=${encodeURIComponent(emptyDir)}`,
+        `${baseUrl()}/api/sessions/notebook-note/files/content?sessionDir=${encodeURIComponent(emptyDir)}`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -463,7 +469,7 @@ describe('workspace file routes', () => {
 
     it('keeps traversal protection on the sessionDir write path', async () => {
       const res = await fetch(
-        `${baseUrl()}/api/files/notebook-note/content?sessionDir=${encodeURIComponent(notebookDir)}`,
+        `${baseUrl()}/api/sessions/notebook-note/files/content?sessionDir=${encodeURIComponent(notebookDir)}`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },

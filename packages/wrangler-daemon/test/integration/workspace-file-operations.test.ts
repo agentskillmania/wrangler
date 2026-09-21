@@ -15,11 +15,11 @@ import { fileRoutes } from '../../src/routes/files.js';
  * so that I can inspect and modify agent working files.
  *
  * Acceptance Criteria:
- * 1. GET /api/files/:sessionId/tree returns file tree (dirs before files, excludes node_modules/hidden)
- * 2. GET /api/files/:sessionId/content reads file content
- * 3. PUT /api/files/:sessionId/content updates file content
- * 4. POST /api/files/:sessionId creates a new file (with nested dir support)
- * 5. DELETE /api/files/:sessionId deletes a file
+ * 1. GET /api/sessions/:sessionId/files/tree returns file tree (dirs before files, excludes node_modules/hidden)
+ * 2. GET /api/sessions/:sessionId/files/content reads file content
+ * 3. PUT /api/sessions/:sessionId/files/content updates file content
+ * 4. POST /api/sessions/:sessionId/files creates a new file (with nested dir support)
+ * 5. DELETE /api/sessions/:sessionId/files deletes a file
  * 6. Path traversal is blocked
  */
 describe('US-C5: Workspace File Operations', () => {
@@ -352,19 +352,21 @@ describe('US-C5: Workspace File Operations', () => {
   // ------------------------------------------------------------------ Edge: unknown session
   describe('Unknown session error handling', () => {
     it('returns Session not found for tree endpoint', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/nonexistent-session/tree`);
+      const res = await fetch(`${baseUrl()}/api/sessions/nonexistent-session/files/tree`);
       expect(res.ok).toBe(true);
       expect((await res.json()).error).toBe('Session not found');
     });
 
     it('returns Session not found for content endpoint', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/nonexistent-session/content?path=x.txt`);
+      const res = await fetch(
+        `${baseUrl()}/api/sessions/nonexistent-session/files/content?path=x.txt`
+      );
       expect(res.ok).toBe(true);
       expect((await res.json()).error).toBe('Session not found');
     });
 
     it('returns Session not found for PUT endpoint', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/nonexistent-session/content`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/nonexistent-session/files/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'x.txt', content: 'y' }),
@@ -374,7 +376,7 @@ describe('US-C5: Workspace File Operations', () => {
     });
 
     it('returns Session not found for POST endpoint', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/nonexistent-session`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/nonexistent-session/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'x.txt' }),
@@ -384,7 +386,7 @@ describe('US-C5: Workspace File Operations', () => {
     });
 
     it('returns Session not found for DELETE endpoint', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/nonexistent-session`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/nonexistent-session/files`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'x.txt' }),

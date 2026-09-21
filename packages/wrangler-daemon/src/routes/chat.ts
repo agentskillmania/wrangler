@@ -747,6 +747,16 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
     // workspacePath 缺省兜底当前目录（对齐 Rust create_session；chat-send
     // 创建分支的 400 校验在调用方）。
     const workspacePath = body.workspacePath?.trim() || process.cwd();
+    // 显式 sessionDir（笔记目录即会话）：dir-bound store 的 createWithId
+    // 不知道 workspace，meta 里会是空串——文件族端点
+    // （/api/sessions/:id/files?sessionDir=）按 meta.workspacePath 寻址，
+    // 装配方先落 meta 再补写（对齐 Rust create.rs 建会话即写
+    // workspace_path）。
+    if (body.sessionDir?.trim()) {
+      const dirStore = SessionStore.fromDir(body.sessionDir, defaultNodeHostEnv);
+      await dirStore.createWithId(undefined, body.agent?.name ?? body.agentName ?? 'agent');
+      await dirStore.updateMeta(undefined, { workspacePath } as never);
+    }
 
     if (source.kind === 'crew') {
       // crew 目录即全世界：skills/MCP 只认 <crew>/ 私有声明，不落全局

@@ -24,7 +24,7 @@ export function FilesPage() {
   function loadTree() {
     if (!sessionId.trim()) return;
     api
-      .get('/api/files/' + sessionId + '/tree')
+      .get('/api/sessions/' + sessionId + '/files/tree')
       .then(function (data) {
         setTree(Array.isArray(data) ? data : data ? [data] : []);
       })
@@ -36,7 +36,7 @@ export function FilesPage() {
   function openFile(path) {
     setSelectedPath(path);
     api
-      .get('/api/files/' + sessionId + '/content?path=' + encodeURIComponent(path))
+      .get('/api/sessions/' + sessionId + '/files/content?path=' + encodeURIComponent(path))
       .then(function (res) {
         if (typeof res === 'object' && res.content) {
           setFileContent(res.content);
@@ -51,7 +51,7 @@ export function FilesPage() {
 
   function saveFile() {
     if (!sessionId || !selectedPath) return;
-    api.put('/api/files/' + sessionId + '/content', {
+    api.put('/api/sessions/' + sessionId + '/files/content', {
       path: selectedPath,
       content: fileContent,
     });
@@ -61,13 +61,13 @@ export function FilesPage() {
     if (!sessionId) return;
     var name = prompt('New file path:');
     if (!name) return;
-    api.post('/api/files/' + sessionId, { path: name, content: '' }).then(loadTree);
+    api.post('/api/sessions/' + sessionId + '/files', { path: name, content: '' }).then(loadTree);
   }
 
   function deleteFile() {
     if (!sessionId || !selectedPath) return;
     if (!confirm('Delete "' + selectedPath + '"?')) return;
-    api.del('/api/files/' + sessionId, { path: selectedPath }).then(function () {
+    api.del('/api/sessions/' + sessionId + '/files', { path: selectedPath }).then(function () {
       setSelectedPath(null);
       setFileContent('');
       loadTree();

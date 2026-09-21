@@ -1,7 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 
-import type { DecoratedFastifyInstance } from '../types.js';
-
 /**
  * Launcher data route — agents, skills, sessions overview.
  *
@@ -9,10 +7,6 @@ import type { DecoratedFastifyInstance } from '../types.js';
  * to render the home screen: available agents, skills, and sessions.
  */
 export async function launcherRoutes(fastify: FastifyInstance): Promise<void> {
-  const decorated = fastify as unknown as DecoratedFastifyInstance;
-  const resourceManager = () => decorated.resourceManager;
-  const sessionManager = () => decorated.sessionManager;
-
   /**
    * GET /api/launcher
    *
@@ -20,11 +14,16 @@ export async function launcherRoutes(fastify: FastifyInstance): Promise<void> {
    * All three queries run in parallel for efficiency.
    */
   fastify.get('/api/launcher', async () => {
-    const [agents, skills, sessions] = await Promise.all([
-      resourceManager().listAgents(),
-      resourceManager().listSkills(),
-      sessionManager().list(),
-    ]);
-    return { agents, skills, sessions };
+    // daemon 身份（对齐 Rust health.rs 的 LauncherResponse：名称/版本/
+    // 端口/主机——原 agents/skills/sessions 聚合形状无消费方，随 65732f3
+    // 的 playground 家族对齐收编）。
+    const addr = fastify.server.address();
+    const address = typeof addr === 'string' ? addr : (addr ?? { port: 0, address: '' });
+    return {
+      name: 'wrangler-daemon',
+      version: process.env.npm_package_version ?? '0.0.0-dev',
+      port: typeof address === 'object' ? address.port : 0,
+      host: typeof address === 'object' ? address.address : '',
+    };
   });
 }

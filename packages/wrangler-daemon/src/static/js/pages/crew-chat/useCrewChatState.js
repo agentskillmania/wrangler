@@ -307,7 +307,7 @@ export function useCrewChatState() {
       refreshDiagnostics(sessionId);
 
       api
-        .get('/api/files/' + sessionId + '/tree')
+        .get('/api/sessions/' + sessionId + '/files/tree')
         .then(function (data) {
           setRightFileTree(Array.isArray(data) ? data : data ? [data] : []);
         })
@@ -774,7 +774,7 @@ export function useCrewChatState() {
   function openRightFile(path) {
     setRightFilePath(path);
     api
-      .get('/api/files/' + sessionId + '/content?path=' + encodeURIComponent(path))
+      .get('/api/sessions/' + sessionId + '/files/content?path=' + encodeURIComponent(path))
       .then(function (res) {
         if (typeof res === 'object' && res.content) {
           setRightFileContent(res.content);
@@ -791,7 +791,7 @@ export function useCrewChatState() {
     if (!sessionId || !rightFilePath) return;
     setRightSaveStatus('saving...');
     api
-      .put('/api/files/' + sessionId + '/content', {
+      .put('/api/sessions/' + sessionId + '/files/content', {
         path: rightFilePath,
         content: rightFileContent,
       })
