@@ -78,6 +78,48 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * （帧间 sleep，供断流重连测试控制节奏）后返回终态。装好后即接管
  * AgentSession.create 的 AgentHarness.create mock。
  */
+/**
+ * 门控 runner：先发 head 帧然后停在 gate 上（轮保持 in-flight、
+ * 帧已落史未落盘），release() 后发 tail 帧并完结。settle 语义下重放
+ * 只含这类未落盘活动——重放/补洞类测试用它确定性构造缓冲窗口。
+ */
+function gatedRunner(head: Array<[string, unknown?]>, tail: Array<[string, unknown?]>) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queue = [...head];
+  const eventHandlers: Record<string, (...args: unknown[]) => void> = {};
+  const emit = (type: string, ...args: unknown[]) => eventHandlers[type]?.(...args);
+  const runner = {
+    run: vi.fn().mockImplementation(async () => {
+      for (const [type, payload] of queue) {
+        if (payload === undefined) emit(type);
+        else emit(type, payload);
+      }
+      await gate;
+      for (const [type, payload] of tail) {
+        if (payload === undefined) emit(type);
+        else emit(type, payload);
+      }
+      return {
+        state: FINAL_STATE,
+        result: { type: 'success', answer: '', totalSteps: 1, tokens: { input: 0, output: 0 } },
+      };
+    }),
+    on: vi.fn((type: string, handler: (...args: unknown[]) => void) => {
+      eventHandlers[type] = handler;
+    }),
+    off: vi.fn(),
+    setSessionTitleListener: vi.fn(),
+    getToolInfo: vi.fn().mockReturnValue([]),
+    getSkillInfo: vi.fn().mockReturnValue([]),
+    getConfig: vi.fn().mockReturnValue({ model: 'test-model' }),
+  };
+  mockAgentHarnessCreate.mockResolvedValue(runner);
+  return { runner, release };
+}
+
 function scriptedRunner(scripts: Array<Array<[string, unknown?]>>, frameDelayMs = 0) {
   const queue = [...scripts];
   const eventHandlers: Record<string, (...args: unknown[]) => void> = {};
@@ -314,72 +356,78 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     expect(frames[0].data).toEqual({ firstSeq: 1, lastSeq: 0 });
   });
 
-  it('default (no lastSeq) replays the FULL rolling history before going live', async () => {
+  it('default (no lastSeq) replays un-settled activity before going live', async () => {
     const sessionManager = await buildApp();
-    scriptedRunner([
-      [['token', { token: 'one' }], ['complete']],
-      [['token', { token: 'two' }], ['complete']],
-    ]);
+    // settle 语义（对齐 Rust live.rs）：安静轮收尾清缓冲——重放只含
+    // 未落盘活动。门控 runner 把轮停在 2 帧之后：建连时缓冲恰有 2 帧。
+    const { release } = gatedRunner(
+      [
+        ['token', { token: 'one' }],
+        ['token', { token: 'two' }],
+      ],
+      [['complete']]
+    );
     const session = await createWarmSession(sessionManager, 'full-replay');
 
-    // 第一轮先完整跑完——建连时历史里已有 2 帧。
-    for await (const _ of session.handleMessage('first')) {
-      // drain
-    }
+    // 开轮（停在门上）：2 帧已落史未落盘。
+    const iterator = session.handleMessage('first')[Symbol.asyncIterator]();
+    await iterator.next(); // 拉动一次启动轮（帧进通道/请求级队列）
+    await vi.waitFor(() => expect(session.historySnapshot().length).toBeGreaterThanOrEqual(2));
 
     const res = await fetch(`${getUrl()}/api/chat/full-replay/events`);
-    // 同一响应体只开一个读取器（ReadableStream 单锁）——重放段与直播段
-    // 共用一个 generator。
     const gen = sseFrames(res);
-    // 重放段：全量（seq 1..2）+ history-end 分界帧收尾（重放段的终结符）。
+    // 重放段：未落盘活动（seq 1..2）+ history-end 分界帧收尾。
     const replay = await collectUntil(gen, (f) => f.event === 'history-end');
     expect(channelSeqs(replay)).toEqual([1, 2]);
     expect(replay.at(-1)!.data).toEqual({ firstSeq: 1, lastSeq: 2 });
 
-    // 直播段：第二轮的帧续在后面（无缝、无重）。
-    const turn = (async () => {
-      for await (const _ of session.handleMessage('second')) {
-        // drain
-      }
-    })();
+    // 直播段：放行后 done 续在后面（无缝、无重）。
+    release();
     const live = await collectUntil(gen, (f) => f.event === 'done');
-    await turn;
+    for (;;) {
+      const r = await iterator.next();
+      if (r.done) break;
+    }
     await stopSse(gen, res);
-    expect(channelSeqs([...replay, ...live])).toEqual([1, 2, 3, 4]);
+    expect(channelSeqs([...replay, ...live])).toEqual([1, 2, 3]);
+    // 安静收尾后缓冲清空（settle 契约）。
+    expect(session.historySnapshot().length).toBe(0);
   });
 
   it('?lastSeq=N gating: replay drops seq<=N, replay + live seamless', async () => {
     const sessionManager = await buildApp();
-    scriptedRunner([
-      [['token', { token: 'one' }], ['complete']],
-      [['token', { token: 'two' }], ['complete']],
-    ]);
+    // 门控轮停在 2 帧后（缓冲 seq 1..2 未落盘），lastSeq=1 建连验门控。
+    const { release } = gatedRunner(
+      [
+        ['token', { token: 'one' }],
+        ['token', { token: 'two' }],
+      ],
+      [['complete']]
+    );
     const session = await createWarmSession(sessionManager, 'gate-replay');
 
-    for await (const _ of session.handleMessage('first')) {
-      // drain
-    }
+    const iterator = session.handleMessage('first')[Symbol.asyncIterator]();
+    await iterator.next(); // 拉动一次启动轮（帧进通道/请求级队列）
+    await vi.waitFor(() => expect(session.historySnapshot().length).toBeGreaterThanOrEqual(2));
 
     const res = await fetch(`${getUrl()}/api/chat/gate-replay/events?lastSeq=1`);
-    // 同一响应体只开一个读取器（ReadableStream 单锁）——重放段与直播段
-    // 共用一个 generator。
     const gen = sseFrames(res);
-    // 重放门控：seq=1 的 token 帧被丢弃，重放段只余 seq=2 的 done +
-    // history-end 分界。分界帧描述保留窗（firstSeq=1），不受门控影响。
+    // 重放门控：seq=1 的 token 帧被丢弃，重放段只余 seq=2。分界帧描述
+    // 保留窗（firstSeq=1），不受门控影响。
     const replay = await collectUntil(gen, (f) => f.event === 'history-end');
     expect(channelSeqs(replay)).toEqual([2]);
     expect(replay.at(-1)!.data).toEqual({ firstSeq: 1, lastSeq: 2 });
 
-    const turn = (async () => {
-      for await (const _ of session.handleMessage('second')) {
-        // drain
-      }
-    })();
+    // 放行：done 直播续后（无缝、无重）。
+    release();
     const live = await collectUntil(gen, (f) => f.event === 'done');
-    await turn;
+    for (;;) {
+      const r = await iterator.next();
+      if (r.done) break;
+    }
     await stopSse(gen, res);
-    // 重放+增量无缝：2（重放）→ 3,4（直播），无重帧无丢帧。
-    expect(channelSeqs([...replay, ...live])).toEqual([2, 3, 4]);
+    // 重放+增量无缝：2（重放）→ 3（直播），无重帧无丢帧。
+    expect(channelSeqs([...replay, ...live])).toEqual([2, 3]);
   });
 
   it('client disconnect unsubscribes — later turns do not feed the dead connection', async () => {
@@ -407,11 +455,16 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
       expect(subs.size).toBe(0);
     });
 
-    // 之后的轮照常落史（退订只摘听者，不影响通道）。
+    // 之后的轮照常落史（退订只摘听者，不影响通道）——经只读探针验证
+    //（安静收尾 settle 清缓冲，轮末读史为空）。
+    const probe: Array<{ seq: number }> = [];
+    const detach = session.subscribe((e) => probe.push(e));
     for await (const _ of session.handleMessage('second')) {
       // drain
     }
-    expect(session.historySnapshot().map((e) => e.seq)).toEqual([1, 2, 3, 4]);
+    detach();
+    expect(probe.map((e) => e.seq)).toEqual([3, 4]);
+    expect(session.historySnapshot().length).toBe(0);
   });
 
   it('e2e reconnect hole-fill: mid-stream disconnect + lastSeq resume — no dup, no gap (by seq)', async () => {
@@ -454,16 +507,26 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
       .filter((f) => f.event === 'token')
       .map((f) => (f.data as { delta?: string }).delta);
     expect(deltas).toEqual(['e0', 'e1', 'e2', 'e3', 'e4']);
-    expect(seqs.length).toBe(session.historySnapshot().length);
+    // 轮已收尾且安静：缓冲 settle 清空（磁盘对账后重放为空）。
+    expect(session.historySnapshot().length).toBe(0);
   });
 
   it('history-end divider: normal reconnect aligned; head-trim flags the gap (firstSeq jumps)', async () => {
     const sessionManager = await buildApp();
-    scriptedRunner([[['token', { token: 'a' }], ['token', { token: 'b' }], ['complete']]]);
+    // 门控轮停在 3 帧后（缓冲 [1..3] 未落盘）——settle 语义下分界帧
+    // 的两场景都在轮在飞时验。
+    const { release } = gatedRunner(
+      [
+        ['token', { token: 'a' }],
+        ['token', { token: 'b' }],
+        ['token', { token: 'c' }],
+      ],
+      [['complete']]
+    );
     const session = await createWarmSession(sessionManager, 'divider');
-    for await (const _ of session.handleMessage('first')) {
-      // drain —— 历史落 3 帧（seq 1..3）
-    }
+    const iterator = session.handleMessage('first')[Symbol.asyncIterator]();
+    await iterator.next();
+    await vi.waitFor(() => expect(session.historySnapshot().length).toBeGreaterThanOrEqual(3));
 
     // 场景一（正常重连，无 gap 信号）：客户端已见 seq=2，窗口完整
     // [1..3]——分界帧 firstSeq=1 ≤ 2+1、lastSeq=3 ≥ 2，语义自洽。
@@ -488,6 +551,11 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     await stopSse(gen2, res2);
     expect(channelSeqs(phase2)).toEqual([3], 'seq=1 已被裁，seq=3 重放');
     const d2 = phase2.at(-1)!.data as { firstSeq: number; lastSeq: number };
+    release();
+    for (;;) {
+      const r = await iterator.next();
+      if (r.done) break;
+    }
     expect(d2).toEqual({ firstSeq: 3, lastSeq: 3 });
     expect(d2.firstSeq > 1 + 1, 'firstSeq 跳变 = 裁头 gap 信号').toBe(true);
   });
@@ -531,7 +599,8 @@ describe('GET /api/chat/:sessionId/events (R2P-151 persistent stream)', () => {
     for await (const _ of original.handleMessage('first')) {
       // drain
     }
-    expect(original.historySnapshot().length).toBe(2);
+    // 安静收尾 settle 清缓冲（重放为空的根因之一；驱逐语义不变）。
+    expect(original.historySnapshot().length).toBe(0);
     await sleep(20);
 
     // 冷路径物化（同 resume/respond 装配）：AgentHarness.resume 返回带
@@ -688,9 +757,11 @@ describe('POST /api/chat/:sessionId ack + persistent events (R2P-153 dual-track)
     await store.updateMeta('cold-ack', { runnerConfig: { model: 'test-model', sandbox: false } });
     sessionManager.registerSession('cold-ack', workspace);
 
-    const rebuiltRunner = scriptedRunner([[['token', { token: 'cold' }], ['complete']]]);
+    // 门控重建轮：ack 后停在 token 之后（未落盘），建连重放确定覆盖；
+    // 放行后 done 直播到达（settle 语义：落定去磁盘，重放只含活动）。
+    const gated = gatedRunner([['token', { token: 'cold' }]], [['complete']]);
     mockAgentHarnessResume.mockResolvedValue({
-      runner: rebuiltRunner.runner,
+      runner: gated.runner,
       state: FINAL_STATE,
     });
 
@@ -705,8 +776,11 @@ describe('POST /api/chat/:sessionId ack + persistent events (R2P-153 dual-track)
     // 建连重放（无 lastSeq）补齐 ack 与挂流之间已发生的帧。
     const res = await fetch(`${getUrl()}/api/chat/cold-ack/events`);
     const gen = sseFrames(res);
-    const frames = await collectUntil(gen, (f) => f.event === 'done');
+    const replay = await collectUntil(gen, (f) => f.event === 'history-end');
+    gated.release();
+    const live = await collectUntil(gen, (f) => f.event === 'done');
     await stopSse(gen, res);
+    const frames = [...replay, ...live];
     expect((frames.find((f) => f.event === 'token')!.data as { delta?: string }).delta).toBe(
       'cold'
     );

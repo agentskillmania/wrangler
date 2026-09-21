@@ -1385,6 +1385,9 @@ export class AgentSession {
         // Persistence is handled by SessionMiddleware.afterRun inside
         // runner.run() — no manual saveState needed here.
         this._busy = false;
+        // 活动落定清缓冲（对齐 Rust settle_history——quiet 时清；消费轮
+        // 续跑（邮箱非空）不清，其帧继续可重放）。
+        this.settleHistory();
         this.sendStateSnapshot();
         this.signalDone();
         this.bridge.sseSender = null;
@@ -1666,6 +1669,19 @@ export class AgentSession {
       this.history.shift();
     }
     this.history.push(entry);
+  }
+
+  /**
+   * 活动落定清空滚动历史（对齐 Rust 34523f2/R2P-166 的 settle_history）：
+   * 轮收尾且会话安静（无在飞轮/子女/邮箱）时清缓冲——下次建连重放为
+   * 空，客户端按磁盘对账后从直播段续上。旧轮帧（尤其旧 done）不再进
+   * 重放，ack 类消费方不会把上一轮的完成误判为本轮终态。进行中的
+   * 活动不清（未落盘的帧仍是断线补洞的唯一来源）。
+   */
+  private settleHistory(): void {
+    if (!this._busy && !this.hasActiveChildren() && !this.hasPendingDeliveries()) {
+      this.history.length = 0;
+    }
   }
 
   /**

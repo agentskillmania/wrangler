@@ -81,7 +81,7 @@ describe('US-C5: Workspace File Operations', () => {
   // ------------------------------------------------------------------ AC-1
   describe('AC-1: GET tree returns file tree', () => {
     it('returns the workspace root as a directory node with children', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}/tree`);
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/tree`);
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.isDirectory).toBe(true);
@@ -91,7 +91,7 @@ describe('US-C5: Workspace File Operations', () => {
     });
 
     it('sorts directories before files, then alphabetically', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}/tree`);
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/tree`);
       expect(res.ok).toBe(true);
       const body = await res.json();
       const children = body.children as Array<{ name: string; isDirectory: boolean }>;
@@ -114,7 +114,7 @@ describe('US-C5: Workspace File Operations', () => {
     });
 
     it('excludes node_modules from the tree', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}/tree`);
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/tree`);
       expect(res.ok).toBe(true);
       const body = await res.json();
 
@@ -131,7 +131,7 @@ describe('US-C5: Workspace File Operations', () => {
     });
 
     it('excludes hidden files and directories (dot-prefixed)', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}/tree`);
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/tree`);
       expect(res.ok).toBe(true);
       const body = await res.json();
 
@@ -151,7 +151,7 @@ describe('US-C5: Workspace File Operations', () => {
   // ------------------------------------------------------------------ AC-2
   describe('AC-2: GET content reads file content', () => {
     it('returns the text content of an existing file', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}/content?path=readme.md`);
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=readme.md`);
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.content).toBe('# Project');
@@ -160,7 +160,7 @@ describe('US-C5: Workspace File Operations', () => {
 
     it('reads a deeply nested file', async () => {
       const res = await fetch(
-        `${baseUrl()}/api/files/${sessionId}/content?path=src/utils/helpers.ts`
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=src/utils/helpers.ts`
       );
       expect(res.ok).toBe(true);
       const body = await res.json();
@@ -171,7 +171,7 @@ describe('US-C5: Workspace File Operations', () => {
   // ------------------------------------------------------------------ AC-2 error cases
   describe('GET content error handling', () => {
     it('returns error when path query parameter is missing', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}/content`);
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content`);
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.error).toBe('path is required');
@@ -179,7 +179,7 @@ describe('US-C5: Workspace File Operations', () => {
 
     it('returns error for a non-existent file', async () => {
       const res = await fetch(
-        `${baseUrl()}/api/files/${sessionId}/content?path=does-not-exist.txt`
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=does-not-exist.txt`
       );
       expect(res.ok).toBe(true);
       const body = await res.json();
@@ -190,7 +190,7 @@ describe('US-C5: Workspace File Operations', () => {
   // ------------------------------------------------------------------ AC-3
   describe('AC-3: PUT content updates file content', () => {
     it('overwrites an existing file with new content', async () => {
-      const writeRes = await fetch(`${baseUrl()}/api/files/${sessionId}/content`, {
+      const writeRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'readme.md', content: '# Updated Project' }),
@@ -198,12 +198,12 @@ describe('US-C5: Workspace File Operations', () => {
       expect(writeRes.ok).toBe(true);
       expect((await writeRes.json()).ok).toBe(true);
 
-      const readRes = await fetch(`${baseUrl()}/api/files/${sessionId}/content?path=readme.md`);
+      const readRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=readme.md`);
       expect((await readRes.json()).content).toBe('# Updated Project');
     });
 
     it('returns error when path or content is missing', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}/content`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'readme.md' }),
@@ -216,7 +216,7 @@ describe('US-C5: Workspace File Operations', () => {
   // ------------------------------------------------------------------ AC-4
   describe('AC-4: POST creates a new file', () => {
     it('creates a file with specified content', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'new-feature.ts', content: 'export const x = 1;' }),
@@ -227,13 +227,13 @@ describe('US-C5: Workspace File Operations', () => {
       expect(body.path).toBe('new-feature.ts');
 
       const readRes = await fetch(
-        `${baseUrl()}/api/files/${sessionId}/content?path=new-feature.ts`
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=new-feature.ts`
       );
       expect((await readRes.json()).content).toBe('export const x = 1;');
     });
 
     it('creates nested directories automatically', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'deep/nested/dir/file.txt', content: 'nested' }),
@@ -242,25 +242,25 @@ describe('US-C5: Workspace File Operations', () => {
       expect((await res.json()).ok).toBe(true);
 
       const readRes = await fetch(
-        `${baseUrl()}/api/files/${sessionId}/content?path=deep/nested/dir/file.txt`
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=deep/nested/dir/file.txt`
       );
       expect((await readRes.json()).content).toBe('nested');
     });
 
     it('defaults content to empty string when not provided', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'empty.txt' }),
       });
       expect(res.ok).toBe(true);
 
-      const readRes = await fetch(`${baseUrl()}/api/files/${sessionId}/content?path=empty.txt`);
+      const readRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=empty.txt`);
       expect((await readRes.json()).content).toBe('');
     });
 
     it('returns error when path is missing', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: 'orphan' }),
@@ -273,7 +273,7 @@ describe('US-C5: Workspace File Operations', () => {
   // ------------------------------------------------------------------ AC-5
   describe('AC-5: DELETE removes a file', () => {
     it('deletes an existing file and it is no longer readable', async () => {
-      const delRes = await fetch(`${baseUrl()}/api/files/${sessionId}`, {
+      const delRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'readme.md' }),
@@ -281,12 +281,12 @@ describe('US-C5: Workspace File Operations', () => {
       expect(delRes.ok).toBe(true);
       expect((await delRes.json()).ok).toBe(true);
 
-      const readRes = await fetch(`${baseUrl()}/api/files/${sessionId}/content?path=readme.md`);
+      const readRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=readme.md`);
       expect((await readRes.json()).error).toBe('File not found');
     });
 
     it('returns error for a non-existent file', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'ghost.txt' }),
@@ -296,7 +296,7 @@ describe('US-C5: Workspace File Operations', () => {
     });
 
     it('returns error when path is missing', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -310,14 +310,14 @@ describe('US-C5: Workspace File Operations', () => {
   describe('AC-6: Path traversal is blocked', () => {
     it('blocks traversal via GET content', async () => {
       const res = await fetch(
-        `${baseUrl()}/api/files/${sessionId}/content?path=../../../etc/passwd`
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=../../../etc/passwd`
       );
       expect(res.ok).toBe(true);
       expect((await res.json()).error).toBe('File not found');
     });
 
     it('blocks traversal via PUT content', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}/content`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: '../../tmp/evil.txt', content: 'pwned' }),
@@ -329,7 +329,7 @@ describe('US-C5: Workspace File Operations', () => {
     });
 
     it('blocks traversal via POST create', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: '../../tmp/evil.txt', content: 'pwned' }),
@@ -339,7 +339,7 @@ describe('US-C5: Workspace File Operations', () => {
     });
 
     it('blocks traversal via DELETE', async () => {
-      const res = await fetch(`${baseUrl()}/api/files/${sessionId}`, {
+      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: '../../tmp/important.txt' }),
@@ -400,7 +400,7 @@ describe('US-C5: Workspace File Operations', () => {
   describe('Full file lifecycle', () => {
     it('create -> read -> update -> tree -> delete', async () => {
       // Step 1: Create a new file
-      const createRes = await fetch(`${baseUrl()}/api/files/${sessionId}`, {
+      const createRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'lifecycle.txt', content: 'v1' }),
@@ -409,11 +409,11 @@ describe('US-C5: Workspace File Operations', () => {
       expect((await createRes.json()).ok).toBe(true);
 
       // Step 2: Read it back
-      const read1 = await fetch(`${baseUrl()}/api/files/${sessionId}/content?path=lifecycle.txt`);
+      const read1 = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=lifecycle.txt`);
       expect((await read1.json()).content).toBe('v1');
 
       // Step 3: Update it
-      const updateRes = await fetch(`${baseUrl()}/api/files/${sessionId}/content`, {
+      const updateRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'lifecycle.txt', content: 'v2' }),
@@ -422,11 +422,11 @@ describe('US-C5: Workspace File Operations', () => {
       expect((await updateRes.json()).ok).toBe(true);
 
       // Verify update
-      const read2 = await fetch(`${baseUrl()}/api/files/${sessionId}/content?path=lifecycle.txt`);
+      const read2 = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=lifecycle.txt`);
       expect((await read2.json()).content).toBe('v2');
 
       // Step 4: Confirm it appears in the file tree
-      const treeRes = await fetch(`${baseUrl()}/api/files/${sessionId}/tree`);
+      const treeRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/tree`);
       const tree = await treeRes.json();
       const rootFiles = tree.children.filter(
         (c: { name: string; isDirectory: boolean }) => !c.isDirectory
@@ -434,7 +434,7 @@ describe('US-C5: Workspace File Operations', () => {
       expect(rootFiles.some((f: { name: string }) => f.name === 'lifecycle.txt')).toBe(true);
 
       // Step 5: Delete it
-      const delRes = await fetch(`${baseUrl()}/api/files/${sessionId}`, {
+      const delRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: 'lifecycle.txt' }),
@@ -443,11 +443,11 @@ describe('US-C5: Workspace File Operations', () => {
       expect((await delRes.json()).ok).toBe(true);
 
       // Verify gone
-      const read3 = await fetch(`${baseUrl()}/api/files/${sessionId}/content?path=lifecycle.txt`);
+      const read3 = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=lifecycle.txt`);
       expect((await read3.json()).error).toBe('File not found');
 
       // Verify absent from tree
-      const treeRes2 = await fetch(`${baseUrl()}/api/files/${sessionId}/tree`);
+      const treeRes2 = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/tree`);
       const tree2 = await treeRes2.json();
       const rootFiles2 = tree2.children.filter(
         (c: { name: string; isDirectory: boolean }) => !c.isDirectory

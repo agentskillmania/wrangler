@@ -111,13 +111,16 @@ async function runCase(def, { onEvent, markHttpStart, markHttpEnd }) {
       httpEnd: markHttpEnd(),
     };
   } finally {
-    // 用例结束统一关全部 events 流——用例内保持连接(异步委派的
-    // 消费轮在主轮 done 之后才发生),用例间释放(防 6 连接上限)。
+    // 用例结束统一释放全部在途连接——events 流 + onetake 请求流（reset
+    // 会 abort 在途 POST/流并 closeEvents）。用例内保持连接(异步委派的
+    // 消费轮在主轮 done 之后才发生),用例间释放:TS 的 HITL 轮内挂起时
+    // 服务器不关 onetake 流(Rust 以 waiting_human 轮终态关流),不主动
+    // abort 会泄漏连接——同源 6 条上限下后续用例全体排队"卡死"。
     for (const { engine } of streams) {
       try {
-        engine.closeEvents();
+        engine.reset();
       } catch {
-        /* already closed */
+        /* already reset */
       }
     }
     unsubLog();

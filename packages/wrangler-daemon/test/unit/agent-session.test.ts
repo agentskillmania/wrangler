@@ -2645,20 +2645,24 @@ describe('AgentSession', () => {
       const session = await createChannelSession();
 
       const received: HistoryEntry[] = [];
+      const receivedSnapshots: HistoryEntry[][] = [];
       const detach = session.subscribe((entry) => {
         received.push(entry);
         // 先落史后广播：订阅者收到本帧的此刻，滚动历史已含本帧且恰为末帧
         // （同步实现下无时序窗——落史失败的广播不发生）。
         const hist = session.historySnapshot();
         expect(hist[hist.length - 1]).toEqual(entry);
+        receivedSnapshots.push([...hist]);
       });
 
       const events: SSEEvent[] = [];
       for await (const sse of session.handleMessage('hello')) events.push(sse);
       detach();
 
-      // 订阅者收到的与历史一致（同对象、同序）。
-      expect(received).toEqual(session.historySnapshot());
+      // 订阅者收到的与轮中历史一致（同对象、同序）——轮中快照在订阅
+      // 回调里取（安静轮收尾 settle_history 会清缓冲：轮末全史为空，
+      // 对齐 Rust live.rs 的「未落盘活动」语义）。
+      expect(received).toEqual(receivedSnapshots.at(-1) ?? received);
       // seq 会话内单调递增，从 1 起（对齐 Rust frame_seq 的 fetch_add+1）。
       expect(received.map((e) => e.seq)).toEqual([1, 2, 3]);
       // R2P-151：seq 上线协议——订阅回调不再剥 seq，wire 帧 data 含 seq
@@ -2683,12 +2687,12 @@ describe('AgentSession', () => {
       ]);
       const session = await createChannelSession();
 
-      // 第一轮：历史里落下 2 帧（token + done），订阅者尚未 attach。
+      // 第一轮：安静收尾即 settle（对齐 Rust settle_history）——轮末
+      // 滚动历史为空，帧只在磁盘；seq 空间继续单调。
       for await (const _ of session.handleMessage('first')) {
         // drain
       }
-      const historyAfterTurnOne = session.historySnapshot();
-      expect(historyAfterTurnOne.length).toBe(2);
+      expect(session.historySnapshot().length).toBe(0, '安静轮收尾 settle 清缓冲');
 
       // attach 后第二轮：只收增量（不重放第一轮）。
       const received: HistoryEntry[] = [];
@@ -2703,9 +2707,8 @@ describe('AgentSession', () => {
       expect(received[0].seq).toBe(3, 'seq 续前轮单调，不重置');
       const deltas = received.map((e) => (e.data as { delta?: string }).delta);
       expect(deltas).toEqual(['turn-two', undefined], 'no replay of turn-one token');
-      // 全史 = 第一轮 2 帧 + 第二轮 2 帧，seq 连续。
-      const full = session.historySnapshot();
-      expect(full.map((e) => e.seq)).toEqual([1, 2, 3, 4]);
+      // settle 契约：第二轮收尾后滚动历史同样清空（磁盘才是事实源）。
+      expect(session.historySnapshot().length).toBe(0);
       // 跨轮 wire 级单调（R2P-151）：本轮 data.seq 续前轮，不重置。
       expect(wire.map((e) => (e.data as { seq: number }).seq)).toEqual([3, 4]);
     });
@@ -2724,6 +2727,13 @@ describe('AgentSession', () => {
       mockRunnerWithScripts([burst, [['token', { token: 'after-burst' }], ['complete']]]);
       const session = await createChannelSession();
 
+      // 轮中截断不变量经订阅回调的逐帧快照钉住（安静收尾 settle 会清
+      // 缓冲——轮末直接读史是空，对齐 Rust「未落盘活动」语义）。
+      let capped: HistoryEntry[] | null = null;
+      const detachProbe = session.subscribe(() => {
+        const h = session.historySnapshot();
+        if (h.length >= HISTORY_CAP) capped = [...h];
+      });
       const gen = session.handleMessage('hello');
       const first = await gen.next();
       expect(first.done).toBe(false);
@@ -2732,15 +2742,18 @@ describe('AgentSession', () => {
         data: expect.objectContaining({ delta: 'e0' }),
       });
       await gen.return(undefined); // 提前终止：detach 必须在 finally 里发生
+      detachProbe();
       await vi.waitFor(() => expect(session.busy).toBe(false));
 
-      const hist = session.historySnapshot();
+      const hist = capped!;
       expect(hist.length).toBe(HISTORY_CAP, 'history length capped');
       // 共 HISTORY_CAP + 3 帧，丢最旧 3 帧（e0/e1/e2）：首帧 seq = 4，末帧是 done。
       expect(hist[0].seq).toBe(4);
       expect((hist[0].data as { delta?: string }).delta).toBe('e3');
       expect(hist.at(-1)!.event).toBe('done');
       expect(hist.at(-1)!.seq).toBe(HISTORY_CAP + 3);
+      // 安静收尾后：滚动历史 settle 清空。
+      expect(session.historySnapshot().length).toBe(0, 'settle 后缓冲为空');
 
       // 提前终止后的下一轮：只含自己的帧——上一轮的爆量队列与订阅
       // 残留都不 bleed 进来。
@@ -2765,13 +2778,18 @@ describe('AgentSession', () => {
       const receivedAtDetach = received.length;
       expect(receivedAtDetach).toBe(1);
 
+      // 退订只摘听者：落史照常（轮中经只读探针验证），安静收尾后
+      // settle 清缓冲（对齐 Rust settle_history——磁盘才是事实源）。
+      const probe: HistoryEntry[] = [];
+      const detachProbe = session.subscribe((entry) => probe.push(entry));
       for await (const _ of session.handleMessage('second')) {
         // drain
       }
+      detachProbe();
       expect(received.length).toBe(receivedAtDetach, '退订后不再收');
-      // 退订只摘听者：历史照常落（第二轮 2 帧续在后面）。
-      expect(session.historySnapshot().length).toBe(3);
-      expect(session.historySnapshot().at(-1)!.event).toBe('done');
+      expect(probe.length).toBe(2, '第二轮 2 帧照常落史');
+      expect(probe.at(-1)!.event).toBe('done');
+      expect(session.historySnapshot().length).toBe(0, '安静收尾 settle 清缓冲');
     });
 
     describe('session event channel: subscriber isolation (R2P-122 review P2)', () => {
@@ -2830,13 +2848,21 @@ describe('AgentSession', () => {
           (events) => events.find((e) => e.event === 'done')!.data as { turnSeq: number }
         );
         expect(dones.map((d) => d.turnSeq)).toEqual([1, 2]);
-        // 历史级：turnSeq 随落史进滚动历史——常驻流重放段照样可见，
-        // 重连后 done 归属不丢。
-        const histDones = session
-          .historySnapshot()
+        // 历史级：turnSeq 随落史进滚动历史（轮中探针钉住——安静收尾
+        // settle 会清缓冲，轮末读史为空；重连后的 done 归属由磁盘/seq
+        // 空间承载，对齐 Rust settle_history 语义）。
+        const probe: HistoryEntry[] = [];
+        const detach = session.subscribe((e) => probe.push(e));
+        for (const msg of ['third'] as const) {
+          for await (const _ of session.handleMessage(msg)) {
+            // drain（第三轮只为确认 seq/turnSeq 续涨）
+          }
+        }
+        detach();
+        const probeDones = probe
           .filter((e) => e.event === 'done')
           .map((e) => e.data as { turnSeq: number });
-        expect(histDones.map((d) => d.turnSeq)).toEqual([1, 2]);
+        expect(probeDones.map((d) => d.turnSeq)).toEqual([3], 'seq/turnSeq 续涨不重置');
       });
 
       it('consumption turn (continueRun / HITL resume) gets a NEW turnSeq — not confused with the user turn', async () => {
@@ -2973,12 +2999,15 @@ describe('AgentSession', () => {
       };
       const callsBefore = addUserMessage.mock.calls.length;
 
+      // 后台驱动轮的帧经订阅探针观察（安静收尾 settle 会清滚动历史——
+      // 轮末读史为空，对齐 Rust settle_history）。
+      const probe: HistoryEntry[] = [];
+      const detach = session.subscribe((e) => probe.push(e));
       session.deliver(mkDelivery('r1'));
 
-      // 消费轮跑完：done 帧落史（后台驱动，历史可见）且邮箱清空。
-      await vi.waitFor(() =>
-        expect(session.historySnapshot().some((e) => e.event === 'done')).toBe(true)
-      );
+      // 消费轮跑完：done 帧到达（后台驱动）且邮箱清空。
+      await vi.waitFor(() => expect(probe.some((e) => e.event === 'done')).toBe(true));
+      detach();
       expect(session.hasPendingDeliveries()).toBe(false);
       // 播种消息带 <delivery> 标记，且以 MAIL_INPUT_CAP 为限额（内部消息
       // 不受人类输入限额约束）。
@@ -2988,12 +3017,10 @@ describe('AgentSession', () => {
       expect(seedCall).toBeDefined();
       expect(String(seedCall![1])).toContain('result of r1');
       expect(seedCall![2]).toBe(MAIL_INPUT_CAP);
-      // 消费轮的 done 帧上常驻流（历史可见）。
-      const dones = session
-        .historySnapshot()
-        .filter((e) => e.event === 'done')
-        .map((e) => e.data as { turnSeq: number });
+      // 消费轮恰一个 done（探针视角；轮末滚动历史已 settle 清空）。
+      const dones = probe.filter((e) => e.event === 'done');
       expect(dones.length).toBe(1, '消费轮自己开轮（无用户轮在先）');
+      expect(session.historySnapshot().length).toBe(0, '安静收尾 settle 清缓冲');
     });
 
     it('delivery frame lands in rolling history on deliver (background frame, no turn running)', async () => {
@@ -3044,18 +3071,20 @@ describe('AgentSession', () => {
       session.deliver(mkDelivery('r2'));
       expect(session.hasPendingDeliveries()).toBe(true, 'busy: 写穿邮箱，不打扰进行中的轮');
 
+      // 轮收尾钩子接力消费：两个 done（用户轮 1 + 消费轮 2）经订阅探针
+      // 观察——消费轮结束时邮箱已空 → settle 清缓冲，轮末读史不可靠
+      //（对齐 Rust settle_history：落定的帧去磁盘，缓冲只留未落盘活动）。
+      const probe: HistoryEntry[] = [];
+      const detach = session.subscribe((e) => probe.push(e));
       releaseRun!();
       for (;;) {
         const r = await iterator.next();
         if (r.done) break;
       }
-      // 轮收尾钩子接力消费：等两个 done 都落史（用户轮 1 + 消费轮 2）。
       const doneSeqs = (): number[] =>
-        session
-          .historySnapshot()
-          .filter((e) => e.event === 'done')
-          .map((e) => (e.data as { turnSeq: number }).turnSeq);
+        probe.filter((e) => e.event === 'done').map((e) => (e.data as { turnSeq: number }).turnSeq);
       await vi.waitFor(() => expect(doneSeqs()).toEqual([1, 2]));
+      detach();
       expect(session.hasPendingDeliveries()).toBe(false, 'hook digested the mail');
     });
 
