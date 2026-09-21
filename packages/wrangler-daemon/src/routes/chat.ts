@@ -179,7 +179,7 @@ const COMMANDS = [
  * 合并 sandbox 配置（config.yaml ← 请求体）并构造实例（enabled 时）。
  * Node 宿主职责——wrangler core 不捆绑 sandbox 运行时。
  */
-function withSandboxInstance(
+export function withSandboxInstance(
   base: import('@agentskillmania/wrangler').SandboxConfig | undefined,
   override: import('@agentskillmania/wrangler').SandboxConfig | boolean | undefined,
   workspacePath: string
@@ -192,10 +192,15 @@ function withSandboxInstance(
     return disabled;
   }
   const { enabled: _enabled, instance: _instance, ...params } = merged;
+  // undefined 值的键不得跨过包边界：Sandbox 构造用 {...DEFAULT, ...options}
+  // 合并——显式 undefined 会击穿包内默认值（timeout: undefined →
+  // setTimeout(fn, undefined) = 0ms → 每条命令瞬间超时；config.yaml 不写
+  // sandbox 段的默认路径正中此坑）。过滤后再传。
+  const defined = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined));
   return {
     enabled: true,
-    ...params,
-    instance: new Sandbox({ sandboxDir: workspacePath, ...params }),
+    ...defined,
+    instance: new Sandbox({ sandboxDir: workspacePath, ...defined }),
   };
 }
 export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
