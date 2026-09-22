@@ -102,6 +102,9 @@ export class Daemon {
     };
 
     const serveStatic = async (filename: string, reply: FastifyReply) => {
+      // no-cache：强制浏览器每次回源校验（懒加载模块改完即生效——否则
+      // 开着的页面一直用旧 cases.js，出现"已修的断言又失败"的假回归）。
+      reply.header('Cache-Control', 'no-cache');
       for (const dir of staticDir) {
         try {
           const content = await readFile(join(dir, filename), 'utf-8');
