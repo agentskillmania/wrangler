@@ -552,6 +552,7 @@ export const STORY_CASES = [
         const t0 = Date.now();
         for (;;) {
           if (await cond()) return;
+          if (t.aborted) throw new Error(`用例中止,停止等待:${what}`);
           if (Date.now() - t0 > timeoutMs) throw new Error(`等待超时:${what}`);
           await sleep(300);
         }
@@ -739,6 +740,7 @@ export const STORY_CASES = [
         const t0 = Date.now();
         for (;;) {
           if (await cond()) return;
+          if (t.aborted) throw new Error(`用例中止,停止等待:${what}`);
           if (Date.now() - t0 > timeoutMs) throw new Error(`等待超时:${what}`);
           await sleep(300);
         }
@@ -936,17 +938,40 @@ export const STORY_CASES = [
         // 邮箱排空——即已受理的子任务全部完成、投递全部消化。轮询诊断
         // 端点,不再自己发明"消息数稳定/数标签"这类启发式。
         await t.step('收工:等待会话安静(轮/子任务/邮箱全排空)', async () => {
+          const quietStart = Date.now();
+          let reapedChildren = false;
           await waitFor(
             async () => {
               try {
                 const d = await api.chatDiagnostics(sid);
                 if (d.quiet === true) return true;
-                // 防御:模型可能中途发起人工确认(非确定性行为)——不答
-                // 它,轮永远挂起,安静永不到来。顺手应答"继续"再接着等。
+                // 防御一:模型可能中途发起人工确认(非确定性行为)——不答
+                // 它,轮永远挂起,安静永不到来。两路找中断:盘上 state
+                // (messages.interrupts)与引擎活中断(轮内挂起的桥上提问
+                // 只在 human-input 帧里,/messages 看不见)。
+                const rid = (eng.state.interrupt && eng.state.interrupt.requestId) || null;
                 const m = await api.chatMessages(sid);
-                for (const it of m.interrupts || []) {
+                const pendings = [
+                  ...(m.interrupts || []),
+                  ...(rid && !(m.interrupts || []).some((x) => x.requestId === rid)
+                    ? [{ requestId: rid }]
+                    : []),
+                ];
+                for (const it of pendings) {
                   t.info(`意外 HITL(${it.requestId}),自动应答"继续"`);
                   await api.respond(sid, it.requestId, '继续，无需人工确认').catch(() => {});
+                }
+                // 防御二:挂死的子 agent(模型派了但一直不结束——看门狗
+                // 要 10 分钟,用例等不起)。其余阻塞项都排空、只剩子女在
+                // 跑且已等了 90s:stop 收割一次(stop 只杀活跃轮与在跑子
+                // 任务,已完成的投递不受影响)。
+                const onlyChildren =
+                  (d.quietBlockers || []).length === 1 &&
+                  String(d.quietBlockers[0]).includes('sub-task');
+                if (!reapedChildren && onlyChildren && Date.now() - quietStart > 90000) {
+                  reapedChildren = true;
+                  t.info('子 agent 挂死(>90s),stop 收割一次');
+                  await api.stopSession(sid).catch(() => {});
                 }
                 return false;
               } catch {
@@ -954,7 +979,7 @@ export const STORY_CASES = [
               }
             },
             '会话安静',
-            120000
+            240000
           );
           const d = await api.chatDiagnostics(sid);
           t.info(`收工确认:quiet=${d.quiet}`);

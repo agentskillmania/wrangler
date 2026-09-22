@@ -12,7 +12,7 @@ import { requestLog, onRequestLogChange } from '../api.js';
 import { EventStream } from '../components/EventStream.js';
 import { JsonTree } from '../components/JsonTree.js';
 
-const CASE_TIMEOUT_MS = 180000;
+const CASE_TIMEOUT_MS = 300000;
 const STATUS_LABELS = {
   pending: '未跑',
   running: '运行中',
@@ -32,6 +32,10 @@ async function runCase(def, { onEvent, markHttpStart, markHttpEnd }) {
   const unsubLog = onRequestLogChange(poke);
 
   const t = {
+    /** 用例已中止（步骤失败或整体超时）——用例内的轮询循环应据此退出。 */
+    get aborted() {
+      return aborted;
+    },
     info: (msg) => {
       const cur = steps[steps.length - 1];
       if (cur) (cur.info = cur.info || []).push(msg);
@@ -99,7 +103,12 @@ async function runCase(def, { onEvent, markHttpStart, markHttpEnd }) {
     await Promise.race([
       def.run(t),
       new Promise((_, rej) =>
-        setTimeout(() => rej(new Error(`用例超时（>${CASE_TIMEOUT_MS / 1000}s）`)), CASE_TIMEOUT_MS)
+        setTimeout(() => {
+          // 超时同样置 abort——race 的拒绝不会停止 def.run，用例内的
+          // 轮询循环靠 t.aborted 退出（否则后台无限打接口）。
+          aborted = true;
+          rej(new Error(`用例超时（>${CASE_TIMEOUT_MS / 1000}s）`));
+        }, CASE_TIMEOUT_MS)
       ),
     ]);
     return {
@@ -126,9 +135,12 @@ async function runCase(def, { onEvent, markHttpStart, markHttpEnd }) {
     // abort 会泄漏连接——同源 6 条上限下后续用例全体排队"卡死"。
     for (const { engine } of streams) {
       try {
-        engine.reset();
+        // release 而非 reset：连接必须还（同源 6 条上限），但卡片的
+        // 帧回放保留——reset 会清空 frames/items，用例通过后卡片显示
+        // 「还没有帧」的回放丢失即由此来。
+        engine.release();
       } catch {
-        /* already reset */
+        /* already released */
       }
     }
     unsubLog();

@@ -31,43 +31,49 @@ const FRAMES_CAP = 3000;
 /** Map `done` frame type → engine status. */
 function statusOfDone(type) {
   switch (type) {
-    case 'success': return 'done';
-    case 'waiting_human': return 'waiting-human';
-    case 'error': return 'error';
+    case 'success':
+      return 'done';
+    case 'waiting_human':
+      return 'waiting-human';
+    case 'error':
+      return 'error';
     case 'abort':
-    case 'stopped': return 'aborted';
-    case 'max_steps': return 'max-steps';
-    default: return 'done';
+    case 'stopped':
+      return 'aborted';
+    case 'max_steps':
+      return 'max-steps';
+    default:
+      return 'done';
   }
 }
 
 export function createRunEngine() {
   const state = {
-    status: 'idle',        // idle | running | waiting-human | done | error | aborted | max-steps
+    status: 'idle', // idle | running | waiting-human | done | error | aborted | max-steps
     sessionId: null,
-    sessionMeta: null,     // session-start payload
+    sessionMeta: null, // session-start payload
     endpoint: null,
     requestBody: null,
     startedAt: null,
     endedAt: null,
-    frames: [],            // raw frames, verbatim
-    items: [],             // rendered projection
-    phases: [],            // phase-change sequence
-    todo: null,            // todo-list items
-    interrupt: null,       // pending human-input payload
-    doneInfo: null,        // done frame data
-    error: null,           // terminal error (stream or event)
-    responseError: null,   // transport-level error (e.g. 409 busy)
+    frames: [], // raw frames, verbatim
+    items: [], // rendered projection
+    phases: [], // phase-change sequence
+    todo: null, // todo-list items
+    interrupt: null, // pending human-input payload
+    doneInfo: null, // done frame data
+    error: null, // terminal error (stream or event)
+    responseError: null, // transport-level error (e.g. 409 busy)
     // ── 常驻 events 流的内部簿记(下划线 = 非投影状态)──
-    _eventsSid: null,      // 当前挂的会话
-    _eventsHandle: null,   // { close() } 句柄
-    _eventsLive: false,    // 已过 history-end(直播段)
-    _lastSeq: null,        // 已应用的最高帧序号(重连去重/补洞)
-    _reconnectRetries: 0,  // 连续重连失败计数(任一帧即清零)
+    _eventsSid: null, // 当前挂的会话
+    _eventsHandle: null, // { close() } 句柄
+    _eventsLive: false, // 已过 history-end(直播段)
+    _lastSeq: null, // 已应用的最高帧序号(重连去重/补洞)
+    _reconnectRetries: 0, // 连续重连失败计数(任一帧即清零)
     // ── 代际:reset 自增,在途异步回调先比对再落地(reset 后的迟到
     // 回调不得复活旧会话/污染新视图)──
     _gen: 0,
-    _postAbort: null,      // 在途 POST 的 AbortController
+    _postAbort: null, // 在途 POST 的 AbortController
   };
 
   const listeners = new Set();
@@ -128,16 +134,46 @@ export function createRunEngine() {
         break;
       }
       case 'tool-start':
-        pushItem({ kind: 'tool', callId: data.id, id: data.id, name: data.name, args: data.args, result: null, done: false, at: frame.at });
+        pushItem({
+          kind: 'tool',
+          callId: data.id,
+          id: data.id,
+          name: data.name,
+          args: data.args,
+          result: null,
+          done: false,
+          at: frame.at,
+        });
         break;
       case 'tool-end': {
         const tool = findTool(data.callId);
-        if (tool) { tool.result = data.result; tool.done = true; }
-        else pushItem({ kind: 'tool', callId: data.callId, name: '(unknown)', args: null, result: data.result, done: true, at: frame.at });
+        if (tool) {
+          tool.result = data.result;
+          tool.done = true;
+        } else
+          pushItem({
+            kind: 'tool',
+            callId: data.callId,
+            name: '(unknown)',
+            args: null,
+            result: data.result,
+            done: true,
+            at: frame.at,
+          });
         break;
       }
       case 'subagent-start':
-        pushItem({ kind: 'sub', subtaskId: data.subtaskId, name: data.name, task: data.task, text: '', events: [], done: false, startedAt: frame.at, endedAt: null });
+        pushItem({
+          kind: 'sub',
+          subtaskId: data.subtaskId,
+          name: data.name,
+          task: data.task,
+          text: '',
+          events: [],
+          done: false,
+          startedAt: frame.at,
+          endedAt: null,
+        });
         break;
       case 'subagent-token': {
         const sub = findSub(data.subtaskId);
@@ -153,7 +189,13 @@ export function createRunEngine() {
       }
       case 'subagent-end': {
         const sub = findSub(data.subtaskId);
-        if (sub) { sub.done = true; sub.status = data.status; sub.answer = data.answer; sub.error = data.error; sub.endedAt = frame.at; }
+        if (sub) {
+          sub.done = true;
+          sub.status = data.status;
+          sub.answer = data.answer;
+          sub.error = data.error;
+          sub.endedAt = frame.at;
+        }
         break;
       }
       case 'phase-change':
@@ -175,14 +217,20 @@ export function createRunEngine() {
         break;
       case 'error':
         state.error = data;
-        pushItem({ kind: 'error', message: data.message, step: data.step, toolName: data.toolName });
+        pushItem({
+          kind: 'error',
+          message: data.message,
+          step: data.step,
+          toolName: data.toolName,
+        });
         break;
       case 'abort':
         pushItem({ kind: 'abort', ...data });
         break;
       case 'done': {
         // Close open text items.
-        for (const it of state.items) if (!it.closed && (it.kind === 'assistant' || it.kind === 'thinking')) it.closed = true;
+        for (const it of state.items)
+          if (!it.closed && (it.kind === 'assistant' || it.kind === 'thinking')) it.closed = true;
         state.doneInfo = data;
         state.endedAt = frame.at;
         state.status = statusOfDone(data.type);
@@ -214,22 +262,29 @@ export function createRunEngine() {
     state.phases = [];
     pushItem({ kind: 'user', text: body.message || '(no message)' });
     notify();
-    return startChatStream(endpoint, body, {
-      onFrame: (frame) => { if (state._gen === gen) applyFrame(frame); },
-      onError: (e) => {
-        if (state._gen !== gen) return;
-        state.responseError = e;
-        if (state.status === 'running') state.status = 'error';
-        notify();
+    return startChatStream(
+      endpoint,
+      body,
+      {
+        onFrame: (frame) => {
+          if (state._gen === gen) applyFrame(frame);
+        },
+        onError: (e) => {
+          if (state._gen !== gen) return;
+          state.responseError = e;
+          if (state.status === 'running') state.status = 'error';
+          notify();
+        },
+        onClose: () => {
+          if (state._gen !== gen) return;
+          // A stream may end without a done frame if the connection drops.
+          if (state.status === 'running') state.status = 'error';
+          state.endedAt = state.endedAt || new Date();
+          notify();
+        },
       },
-      onClose: () => {
-        if (state._gen !== gen) return;
-        // A stream may end without a done frame if the connection drops.
-        if (state.status === 'running') state.status = 'error';
-        state.endedAt = state.endedAt || new Date();
-        notify();
-      },
-    }, postAbort.signal);
+      postAbort.signal
+    );
   }
 
   // 会话级常驻事件订阅:ack 类动作的帧来源。同 sessionId 复用,换会话
@@ -351,30 +406,36 @@ export function createRunEngine() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body, null, 2),
       signal: postAbort.signal,
-    }).then(async (res) => {
-      if (state._gen !== gen) return; // reset 期间的迟到回执:直接丢弃
-      if (!res.ok) {
-        let data;
-        try { data = await res.json(); } catch { /* ignore */ }
-        const err = new Error((data && data.error) || `HTTP ${res.status}`);
-        err.status = res.status;
-        err.body = data;
-        state.responseError = err;
-        // 409(busy/HITL 未答)同样是失败终态——不会有 done 来收口。
+    })
+      .then(async (res) => {
+        if (state._gen !== gen) return; // reset 期间的迟到回执:直接丢弃
+        if (!res.ok) {
+          let data;
+          try {
+            data = await res.json();
+          } catch {
+            /* ignore */
+          }
+          const err = new Error((data && data.error) || `HTTP ${res.status}`);
+          err.status = res.status;
+          err.body = data;
+          state.responseError = err;
+          // 409(busy/HITL 未答)同样是失败终态——不会有 done 来收口。
+          if (state.status === 'running') state.status = 'error';
+          notify();
+          return;
+        }
+        // 受理后才入渲染视图、才挂流(早帧由建连重放补齐)。
+        pushItem({ kind: 'user', text: (body && body.message) || '(no message)' });
+        notify();
+        ensureEvents(sid);
+      })
+      .catch((e) => {
+        if (state._gen !== gen) return;
+        state.responseError = e;
         if (state.status === 'running') state.status = 'error';
         notify();
-        return;
-      }
-      // 受理后才入渲染视图、才挂流(早帧由建连重放补齐)。
-      pushItem({ kind: 'user', text: (body && body.message) || '(no message)' });
-      notify();
-      ensureEvents(sid);
-    }).catch((e) => {
-      if (state._gen !== gen) return;
-      state.responseError = e;
-      if (state.status === 'running') state.status = 'error';
-      notify();
-    });
+      });
   }
 
   return {
@@ -391,10 +452,14 @@ export function createRunEngine() {
     },
     startCrewChat(id, body) {
       // crew 会话经统一发送端点创建:ack 语义,帧在 events 流上收。
-      const sid = (body && body.sessionId) || (crypto.randomUUID ? crypto.randomUUID() : `crew-${Date.now()}`);
+      const sid =
+        (body && body.sessionId) ||
+        (crypto.randomUUID ? crypto.randomUUID() : `crew-${Date.now()}`);
       state.sessionId = sid;
       return beginAck(`POST /api/chat/:id {crew}`, `/api/chat/${encodeURIComponent(sid)}`, {
-        ...(body || {}), crew: id, sessionId: sid,
+        ...(body || {}),
+        crew: id,
+        sessionId: sid,
       });
     },
     resume(sessionId, body) {
@@ -409,19 +474,30 @@ export function createRunEngine() {
         return Promise.resolve();
       }
       state.interrupt = null;
-      pushItem({ kind: 'user', text: typeof response === 'string' ? response : JSON.stringify(response) });
+      pushItem({
+        kind: 'user',
+        text: typeof response === 'string' ? response : JSON.stringify(response),
+      });
       notify();
-      return beginAck(`POST /api/chat/:id/respond`, `/api/chat/${encodeURIComponent(sid)}/respond`, { requestId, response });
+      return beginAck(
+        `POST /api/chat/:id/respond`,
+        `/api/chat/${encodeURIComponent(sid)}/respond`,
+        { requestId, response }
+      );
     },
 
     async stop() {
       const sid = state.sessionId;
       if (!sid) return;
       try {
-        const res = await fetch(`${BASE}/api/chat/${encodeURIComponent(sid)}/stop`, { method: 'POST' });
+        const res = await fetch(`${BASE}/api/chat/${encodeURIComponent(sid)}/stop`, {
+          method: 'POST',
+        });
         const data = await res.json().catch(() => ({}));
         if (!data.stopped) {
-          state.responseError = new Error(data.error || 'stop returned stopped:false (no active run?)');
+          state.responseError = new Error(
+            data.error || 'stop returned stopped:false (no active run?)'
+          );
           notify();
         }
       } catch (e) {
@@ -443,6 +519,16 @@ export function createRunEngine() {
     /// 关闭常驻 events 流(页面卸载/换故事时调用;reset 内部也会调)。
     closeEvents,
 
+    /// 释放全部在途传输（abort 在途 POST/请求流 + 关 events 流）但**保留
+    /// 投影状态**（frames/items/终态）——E2E 用例收尾用：连接必须还
+    /// （6 条上限），但卡片回放要留着。reset 才是「清状态」。
+    release() {
+      state._gen += 1;
+      state._postAbort?.abort();
+      state._postAbort = null;
+      closeEvents();
+    },
+
     reset() {
       // 代际自增:在途 POST/流的迟到回调按代际丢弃,不再复活旧会话。
       state._gen += 1;
@@ -453,10 +539,21 @@ export function createRunEngine() {
       state._lastSeq = null;
       state._reconnectRetries = 0;
       Object.assign(state, {
-        status: 'idle', sessionId: null, sessionMeta: null, endpoint: null,
-        requestBody: null, startedAt: null, endedAt: null,
-        frames: [], items: [], phases: [], todo: null,
-        interrupt: null, doneInfo: null, error: null, responseError: null,
+        status: 'idle',
+        sessionId: null,
+        sessionMeta: null,
+        endpoint: null,
+        requestBody: null,
+        startedAt: null,
+        endedAt: null,
+        frames: [],
+        items: [],
+        phases: [],
+        todo: null,
+        interrupt: null,
+        doneInfo: null,
+        error: null,
+        responseError: null,
       });
       notify();
     },
