@@ -275,26 +275,28 @@ export class ResourceManager {
       const content = await readFile(join(crewDir, 'CREW.md'), 'utf-8');
       const parsed = parseCrewMd(content, id);
 
-      const agents: { name: string; fileName: string }[] = [];
+      // agents/skills 均为名字数组（对齐 Rust CrewDetail 的 Vec<String>——
+      // 消费方 CrewsPage/CrewLab/E2E 全按字符串用，对象形状无依赖方）。
+      const agents: string[] = [];
       try {
         const agentEntries = await readdir(join(crewDir, 'agents'), { withFileTypes: true });
         for (const entry of agentEntries) {
           if (entry.isFile() && entry.name.endsWith('.md')) {
-            agents.push({ name: entry.name.replace('.md', ''), fileName: entry.name });
+            agents.push(entry.name.replace('.md', ''));
           }
         }
       } catch {
         /* no agents directory */
       }
 
-      const skills: { name: string; dirName: string }[] = [];
+      const skills: string[] = [];
       try {
         const skillEntries = await readdir(join(crewDir, 'skills'), { withFileTypes: true });
         for (const entry of skillEntries) {
           if (entry.isDirectory()) {
             try {
               await statFn(join(crewDir, 'skills', entry.name, 'SKILL.md'));
-              skills.push({ name: entry.name, dirName: entry.name });
+              skills.push(entry.name);
             } catch {
               /* not a valid skill directory */
             }

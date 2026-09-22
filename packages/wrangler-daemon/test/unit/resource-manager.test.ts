@@ -499,15 +499,15 @@ describe('ResourceManager', () => {
 
     it('returns parsed crew agents list', async () => {
       const detail = await createDetailCrew();
+      // 名字数组（对齐 Rust CrewDetail 的 Vec<String>）。
       expect(detail!.agents).toHaveLength(1);
-      expect(detail!.agents[0].name).toBe('leader');
-      expect(detail!.agents[0].fileName).toBe('leader.md');
+      expect(detail!.agents[0]).toBe('leader');
     });
 
     it('returns parsed crew skills list', async () => {
       const detail = await createDetailCrew();
       expect(detail!.skills).toHaveLength(1);
-      expect(detail!.skills[0].name).toBe('search');
+      expect(detail!.skills[0]).toBe('search');
     });
 
     it('returns null when id is not a directory', async () => {

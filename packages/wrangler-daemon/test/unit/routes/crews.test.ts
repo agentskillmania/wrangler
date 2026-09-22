@@ -130,11 +130,11 @@ describe('Unit: Crew CRUD Routes', () => {
     });
     expect(body).toHaveProperty('path');
     expect(body).toHaveProperty('crewMd');
+    // agents/skills 为名字数组（对齐 Rust CrewDetail 的 Vec<String>）。
     expect(body.agents).toHaveLength(2);
-    expect(body.agents).toContainEqual({ name: 'agent1', fileName: 'agent1.md' });
-    expect(body.agents).toContainEqual({ name: 'agent2', fileName: 'agent2.md' });
+    expect(body.agents).toEqual(expect.arrayContaining(['agent1', 'agent2']));
     expect(body.skills).toHaveLength(1);
-    expect(body.skills).toContainEqual({ name: 'skill1', dirName: 'skill1' });
+    expect(body.skills).toEqual(['skill1']);
   });
 
   // Test 4: GET /api/crews/:id returns error "Crew not found" for non-existent crew

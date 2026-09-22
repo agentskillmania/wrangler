@@ -932,7 +932,15 @@ export const STORY_CASES = [
             async () => {
               try {
                 const d = await api.chatDiagnostics(sid);
-                return d.quiet === true;
+                if (d.quiet === true) return true;
+                // 防御:模型可能中途发起人工确认(非确定性行为)——不答
+                // 它,轮永远挂起,安静永不到来。顺手应答"继续"再接着等。
+                const m = await api.chatMessages(sid);
+                for (const it of m.interrupts || []) {
+                  t.info(`意外 HITL(${it.requestId}),自动应答"继续"`);
+                  await api.respond(sid, it.requestId, '继续，无需人工确认').catch(() => {});
+                }
+                return false;
               } catch {
                 return false;
               }

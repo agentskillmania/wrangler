@@ -167,8 +167,10 @@ export interface CrewDetail {
   primaryAgent?: string;
   path: string;
   crewMd: string;
-  agents: { name: string; fileName: string }[];
-  skills: { name: string; dirName: string }[];
+  /** crew 私有 agent 名字（<id>/agents/*.md 去后缀；对齐 Rust Vec<String>） */
+  agents: string[];
+  /** crew 私有 skill 目录名（对齐 Rust Vec<String>） */
+  skills: string[];
 }
 
 export interface CreateCrewOptions {

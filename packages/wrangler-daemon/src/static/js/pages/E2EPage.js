@@ -51,7 +51,15 @@ async function runCase(def, { onEvent, markHttpStart, markHttpEnd }) {
       poke();
       const unsub = eng.subscribe(poke);
       try {
-        await starter(eng);
+        // 步骤的完成判据是 RUN 终态（waiting-human 也算可推进——TS 的
+        // HITL 是轮内挂起，onetake 流在挂起期间不关（Rust 以
+        // waiting_human 轮终态关流）；await starter 会等到流关闭才返回，
+        // 在 TS 语义下等于等 respond 完成——步骤卡死。starter 发起即
+        // 返回，终态交给 waitTerminal；传输层错误经 responseError →
+        // error 终态同样收敛。
+        void Promise.resolve(starter(eng)).catch(() => {
+          /* 传输错误已进引擎 responseError */
+        });
         await waitTerminal(eng, timeoutMs);
         return eng;
       } finally {

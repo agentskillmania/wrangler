@@ -357,6 +357,12 @@ const namedApi = {
     ),
   // 停掉活跃轮与全部子任务(DELETE 409 的正路:stop it before deleting)。
   stopSession: (sessionId) => apiRequest('POST', `/api/chat/${encodeURIComponent(sessionId)}/stop`),
+  // 应答挂起的 HITL 中断(ack;续跑帧在 events 流上)。
+  respond: (sessionId, requestId, response) =>
+    apiRequest('POST', `/api/chat/${encodeURIComponent(sessionId)}/respond`, {
+      requestId,
+      response,
+    }),
 
   // Specs / Plans
   listSpecs: (workspacePath, includeArchived) =>
