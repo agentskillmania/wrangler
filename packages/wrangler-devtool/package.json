@@ -1,6 +1,6 @@
 {
   "name": "@agentskillmania/wrangler-devtool",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Devtool library for Wrangler — development tooling and utilities.",
   "type": "module",
   "main": "dist/index.js",
@@ -44,8 +44,8 @@
     "directory": "packages/wrangler-devtool"
   },
   "dependencies": {
-    "@agentskillmania/colts": "0.5.0-alpha.2",
-    "@agentskillmania/llm-client": "0.5.0-alpha.2",
+    "@agentskillmania/colts": "^0.5.0",
+    "@agentskillmania/llm-client": "^0.5.0",
     "@agentskillmania/wrangler": "workspace:*",
     "isomorphic-git": "^1.38.1",
     "js-yaml": "^4.1.0",

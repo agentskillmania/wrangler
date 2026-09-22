@@ -151,7 +151,9 @@ describe('US-C5: Workspace File Operations', () => {
   // ------------------------------------------------------------------ AC-2
   describe('AC-2: GET content reads file content', () => {
     it('returns the text content of an existing file', async () => {
-      const res = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=readme.md`);
+      const res = await fetch(
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=readme.md`
+      );
       expect(res.ok).toBe(true);
       const body = await res.json();
       expect(body.content).toBe('# Project');
@@ -198,7 +200,9 @@ describe('US-C5: Workspace File Operations', () => {
       expect(writeRes.ok).toBe(true);
       expect((await writeRes.json()).ok).toBe(true);
 
-      const readRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=readme.md`);
+      const readRes = await fetch(
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=readme.md`
+      );
       expect((await readRes.json()).content).toBe('# Updated Project');
     });
 
@@ -255,7 +259,9 @@ describe('US-C5: Workspace File Operations', () => {
       });
       expect(res.ok).toBe(true);
 
-      const readRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=empty.txt`);
+      const readRes = await fetch(
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=empty.txt`
+      );
       expect((await readRes.json()).content).toBe('');
     });
 
@@ -281,7 +287,9 @@ describe('US-C5: Workspace File Operations', () => {
       expect(delRes.ok).toBe(true);
       expect((await delRes.json()).ok).toBe(true);
 
-      const readRes = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=readme.md`);
+      const readRes = await fetch(
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=readme.md`
+      );
       expect((await readRes.json()).error).toBe('File not found');
     });
 
@@ -409,7 +417,9 @@ describe('US-C5: Workspace File Operations', () => {
       expect((await createRes.json()).ok).toBe(true);
 
       // Step 2: Read it back
-      const read1 = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=lifecycle.txt`);
+      const read1 = await fetch(
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=lifecycle.txt`
+      );
       expect((await read1.json()).content).toBe('v1');
 
       // Step 3: Update it
@@ -422,7 +432,9 @@ describe('US-C5: Workspace File Operations', () => {
       expect((await updateRes.json()).ok).toBe(true);
 
       // Verify update
-      const read2 = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=lifecycle.txt`);
+      const read2 = await fetch(
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=lifecycle.txt`
+      );
       expect((await read2.json()).content).toBe('v2');
 
       // Step 4: Confirm it appears in the file tree
@@ -443,7 +455,9 @@ describe('US-C5: Workspace File Operations', () => {
       expect((await delRes.json()).ok).toBe(true);
 
       // Verify gone
-      const read3 = await fetch(`${baseUrl()}/api/sessions/${sessionId}/files/content?path=lifecycle.txt`);
+      const read3 = await fetch(
+        `${baseUrl()}/api/sessions/${sessionId}/files/content?path=lifecycle.txt`
+      );
       expect((await read3.json()).error).toBe('File not found');
 
       // Verify absent from tree

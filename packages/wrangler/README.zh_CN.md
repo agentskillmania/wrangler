@@ -158,6 +158,16 @@ await AgentHarness.create({
 
 旧版扁平字段（`llmClient`、`enableSession`、`skillDirs`、`sandbox: true` 等）已移除——所有选项都通过上面的结构化组传入。按请求覆盖（model、thinking）见 `ResumeOptions`；daemon 的聊天请求 `config` 暴露同样的配置组。
 
+## 0.3.0 变更说明（2026-09）
+
+对齐 wrangler.rs（Rust 版）8 月迭代的全量回填。**破坏性变更：**
+
+1. **`EnhancedRunner` → `AgentHarness`**——别名保留一版（`@deprecated`），0.4 移除。
+2. **daemon 接口族**：`POST /api/agents/:name/chat` → `POST /api/agents/:name/onetake`（一次性调用，done 即关）；发消息统一走 `POST /api/chat/:id`（首次即建——带 agent/crew 创建字段直接建会话，无则 410）；`GET /api/agent/:id/state` 常驻流退役 → `GET /api/chat/:id` 诊断快照；工作区文件端点 `/api/files/:id/*` → `/api/sessions/:id/files/*`；`/api/launcher` 返回 daemon 身份（name/version/port/host）。
+3. **colts 依赖升至 ^0.5.0**——多模态 `file:` 附件、意图构造器（`completeFromCommand`/`waitHuman`/`runComplete`）、`fromCommand` 终态标记等，详见 colts 0.5.0 版本说明。
+
+主要新能力：多模态图片输入（data:/file: 引用，存档永不内联 base64）·异步委派全链路（受理即返回 + 投递邮箱 + 消费轮）·seq/turnSeq 线协议（断线重连不丢帧）·send/respond 全 ack 化 · 会话事件常驻流 · truncate/409 分诊 · CrewLab/RunLab/E2E 自动测试观察页族 · 沙箱与多项并发缺陷修复。
+
 ## 依赖
 
 - [`@agentskillmania/colts`](https://github.com/agentskillmania/colts) — ReAct Agent 框架

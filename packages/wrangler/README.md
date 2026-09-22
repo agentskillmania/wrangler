@@ -158,6 +158,16 @@ await AgentHarness.create({
 
 Legacy flat fields (`llmClient`, `enableSession`, `skillDirs`, `sandbox: true`, etc.) were removed — all options live in the structured groups above. For per-request overrides (model, thinking) see `ResumeOptions`; the daemon exposes the same groups in its chat request `config`.
 
+## 0.3.0 Release Notes (2026-09)
+
+Full backfill of the August wrangler.rs (Rust) iteration. **Breaking:**
+
+1. **`EnhancedRunner` → `AgentHarness`** — deprecated alias kept for one release (removed in 0.4).
+2. **Daemon API family**: `POST /api/agents/:name/chat` → `POST /api/agents/:name/onetake` (one-shot, closes on done); sends unified via `POST /api/chat/:id` (create-on-first-touch with agent/crew fields, else 410); `GET /api/agent/:id/state` retired → `GET /api/chat/:id` diagnostics snapshot; workspace files moved `/api/files/:id/*` → `/api/sessions/:id/files/*`; `/api/launcher` now returns daemon identity.
+3. **colts dependency ^0.5.0** — multimodal `file:` attachments, intent constructors, `fromCommand` terminal marker; see colts 0.5.0 notes.
+
+Highlights: multimodal image input · async delegation (accept-and-return + delivery mailbox + consumption turns) · seq/turnSeq wire protocol · ack-semantics send/respond · persistent session event stream · truncate/409 triage · CrewLab/RunLab/E2E playground pages · sandbox and concurrency fixes.
+
 ## Dependencies
 
 - [`@agentskillmania/colts`](https://github.com/agentskillmania/colts) — ReAct agent framework
