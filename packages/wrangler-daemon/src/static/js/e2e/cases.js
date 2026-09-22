@@ -368,9 +368,12 @@ export const STORY_CASES = [
         const eng = await t.chat('派三步任务', (e) =>
           e.startAgentChat('inline', {
             message:
-              '请用任务清单管理这三步并依次完成：1) 算出 17*23 2) 算出 3 的平方根（保留两位小数） 3) 汇报两个结果。',
+              '请用任务清单管理这三步并依次完成：1) 算出 17*23 2) 算出 3 的平方根（保留两位小数） 3) 汇报两个结果。每完成一步，必须立即用 todolist 工具把该步标记为 completed；三步全部完成时，清单里不得有任何 pending 项。',
             workspacePath: E2E_WORKSPACE,
-            agent: { instructions: '你是严谨的执行者，用 todolist 工具跟踪多步任务。' },
+            agent: {
+              instructions:
+                '你是严谨的执行者，用 todolist 工具跟踪多步任务。铁律：开始一步先建/更新清单，做完一步立刻把该步置为 completed——清单状态必须始终反映真实进度。',
+            },
           })
         );
         sid = eng.state.sessionId;
