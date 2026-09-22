@@ -981,6 +981,42 @@ describe('AgentSession', () => {
     });
   });
 
+  describe('stop() settles parked HITL (gap fix)', () => {
+    it('stop rejects parked ask_human promises and clears the bridge map', async () => {
+      mockRunnerWithEvents();
+      const session = await AgentSession.create(
+        {
+          workspacePath: '/tmp/test',
+          agentName: 'test',
+          runtime: defaultNodeHostEnv,
+          llmClientFactory: vi.fn().mockReturnValue(mockLLMClient),
+        },
+        testConfig
+      );
+      const createOptions = mockAgentHarnessCreate.mock.calls.at(-1)![0] as {
+        tools: {
+          askHumanHandler: (p: {
+            questions: Array<{ id: string; question: string; type: string }>;
+          }) => Promise<unknown>;
+        };
+      };
+      const handler = createOptions.tools.askHumanHandler;
+      const parked = handler({
+        questions: [{ id: 'q1', question: '停掉我?', type: 'text' }],
+      });
+
+      session.stop();
+
+      // parked promise 被 stop 拒绝（不是永远挂起）。
+      await expect(parked).rejects.toThrow(/stopped/i);
+      // 桥上的登记清空（后续 respond 对它返回 false，不会误结算）。
+      const frames: SSEEvent[] = [];
+      session.addCockpitSender((e) => frames.push(e));
+      const anyId = (frames[0]?.data as Record<string, unknown> | undefined)?.requestId;
+      expect(anyId).toBeUndefined();
+    });
+  });
+
   describe('session-title wiring (R2P-232, aligned Rust 2287cc1)', () => {
     it('late-binds the naming sink: a Phase-2 title upgrade lands on the cockpit stream + history with the minimal {title} payload', async () => {
       const mock = mockRunnerWithEvents();

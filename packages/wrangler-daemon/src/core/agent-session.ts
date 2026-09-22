@@ -400,6 +400,8 @@ export class AgentSession {
   private readonly sessionManager?: SessionManagerRef;
   private readonly agentConfigPath?: string;
   private _busy = false;
+  /** stop() 抑制消费轮接力标志（新轮开启时清除）。 */
+  private _suppressConsumption = false;
   /** Max input length in characters, enforced in handleMessage. */
   private readonly maxInputLength?: number;
   /** Latest LLM request captured from llm:request stream events */
@@ -1251,6 +1253,8 @@ export class AgentSession {
     options?: { thinkingEnabled?: boolean; model?: string }
   ): AsyncIterable<SSEEvent> {
     this._busy = true;
+    // 新轮开启：stop 的消费抑制到此为止（正常驱动不受影响）。
+    this._suppressConsumption = false;
     // 轮次编号 +1（R2P-152，对齐 Rust begin_turn 在驱动入口开轮）：含
     // continueRun/HITL 续跑——消费轮的 done 与用户轮的 done 各带各的
     // turnSeq；send/respond ack 体携带待等的轮次是 Task 3（R2P-153）。
@@ -1421,9 +1425,21 @@ export class AgentSession {
    * 投递——用户叫停的语义是「别再来了」（daemon /stop 走这里）。
    */
   stop(): void {
+    // 抑制收尾钩子的消费轮接力（stop 语义是「停」,不是「换个轮继续」）——
+    // 新轮开启时清除（下一次正常驱动不受影响）。
+    this._suppressConsumption = true;
     this.abortController?.abort();
     this.abortController = null;
     this.subagentSupervisor.cancelAll();
+    // 结算挂起中的 HITL parked promise：ask_human 的promise不挂在abort
+    // 信号上,不结算的话轮永远停在工具调用上——busy 永真、DELETE 永远
+    // 409（只能手工 respond 解开）。拒绝即中止：工具报错→轮沿中止/
+    // 错误路径收尾,busy 释放。
+    const parked = [...this.bridge.pendingHumanInput.entries()];
+    this.bridge.pendingHumanInput.clear();
+    for (const [, entry] of parked) {
+      entry.reject(new Error('Aborted: session stopped'));
+    }
   }
 
   // ─── 邮箱：投递 + 消费轮（R2P-141b，对齐 Rust live.rs D2 段）───
@@ -1494,6 +1510,7 @@ export class AgentSession {
    * deliver 在闲时的直投自行 spawn）。链式收尾——消费轮自己的收尾也会
    * 再查一轮（轮内可能又来了新投递）。 */
   private afterTurnEnd(): void {
+    if (this._suppressConsumption) return;
     if (this.deliveries.length > 0) {
       this.spawnMailConsumer();
     }
