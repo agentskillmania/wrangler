@@ -8,7 +8,7 @@
  * (R2P-114w, aligned with Rust dc5cb1f.)
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, rm, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -164,5 +164,60 @@ describe('collectRelativeFiles', () => {
 
   it('throws when the root directory cannot be read', async () => {
     await expect(collectRelativeFiles(join(root, 'does-not-exist'))).rejects.toThrow();
+  });
+});
+
+describe('collectRelativeFiles hardening (symlink + caps)', () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = join(
+      tmpdir(),
+      `wrangler-test-inventory-hard-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    await mkdir(root, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('does not follow a symlink out of the skill directory', async () => {
+    // 目标目录在 root 之外(兄弟临时目录):从 symlink 进去才算"逃逸",
+    // 放 root 里会被真实目录路径直接走到,测的就是个寂寞。
+    const outside = join(tmpdir(), `wrangler-inv-out-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(outside, { recursive: true });
+    await writeFile(join(outside, 'secret-a.txt'), 'a');
+    await writeFile(join(outside, 'secret-b.txt'), 'b');
+    await writeFile(join(root, 'plain.txt'), 'p');
+    await symlink(outside, join(root, 'escape-link'));
+
+    const files = await collectRelativeFiles(root);
+    await rm(outside, { recursive: true, force: true }).catch(() => {});
+    expect(files).toContain('plain.txt');
+    expect(files).toContain('escape-link');
+    expect(files.some((f) => f.includes('secret-'))).toBe(false);
+  });
+
+  it('truncates past the depth cap (8 levels)', async () => {
+    let deep = root;
+    for (let i = 0; i < 10; i++) {
+      deep = join(deep, `d${i}`);
+    }
+    await mkdir(deep, { recursive: true });
+    await writeFile(join(deep, 'bottom.txt'), 'x');
+    await writeFile(join(root, 'shallow.txt'), 'x');
+
+    const files = await collectRelativeFiles(root);
+    expect(files).toContain('shallow.txt');
+    expect(files.some((f) => f.endsWith('bottom.txt'))).toBe(false);
+  });
+
+  it('truncates at the entry cap (1000 files)', async () => {
+    for (let i = 0; i < 1005; i++) {
+      await writeFile(join(root, `f${String(i).padStart(4, '0')}.txt`), 'x');
+    }
+    const files = await collectRelativeFiles(root);
+    expect(files).toHaveLength(1000);
   });
 });

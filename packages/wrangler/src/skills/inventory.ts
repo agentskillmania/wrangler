@@ -14,11 +14,24 @@
  * (R2P-114w, aligned with Rust dc5cb1f.)
  */
 
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 /** Maximum number of entries listed per inventory side (resources/scripts). */
 export const INVENTORY_CAP = 50;
+
+/**
+ * Walk depth cap: the standard skill layout (SKILL.md + scripts/,
+ * reference/) is two or three levels; anything past 8 is anomalous and gets
+ * truncated with a warning (directory-bomb guard).
+ */
+const WALK_MAX_DEPTH = 8;
+
+/**
+ * Entry cap per skill: the truncation point for runaway inventories (the
+ * INVENTORY_CAP above only shapes what is DISPLAYED, not how much is walked).
+ */
+const WALK_MAX_ENTRIES = 1000;
 
 const SKILL_FILE = 'SKILL.md';
 
@@ -124,17 +137,27 @@ export function splitInventory(paths: string[]): {
  *
  * The inventory must cover subdirectories (scripts/, reference/ are the
  * standard skill layouts) with relative paths — exactly the path shape
- * read_skill_resource / run_skill_script require. Unreadable
- * subdirectories are skipped silently (Rust parity); an unreadable ROOT
- * throws so the caller can distinguish "not my backend" from "empty".
+ * read_skill_resource / run_skill_script require. Two hard boundaries
+ * (aligned with Rust 3ac6ac5): symlinks are NOT followed (lstat semantics —
+ * a link is one file entry, its target never entered), and the walk is
+ * capped at WALK_MAX_DEPTH / WALK_MAX_ENTRIES with a warning on truncation.
+ * Unreadable subdirectories are skipped silently (Rust parity); an
+ * unreadable ROOT throws so the caller can distinguish "not my backend"
+ * from "empty".
  */
 export async function collectRelativeFiles(absDir: string): Promise<string[]> {
   const out: string[] = [];
-  await walk(absDir, '', out);
+  await walk(absDir, '', out, 0);
   return out;
 }
 
-async function walk(absDir: string, rel: string, out: string[]): Promise<void> {
+async function walk(absDir: string, rel: string, out: string[], depth: number): Promise<void> {
+  if (depth > WALK_MAX_DEPTH) {
+    console.warn(
+      `[wrangler/skills] inventory walk hit depth cap ${WALK_MAX_DEPTH} at ${absDir} — truncated`
+    );
+    return;
+  }
   let entries: string[];
   try {
     entries = await readdir(absDir);
@@ -146,14 +169,25 @@ async function walk(absDir: string, rel: string, out: string[]): Promise<void> {
     return;
   }
   for (const name of entries) {
+    if (out.length >= WALK_MAX_ENTRIES) {
+      console.warn(
+        `[wrangler/skills] inventory walk hit entry cap ${WALK_MAX_ENTRIES} — truncated`
+      );
+      return;
+    }
     if (isJunkEntry(name)) {
       continue;
     }
     const relChild = rel === '' ? name : `${rel}/${name}`;
     const absChild = join(absDir, name);
     try {
-      if ((await stat(absChild)).isDirectory()) {
-        await walk(absChild, relChild, out);
+      // lstat (not stat): a symlink reports as itself, never as the
+      // directory it points to. Following it (stat semantics) let a single
+      // link to a home directory drag tens of thousands of files into the
+      // inventory and reach outside the skill directory through the target;
+      // the link itself is recorded as one plain file entry.
+      if ((await lstat(absChild)).isDirectory()) {
+        await walk(absChild, relChild, out, depth + 1);
       } else {
         out.push(relChild);
       }
